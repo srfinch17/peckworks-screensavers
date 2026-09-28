@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The shared "engine" every screensaver in this repo is built on.
+    It knows HOW to be a Windows screensaver (command line, full screen,
+    preview box, quitting on mouse move, drawing pixels fast).
+    It knows nothing about any particular animation.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

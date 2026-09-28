@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MatrixRain/MatrixRain.csproj" />
+    <Project Path="src/Peckworks.Screensavers.Core/Peckworks.Screensavers.Core.csproj" />
+  </Folder>
+</Solution>

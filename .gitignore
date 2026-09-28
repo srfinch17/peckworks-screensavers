@@ -1,0 +1,9 @@
+bin/
+obj/
+dist/
+.vs/
+*.user
+snapshots/
+
+# Local-only: personal agent instructions (contain local paths)
+CLAUDE.md

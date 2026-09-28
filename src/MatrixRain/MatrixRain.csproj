@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Matrix "digital rain" screensaver.
+
+    A Windows screensaver is just a normal .exe program whose file name
+    ends in .scr instead of .exe. So we build a normal WinExe here, and the
+    publish script (scripts/publish.ps1) renames MatrixRain.exe to
+    MatrixRain.scr at the end.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>MatrixRain</AssemblyName>
+    <RootNamespace>MatrixRain</RootNamespace>
+
+    <!--
+      "Per monitor DPI aware": tells Windows "I will handle high-resolution
+      screens myself, do not blow my window up and blur it." Without this, on a
+      laptop set to 150% scaling Windows would render us small and stretch us,
+      and the crisp little characters would go fuzzy.
+    -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+
+    <Product>Matrix Rain Screensaver</Product>
+    <Company>Peckworks</Company>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Peckworks.Screensavers.Core\Peckworks.Screensavers.Core.csproj" />
+  </ItemGroup>
+
+</Project>
