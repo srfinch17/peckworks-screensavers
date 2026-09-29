@@ -157,7 +157,17 @@ Sakura works like a theater: a **backdrop** that never moves, and **actors** tha
 drawing kit: gradients for the sky and lake, curves for Mount Fuji's outline, and thousands of
 small circles for the blossoms. It's painted back to front like a landscape painting, so each
 layer covers what's behind it: sky, mountain, haze, lake (with the mountain drawn again upside
-down and faint, as a reflection), far shore, nearby trees, and finally the branches.
+down and faint, as a reflection), far shore, the two banks of land, the trees standing on them,
+and finally the branches.
+
+The banks are the ground truth for the trees. Each bank is a line of points, and it can answer
+"how high is the ground at this x?" Every trunk's foot is drawn a little *below* that answer, so
+the tree visibly stands on the bank's surface instead of floating above the shoreline. (The foot
+is painted over the bank, not hidden by it; it looks planted because it ends past the rim, the
+same trick a hand drawing uses.) The pine is one solid cone shape with clumps of needles painted
+over it for texture; the blossoming trees are a forked trunk with a cloud of blossoms on top.
+Tree and branch sizes come from the screen height on a normal wide screen, but from the width on
+a tall or square screen, so the grove does not swallow a portrait monitor.
 
 The branches are *grown*, not drawn by hand. A small rule walks forward in steps, wobbling a
 little and sagging under its own weight, and now and then starts a thinner copy of itself heading

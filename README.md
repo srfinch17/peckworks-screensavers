@@ -23,6 +23,7 @@ across a lake, framed by branches in full bloom. Stylized rather than photoreali
 - Petals tumble, spin, sway, and ride a breeze that rises and settles.
 - Depth: near petals are bigger, faster, and more opaque than far ones.
 - Some petals let go of the blossoms on the branches; light glints on the lake.
+- Trees stand on two banks of land in front of the lake, with a pine behind the grove.
 - Branches and trees are grown randomly, so each run looks a little different.
 
 Settings: number of petals, fall speed, breeze, petal size.
