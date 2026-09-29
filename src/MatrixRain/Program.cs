@@ -18,10 +18,23 @@ internal sealed class MatrixRainScreensaver : ScreensaverDefinition
         // looks the same on both. The tiny Settings preview box gets a gentler
         // scale so the characters stay big enough to read as characters.
         double scale = isPreview ? Math.Max(0.30, height / 1080.0) : height / 1080.0;
-        return new MatrixRainScene(width, height, scale, MatrixRainSettings.Load());
+        return new MatrixRainScene(width, height, scale, MatrixRainSettings.LoadSaved());
     }
 
-    public override Form CreateSettingsForm() => new SettingsForm();
+    public override Form CreateSettingsForm()
+    {
+        var draft = MatrixRainSettings.LoadSaved();
+
+        // pixelScale = primary screen height / 1080 makes the dialog's preview
+        // show characters at their TRUE full-screen size (a cropped peek at the
+        // real thing), which is what you want when choosing a character size.
+        double trueScale = (Screen.PrimaryScreen?.Bounds.Height ?? 1080) / 1080.0;
+
+        return new SettingsDialog("Matrix Rain Settings", draft,
+            (w, h) => new MatrixRainScene(w, h, trueScale, draft),
+            back: Color.FromArgb(18, 18, 18),
+            fore: Color.FromArgb(160, 255, 170));
+    }
 }
 
 internal static class Program

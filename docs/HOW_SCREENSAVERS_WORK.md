@@ -65,13 +65,20 @@ src/
     BloomEffect.cs                 the soft glow
     NativeMethods.cs               the few raw Windows functions .NET doesn't wrap
     IScreensaverScene.cs           the contract a screensaver fills in
+    ScreensaverSettings.cs         a list of knobs, saved in the registry
+    SettingsDialog.cs              the Settings dialog: live preview + one slider per knob
 
-  MatrixRain/                      ONE screensaver built on the engine
+  MatrixRain/                      a screensaver built on the engine
     Program.cs                     Main(), plus the "definition" handed to the engine
     MatrixRainScene.cs             the rain simulation (start here, it's the fun part)
     GlyphAtlas.cs                  pre-drawn character stamps
-    MatrixRainSettings.cs          the knobs, saved in the registry
-    SettingsForm.cs                the Settings dialog with a live preview
+    MatrixRainSettings.cs          declares its knobs
+
+  Sakura/                          another screensaver built on the engine
+    Program.cs                     Main(), plus the definition
+    SakuraScene.cs                 the falling petals
+    SceneryPainter.cs              paints Mount Fuji, the lake, trees, and branches once
+    SakuraSettings.cs              declares its knobs
 ```
 
 A screensaver only has to write one class with two methods:
@@ -141,34 +148,75 @@ Adding (rather than replacing) is why dark areas near bright characters pick up 
 while the characters themselves stay crisp. With the glow turned off, the rain looks flat,
 like text in a terminal.
 
-## 8. High-DPI screens
+## 8. Sakura: a painted backdrop and falling petals
+
+Sakura works like a theater: a **backdrop** that never moves, and **actors** that do.
+
+**The backdrop** (`SceneryPainter.cs`) is painted once, at startup, with .NET's ordinary 2D
+drawing kit: gradients for the sky and lake, curves for Mount Fuji's outline, and thousands of
+small circles for the blossoms. It's painted back to front like a landscape painting, so each
+layer covers what's behind it: sky, mountain, haze, lake (with the mountain drawn again upside
+down and faint, as a reflection), far shore, nearby trees, and finally the branches.
+
+The branches are *grown*, not drawn by hand. A small rule walks forward in steps, wobbling a
+little and sagging under its own weight, and now and then starts a thinner copy of itself heading
+off at an angle. A rule that uses itself like this is called **recursion**, and it's how most
+computer-drawn plants are made. Since the random numbers differ each run, so do the branches.
+
+Painting the backdrop takes under a second. After that, each frame just **copies** the finished
+picture (fast) and draws the petals on top.
+
+**The actors** (`SakuraScene.cs`) are a few hundred petals. Each one:
+
+- **falls** slowly, and is pushed sideways by a breeze that rises and fades over time;
+- **sways** side to side, like a leaf rocking as it drops;
+- **spins** in the plane of the screen;
+- **tumbles**: it flips over and over. That's faked in 2D by squashing the petal's width by
+  `cos(flip angle)`, which swings smoothly from 1 to 0 and back, so the petal looks like it's
+  turning face-on, then edge-on, then face-on again;
+- has a **depth**: near petals are bigger, faster, and more solid, far ones small, slow, and
+  slightly see-through. That difference is called **parallax** (close things cross your view
+  faster than far things, like fence posts versus hills from a car window), and it's what makes
+  the scene feel 3D.
+
+Petals are drawn pixel by pixel. For each pixel near a petal, the code asks "where is this pixel
+in the *petal's own* coordinates?" (turning the pixel backward by the petal's angle). In those
+coordinates the petal is always upright, so the question "is this inside the petal shape?" stays
+simple no matter how the petal is turned.
+
+## 9. High-DPI screens
 
 A 4K laptop screen usually runs at 200% to 250% "scaling", so text isn't microscopic. A program
 that doesn't declare itself "DPI aware" gets rendered small and then stretched by Windows, which
-looks blurry. `MatrixRain.csproj` sets `ApplicationHighDpiMode` to `PerMonitorV2`, which tells
-Windows "I handle real pixels myself." The rain then draws at the screen's true resolution, and
-the character size scales with screen height, so a 4K monitor gets characters twice as many
-pixels tall as a 1080p one.
+looks blurry. Each screensaver's `.csproj` sets `ApplicationHighDpiMode` to `PerMonitorV2`, which
+tells Windows "I handle real pixels myself." Everything then draws at the screen's true
+resolution, and sizes scale with screen height, so a 4K monitor gets things twice as many pixels
+tall as a 1080p one.
 
-## 9. Where things live on your PC
+The settings dialog does the same for its buttons and sliders: its layout is written for 100%
+scaling (96 DPI, "dots per inch") and WinForms multiplies every position by the real scaling.
+
+## 10. Where things live on your PC
 
 | What                          | Where                                                         |
 |-------------------------------|---------------------------------------------------------------|
-| The installed screensaver     | `C:\Windows\System32\MatrixRain.scr`                          |
-| Your settings                 | Registry: `HKEY_CURRENT_USER\Software\Peckworks\Screensavers\MatrixRain` (open with `regedit`) |
+| The installed screensavers    | `C:\Windows\System32\MatrixRain.scr`, `C:\Windows\System32\Sakura.scr` |
+| Your settings                 | Registry: `HKEY_CURRENT_USER\Software\Peckworks\Screensavers\<name>` (open with `regedit`) |
 | Which screensaver is selected | Registry: `HKEY_CURRENT_USER\Control Panel\Desktop`, value `SCRNSAVE.EXE` |
 
 When Windows starts a screensaver for real, it runs it on a separate private "desktop" that
 other programs can't see or screenshot. That's also why no taskbar shows over it.
 
-## 10. Making the next screensaver
+## 11. Making the next screensaver
 
-1. Copy the `src/MatrixRain` folder and rename it.
-2. Replace `MatrixRainScene` with your own class that implements `IScreensaverScene`
+1. Copy the `src/Sakura` folder and rename the folder, the `.csproj`, and the names inside it.
+2. Replace the scene with your own class that implements `IScreensaverScene`
    (`Update` + `Render`).
-3. Update the definition class in `Program.cs` (name, scene, settings form).
-4. Add the project to the solution: `dotnet sln add src\YourSaver\YourSaver.csproj`.
-5. Point a copy of `scripts/publish.ps1` at the new project.
+3. Declare your knobs in a settings class that inherits `ScreensaverSettings`
+   (`Add("Speed", ...)` once per knob). The settings dialog builds a slider for each one.
+4. Update the definition class in `Program.cs` (name, scene, dialog colors).
+5. Add the project to the solution: `dotnet sln add src\YourSaver\YourSaver.csproj`.
 
-Everything about being a screensaver (monitors, preview box, wake-up rule, fast drawing, glow)
-comes from the engine for free.
+`scripts/publish.ps1` and `install.ps1` find every screensaver folder under `src\` on their own.
+Everything about being a screensaver (monitors, preview box, wake-up rule, fast drawing, glow,
+saved settings, the settings dialog) comes from the engine for free.

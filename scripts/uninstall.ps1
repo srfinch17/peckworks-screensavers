@@ -1,23 +1,35 @@
 <#
 .SYNOPSIS
-    Removes MatrixRain.scr from System32, deselects it if it was the active
-    screensaver, and deletes its saved settings.
+    Removes screensavers from System32, deselects one if it was the active
+    screensaver, and deletes their saved settings.
+
+.PARAMETER Saver
+    Which screensaver(s) to remove (MatrixRain, Sakura). Leave out for all.
 #>
+param([string[]]$Saver)
 $ErrorActionPreference = 'Stop'
-$dest = Join-Path $env:WINDIR 'System32\MatrixRain.scr'
+
+$repo = Split-Path -Parent $PSScriptRoot
+if (-not $Saver) {
+    $Saver = Get-ChildItem (Join-Path $repo 'src') -Directory |
+        Where-Object { $_.Name -ne 'Peckworks.Screensavers.Core' } | ForEach-Object Name
+}
 $desk = 'HKCU:\Control Panel\Desktop'
-
 $current = (Get-ItemProperty $desk -Name 'SCRNSAVE.EXE' -ErrorAction SilentlyContinue).'SCRNSAVE.EXE'
-if ($current -and $current -like '*MatrixRain.scr') {
-    Remove-ItemProperty $desk -Name 'SCRNSAVE.EXE'
-    Write-Host "Matrix Rain was the active screensaver; it is now deselected."
+
+$deletes = @()
+foreach ($name in $Saver) {
+    $dest = Join-Path $env:WINDIR "System32\$name.scr"
+    if ($current -and $current -like "*\$name.scr") {
+        Remove-ItemProperty $desk -Name 'SCRNSAVE.EXE'
+        Write-Host "$name was the active screensaver; it is now deselected."
+    }
+    if (Test-Path $dest) { $deletes += "Remove-Item -LiteralPath '$dest' -Force" }
+    Remove-Item "HKCU:\Software\Peckworks\Screensavers\$name" -Recurse -ErrorAction SilentlyContinue
 }
 
-if (Test-Path $dest) {
-    $del = "Remove-Item -LiteralPath '$dest' -Force"
-    Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Command', $del
-    Write-Host "Removed $dest"
+if ($deletes) {
+    Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile', '-Command', ($deletes -join '; ')
+    Write-Host "Removed: $($Saver -join ', ')"
 }
-
-Remove-Item 'HKCU:\Software\Peckworks\Screensavers\MatrixRain' -Recurse -ErrorAction SilentlyContinue
-Write-Host "Settings removed. Done."
+Write-Host "Done."
