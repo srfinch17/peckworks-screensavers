@@ -39,8 +39,8 @@ if (-not $SkipPublish) {
     else        { & (Join-Path $PSScriptRoot 'publish.ps1') }
 }
 
-$files = if ($Saver) { $Saver | ForEach-Object { Join-Path $repo "dist\$_.scr" } }
-         else        { (Get-ChildItem (Join-Path $repo 'dist') -Filter *.scr).FullName }
+$files = @(if ($Saver) { $Saver | ForEach-Object { Join-Path $repo "dist\$_.scr" } }
+         else        { (Get-ChildItem (Join-Path $repo 'dist') -Filter *.scr).FullName })
 foreach ($f in $files) { if (-not (Test-Path $f)) { throw "Missing $f. Run .\scripts\publish.ps1 first." } }
 
 # Copy into System32 through ONE elevated (administrator) PowerShell, so there
@@ -64,5 +64,13 @@ if ($Activate) {
     Write-Host "$($Saver[0]) selected as your screensaver (starts after 5 idle minutes)."
 }
 
-# Open Screen Saver Settings so you can preview, tweak Settings..., and set the wait time.
-Start-Process 'control.exe' -ArgumentList 'desk.cpl,,@screensaver'
+# Open a FRESH Screen Saver Settings window (closing any stale one first, see
+# ScreenSaverDialog.ps1 for why), then check the list the user will actually see.
+# "The file is in System32" is not the same claim as "it is in the list".
+. (Join-Path $PSScriptRoot 'ScreenSaverDialog.ps1')
+$listed = Open-ScreenSaverDialog
+foreach ($f in $files) {
+    $name = [IO.Path]::GetFileNameWithoutExtension($f)
+    if ($listed -contains $name) { Write-Host "Confirmed: '$name' is in the Screen Saver Settings list." }
+    else { Write-Warning "'$name' is NOT in the Screen Saver Settings list. The list shows: $($listed -join ', ')" }
+}

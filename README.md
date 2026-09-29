@@ -41,7 +41,9 @@ Settings: number of petals, fall speed, breeze, petal size.
 .\scripts\install.ps1 -Saver Sakura -Activate  # build and install one, and select it with a 5-minute wait
 ```
 
-Then pick one in the Screen Saver Settings list.
+Then pick one in the Screen Saver Settings list. The install script closes any Screen Saver
+Settings window that was already open (an open one keeps showing its old list), opens a fresh one,
+and confirms the new screensaver actually appears in its list.
 
 No-admin alternative: run `.\scripts\publish.ps1`, then right-click a `.scr` in `dist\` in File
 Explorer and choose **Install**. (Windows then uses the file where it sits, so leave it there.)
@@ -65,6 +67,16 @@ $exe = ".\src\Sakura\bin\Release\net10.0-windows\Sakura.exe"
 & $exe /snapshot out.png 1920 1080 8                   # render 8 s off-screen, save a PNG + timing
 ```
 
+## Verify
+
+```powershell
+.\scripts\verify.ps1                     # every .scr in dist\: snapshot speed, preview box, settings dialog
+.\scripts\verify.ps1 -WindowsLaunch      # also let Windows start each one for real (your setting is restored)
+```
+
+Prints PASS / FAIL per check and saves pictures to `snapshots\verify\`. Look at the pictures too:
+a check can pass while the picture is wrong.
+
 ## How it works
 
 Start with **[docs/HOW_SCREENSAVERS_WORK.md](docs/HOW_SCREENSAVERS_WORK.md)**: a plain-language
@@ -78,7 +90,7 @@ first-time reader.
 src/Peckworks.Screensavers.Core/   the engine (command line, windows, drawing, glow, settings)
 src/MatrixRain/                    the Matrix Rain screensaver
 src/Sakura/                        the Sakura screensaver
-scripts/                           publish / install / uninstall
+scripts/                           publish / install / uninstall / verify
 docs/                              the how-it-works guide
 ```
 

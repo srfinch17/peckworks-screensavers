@@ -39,6 +39,7 @@ Two extra notes exist only for development:
 > PowerShell's `Start-Process`, Windows' file association **replaces your arguments with `/S`**.
 > So `Start-Process MatrixRain.scr /c` quietly runs the full-screen saver instead. To test the
 > other modes, run the `.exe` from `src\MatrixRain\bin\...`, or launch with `UseShellExecute = false`.
+> `scripts\verify.ps1` does exactly that and checks every mode for you.
 
 ## 3. The "wake up" rule
 
@@ -206,6 +207,10 @@ scaling (96 DPI, "dots per inch") and WinForms multiplies every position by the 
 
 When Windows starts a screensaver for real, it runs it on a separate private "desktop" that
 other programs can't see or screenshot. That's also why no taskbar shows over it.
+
+The Screen Saver Settings dialog reads the `.scr` files in System32 **once, when it opens**. If
+it was already open when you installed a new screensaver, it won't list it until you close and
+reopen it. `install.ps1` does that for you and then checks the list.
 
 ## 11. Making the next screensaver
 
