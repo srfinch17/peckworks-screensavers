@@ -52,6 +52,7 @@ public sealed class PetalField
 
     private readonly Random _rng;
     private readonly int _w, _h;
+    private readonly float _u;   // the size unit: petal size, sway, wind and fall speed scale with it
     private readonly IReadOnlyList<PointF> _blossomSpots;
     private readonly Petal[] _petals;
     private readonly float _speedScale, _windScale, _sizeScale;
@@ -70,11 +71,18 @@ public sealed class PetalField
     /// <param name="windScale">1 = a normal breeze. 0 = still air.</param>
     /// <param name="sizeScale">1 = normal petals.</param>
     /// <param name="blossomSpots">Places on the backdrop (blossom clusters) that petals can let go from. May be empty.</param>
+    /// <param name="sizeUnit">
+    /// What petal sizes and speeds are measured against. Leave it out to use the
+    /// height. A tall (portrait) screen should pass something smaller, such as
+    /// min(height, width * 9 / 16), so the petals stay in proportion to a
+    /// backdrop that was scaled the same way.
+    /// </param>
     public PetalField(int width, int height, int count, float speedScale, float windScale, float sizeScale,
-                      IReadOnlyList<PointF> blossomSpots, Random rng)
+                      IReadOnlyList<PointF> blossomSpots, Random rng, float? sizeUnit = null)
     {
         _w = width;
         _h = height;
+        _u = sizeUnit ?? height;
         _rng = rng;
         _speedScale = speedScale;
         _windScale = windScale;
@@ -107,14 +115,14 @@ public sealed class PetalField
     /// <summary>Give a petal a fresh random personality and a starting spot.</summary>
     private void Respawn(ref Petal p, bool scatterOnScreen)
     {
-        p.Size = Math.Max(3f, _h * 0.013f * (0.45f + 1.2f * p.Z) * _sizeScale);
+        p.Size = Math.Max(3f, _u * 0.013f * (0.45f + 1.2f * p.Z) * _sizeScale);
         p.Angle = (float)(_rng.NextDouble() * Math.PI * 2);
         p.Spin = ((float)_rng.NextDouble() - 0.5f) * 1.6f;
         p.Flip = (float)(_rng.NextDouble() * Math.PI * 2);
         p.FlipSpeed = 0.8f + 2.2f * (float)_rng.NextDouble();
         p.Sway = (float)(_rng.NextDouble() * Math.PI * 2);
         p.SwayFreq = 0.5f + 1.1f * (float)_rng.NextDouble();
-        p.SwayAmp = _h * (0.01f + 0.025f * (float)_rng.NextDouble()) * (0.5f + p.Z);
+        p.SwayAmp = _u * (0.01f + 0.025f * (float)_rng.NextDouble()) * (0.5f + p.Z);
         p.Pink = (float)_rng.NextDouble();
 
         if (scatterOnScreen)
@@ -154,7 +162,7 @@ public sealed class PetalField
         // The breeze: two slow waves added together, so gusts rise and fall on
         // an irregular rhythm instead of a steady beat. Mostly blowing right,
         // occasionally stilling almost to nothing.
-        float wind = _h * 0.03f * _windScale *
+        float wind = _u * 0.03f * _windScale *
                      (0.55f + 0.5f * MathF.Sin(_time * 0.11f) + 0.3f * MathF.Sin(_time * 0.043f + 2f));
 
         float margin = _h * 0.1f;
@@ -170,7 +178,7 @@ public sealed class PetalField
             // Falling: nearer petals fall faster (parallax), and petals falling
             // edge-on (|cos(flip)| near 0) drop a bit quicker than face-on ones.
             float faceOn = MathF.Abs(MathF.Cos(p.Flip));
-            float fall = _h * 0.045f * (0.45f + 0.75f * p.Z) * _speedScale * (0.8f + 0.45f * (1 - faceOn));
+            float fall = _u * 0.045f * (0.45f + 0.75f * p.Z) * _speedScale * (0.8f + 0.45f * (1 - faceOn));
 
             // Sideways: the shared breeze (felt more by near petals), plus this
             // petal's own swing. The swing's speed is the rate of change of

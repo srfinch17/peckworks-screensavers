@@ -32,11 +32,12 @@ internal sealed class SakuraScene : IScreensaverScene
     public SakuraScene(int width, int height, SakuraSettings settings)
     {
         _scenery = SceneryPainter.Paint(width, height, _rng);
+        float u = Math.Min(height, width * 9f / 16f);   // the size unit: height, or less on a tall screen
 
         _petals = new PetalField(width, height,
             PetalField.CountFor(width, height, settings.DensityPercent),
             settings.FallSpeedPercent / 100f, settings.WindPercent / 100f, settings.PetalSizePercent / 100f,
-            _scenery.BlossomSpots, _rng);
+            _scenery.BlossomSpots, _rng, sizeUnit: u);
 
         // ---- Glints on the lake ----
         _glints = new Glint[120];

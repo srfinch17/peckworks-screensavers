@@ -66,7 +66,7 @@ internal static class SceneryPainter
         PaintLake(g, w, h, horizon, fuji, rng);
         PaintShore(g, w, h, horizon, rng);
         var (leftBank, rightHill) = MakeGround(w, h);
-        PaintGround(g, leftBank, rightHill);
+        PaintGround(g, u, leftBank, rightHill);
         PaintGrove(g, w, h, u, leftBank, rightHill, rng);
         List<PointF> spots = PaintBranches(g, w, h, u, rng);
 
@@ -371,10 +371,11 @@ internal static class SceneryPainter
     }
 
     /// <summary>Paints the two banks: a dark earthy one on the left, a grassy one on the right.</summary>
-    private static void PaintGround(Graphics g, Bank left, Bank right)
+    private static void PaintGround(Graphics g, float u, Bank left, Bank right)
     {
-        left.Paint(g, Color.FromArgb(74, 86, 70), Color.FromArgb(40, 46, 42), Color.FromArgb(120, 104, 122, 92));
-        right.Paint(g, Color.FromArgb(134, 146, 88), Color.FromArgb(82, 92, 56), Color.FromArgb(140, 168, 182, 112));
+        float rim = Math.Max(1.5f, u * 0.004f);
+        left.Paint(g, Color.FromArgb(74, 86, 70), Color.FromArgb(40, 46, 42), Color.FromArgb(120, 104, 122, 92), rim);
+        right.Paint(g, Color.FromArgb(134, 146, 88), Color.FromArgb(82, 92, 56), Color.FromArgb(140, 168, 182, 112), rim);
     }
 
     /// <summary>

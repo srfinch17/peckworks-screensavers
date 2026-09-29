@@ -25,7 +25,7 @@
     Every folder under src\ except the Core engine is a screensaver.
 
 .PARAMETER Saver
-    Which screensaver(s) to build, by folder name (MatrixRain, Sakura).
+    Which screensaver(s) to build, by folder name (MatrixRain, Sakura, SakuraDusk).
     Leave it out to build all of them.
 
 .EXAMPLE

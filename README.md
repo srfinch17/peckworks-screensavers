@@ -31,13 +31,13 @@ Settings: number of petals, fall speed, breeze, petal size.
 ## Sakura Dusk
 
 The same slowly falling petals over a different painting: a pond at sunset, with a low sun
-resting on hazy hills, a pagoda on the far shore, an arched wooden footbridge, a stone lantern
-with a glowing window, cherry trees on both banks, and a small flock of birds.
+setting behind hazy hills, a pagoda on the far shore, an arched wooden footbridge, a stone
+lantern with a glowing window, cherry trees on both banks, and a small flock of birds.
 
 ![Sakura Dusk](docs/images/sakura-dusk.png)
 
 - Petals are tinted by the evening light, and golden glints twinkle in the sun's reflection.
-- The hills, pagoda, and bridge are mirrored faintly in the still water.
+- The nearest hills, the pagoda, and the bridge are mirrored faintly in the still water.
 - Same four settings as Sakura, saved separately.
 
 Sakura and Sakura Dusk share one petal engine and one set of painting brushes (banks, trunks,
@@ -117,8 +117,8 @@ Time per frame (update + render):
 
 | Resolution | Matrix Rain | Sakura      | Sakura Dusk |
 |------------|-------------|-------------|-------------|
-| 1920x1080  | about 10 ms | about 3 ms  | about 3 ms  |
-| 3840x2160  | about 29 ms | about 10 ms | about 10 ms |
+| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms |
 
 Under about 16 ms means the full 60 frames per second. Matrix Rain at 4K runs at about 34, above
 the film's own 24.

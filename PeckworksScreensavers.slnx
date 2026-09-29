@@ -3,5 +3,6 @@
     <Project Path="src/MatrixRain/MatrixRain.csproj" />
     <Project Path="src/Peckworks.Screensavers.Core/Peckworks.Screensavers.Core.csproj" />
     <Project Path="src/Sakura/Sakura.csproj" />
+    <Project Path="src/SakuraDusk/SakuraDusk.csproj" />
   </Folder>
 </Solution>

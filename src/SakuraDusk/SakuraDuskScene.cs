@@ -31,21 +31,24 @@ internal sealed class SakuraDuskScene : IScreensaverScene
     public SakuraDuskScene(int width, int height, SakuraDuskSettings settings)
     {
         _scenery = DuskPainter.Paint(width, height, _rng);
+        float u = Math.Min(height, width * 9f / 16f);   // the size unit: height, or less on a tall screen
 
         _petals = new PetalField(width, height,
             PetalField.CountFor(width, height, settings.DensityPercent),
             settings.FallSpeedPercent / 100f, settings.WindPercent / 100f, settings.PetalSizePercent / 100f,
-            _scenery.BlossomSpots, _rng)
+            _scenery.BlossomSpots, _rng, sizeUnit: u)
         {
             Tint = (1f, 0.90f, 0.84f),   // evening light: a little less green and blue, so the petals warm up
         };
 
         // ---- Glints in the sun's reflection ----
-        // The painter tells us the patch of water the sun lights up. Glints
-        // are scattered only there, denser and shorter near the far edge (far
-        // away) and longer near the bottom (close to us).
+        // The painter tells us the strip of water the sun lights up. Glints
+        // are scattered there, bunched under the sun, shorter near the far
+        // edge (far away) and longer near the bottom (close to us). The bridge
+        // crosses the strip, so DrawGlint checks every pixel and only lights
+        // bright water.
         RectangleF sun = _scenery.SunPath;
-        _glints = new Glint[90];
+        _glints = new Glint[160];
         for (int i = 0; i < _glints.Length; i++)
         {
             float depth = (float)Math.Pow(_rng.NextDouble(), 0.8);   // 0 = far edge of the patch, 1 = near edge
@@ -55,7 +58,7 @@ internal sealed class SakuraDuskScene : IScreensaverScene
             {
                 X = (int)(sun.X + sun.Width * (0.5f + 0.5f * across)),
                 Y = (int)(sun.Y + depth * sun.Height),
-                Length = Math.Max(2, (int)(height * (0.004f + 0.02f * (float)_rng.NextDouble()) * (0.3f + depth))),
+                Length = Math.Max(2, (int)(u * (0.004f + 0.02f * (float)_rng.NextDouble()) * (0.3f + depth))),
                 Phase = (float)(_rng.NextDouble() * Math.PI * 2),
                 Speed = 0.8f + 2.2f * (float)_rng.NextDouble(),
             };
@@ -87,7 +90,12 @@ internal sealed class SakuraDuskScene : IScreensaverScene
         _petals.Draw(fb);
     }
 
-    /// <summary>A short horizontal streak of warm light, brightest in the middle.</summary>
+    /// <summary>
+    /// A short horizontal streak of warm light, brightest in the middle. Only
+    /// lands on bright, warm water pixels: the bridge's wood, the banks, and
+    /// the deep water near the bottom are all too dark to pass the test, so a
+    /// glint can never sit on the railing.
+    /// </summary>
     private static void DrawGlint(FrameBuffer fb, in Glint gl, float alpha)
     {
         if (gl.Y < 0 || gl.Y >= fb.Height) return;
@@ -96,6 +104,9 @@ internal sealed class SakuraDuskScene : IScreensaverScene
         {
             int x = gl.X + i;
             if (x < 0 || x >= fb.Width) continue;
+            uint bg = fb.Pixels[row + x];
+            int r = (int)((bg >> 16) & 0xFF), g = (int)((bg >> 8) & 0xFF);
+            if (r < 150 || g < 95) continue;               // not sunlit water
             float t = 1 - MathF.Abs(i / (float)gl.Length * 2 - 1);
             fb.Pixels[row + x] = FrameBuffer.Blend(fb.Pixels[row + x], 255, 240, 200, alpha * t);
         }

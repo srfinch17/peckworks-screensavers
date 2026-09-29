@@ -4,7 +4,7 @@
     screensaver, and deletes their saved settings.
 
 .PARAMETER Saver
-    Which screensaver(s) to remove (MatrixRain, Sakura). Leave out for all.
+    Which screensaver(s) to remove (MatrixRain, Sakura, SakuraDusk). Leave out for all.
 #>
 param([string[]]$Saver)
 $ErrorActionPreference = 'Stop'

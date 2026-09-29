@@ -53,12 +53,13 @@ public sealed class Bank
     /// bottom of the screen) with a thin lighter rim along the top edge, so
     /// it reads as a rounded bank rather than a flat cutout.
     /// </summary>
-    public void Paint(Graphics g, Color top, Color bottom, Color rim)
+    /// <param name="rimWidth">The rim line's thickness in pixels (about 0.4% of the size unit reads well).</param>
+    public void Paint(Graphics g, Color top, Color bottom, Color rim, float rimWidth)
     {
         float edgeTop = _edge.Min(p => p.Y);
         using (var brush = new LinearGradientBrush(new PointF(0, edgeTop - 1), new PointF(0, _h + 1), top, bottom))
             g.FillPolygon(brush, Polygon());
-        using var pen = new Pen(rim, Math.Max(1.5f, _h * 0.004f)) { LineJoin = LineJoin.Round };
+        using var pen = new Pen(rim, rimWidth) { LineJoin = LineJoin.Round };
         g.DrawLines(pen, _edge);
     }
 }

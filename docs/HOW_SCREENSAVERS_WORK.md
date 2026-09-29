@@ -207,13 +207,15 @@ simple no matter how the petal is turned.
 **Sakura Dusk** (`DuskPainter.cs`) is the same theater with a different backdrop: a sunset sky
 (a gradient from violet to warm yellow, with a "path gradient" glow around the sun that is
 strongest at its center and fades to nothing at its edge), three ranges of hills made from sine
-waves added together, a pagoda silhouette, a pond that mirrors the hills and the bridge (painted
-again upside down, clipped to the near water, then washed back toward the water color), an
-arched bridge whose deck is a curve bowed upward by a steering point above its middle, and a
-stone lantern with a glowing window. The shared pieces (banks, trunks, blossoms, branches) come
+waves added together, a pagoda silhouette, a pond that mirrors the nearest hills and the pagoda
+(painted again upside down, clipped to the near water, then washed back toward the water color)
+and, more faintly, the bridge, an arched bridge whose deck is a curve bowed upward by a steering
+point above its middle, and a stone lantern with a glowing window. The sun is placed on the far
+ridge under it, so it always sets behind the hills whatever shape they took. The shared pieces (banks, trunks, blossoms, branches) come
 from `Core/Sakura/Brushwork.cs`, so both scenes have the same hand. The petals get a warm tint,
 and the glints are golden and live only in the sun's reflection, which the painter hands over
-as a rectangle.
+as a rectangle; each glint also checks the pixels under it and lights only bright water, so none
+ever lands on the bridge that crosses the reflection.
 
 ## 9. High-DPI screens
 
@@ -244,14 +246,17 @@ reopen it. `install.ps1` does that for you and then checks the list.
 
 ## 11. Making the next screensaver
 
-1. Copy the `src/Sakura` folder (or `src/SakuraDusk`, the smaller one) and rename the folder,
-   the `.csproj`, and the names inside it.
+1. Copy the `src/Sakura` folder (or `src/SakuraDusk`) and rename the folder, the `.csproj`,
+   and the names inside it.
 2. Replace the scene with your own class that implements `IScreensaverScene`
    (`Update` + `Render`).
 3. Declare your knobs in a settings class that inherits `ScreensaverSettings`
    (`Add("Speed", ...)` once per knob). The settings dialog builds a slider for each one.
 4. Update the definition class in `Program.cs` (name, scene, dialog colors).
-5. Want falling petals over your own painting? Build a `PetalField` and call its `Update` and
+5. Add the project to the solution file (`PeckworksScreensavers.slnx`) next to the others, so
+   `dotnet build PeckworksScreensavers.slnx` compiles it and a change to the shared engine that
+   breaks it shows up right away.
+6. Want falling petals over your own painting? Build a `PetalField` and call its `Update` and
    `Draw`, exactly as `SakuraDuskScene.cs` does.
 
 `scripts/publish.ps1` and `install.ps1` find every screensaver folder under `src\` on their own.

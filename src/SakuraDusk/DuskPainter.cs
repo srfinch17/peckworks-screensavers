@@ -39,11 +39,16 @@ internal static class DuskPainter
 
         float horizon = h * 0.70f;                       // where the water meets the hills
         float u = Math.Min(h, w * 9f / 16f);
-        var sun = new Sun(w * 0.60f, h * 0.50f, u * 0.09f);
+
+        // The hills are worked out first so the sun can rest on them: its
+        // center sits a little above the far ridge under it, so the ridge
+        // always hides the sun's lower edge, whatever shape the hills took.
+        var hills = new Hills(w, h, horizon, u, rng);
+        float sunX = w * 0.60f, sunR = u * 0.09f;
+        var sun = new Sun(sunX, hills.FarRidgeAt(sunX) - sunR * 0.55f, sunR);
 
         PaintSky(g, w, horizon, sun, u);
         PaintBirds(g, w, h, u, rng);
-        var hills = new Hills(w, h, horizon, u, rng);
         hills.PaintFarLayers(g);
         PaintWaterBase(g, w, h, horizon);
 
@@ -52,21 +57,25 @@ internal static class DuskPainter
         // once for real.
         var (left, right) = MakeGround(w, h);
         var bridge = new Bridge(new PointF(w * 0.30f, left.YAt(w * 0.30f)), new PointF(w * 0.69f, right.YAt(w * 0.69f)), h, u);
-        PaintReflected(g, w, h, horizon, () => hills.PaintNearLayer(g));
+        PaintReflected(g, w, h, horizon, (h - horizon) * 0.6f, () => hills.PaintNearLayer(g));
         WashReflection(g, w, h, horizon);
-        PaintReflected(g, w, h, bridge.WaterLine, () => bridge.Paint(g, 0.35f));
+        PaintReflected(g, w, h, bridge.WaterLine, h - bridge.WaterLine, () => bridge.Paint(g, 0.35f));
         PaintRipples(g, w, h, horizon, sun, u, rng);
         hills.PaintNearLayer(g);
 
-        left.Paint(g, Color.FromArgb(70, 52, 84), Color.FromArgb(30, 22, 42), Color.FromArgb(120, 150, 104, 96));
-        right.Paint(g, Color.FromArgb(70, 52, 84), Color.FromArgb(30, 22, 42), Color.FromArgb(120, 150, 104, 96));
+        float rim = Math.Max(1.5f, u * 0.004f);
+        left.Paint(g, Color.FromArgb(70, 52, 84), Color.FromArgb(30, 22, 42), Color.FromArgb(120, 150, 104, 96), rim);
+        right.Paint(g, Color.FromArgb(70, 52, 84), Color.FromArgb(30, 22, 42), Color.FromArgb(120, 150, 104, 96), rim);
         bridge.Paint(g, 1f);
         PaintLantern(g, w * 0.26f, left.YAt(w * 0.26f) + u * 0.01f, u);
         PaintTrees(g, w, u, left, right, rng);
         List<PointF> spots = PaintBranches(g, w, h, u, rng);
 
-        // The sun's reflection: a patch just below the horizon, under the sun.
-        var sunPath = new RectangleF(sun.X - sun.R * 1.2f, horizon + h * 0.01f, sun.R * 2.4f, bridge.Top - horizon - h * 0.02f);
+        // The sun's reflection: the strip of water under the sun, from the far
+        // shore down to where the reflection has faded out. The bridge crosses
+        // it; the scene skips any pixel that is not bright water, so a glint
+        // never lands on the railing.
+        var sunPath = new RectangleF(sun.X - sun.R * 3f, horizon + h * 0.01f, sun.R * 6f, (h - horizon) * 0.8f);
 
         return new DuskScenery { Pixels = Brushwork.ToPixels(bmp), BlossomSpots = spots, SunPath = sunPath };
     }
@@ -146,6 +155,9 @@ internal static class DuskPainter
         private readonly PointF[][] _layers = new PointF[3][];
         private readonly float _pagodaX, _pagodaBase;
         private readonly float _u;
+
+        /// <summary>The top of the farthest ridge at x, so the sun can be placed on it.</summary>
+        public float FarRidgeAt(float x) => HeightAt(0, x);
 
         public Hills(int w, int h, float horizon, float u, Random rng)
         {
@@ -249,10 +261,9 @@ internal static class DuskPainter
     // ================================================================ water
 
     /// <summary>
-    /// The pond: warm near the far shore where it mirrors the sky, cooling to
-    /// deep violet near us. Under the sun, hundreds of short bright streaks
-    /// make the sun's reflection, widening toward the viewer the way a real
-    /// sun path does. Elsewhere, faint light and dark ripples.
+    /// The pond's base color: warm near the far shore where it mirrors the
+    /// sky, cooling to deep violet near us. The streaks and ripples come later
+    /// (PaintRipples), after the reflections have been painted and washed.
     /// </summary>
     private static void PaintWaterBase(Graphics g, int w, int h, float horizon)
     {
@@ -267,7 +278,12 @@ internal static class DuskPainter
         g.FillRectangle(water, 0, horizon, w, h - horizon);
     }
 
-    /// <summary>The sun path and the ripples, painted after the reflections so the wash does not dull them.</summary>
+    /// <summary>
+    /// Under the sun, hundreds of short bright streaks make the sun's
+    /// reflection, widening toward the viewer the way a real sun path does.
+    /// Elsewhere, faint light and dark ripples. Painted after the reflections
+    /// so the wash does not dull them.
+    /// </summary>
     private static void PaintRipples(Graphics g, int w, int h, float horizon, Sun sun, float u, Random rng)
     {
         // The sun path.
@@ -301,14 +317,16 @@ internal static class DuskPainter
     /// Paints something upside down and faint into the water, as its
     /// reflection. The "transform" flips every point across the water line:
     /// Matrix(1, 0, 0, -1, 0, 2 * line) means "keep x, replace y with
-    /// (2 * line - y)". The clip keeps the reflection in the upper part of the
-    /// water, where a still pond really shows one, and Save/Restore hands the
-    /// canvas back exactly as it was.
+    /// (2 * line - y)". The clip keeps the reflection within "depth" pixels
+    /// below the water line (the hills stop partway down, where a still pond
+    /// really shows one; the bridge runs to the bottom, since the banks cover
+    /// its sides anyway), and Save/Restore hands the canvas back exactly as
+    /// it was.
     /// </summary>
-    private static void PaintReflected(Graphics g, int w, int h, float waterLine, Action paint)
+    private static void PaintReflected(Graphics g, int w, int h, float waterLine, float depth, Action paint)
     {
         GraphicsState before = g.Save();
-        g.SetClip(new RectangleF(0, waterLine, w, (h - waterLine) * 0.6f), CombineMode.Intersect);
+        g.SetClip(new RectangleF(0, waterLine, w, depth), CombineMode.Intersect);
         g.Transform = new Matrix(1, 0, 0, -1, 0, 2 * waterLine);
         paint();
         g.Restore(before);
