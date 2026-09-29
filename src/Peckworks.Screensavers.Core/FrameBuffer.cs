@@ -66,6 +66,19 @@ public sealed class FrameBuffer
     public static uint Rgb(int r, int g, int b) => (uint)((r << 16) | (g << 8) | b);
 
     /// <summary>
+    /// Mix a color over a pixel. alpha = how opaque the new color is (0 = invisible, 1 = solid).
+    /// result = old + (new - old) * alpha, for each of red, green, and blue.
+    /// </summary>
+    public static uint Blend(uint bg, int r, int g, int b, float alpha)
+    {
+        int br = (int)((bg >> 16) & 0xFF), bgc = (int)((bg >> 8) & 0xFF), bb = (int)(bg & 0xFF);
+        int nr = br + (int)((r - br) * alpha);
+        int ng = bgc + (int)((g - bgc) * alpha);
+        int nb = bb + (int)((b - bb) * alpha);
+        return (uint)((Math.Clamp(nr, 0, 255) << 16) | (Math.Clamp(ng, 0, 255) << 8) | Math.Clamp(nb, 0, 255));
+    }
+
+    /// <summary>
     /// Copies the whole sheet onto a real window in one fast call.
     /// "hdc" is a Handle to a Device Context: Windows' name for "a surface you can
     /// draw on", here the inside of our window.

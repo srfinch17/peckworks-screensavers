@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Sakura Dusk: cherry blossom petals drifting down over a pond at sunset,
+    with an arched footbridge, a stone lantern, and a pagoda on the far hills.
+
+    A Windows screensaver is just a normal .exe program whose file name
+    ends in .scr instead of .exe. So we build a normal WinExe here, and the
+    publish script (scripts/publish.ps1) renames SakuraDusk.exe to
+    SakuraDusk.scr at the end.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SakuraDusk</AssemblyName>
+    <RootNamespace>SakuraDusk</RootNamespace>
+
+    <!--
+      "Per monitor DPI aware": tells Windows "I will handle high-resolution
+      screens myself, do not blow my window up and blur it." Without this, on a
+      laptop set to 150% scaling Windows would render us small and stretch us,
+      and the fine petal edges would go fuzzy.
+    -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+
+    <Product>Sakura Dusk Screensaver</Product>
+    <Company>Peckworks</Company>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Peckworks.Screensavers.Core\Peckworks.Screensavers.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,6 +1,6 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
-using System.Runtime.InteropServices;
+using Peckworks.Screensavers.Core.Sakura;
 
 namespace Sakura;
 
@@ -37,7 +37,9 @@ internal sealed class Scenery
 ///
 /// This uses System.Drawing (GDI+), the standard .NET 2D drawing kit: shapes,
 /// gradients, and anti-aliasing (smoothed edges). It is too slow for the
-/// petals, but perfect for painting a backdrop once.
+/// petals, but perfect for painting a backdrop once. The trees, banks and
+/// branches themselves are painted by the shared Brushwork helpers in the
+/// engine (Core/Sakura/Brushwork.cs), so every sakura scene has the same hand.
 /// </summary>
 internal static class SceneryPainter
 {
@@ -64,11 +66,11 @@ internal static class SceneryPainter
         PaintLake(g, w, h, horizon, fuji, rng);
         PaintShore(g, w, h, horizon, rng);
         var (leftBank, rightHill) = MakeGround(w, h);
-        PaintGround(g, h, leftBank, rightHill);
+        PaintGround(g, leftBank, rightHill);
         PaintGrove(g, w, h, u, leftBank, rightHill, rng);
         List<PointF> spots = PaintBranches(g, w, h, u, rng);
 
-        return new Scenery { Pixels = ToPixels(bmp), HorizonY = horizon, BlossomSpots = spots };
+        return new Scenery { Pixels = Brushwork.ToPixels(bmp), HorizonY = horizon, BlossomSpots = spots };
     }
 
     // ================================================================ sky
@@ -352,50 +354,6 @@ internal static class SceneryPainter
 
     // ================================================================ foreground
 
-    /// <summary>
-    /// One bank of land: its top edge as a line of points (left to right), and
-    /// a way to ask "how high is the ground at this x?".
-    ///
-    /// Why this exists: earlier, the ground was a plain polygon and each tree
-    /// had its trunk end at a fixed height. Where the bank sloped down toward
-    /// the water, the trunk stopped in mid air and the tree looked like it was
-    /// floating. Now the ground is the single source of truth: a tree asks the
-    /// bank where the ground is under it and plants its trunk there, so a tree
-    /// placed anywhere along the bank stands on it whatever slope it has.
-    /// </summary>
-    private sealed class Bank
-    {
-        private readonly PointF[] _edge;
-        private readonly int _h;
-
-        public Bank(PointF[] edge, int h) { _edge = edge; _h = h; }
-
-        /// <summary>The top edge, left to right.</summary>
-        public PointF[] Edge => _edge;
-
-        /// <summary>The whole shape to fill: the top edge, then down to the bottom of the screen and back.</summary>
-        public PointF[] Polygon() =>
-            [.. _edge, new PointF(_edge[^1].X, _h + 2), new PointF(_edge[0].X, _h + 2)];
-
-        /// <summary>
-        /// Ground height at x, found by walking along the edge to the two
-        /// points that straddle x and blending between them ("linear
-        /// interpolation": if x is 30% of the way from point A to point B, the
-        /// answer is 30% of the way from A's height to B's height).
-        /// </summary>
-        public float YAt(float x)
-        {
-            if (x <= _edge[0].X) return _edge[0].Y;
-            for (int i = 1; i < _edge.Length; i++)
-            {
-                if (x > _edge[i].X) continue;
-                float t = (x - _edge[i - 1].X) / (_edge[i].X - _edge[i - 1].X);
-                return _edge[i - 1].Y + (_edge[i].Y - _edge[i - 1].Y) * t;
-            }
-            return _edge[^1].Y;
-        }
-    }
-
     /// <summary>The land in front of the lake: a dark bank at the lower left and a grassy rise at the lower right.</summary>
     private static (Bank Left, Bank Right) MakeGround(int w, int h)
     {
@@ -412,24 +370,11 @@ internal static class SceneryPainter
         return (left, right);
     }
 
-    /// <summary>
-    /// Paints the two banks. Each is a gradient (lit along its top, darker
-    /// toward the bottom of the screen) with a thin lighter rim along the top
-    /// edge, so it reads as a rounded bank rather than a flat cutout.
-    /// </summary>
-    private static void PaintGround(Graphics g, int h, Bank left, Bank right)
+    /// <summary>Paints the two banks: a dark earthy one on the left, a grassy one on the right.</summary>
+    private static void PaintGround(Graphics g, Bank left, Bank right)
     {
-        Fill(left, Color.FromArgb(74, 86, 70), Color.FromArgb(40, 46, 42), Color.FromArgb(120, 104, 122, 92));
-        Fill(right, Color.FromArgb(134, 146, 88), Color.FromArgb(82, 92, 56), Color.FromArgb(140, 168, 182, 112));
-
-        void Fill(Bank bank, Color top, Color bottom, Color rim)
-        {
-            float edgeTop = bank.Edge.Min(p => p.Y);
-            using (var brush = new LinearGradientBrush(new PointF(0, edgeTop - 1), new PointF(0, h + 1), top, bottom))
-                g.FillPolygon(brush, bank.Polygon());
-            using var pen = new Pen(rim, Math.Max(1.5f, h * 0.004f)) { LineJoin = LineJoin.Round };
-            g.DrawLines(pen, bank.Edge);
-        }
+        left.Paint(g, Color.FromArgb(74, 86, 70), Color.FromArgb(40, 46, 42), Color.FromArgb(120, 104, 122, 92));
+        right.Paint(g, Color.FromArgb(134, 146, 88), Color.FromArgb(82, 92, 56), Color.FromArgb(140, 168, 182, 112));
     }
 
     /// <summary>
@@ -462,146 +407,20 @@ internal static class SceneryPainter
         ];
 
         float pineFoot = left.YAt(w * 0.21f) + u * 0.02f;
-        Pine(g, w * 0.21f, pineFoot - u * 0.37f, pineFoot, u, rng);
+        Brushwork.Pine(g, w * 0.21f, pineFoot - u * 0.37f, pineFoot, u, rng);
 
         // Trunks first, then all the canopies, so a canopy can hide the top of
         // its neighbor's trunk but a trunk is never painted over blossoms.
         foreach (var t in trees)
-            Trunk(g, w * t.X, left.YAt(w * t.X) + u * 0.03f, left.YAt(w * t.X) - u * t.Lift, u * t.R, rng);
+            Brushwork.Trunk(g, w * t.X, left.YAt(w * t.X) + u * 0.03f, left.YAt(w * t.X) - u * t.Lift, u * t.R, rng);
         foreach (var t in trees)
-            Canopy(g, w * t.X, left.YAt(w * t.X) - u * t.Lift, u * t.R, u, rng);
+            Brushwork.Canopy(g, w * t.X, left.YAt(w * t.X) - u * t.Lift, u * t.R, u, rng);
 
         // The lone tree on the right hill. It stands inward from the edge so it
         // does not run into the branch that reaches in from the right.
         float rx = w * 0.87f, ry = right.YAt(rx) - u * 0.165f;
-        Trunk(g, rx, right.YAt(rx) + u * 0.03f, ry, u * 0.14f, rng);
-        Canopy(g, rx, ry, u * 0.14f, u, rng);
-    }
-
-    /// <summary>
-    /// A trunk that forks: one thick stem from the ground to a little more than
-    /// halfway up, then two thinner limbs that lean apart and disappear into the
-    /// canopy (the blossoms are painted afterward and cover their ends). The
-    /// whole thing leans slightly, and the lean is random, so the grove is not
-    /// a row of identical posts. Thickness scales with the canopy's size (r).
-    /// </summary>
-    private static void Trunk(Graphics g, float x, float baseY, float canopyY, float r, Random rng)
-    {
-        float lean = r * 0.15f * ((float)rng.NextDouble() * 2 - 1);
-        var mid = new PointF(x + lean, baseY - (baseY - canopyY) * 0.6f);
-        float thick = Math.Max(2f, r * 0.11f);
-        Color bark = Color.FromArgb(52, 38, 40);
-
-        using (var stem = new Pen(bark, thick) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-            g.DrawLine(stem, new PointF(x, baseY), mid);
-        using var limb = new Pen(bark, thick * 0.65f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        g.DrawLine(limb, mid, new PointF(mid.X + lean - r * 0.25f, canopyY + r * 0.05f));
-        g.DrawLine(limb, mid, new PointF(mid.X + lean + r * 0.30f, canopyY - r * 0.05f));
-    }
-
-    /// <summary>
-    /// A cloud of blossoms, built from "lumps" the way a child draws a cloud:
-    /// several overlapping round bunches. Each lump gets a soft pink body, then
-    /// hundreds of tiny dots of light and deep pink scattered over it and a bit
-    /// past its edge, so the outline comes out bumpy and fluffy instead of a
-    /// smooth circle. Dots in the upper left come out lighter, as if the sun
-    /// (on the left) catches them.
-    /// </summary>
-    private static void Canopy(Graphics g, float cx, float cy, float r, float u, Random rng)
-    {
-        int lumpCount = 7 + rng.Next(4);
-        var lumps = new (float X, float Y, float R)[lumpCount];
-        for (int i = 0; i < lumpCount; i++)
-        {
-            // Random point inside an ellipse: random angle, random distance.
-            // Square root on the distance keeps points evenly spread instead of
-            // bunched in the middle.
-            double ang = rng.NextDouble() * Math.PI * 2, dist = Math.Sqrt(rng.NextDouble()) * 0.6;
-            lumps[i] = (cx + (float)(Math.Cos(ang) * dist) * r * 1.2f,   // wider than tall
-                        cy + (float)(Math.Sin(ang) * dist) * r * 0.6f,
-                        r * (0.28f + 0.14f * (float)rng.NextDouble()));
-        }
-
-        using (var body = new SolidBrush(Color.FromArgb(240, 210, 134, 166)))
-            foreach (var l in lumps)
-                g.FillEllipse(body, l.X - l.R * 0.9f, l.Y - l.R * 0.9f, l.R * 1.8f, l.R * 1.8f);
-
-        int dots = Math.Min(1800, (int)(r * r / (u * 0.0045f * u * 0.0045f) * 1.5f));
-        for (int i = 0; i < dots; i++)
-        {
-            var l = lumps[rng.Next(lumpCount)];
-            double ang = rng.NextDouble() * Math.PI * 2, dist = Math.Sqrt(rng.NextDouble()) * 1.05;
-            float x = l.X + (float)(Math.Cos(ang) * dist) * l.R;
-            float y = l.Y + (float)(Math.Sin(ang) * dist) * l.R;
-            float light = Math.Clamp(0.5f - (x - cx) / r * 0.3f - (y - cy) / r * 0.4f + ((float)rng.NextDouble() - 0.5f) * 0.6f, 0, 1);
-            Color c = Mix(Color.FromArgb(200, 104, 146), Color.FromArgb(255, 238, 245), light);
-            float dr = u * (0.003f + 0.004f * (float)rng.NextDouble());
-            using var b = new SolidBrush(Color.FromArgb(230, c));
-            g.FillEllipse(b, x - dr, y - dr, dr * 2, dr * 2);
-        }
-    }
-
-    /// <summary>
-    /// A tall dark pine, the classic cone shape: narrow at the tip, wide at the
-    /// foot. Two passes:
-    ///
-    ///   1. The SILHOUETTE: one solid dark-green shape, traced down the left
-    ///      side and back up the right. Its edge is jagged because each row of
-    ///      boughs sticks out a slightly different amount, and each row's tips
-    ///      hang a little lower than its middle, the way real boughs droop.
-    ///      Painting this first guarantees the tree is one solid shape, never a
-    ///      stack of separate pancakes with sky showing between them.
-    ///   2. The TEXTURE: small ovals scattered over the silhouette in lighter
-    ///      and darker greens, which gives the surface the look of clumps of
-    ///      needles. The right side comes out darker (the sun is on the left).
-    ///
-    /// The trunk runs all the way to the ground, which is passed in, so the
-    /// pine stands on the bank like everything else.
-    /// </summary>
-    private static void Pine(Graphics g, float x, float top, float ground, float u, Random rng)
-    {
-        using (var trunk = new Pen(Color.FromArgb(48, 38, 34), u * 0.007f))
-            g.DrawLine(trunk, x, ground, x, top + u * 0.02f);
-
-        float bottom = ground - u * 0.03f;
-        float height = bottom - top;
-        float HalfWidthAt(float y) => u * (0.006f + 0.070f * (y - top) / height);   // the cone: wider lower down
-
-        // Pass 1: the silhouette. Left edge going down, then right edge coming back up.
-        var leftEdge = new List<PointF> { new(x, top) };
-        var rightEdge = new List<PointF>();
-        float rowStep = u * 0.02f;
-        for (float y = top + rowStep; y <= bottom; y += rowStep)
-        {
-            float hw = HalfWidthAt(y);
-            float droop = hw * 0.2f;
-            leftEdge.Add(new PointF(x - hw * (0.85f + 0.3f * (float)rng.NextDouble()), y + droop));
-            leftEdge.Add(new PointF(x - hw * 0.45f, y + droop * 0.4f));                // the notch between one row and the next
-            rightEdge.Add(new PointF(x + hw * (0.85f + 0.3f * (float)rng.NextDouble()), y + droop));
-            rightEdge.Add(new PointF(x + hw * 0.45f, y + droop * 0.4f));
-        }
-        rightEdge.Reverse();
-        using (var body = new SolidBrush(Color.FromArgb(30, 60, 44)))
-            g.FillPolygon(body, [.. leftEdge, .. rightEdge]);
-
-        // Pass 2: the texture of needle clumps.
-        Color dark = Color.FromArgb(22, 48, 36), lit = Color.FromArgb(70, 112, 76);
-        for (float y = top + u * 0.015f; y < bottom; y += u * 0.014f)
-        {
-            float hw = HalfWidthAt(y);
-            int puffs = 2 + (int)(hw / (u * 0.008f));
-            for (int k = 0; k < puffs; k++)
-            {
-                float f = (k + (float)rng.NextDouble()) / puffs * 2 - 1;          // -1 (left tip) ... +1 (right tip), evenly spread
-                float px = x + f * hw;
-                float py = y + MathF.Abs(f) * hw * 0.2f;                           // tips hang lower, matching the silhouette
-                float pw = u * (0.006f + 0.007f * (float)rng.NextDouble());
-                float ph = pw * 0.6f;
-                float light = Math.Clamp(0.5f - f * 0.3f + ((float)rng.NextDouble() - 0.5f) * 0.5f, 0, 1);
-                using var needles = new SolidBrush(Mix(dark, lit, light));
-                g.FillEllipse(needles, px - pw, py - ph, pw * 2, ph * 2);
-            }
-        }
+        Brushwork.Trunk(g, rx, right.YAt(rx) + u * 0.03f, ry, u * 0.14f, rng);
+        Brushwork.Canopy(g, rx, ry, u * 0.14f, u, rng);
     }
 
     // ================================================================ branches
@@ -609,117 +428,28 @@ internal static class SceneryPainter
     /// <summary>
     /// Cherry branches reaching in from the top corners, covered in blossom.
     /// Returns the blossom cluster positions so petals can fall from them.
-    ///
-    /// Branches are grown, not drawn by hand. Grow() walks forward in small
-    /// steps, wobbling a little and sagging downward under its own weight, and
-    /// now and then sprouts a thinner side branch that does the same thing.
-    /// A rule that calls itself like this is called "recursion", and it is how
-    /// most computer-drawn plants are made: a few simple rules, repeated,
-    /// produce something that looks organic.
+    /// The growing itself is Brushwork.Branches; this method only says where
+    /// each branch starts and which way it heads.
     /// </summary>
     private static List<PointF> PaintBranches(Graphics g, int w, int h, float u, Random rng)
     {
-        var wood = new List<(PointF A, PointF B, float Width)>();
-        var flowers = new List<(PointF C, float R, Color Petal, float Turn)>();
-        var spots = new List<PointF>();
-
-        void Cluster(PointF at, float spread)
-        {
-            spots.Add(at);
-            int n = 3 + rng.Next(5);
-            for (int i = 0; i < n; i++)
-            {
-                var c = new PointF(at.X + spread * ((float)rng.NextDouble() * 2 - 1),
-                                   at.Y + spread * ((float)rng.NextDouble() * 2 - 1));
-                float r = u * (0.008f + 0.005f * (float)rng.NextDouble());
-                Color petal = Mix(Color.FromArgb(255, 246, 249), Color.FromArgb(244, 162, 192), (float)Math.Pow(rng.NextDouble(), 0.8));
-                flowers.Add((c, r, petal, (float)(rng.NextDouble() * Math.PI * 2)));
-            }
-        }
-
-        void Grow(PointF p, float angle, float length, float thick, int depth)
-        {
-            const int steps = 8;
-            float stepLen = length / steps;
-            for (int i = 0; i < steps; i++)
-            {
-                angle += ((float)rng.NextDouble() - 0.5f) * 0.35f;       // wobble
-                angle += (MathF.PI / 2 - angle) * 0.03f;                  // sag toward "straight down" (pi/2 in screen coordinates)
-                var next = new PointF(p.X + MathF.Cos(angle) * stepLen, p.Y + MathF.Sin(angle) * stepLen);
-                wood.Add((p, next, thick));
-                thick *= 0.88f;                                           // taper
-
-                if (depth > 0 && rng.NextDouble() < 0.45)                 // sprout a side branch
-                {
-                    float turn = (0.4f + 0.5f * (float)rng.NextDouble()) * (rng.Next(2) == 0 ? -1 : 1);
-                    Grow(next, angle + turn, length * 0.5f * (1 - i / (float)steps * 0.4f), thick * 0.75f, depth - 1);
-                }
-                if (thick < u * 0.012f && rng.NextDouble() < 0.5)         // thin enough to bloom
-                    Cluster(next, u * 0.02f);
-                p = next;
-            }
-            Cluster(p, u * 0.024f);                                       // every tip ends in a big cluster
-        }
-
         // Angles are in radians, measured clockwise from "pointing right"
         // (because screen y grows downward): 0 = right, pi/2 = down, pi = left.
         // Start points are positions (w, h); lengths and thicknesses are sizes (u).
-        Grow(new PointF(-w * 0.01f, h * 0.04f), 0.25f, u * 0.55f, u * 0.020f, 3);        // top left, reaching right
-        Grow(new PointF(w * 0.12f, -h * 0.01f), 1.15f, u * 0.30f, u * 0.012f, 2);        // top left, hanging down
-        Grow(new PointF(w * 1.01f, h * 0.02f), MathF.PI - 0.35f, u * 0.60f, u * 0.024f, 3); // top right, reaching left
-        Grow(new PointF(w * 1.01f, h * 0.30f), MathF.PI - 0.12f, u * 0.45f, u * 0.018f, 3); // right edge, lower
-        Grow(new PointF(w * 0.74f, -h * 0.01f), MathF.PI / 2 + 0.35f, u * 0.32f, u * 0.012f, 2); // top, hanging down
-
-        // Wood first, then all the flowers, so no branch is painted over a blossom.
-        foreach (var (a, b, width) in wood)
-        {
-            using var pen = new Pen(Color.FromArgb(58, 38, 40), Math.Max(1f, width)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            g.DrawLine(pen, a, b);
-        }
-        foreach (var (c, r, petal, turn) in flowers)
-            Flower(g, c, r, petal, turn);
+        Brushwork.BranchSeed[] seeds =
+        [
+            new(new PointF(-w * 0.01f, h * 0.04f), 0.25f, u * 0.55f, u * 0.020f, 3),             // top left, reaching right
+            new(new PointF(w * 0.12f, -h * 0.01f), 1.15f, u * 0.30f, u * 0.012f, 2),             // top left, hanging down
+            new(new PointF(w * 1.01f, h * 0.02f), MathF.PI - 0.35f, u * 0.60f, u * 0.024f, 3),   // top right, reaching left
+            new(new PointF(w * 1.01f, h * 0.30f), MathF.PI - 0.12f, u * 0.45f, u * 0.018f, 3),   // right edge, lower
+            new(new PointF(w * 0.74f, -h * 0.01f), MathF.PI / 2 + 0.35f, u * 0.32f, u * 0.012f, 2), // top, hanging down
+        ];
+        List<PointF> spots = Brushwork.Branches(g, seeds, u, rng,
+            wood: Color.FromArgb(58, 38, 40),
+            petalLight: Color.FromArgb(255, 246, 249),
+            petalDeep: Color.FromArgb(244, 162, 192));
 
         // Only clusters actually on screen and in the upper part are good drop points.
         return spots.Where(s => s.X >= 0 && s.X < w && s.Y >= 0 && s.Y < h * 0.7f).ToList();
-    }
-
-    /// <summary>One cherry blossom: five round petals in a ring around a deep pink center.</summary>
-    private static void Flower(Graphics g, PointF c, float r, Color petal, float turn)
-    {
-        using var petalBrush = new SolidBrush(Color.FromArgb(245, petal));
-        float pr = r * 0.5f;
-        for (int k = 0; k < 5; k++)
-        {
-            float a = turn + k * MathF.Tau / 5;   // Tau = 2 * pi = one full turn; five petals, a fifth of a turn apart
-            float px = c.X + MathF.Cos(a) * r * 0.5f, py = c.Y + MathF.Sin(a) * r * 0.5f;
-            g.FillEllipse(petalBrush, px - pr, py - pr, pr * 2, pr * 2);
-        }
-        using var center = new SolidBrush(Color.FromArgb(214, 92, 134));
-        float cr = r * 0.17f;
-        g.FillEllipse(center, c.X - cr, c.Y - cr, cr * 2, cr * 2);
-    }
-
-    // ================================================================ helpers
-
-    /// <summary>Blend two colors: t = 0 gives a, t = 1 gives b.</summary>
-    private static Color Mix(Color a, Color b, float t) => Color.FromArgb(
-        (int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
-
-    /// <summary>Copy the finished Bitmap into a plain pixel array (the same 0x00RRGGBB layout as a FrameBuffer).</summary>
-    private static uint[] ToPixels(Bitmap bmp)
-    {
-        var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppRgb);
-        try
-        {
-            var raw = new int[bmp.Width * bmp.Height];
-            Marshal.Copy(data.Scan0, raw, 0, raw.Length);   // 32-bit rows have no padding, so one copy does it
-            var pixels = new uint[raw.Length];
-            Buffer.BlockCopy(raw, 0, pixels, 0, raw.Length * 4);
-            return pixels;
-        }
-        finally
-        {
-            bmp.UnlockBits(data);
-        }
     }
 }
