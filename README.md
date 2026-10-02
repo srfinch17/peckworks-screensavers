@@ -25,6 +25,8 @@ across a lake, framed by branches in full bloom. Stylized rather than photoreali
 - Depth: near petals are bigger, faster, and more opaque than far ones.
 - Some petals let go of the blossoms on the branches; light glints on the lake.
 - Trees stand on two banks of land in front of the lake, with a pine behind the grove.
+- A small wooden boat with a roofed cabin, a boatman in a straw hat and a red lantern drifts
+  slowly across the lake, passing behind the banks and trees.
 - Branches and trees are grown randomly, so each run looks a little different.
 
 Settings: number of petals, fall speed, breeze, petal size.
@@ -39,6 +41,7 @@ lantern with a glowing window, cherry trees on both banks, and a small flock of 
 
 - Petals are tinted by the evening light, and golden glints twinkle in the sun's reflection.
 - The nearest hills, the pagoda, and the bridge are mirrored faintly in the still water.
+- The same boat as Sakura's, here a small silhouette far out near the opposite shore.
 - Same four settings as Sakura, saved separately.
 
 Sakura and Sakura Dusk share one petal engine and one set of painting brushes (banks, trunks,

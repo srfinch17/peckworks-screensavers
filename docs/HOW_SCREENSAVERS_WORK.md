@@ -71,6 +71,7 @@ src/
     Sprite.cs                      a small picture painted once and stamped each frame (bats, Santa, glows)
     Sakura/PetalField.cs           the falling petals (or leaves, or snow), shared by every painted scene
     Sakura/Brushwork.cs            banks, hills, trunks, blossoms, a pine, and self-growing branches
+    Sakura/Boat.cs                 the little boat that crosses the water in both sakura scenes
 
   MatrixRain/                      a screensaver built on the engine
     Program.cs                     Main(), plus the "definition" handed to the engine
@@ -255,6 +256,14 @@ keeps a copy of the picture. When the whole backdrop is finished, it compares th
 that did not change is still sky. That gives a stencil with one yes/no per pixel, and the sleigh
 is only ever stamped on the "yes" pixels. Nothing has to know where the branches are. (He flies
 well above the pines, so in practice it is only the corner branches that cover him.)
+
+**The boat on the Sakura lakes** (`Core/Sakura/Boat.cs`) is those same two ideas again. It is a
+sprite, painted once, plus a second sprite of the same boat painted upside down and stamped
+faintly underneath as its reflection. Each painter keeps a copy of the picture at the moment the
+water is finished, and compares it with the final backdrop to get an "open water" stencil, so the
+boat slips behind the banks, the trees and the bridge. In Sakura Dusk the boat is smaller and
+sails far out near the opposite shore: any closer and it lined up with the bridge's railing and
+looked as if it were riding on the bridge.
 
 ## 9. High-DPI screens
 

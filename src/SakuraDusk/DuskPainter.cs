@@ -10,6 +10,8 @@ internal sealed class DuskScenery
     public required uint[] Pixels { get; init; }             // the painted picture, same layout as a FrameBuffer
     public required List<PointF> BlossomSpots { get; init; } // clusters on the branches that petals can drop from
     public required RectangleF SunPath { get; init; }        // the patch of water lit by the setting sun (glints live here)
+    public required bool[] OpenWater { get; init; }          // one true/false per pixel: true where no bank, bridge, tree or branch was painted in front
+    public required float BoatWaterline { get; init; }       // the height on the pond where the boat floats
 }
 
 /// <summary>
@@ -63,6 +65,13 @@ internal static class DuskPainter
         PaintRipples(g, w, h, horizon, sun, u, rng);
         hills.PaintNearLayer(g);
 
+        // Everything painted so far is BEHIND the boat that crosses the pond;
+        // everything after this line (banks, bridge, lantern, trees,
+        // branches) is in front of it. Keep a copy now, and compare at the
+        // end: unchanged pixels are still open water.
+        g.Flush();
+        uint[] behindBoat = Brushwork.ToPixels(bmp);
+
         float rim = Math.Max(1.5f, u * 0.004f);
         left.Paint(g, Color.FromArgb(70, 52, 84), Color.FromArgb(30, 22, 42), Color.FromArgb(120, 150, 104, 96), rim);
         right.Paint(g, Color.FromArgb(70, 52, 84), Color.FromArgb(30, 22, 42), Color.FromArgb(120, 150, 104, 96), rim);
@@ -77,7 +86,14 @@ internal static class DuskPainter
         // never lands on the railing.
         var sunPath = new RectangleF(sun.X - sun.R * 3f, horizon + h * 0.01f, sun.R * 6f, (h - horizon) * 0.8f);
 
-        return new DuskScenery { Pixels = Brushwork.ToPixels(bmp), BlossomSpots = spots, SunPath = sunPath };
+        g.Flush();
+        uint[] pixels = Brushwork.ToPixels(bmp);
+        return new DuskScenery
+        {
+            Pixels = pixels, BlossomSpots = spots, SunPath = sunPath,
+            OpenWater = Brushwork.Unchanged(behindBoat, pixels),
+            BoatWaterline = horizon + u * 0.014f,   // far out, just off the opposite shore, well above the bridge's railing
+        };
     }
 
     private sealed record Sun(float X, float Y, float R);

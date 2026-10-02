@@ -10,6 +10,8 @@ internal sealed class Scenery
     public required uint[] Pixels { get; init; }             // the painted picture, same layout as a FrameBuffer
     public required float HorizonY { get; init; }            // where the lake meets the far shore
     public required List<PointF> BlossomSpots { get; init; } // clusters on the top branches that petals can drop from
+    public required bool[] OpenWater { get; init; }          // one true/false per pixel: true where no bank, tree or branch was painted in front
+    public required float BoatWaterline { get; init; }       // the height on the lake where the boat floats
 }
 
 /// <summary>
@@ -65,12 +67,26 @@ internal static class SceneryPainter
         PaintHills(g, w, h, horizon, rng);
         PaintLake(g, w, h, horizon, fuji, rng);
         PaintShore(g, w, h, horizon, rng);
+
+        // Everything painted so far is BEHIND the boat that crosses the lake;
+        // everything after this line is in front of it. Keep a copy now, and
+        // compare at the end: unchanged pixels are still open water.
+        g.Flush();
+        uint[] behindBoat = Brushwork.ToPixels(bmp);
+
         var (leftBank, rightHill) = MakeGround(w, h);
         PaintGround(g, u, leftBank, rightHill);
         PaintGrove(g, w, h, u, leftBank, rightHill, rng);
         List<PointF> spots = PaintBranches(g, w, h, u, rng);
 
-        return new Scenery { Pixels = Brushwork.ToPixels(bmp), HorizonY = horizon, BlossomSpots = spots };
+        g.Flush();
+        uint[] pixels = Brushwork.ToPixels(bmp);
+        return new Scenery
+        {
+            Pixels = pixels, HorizonY = horizon, BlossomSpots = spots,
+            OpenWater = Brushwork.Unchanged(behindBoat, pixels),
+            BoatWaterline = horizon + u * 0.07f,   // a little way out from the far shore
+        };
     }
 
     // ================================================================ sky

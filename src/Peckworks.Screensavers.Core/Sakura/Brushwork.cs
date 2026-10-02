@@ -401,6 +401,20 @@ public static class Brushwork
     public static Color Mix(Color a, Color b, float t) => Color.FromArgb(
         (int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
 
+    /// <summary>
+    /// Makes a stencil for something that must pass BEHIND the foreground.
+    /// Take a copy of the picture at the moment everything behind the moving
+    /// thing has been painted ("before"), finish the picture ("after"), and
+    /// compare: a pixel that did not change has nothing in front of it. The
+    /// answer is one true/false per pixel, true = still open.
+    /// </summary>
+    public static bool[] Unchanged(uint[] before, uint[] after)
+    {
+        var open = new bool[after.Length];
+        for (int i = 0; i < open.Length; i++) open[i] = before[i] == after[i];
+        return open;
+    }
+
     /// <summary>Copy a finished Bitmap into a plain pixel array (the same 0x00RRGGBB layout as a FrameBuffer).</summary>
     public static uint[] ToPixels(Bitmap bmp)
     {

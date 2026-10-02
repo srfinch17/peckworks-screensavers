@@ -26,6 +26,7 @@ internal sealed class SakuraDuskScene : IScreensaverScene
     private readonly DuskScenery _scenery;
     private readonly PetalField _petals;
     private readonly Glint[] _glints;
+    private readonly Boat _boat;
     private float _time;
 
     public SakuraDuskScene(int width, int height, SakuraDuskSettings settings)
@@ -40,6 +41,14 @@ internal sealed class SakuraDuskScene : IScreensaverScene
         {
             Tint = (1f, 0.90f, 0.84f),   // evening light: a little less green and blue, so the petals warm up
         };
+
+        // ---- The boat crossing the pond (Core/Sakura/Boat.cs) ----
+        // Shaded most of the way toward the hills' plum shadow, because the
+        // sun is behind it: against a sunset, a boat is nearly a silhouette.
+        // It is also smaller than Sakura's boat, because it sails far out
+        // near the opposite shore: closer in, it would line up with the
+        // bridge's railing and look as if it were riding on the bridge.
+        _boat = new Boat(width, _scenery.BoatWaterline, u, shade: 0.62f, shadow: Color.FromArgb(50, 26, 60), _rng, scale: 0.6f);
 
         // ---- Glints in the sun's reflection ----
         // The painter tells us the strip of water the sun lights up. Glints
@@ -70,6 +79,7 @@ internal sealed class SakuraDuskScene : IScreensaverScene
         float dt = (float)elapsedSeconds;
         _time += dt;
         _petals.Update(dt);
+        _boat.Update(dt);
     }
 
     public void Render(FrameBuffer fb)
@@ -77,7 +87,10 @@ internal sealed class SakuraDuskScene : IScreensaverScene
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
         Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
 
-        // 2. Golden glints twinkling in the sun's reflection.
+        // 2. The boat, only where the pond is open, so the banks and the bridge hide it.
+        _boat.Draw(fb, _scenery.OpenWater);
+
+        // 3. Golden glints twinkling in the sun's reflection.
         foreach (ref readonly Glint gl in _glints.AsSpan())
         {
             float s = MathF.Sin(_time * gl.Speed + gl.Phase);
@@ -86,7 +99,7 @@ internal sealed class SakuraDuskScene : IScreensaverScene
             DrawGlint(fb, gl, alpha);
         }
 
-        // 3. The petals, far to near.
+        // 4. The petals, far to near.
         _petals.Draw(fb);
     }
 

@@ -27,6 +27,7 @@ internal sealed class SakuraScene : IScreensaverScene
     private readonly Scenery _scenery;
     private readonly PetalField _petals;
     private readonly Glint[] _glints;
+    private readonly Boat _boat;
     private float _time;
 
     public SakuraScene(int width, int height, SakuraSettings settings)
@@ -38,6 +39,9 @@ internal sealed class SakuraScene : IScreensaverScene
             PetalField.CountFor(width, height, settings.DensityPercent),
             settings.FallSpeedPercent / 100f, settings.WindPercent / 100f, settings.PetalSizePercent / 100f,
             _scenery.BlossomSpots, _rng, sizeUnit: u);
+
+        // ---- The boat crossing the lake (Core/Sakura/Boat.cs), in plain daylight colors ----
+        _boat = new Boat(width, _scenery.BoatWaterline, u, shade: 0f, shadow: Color.Black, _rng);
 
         // ---- Glints on the lake ----
         _glints = new Glint[120];
@@ -61,6 +65,7 @@ internal sealed class SakuraScene : IScreensaverScene
         float dt = (float)elapsedSeconds;
         _time += dt;
         _petals.Update(dt);
+        _boat.Update(dt);
     }
 
     public void Render(FrameBuffer fb)
@@ -68,7 +73,10 @@ internal sealed class SakuraScene : IScreensaverScene
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
         Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
 
-        // 2. Glints twinkling on the lake.
+        // 2. The boat, only where the lake is open, so the banks and trees hide it.
+        _boat.Draw(fb, _scenery.OpenWater);
+
+        // 3. Glints twinkling on the lake.
         foreach (ref readonly Glint gl in _glints.AsSpan())
         {
             float s = MathF.Sin(_time * gl.Speed + gl.Phase);
@@ -77,7 +85,7 @@ internal sealed class SakuraScene : IScreensaverScene
             DrawGlint(fb, gl, alpha);
         }
 
-        // 3. The petals, far to near.
+        // 4. The petals, far to near.
         _petals.Draw(fb);
     }
 
