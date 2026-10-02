@@ -11,6 +11,8 @@ internal sealed class HalloweenScenery
     public required uint[] Pixels { get; init; }                     // the painted picture, same layout as a FrameBuffer
     public required List<PointF> LeafSpots { get; init; }            // places in the autumn trees that leaves can drop from
     public required List<(PointF At, float R)> Pumpkins { get; init; } // each jack-o'-lantern's center and size, for its candle glow
+    public required PointF SkeletonShoulder { get; init; }           // where the waving arm hinges
+    public required float SkeletonHeight { get; init; }              // its height in pixels, so the arm is drawn to scale
 }
 
 /// <summary>
@@ -78,11 +80,17 @@ internal static class HalloweenPainter
         foreach (var p in patch)
             pumpkins.Add(PaintPumpkin(g, w * p.X, ground.YAt(w * p.X) + u * 0.012f, u * p.R));
 
-        PaintSkeleton(g, w * 0.225f, ground.YAt(w * 0.225f) + u * 0.006f, u * 0.14f);
+        float skeletonX = w * 0.225f, skeletonFoot = ground.YAt(skeletonX) + u * 0.006f, skeletonTall = u * 0.14f;
+        PaintSkeleton(g, skeletonX, skeletonFoot, skeletonTall);
 
         PaintCornerBranches(g, w, h, u, rng);
 
-        return new HalloweenScenery { Pixels = Brushwork.ToPixels(bmp), LeafSpots = leafSpots, Pumpkins = pumpkins };
+        return new HalloweenScenery
+        {
+            Pixels = Brushwork.ToPixels(bmp), LeafSpots = leafSpots, Pumpkins = pumpkins,
+            SkeletonShoulder = new PointF(skeletonX + skeletonTall * 0.105f, skeletonFoot - skeletonTall * 0.765f),
+            SkeletonHeight = skeletonTall,
+        };
     }
 
     // ================================================================ sky
@@ -395,11 +403,12 @@ internal static class HalloweenPainter
         foreach (var r in ribs)
             g.DrawBezier(thin, P(-r.HalfWidth, r.Up), P(-r.HalfWidth, r.Up - 0.035f), P(r.HalfWidth, r.Up - 0.035f), P(r.HalfWidth, r.Up));
 
-        // Arms: the left one hangs, the right one is raised in a wave.
+        // The left arm hangs, with three fingers at the hand. The right arm
+        // is NOT painted here: it waves, so the scene stamps it every frame
+        // (see HalloweenScene.PaintArm), hinged at this shoulder.
         g.DrawLines(bone, [P(-0.105f, 0.765f), P(-0.155f, 0.60f), P(-0.135f, 0.44f)]);
-        g.DrawLines(bone, [P(0.105f, 0.765f), P(0.20f, 0.80f), P(0.235f, 0.97f)]);
-        foreach (float finger in (float[])[-0.03f, 0f, 0.03f])       // three spread fingers on the waving hand
-            g.DrawLine(thin, P(0.235f, 0.97f), P(0.24f + finger, 1.02f));
+        foreach (float finger in (float[])[-0.025f, 0f, 0.025f])
+            g.DrawLine(thin, P(-0.135f, 0.44f), P(-0.135f + finger, 0.395f));
 
         // Skull: a round top, a narrower jaw, then the dark hollows that make it a face.
         g.FillEllipse(fill, x - tall * 0.078f, footY - tall * 0.99f, tall * 0.156f, tall * 0.16f);

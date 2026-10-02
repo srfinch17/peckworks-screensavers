@@ -11,11 +11,12 @@ internal sealed class DuskScenery
     public required List<PointF> BlossomSpots { get; init; } // clusters on the branches that petals can drop from
     public required RectangleF SunPath { get; init; }        // the patch of water lit by the setting sun (glints live here)
     public required bool[] OpenWater { get; init; }          // one true/false per pixel: true where no bank, bridge, tree or branch was painted in front
+    public required bool[] OpenSky { get; init; }            // one true/false per pixel: true where nothing at all was painted over the sky (the birds fly there)
     public required float BoatWaterline { get; init; }       // the height on the pond where the boat floats
 }
 
 /// <summary>
-/// Paints the backdrop: a sunset sky with a low sun, a few birds, three
+/// Paints the backdrop: a sunset sky with a low sun, three
 /// layers of hazy hills with a pagoda on the nearest one, a still pond that
 /// reflects the sun, two banks with cherry trees, an arched wooden footbridge,
 /// a stone lantern with a glowing window, and blossom branches at the top
@@ -50,7 +51,13 @@ internal static class DuskPainter
         var sun = new Sun(sunX, hills.FarRidgeAt(sunX) - sunR * 0.55f, sunR);
 
         PaintSky(g, w, horizon, sun, u);
-        PaintBirds(g, w, h, u, rng);
+
+        // The birds are animated (Flock.cs) and fly in front of the sun but
+        // behind everything else. Keep a copy of the bare sky; pixels that
+        // are still the same at the end are where the birds may be drawn.
+        g.Flush();
+        uint[] bareSky = Brushwork.ToPixels(bmp);
+
         hills.PaintFarLayers(g);
         PaintWaterBase(g, w, h, horizon);
 
@@ -92,6 +99,7 @@ internal static class DuskPainter
         {
             Pixels = pixels, BlossomSpots = spots, SunPath = sunPath,
             OpenWater = Brushwork.Unchanged(behindBoat, pixels),
+            OpenSky = Brushwork.Unchanged(bareSky, pixels),
             BoatWaterline = horizon + u * 0.014f,   // far out, just off the opposite shore, well above the bridge's railing
         };
     }
@@ -135,26 +143,6 @@ internal static class DuskPainter
             g.FillEllipse(rim, sun.X - sun.R * 1.12f, sun.Y - sun.R * 1.12f, sun.R * 2.24f, sun.R * 2.24f);
         using (var disc = new SolidBrush(Color.FromArgb(255, 244, 206)))
             g.FillEllipse(disc, sun.X - sun.R, sun.Y - sun.R, sun.R * 2, sun.R * 2);
-    }
-
-    /// <summary>
-    /// A loose flock of distant birds: each one is two little curved wing
-    /// strokes meeting in the middle, the shorthand every illustrator uses.
-    /// </summary>
-    private static void PaintBirds(Graphics g, int w, int h, float u, Random rng)
-    {
-        using var pen = new Pen(Color.FromArgb(220, 44, 22, 56), Math.Max(1f, u * 0.0025f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        int count = 7;
-        float cx = w * 0.33f, cy = h * 0.40f;
-        for (int i = 0; i < count; i++)
-        {
-            float x = cx + u * 0.22f * ((float)rng.NextDouble() - 0.5f);
-            float y = cy + u * 0.10f * ((float)rng.NextDouble() - 0.5f);
-            float s = u * (0.008f + 0.008f * (float)rng.NextDouble());   // wingspan, half
-            float lift = s * (0.3f + 0.4f * (float)rng.NextDouble());     // how high the wing tips are
-            g.DrawBezier(pen, new PointF(x - s, y - lift), new PointF(x - s * 0.5f, y - lift * 0.2f), new PointF(x - s * 0.3f, y), new PointF(x, y));
-            g.DrawBezier(pen, new PointF(x, y), new PointF(x + s * 0.3f, y), new PointF(x + s * 0.5f, y - lift * 0.2f), new PointF(x + s, y - lift));
-        }
     }
 
     // ================================================================ hills

@@ -35,7 +35,8 @@ Settings: number of petals, fall speed, breeze, petal size.
 
 The same slowly falling petals over a different painting: a pond at sunset, with a low sun
 setting behind hazy hills, a pagoda on the far shore, an arched wooden footbridge, a stone
-lantern with a glowing window, cherry trees on both banks, and a small flock of birds.
+lantern with a glowing window, and cherry trees on both banks. A small flock of birds flaps
+slowly across the sky, each bird on its own rhythm, gliding now and then.
 
 ![Sakura Dusk](docs/images/sakura-dusk.png)
 
@@ -56,7 +57,7 @@ trees, and bare branches clawing in from the top corners.
 ![Halloween](docs/images/halloween.png)
 
 - Bats flap across the sky in three sizes, swooping as they go.
-- The jack-o'-lanterns flicker like candles.
+- The jack-o'-lanterns flicker like candles, and the skeleton waves.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the autumn trees.
 
 Settings: number of leaves, fall speed, breeze, leaf size, number of bats.

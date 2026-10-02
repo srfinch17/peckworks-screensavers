@@ -42,6 +42,8 @@ internal sealed class HalloweenScene : IScreensaverScene
     private readonly Bat[] _bats;
     private readonly Sprite[] _candleGlows;   // one per pumpkin, sized to it
     private readonly float[] _candlePhases;
+    private readonly Sprite[] _arms;          // the skeleton's waving arm, one sprite per position of the wave
+    private const int ArmPoses = 16;
     private readonly int _w, _h;
     // A "double" (a decimal number with about 15 digits of precision), not a
     // "float" (about 7 digits). A screensaver can run for days. A float clock
@@ -104,6 +106,47 @@ internal sealed class HalloweenScene : IScreensaverScene
             _candleGlows[i] = Sprite.Glow((int)(_scenery.Pumpkins[i].R * 3.2f), Color.FromArgb(255, 150, 40));
             _candlePhases[i] = (float)(_rng.NextDouble() * 20);
         }
+
+        // ---- The skeleton's waving arm: one sprite per position of the wave ----
+        _arms = new Sprite[ArmPoses];
+        for (int i = 0; i < ArmPoses; i++)
+            _arms[i] = PaintArm(_scenery.SkeletonHeight, i / (ArmPoses - 1f) * 2 - 1);   // -1 = leaning left ... +1 = leaning right
+    }
+
+    /// <summary>
+    /// The skeleton's raised right arm, hinged at the shoulder, which sits at
+    /// the sprite's bottom-left corner. The upper arm angles up and out; the
+    /// forearm rocks about the elbow with "swing" (-1 to +1), fingers spread
+    /// at the hand. Positions are in fractions of the skeleton's height,
+    /// matching HalloweenPainter.PaintSkeleton, so the arm fits the body.
+    /// </summary>
+    private static int ArmShoulderInset(float tall) => (int)(tall * 0.07f) + 2;
+
+    private static Sprite PaintArm(float tall, float swing)
+    {
+        int size = (int)(tall * 0.36f) + 4;
+        float ox = ArmShoulderInset(tall), oy = size - 2;               // the shoulder, near the bottom-left (a little in, so fingers leaning left still fit)
+        PointF P(float across, float up) => new(ox + tall * across, oy - tall * up);
+        return Sprite.Paint(size, size, g =>
+        {
+            Color boneColor = Color.FromArgb(232, 226, 204);
+            using var bone = new Pen(boneColor, Math.Max(1.5f, tall * 0.022f)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+            using var thin = new Pen(boneColor, Math.Max(1f, tall * 0.014f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+
+            PointF elbow = P(0.11f, 0.03f);
+            // The forearm swings about the elbow, from a little past
+            // straight up to about 35 degrees outward (away from the head,
+            // so the hand never swings into the skull), done with sin and cos.
+            float angle = 0.22f + swing * 0.38f;
+            float foreLen = 0.175f;
+            PointF hand = P(0.11f + foreLen * MathF.Sin(angle), 0.03f + foreLen * MathF.Cos(angle));
+            g.DrawLines(bone, [P(0, 0), elbow, hand]);
+            foreach (float spread in (float[])[-0.45f, 0f, 0.45f])     // three spread fingers, fanning out along the forearm's direction
+            {
+                float fa = angle + spread;
+                g.DrawLine(thin, hand, new PointF(hand.X + tall * 0.05f * MathF.Sin(fa), hand.Y - tall * 0.05f * MathF.Cos(fa)));
+            }
+        });
     }
 
     /// <summary>
@@ -205,7 +248,16 @@ internal sealed class HalloweenScene : IScreensaverScene
             _candleGlows[i].DrawCentered(fb, _scenery.Pumpkins[i].At.X, _scenery.Pumpkins[i].At.Y, flicker);
         }
 
-        // 3. The bats, far (small) to near (big).
+        // 3. The skeleton's wave: the forearm rocks side to side about twice
+        //    a second, in bursts (it waves for a while, rests, waves again).
+        float burst = MathF.Sin((float)(_time * 0.35));                // slow clock: above zero = waving
+        float swing = burst > 0 ? MathF.Sin((float)(_time * 11)) * MathF.Min(1f, burst * 4) : 0f;
+        int armPose = Math.Clamp((int)MathF.Round((swing + 1) / 2 * (ArmPoses - 1)), 0, ArmPoses - 1);
+        Sprite arm = _arms[armPose];
+        arm.Draw(fb, (int)_scenery.SkeletonShoulder.X - ArmShoulderInset(_scenery.SkeletonHeight),
+                     (int)_scenery.SkeletonShoulder.Y - arm.Height + 2);
+
+        // 4. The bats, far (small) to near (big).
         foreach (ref readonly Bat b in _bats.AsSpan())
         {
             // Two swoops of different lengths added together, so the path
@@ -217,7 +269,7 @@ internal sealed class HalloweenScene : IScreensaverScene
             _batSprites[b.Size, pose].DrawCentered(fb, b.X, y + lift * _batSpans[b.Size] * 0.10f);
         }
 
-        // 4. The leaves, far to near.
+        // 5. The leaves, far to near.
         _leaves.Draw(fb);
     }
 

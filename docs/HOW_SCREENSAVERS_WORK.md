@@ -89,6 +89,7 @@ src/
     Program.cs                     Main(), plus the definition
     SakuraDuskScene.cs             backdrop + golden glints + the shared petals
     DuskPainter.cs                 paints the sunset, hills, pagoda, pond, bridge, lantern, trees
+    Flock.cs                       the birds: sprites that cross the sky, flapping and gliding
     SakuraDuskSettings.cs          declares its knobs
 
   Halloween/                       falling leaves, bats, and jack-o'-lanterns

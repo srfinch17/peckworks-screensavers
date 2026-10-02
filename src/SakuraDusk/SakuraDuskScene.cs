@@ -27,6 +27,7 @@ internal sealed class SakuraDuskScene : IScreensaverScene
     private readonly PetalField _petals;
     private readonly Glint[] _glints;
     private readonly Boat _boat;
+    private readonly Flock _birds;
     private float _time;
 
     public SakuraDuskScene(int width, int height, SakuraDuskSettings settings)
@@ -41,6 +42,9 @@ internal sealed class SakuraDuskScene : IScreensaverScene
         {
             Tint = (1f, 0.90f, 0.84f),   // evening light: a little less green and blue, so the petals warm up
         };
+
+        // ---- The flock of birds crossing the sky (Flock.cs) ----
+        _birds = new Flock(width, height, u, _rng);
 
         // ---- The boat crossing the pond (Core/Sakura/Boat.cs) ----
         // Shaded most of the way toward the hills' plum shadow, because the
@@ -80,6 +84,7 @@ internal sealed class SakuraDuskScene : IScreensaverScene
         _time += dt;
         _petals.Update(dt);
         _boat.Update(dt);
+        _birds.Update(dt);
     }
 
     public void Render(FrameBuffer fb)
@@ -87,10 +92,13 @@ internal sealed class SakuraDuskScene : IScreensaverScene
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
         Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
 
-        // 2. The boat, only where the pond is open, so the banks and the bridge hide it.
+        // 2. The birds, only where the sky is open, so the hills and branches hide them.
+        _birds.Draw(fb, _scenery.OpenSky);
+
+        // 3. The boat, only where the pond is open, so the banks and the bridge hide it.
         _boat.Draw(fb, _scenery.OpenWater);
 
-        // 3. Golden glints twinkling in the sun's reflection.
+        // 4. Golden glints twinkling in the sun's reflection.
         foreach (ref readonly Glint gl in _glints.AsSpan())
         {
             float s = MathF.Sin(_time * gl.Speed + gl.Phase);
@@ -99,7 +107,7 @@ internal sealed class SakuraDuskScene : IScreensaverScene
             DrawGlint(fb, gl, alpha);
         }
 
-        // 4. The petals, far to near.
+        // 5. The petals, far to near.
         _petals.Draw(fb);
     }
 
