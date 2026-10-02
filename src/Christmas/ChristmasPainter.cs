@@ -30,7 +30,8 @@ internal sealed class ChristmasScenery
 ///   - A "sky stencil": after the sky is painted, we keep a copy. At the end
 ///     we compare it to the finished picture. Any pixel that did not change
 ///     is still sky. Santa is only ever drawn on sky pixels, and that is the
-///     whole trick that makes him pass BEHIND the trees and the mountains.
+///     whole trick that makes him pass BEHIND the corner branches (and
+///     behind anything else that ever reaches up into his part of the sky).
 ///
 /// Positions are fractions of the width (w) or height (h). Sizes are
 /// fractions of "u": the height on a normal wide screen, or less on a tall one.
@@ -242,7 +243,7 @@ internal static class ChristmasPainter
     /// <summary>One unlit bulb: a small dot of its pastel color. The scene adds the glow that makes it shine.</summary>
     private static void PaintBulb(Graphics g, PointF at, float u, int color)
     {
-        float r = Math.Max(1.2f, u * 0.0032f);
+        float r = Math.Max(0.7f, u * 0.0032f);   // the floor keeps a bulb visible, but small, in the tiny preview box
         using var bulb = new SolidBrush(Pastels[color]);
         g.FillEllipse(bulb, at.X - r, at.Y - r, r * 2, r * 2);
     }
@@ -273,7 +274,9 @@ internal static class ChristmasPainter
             float xb = x + Brushwork.PineHalfWidth(yEnd, top, foot, u) * 0.85f;
             if (!leftToRight) { xa = 2 * x - xa; xb = 2 * x - xb; }   // mirror the run across the trunk
 
-            int n = Math.Max(2, (int)(MathF.Abs(xb - xa) / (u * 0.017f)));
+            // Bulbs sit about 1.7% of u apart, but never closer than 4 pixels:
+            // in the tiny preview box that keeps a tree from turning into one smear of light.
+            int n = Math.Max(2, (int)(MathF.Abs(xb - xa) / Math.Max(4f, u * 0.017f)));
             var run = new PointF[n + 1];
             for (int i = 0; i <= n; i++)
             {
@@ -322,7 +325,10 @@ internal static class ChristmasPainter
             new(new PointF(w * 1.01f, h * 0.03f), MathF.PI - 0.30f, u * 0.42f, u * 0.017f, 3),  // top right, reaching left
         ];
         List<PointF> spots = Brushwork.Branches(g, seeds, u, rng, wood, wood, wood, bare: true);
-        for (int i = 0; i < spots.Count; i += 3)   // every third spot: a bulb on all of them clumps into one bright smear
+        // Every third spot: a bulb on all of them clumps into one bright smear.
+        // In the tiny preview box the twigs are only a pixel or two apart, so there it is every ninth.
+        int skip = u < 250 ? 9 : 3;
+        for (int i = 0; i < spots.Count; i += skip)
         {
             PointF at = spots[i];
             if (at.X < 0 || at.X >= w || at.Y < 0 || at.Y >= h) continue;

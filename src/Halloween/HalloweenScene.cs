@@ -43,7 +43,11 @@ internal sealed class HalloweenScene : IScreensaverScene
     private readonly Sprite[] _candleGlows;   // one per pumpkin, sized to it
     private readonly float[] _candlePhases;
     private readonly int _w, _h;
-    private float _time;
+    // A "double" (a decimal number with about 15 digits of precision), not a
+    // "float" (about 7 digits). A screensaver can run for days. A float clock
+    // that large can no longer register a 16 millisecond step, and the
+    // candles would freeze.
+    private double _time;
 
     public HalloweenScene(int width, int height, HalloweenSettings settings)
     {
@@ -55,7 +59,7 @@ internal sealed class HalloweenScene : IScreensaverScene
         // ---- Leaves: the petal engine with a different outline and colors ----
         // Leaves are bigger than petals, so there are fewer of them.
         _leaves = new PetalField(width, height,
-            PetalField.CountFor(width, height, settings.DensityPercent) * 6 / 10,
+            PetalField.CountFor(width, height, settings.DensityPercent, u) * 6 / 10,
             settings.FallSpeedPercent / 100f, settings.WindPercent / 100f, settings.LeafSizePercent / 100f * 1.3f,
             _scenery.LeafSpots, _rng, sizeUnit: u)
         {
@@ -197,7 +201,7 @@ internal sealed class HalloweenScene : IScreensaverScene
         for (int i = 0; i < _candleGlows.Length; i++)
         {
             float p = _candlePhases[i];
-            float flicker = 0.42f + 0.16f * MathF.Sin(_time * 9f + p) + 0.10f * MathF.Sin(_time * 23f + p * 2);
+            float flicker = 0.42f + 0.16f * (float)Math.Sin(_time * 9 + p) + 0.10f * (float)Math.Sin(_time * 23 + p * 2);
             _candleGlows[i].DrawCentered(fb, _scenery.Pumpkins[i].At.X, _scenery.Pumpkins[i].At.Y, flicker);
         }
 

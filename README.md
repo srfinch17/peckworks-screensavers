@@ -65,8 +65,8 @@ warm windows and a smoking chimney, snowy mountains, and a moon.
 
 ![Christmas](docs/images/christmas.png)
 
-- Santa's sleigh crosses the sky behind the trees, pulled by four galloping reindeer. Rudolph
-  leads, and his red nose glows and sparkles.
+- Santa's sleigh crosses the sky, passing behind the overhanging branches, pulled by four
+  galloping reindeer. Rudolph leads, and his red nose glows and sparkles.
 - Every bulb (pink, mint, baby blue, lavender, butter, peach) brightens and dims on its own rhythm.
 - The snow is the Sakura petal engine drawing soft white dots.
 
@@ -74,7 +74,8 @@ Settings: amount of snow, fall speed, breeze, flake size.
 
 Halloween and Christmas are built from the same shared pieces as the Sakura pair (the falling
 engine, the ground, trees, hills and branches), plus one new one: sprites, small pictures painted
-once and stamped each frame, which is how the bats, the sleigh and every glow are drawn.
+once and stamped each frame, which is how the bats, the sleigh and every moving light (candles,
+bulbs, Rudolph's nose) are drawn.
 
 ## All screensavers
 
@@ -153,7 +154,7 @@ Time per frame (update + render):
 | Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   |
 |------------|-------------|-------------|-------------|-------------|-------------|
 | 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  |
-| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 12 ms | about 14 ms |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 13 ms | about 15 ms |
 
 Under about 16 ms means the full 60 frames per second. Matrix Rain at 4K runs at about 34, above
 the film's own 24.

@@ -132,9 +132,19 @@ public sealed class PetalField
     /// A sensible petal count for a screen: about 220 at 100% on a 16:9
     /// screen, more on wider screens, scaled by the user's density setting.
     /// </summary>
-    public static int CountFor(int width, int height, int densityPercent)
+    /// <param name="sizeUnit">
+    /// Pass the same size unit the field is built with to keep the flurry
+    /// equally THICK on every screen shape. Flakes are sized by this unit, so
+    /// on a tall screen (where the unit is small) each flake is small, and
+    /// the screen needs many more of them to look as full. The count becomes
+    /// "how many unit-sized squares fit on the screen", which on a normal
+    /// wide screen works out to exactly the same number as leaving this out.
+    /// </param>
+    public static int CountFor(int width, int height, int densityPercent, float? sizeUnit = null)
     {
-        float aspect = width / (float)Math.Max(1, height);
+        float aspect = sizeUnit is float u
+            ? width * (float)height / Math.Max(1f, u * u)
+            : width / (float)Math.Max(1, height);
         return Math.Max(10, (int)(220 * densityPercent / 100f * aspect / (16f / 9f)));
     }
 
@@ -330,7 +340,7 @@ public sealed class PetalField
     /// </summary>
     private void DrawSnow(FrameBuffer fb, in Petal p)
     {
-        float radius = MathF.Max(1.2f, p.Size * 0.3f);
+        float radius = MathF.Max(0.75f, p.Size * 0.3f);   // the floor keeps far flakes visible without turning them into blocks in the tiny preview box
         var (pale, deep) = Colors;
         int r = (int)((pale.R + (deep.R - pale.R) * p.Pink) * Tint.R);
         int g = (int)((pale.G + (deep.G - pale.G) * p.Pink) * Tint.G);

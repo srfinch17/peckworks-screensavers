@@ -23,7 +23,9 @@ namespace Christmas;
 ///     we stamp one of the four a little farther along, like a flip-book
 ///     sliding across the sky. He is only stamped onto sky pixels (the
 ///     painter hands over a stencil that says which pixels are sky), so he
-///     passes behind the trees and the mountains.
+///     passes behind the branches that reach in from the top corners, and
+///     in front of the moon and stars. (He flies well above the pines, so
+///     those never actually cover him.)
 /// </summary>
 internal sealed class ChristmasScene : IScreensaverScene
 {
@@ -53,7 +55,11 @@ internal sealed class ChristmasScene : IScreensaverScene
     private readonly float _s;                      // the sleigh's size unit, in pixels
     private readonly float _u;
     private readonly int _w, _h;
-    private float _time;
+    // A "double" (a decimal number with about 15 digits of precision), not a
+    // "float" (about 7 digits). A screensaver can run for days. A float clock
+    // that large can no longer register a 16 millisecond step, and Santa and
+    // every bulb would freeze.
+    private double _time;
 
     public ChristmasScene(int width, int height, ChristmasSettings settings)
     {
@@ -65,7 +71,7 @@ internal sealed class ChristmasScene : IScreensaverScene
         // ---- Snow: the petal engine drawing soft white dots ----
         // Snowflakes are small, so there are more of them than petals.
         _snow = new PetalField(width, height,
-            PetalField.CountFor(width, height, settings.DensityPercent) * 2,
+            PetalField.CountFor(width, height, settings.DensityPercent, _u) * 2,
             settings.FallSpeedPercent / 100f, settings.WindPercent / 100f, settings.FlakeSizePercent / 100f,
             [], _rng, sizeUnit: _u)
         {
@@ -244,7 +250,7 @@ internal sealed class ChristmasScene : IScreensaverScene
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
         Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
 
-        // 2. Santa, behind everything that is not sky.
+        // 2. Santa, behind everything that is not sky (in practice, the corner branches).
         DrawSanta(fb);
 
         // 3. The lights. sin() swings between -1 and 1; the arithmetic turns
@@ -252,7 +258,7 @@ internal sealed class ChristmasScene : IScreensaverScene
         //    never goes fully out.
         foreach (ref readonly Light l in _lights.AsSpan())
         {
-            float bright = 0.35f + 0.65f * (0.5f + 0.5f * MathF.Sin(_time * l.Speed + l.Phase));
+            float bright = 0.35f + 0.65f * (0.5f + 0.5f * (float)Math.Sin(_time * l.Speed + l.Phase));
             _bulbGlows[l.Color].DrawCentered(fb, l.X, l.Y, bright);
         }
 
@@ -269,26 +275,28 @@ internal sealed class ChristmasScene : IScreensaverScene
     /// </summary>
     private void DrawSanta(FrameBuffer fb)
     {
-        Sprite sheet = _sleigh[(int)(_time * 7f) % GallopFrames];   // 7 flip-book pages a second
-        float trip = _w + sheet.Width + _u * 0.7f;                  // on-screen crossing plus the off-screen pause
-        float travelled = (_time * _u * 0.085f + sheet.Width + _w * 0.03f) % trip;
+        Sprite sheet = _sleigh[(int)(_time * 7 % GallopFrames)];    // 7 flip-book pages a second
+        double trip = _w + sheet.Width + _u * 0.7f;                 // on-screen crossing plus the off-screen pause
+        double travelled = (_time * _u * 0.085f + sheet.Width + _w * 0.03f) % trip;
         int left = (int)(travelled - sheet.Width);
-        int top = (int)(_h * 0.12f + _u * 0.022f * MathF.Sin(_time * 0.7f));   // a gentle rise and dip
+        int top = (int)(_h * 0.12f + _u * 0.022f * Math.Sin(_time * 0.7));   // a gentle rise and dip
 
         sheet.Draw(fb, left, top, 1f, _scenery.IsSky);
 
-        // Rudolph's nose. Only lit when the nose itself is over open sky, so
-        // it does not shine through a tree he is flying behind.
+        // Rudolph's nose. Its shine goes through the same sky stencil as the
+        // sleigh, pixel by pixel, so a twig in front of him hides exactly the
+        // part of the glow it covers. (An earlier version asked one yes/no
+        // question about the single pixel under the nose, and the whole glow
+        // blinked off every time that pixel crossed a twig.)
         PointF nose = NoseOnSheet(_s);
         int nx = left + (int)nose.X, ny = top + (int)nose.Y;
-        if (nx < 0 || nx >= fb.Width || ny < 0 || ny >= fb.Height || !_scenery.IsSky[ny * fb.Width + nx]) return;
 
-        float pulse = 0.75f + 0.25f * MathF.Sin(_time * 5f);                    // a steady warm throb
-        _noseGlow.DrawCentered(fb, nx, ny, pulse);
+        float pulse = 0.75f + 0.25f * (float)Math.Sin(_time * 5);               // a steady warm throb
+        _noseGlow.DrawCentered(fb, nx, ny, pulse, _scenery.IsSky);
         // The sparkle: sin() raised to a high power is near zero most of the
         // time and spikes briefly, so the glint flashes about once every three seconds.
-        float glint = MathF.Pow(MathF.Max(0, MathF.Sin(_time * 2.1f)), 8);
-        _noseSparkle.DrawCentered(fb, nx, ny, glint);
+        float glint = MathF.Pow(MathF.Max(0, (float)Math.Sin(_time * 2.1)), 8);
+        _noseSparkle.DrawCentered(fb, nx, ny, glint, _scenery.IsSky);
     }
 
     public void Dispose() { }

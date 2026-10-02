@@ -250,10 +250,11 @@ Christmas bulb twinkle, and Rudolph's nose shine. The bulbs themselves are paint
 backdrop as dull dots (strung along each pine by asking the pine how wide it is at each height);
 the animation only adds the light.
 
-*Santa flies behind the trees* with one trick. Right after painting the sky, the Christmas painter
+*Santa flies behind the overhanging branches* with one trick. Right after painting the sky, the Christmas painter
 keeps a copy of the picture. When the whole backdrop is finished, it compares the two: any pixel
 that did not change is still sky. That gives a stencil with one yes/no per pixel, and the sleigh
-is only ever stamped on the "yes" pixels. Nothing has to know where the trees are.
+is only ever stamped on the "yes" pixels. Nothing has to know where the branches are. (He flies
+well above the pines, so in practice it is only the corner branches that cover him.)
 
 ## 9. High-DPI screens
 
