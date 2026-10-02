@@ -68,8 +68,9 @@ src/
     IScreensaverScene.cs           the contract a screensaver fills in
     ScreensaverSettings.cs         a list of knobs, saved in the registry
     SettingsDialog.cs              the Settings dialog: live preview + one slider per knob
-    Sakura/PetalField.cs           the falling petals, shared by every sakura scene
-    Sakura/Brushwork.cs            banks, trunks, blossoms, a pine, and self-growing branches
+    Sprite.cs                      a small picture painted once and stamped each frame (bats, Santa, glows)
+    Sakura/PetalField.cs           the falling petals (or leaves, or snow), shared by every painted scene
+    Sakura/Brushwork.cs            banks, hills, trunks, blossoms, a pine, and self-growing branches
 
   MatrixRain/                      a screensaver built on the engine
     Program.cs                     Main(), plus the "definition" handed to the engine
@@ -88,6 +89,18 @@ src/
     SakuraDuskScene.cs             backdrop + golden glints + the shared petals
     DuskPainter.cs                 paints the sunset, hills, pagoda, pond, bridge, lantern, trees
     SakuraDuskSettings.cs          declares its knobs
+
+  Halloween/                       falling leaves, bats, and jack-o'-lanterns
+    Program.cs                     Main(), plus the definition
+    HalloweenScene.cs              backdrop + candle flicker + bats + the shared engine dropping leaves
+    HalloweenPainter.cs            paints the moon, haunted house, graveyard, pumpkins, trees
+    HalloweenSettings.cs           declares its knobs
+
+  Christmas/                       falling snow, twinkling lights, and Santa
+    Program.cs                     Main(), plus the definition
+    ChristmasScene.cs              backdrop + Santa's sleigh + twinkling lights + the shared engine dropping snow
+    ChristmasPainter.cs            paints the night sky, mountains, cabin, snowy pines, strings of lights
+    ChristmasSettings.cs           declares its knobs
 ```
 
 A screensaver only has to write one class with two methods:
@@ -217,6 +230,31 @@ and the glints are golden and live only in the sun's reflection, which the paint
 as a rectangle; each glint also checks the pixels under it and lights only bright water, so none
 ever lands on the bridge that crosses the reflection.
 
+**Halloween and Christmas** are the same theater again, with two new ideas.
+
+*The falling things changed shape, not behavior.* A leaf and a snowflake fall, sway and drift
+just as a petal does, so `PetalField` simply has a `Shape` switch (petal, leaf, or snow) and a
+pair of `Colors` to mix between. Halloween asks for leaves from gold to deep red; Christmas asks
+for soft white dots.
+
+*Sprites.* A bat with scalloped wings, or a sleigh with four reindeer, is too detailed to work
+out pixel by pixel sixty times a second. So `Sprite.cs` does what `GlyphAtlas` does for the
+Matrix characters: paint the thing **once** at startup onto a small see-through sheet, then stamp
+that sheet onto the frame wherever it is needed. To animate, paint a few sheets in different
+poses and stamp a different one each frame, like the pages of a flip-book. The bats have seven
+wing positions in three sizes; the sleigh has four gallop poses.
+
+A soft **glow** is also a sprite: a round patch of color, strong in the middle and fading to
+nothing at the edge. Stamping it at changing strength is what makes a jack-o'-lantern flicker, a
+Christmas bulb twinkle, and Rudolph's nose shine. The bulbs themselves are painted into the
+backdrop as dull dots (strung along each pine by asking the pine how wide it is at each height);
+the animation only adds the light.
+
+*Santa flies behind the trees* with one trick. Right after painting the sky, the Christmas painter
+keeps a copy of the picture. When the whole backdrop is finished, it compares the two: any pixel
+that did not change is still sky. That gives a stencil with one yes/no per pixel, and the sleigh
+is only ever stamped on the "yes" pixels. Nothing has to know where the trees are.
+
 ## 9. High-DPI screens
 
 A 4K laptop screen usually runs at 200% to 250% "scaling", so text isn't microscopic. A program
@@ -233,7 +271,7 @@ scaling (96 DPI, "dots per inch") and WinForms multiplies every position by the 
 
 | What                          | Where                                                         |
 |-------------------------------|---------------------------------------------------------------|
-| The installed screensavers    | `C:\Windows\System32\MatrixRain.scr`, `C:\Windows\System32\Sakura.scr`, `C:\Windows\System32\SakuraDusk.scr` |
+| The installed screensavers    | `C:\Windows\System32\<Name>.scr`, for example `MatrixRain.scr`, `Sakura.scr`, `Halloween.scr` |
 | Your settings                 | Registry: `HKEY_CURRENT_USER\Software\Peckworks\Screensavers\<name>` (open with `regedit`) |
 | Which screensaver is selected | Registry: `HKEY_CURRENT_USER\Control Panel\Desktop`, value `SCRNSAVE.EXE` |
 
@@ -257,7 +295,9 @@ reopen it. `install.ps1` does that for you and then checks the list.
    `dotnet build PeckworksScreensavers.slnx` compiles it and a change to the shared engine that
    breaks it shows up right away.
 6. Want falling petals over your own painting? Build a `PetalField` and call its `Update` and
-   `Draw`, exactly as `SakuraDuskScene.cs` does.
+   `Draw`, exactly as `SakuraDuskScene.cs` does. Set its `Shape` and `Colors` for leaves or snow.
+7. Want something that flies or glows? Paint it once with `Sprite.Paint` (or `Sprite.Glow`) and
+   stamp it each frame, as `HalloweenScene.cs` does for its bats.
 
 `scripts/publish.ps1` and `install.ps1` find every screensaver folder under `src\` on their own.
 Everything about being a screensaver (monitors, preview box, wake-up rule, fast drawing, glow,

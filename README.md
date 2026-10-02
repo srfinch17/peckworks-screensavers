@@ -1,7 +1,8 @@
 # Peckworks Screensavers
 
 Native Windows screensavers written in C# (.NET 10, Windows Forms), plus a small reusable engine
-for making more of them. So far: **Matrix Rain**, **Sakura**, and **Sakura Dusk**.
+for making more of them. So far: **Matrix Rain**, **Sakura**, **Sakura Dusk**, **Halloween**, and
+**Christmas**.
 
 ## Matrix Rain
 
@@ -43,6 +44,38 @@ lantern with a glowing window, cherry trees on both banks, and a small flock of 
 Sakura and Sakura Dusk share one petal engine and one set of painting brushes (banks, trunks,
 blossoms, branches) in the Core project, so they have the same illustrative hand.
 
+## Halloween
+
+Autumn leaves in gold and red drifting down over a moonlit graveyard hill: a big full moon, a
+haunted house with lit windows on the far hill, a dead tree, tombstones, autumn trees, and bare
+branches clawing in from the top corners.
+
+![Halloween](docs/images/halloween.png)
+
+- Bats flap across the sky in three sizes, swooping as they go.
+- The jack-o'-lanterns flicker like candles.
+- The leaves are the Sakura petal engine with a leaf outline, and they let go of the autumn trees.
+
+Settings: number of leaves, fall speed, breeze, leaf size, number of bats.
+
+## Christmas
+
+Snow falling on a snowy night: pines strung with pastel lights that twinkle, a log cabin with
+warm windows and a smoking chimney, snowy mountains, and a moon.
+
+![Christmas](docs/images/christmas.png)
+
+- Santa's sleigh crosses the sky behind the trees, pulled by four galloping reindeer. Rudolph
+  leads, and his red nose glows and sparkles.
+- Every bulb (pink, mint, baby blue, lavender, butter, peach) brightens and dims on its own rhythm.
+- The snow is the Sakura petal engine drawing soft white dots.
+
+Settings: amount of snow, fall speed, breeze, flake size.
+
+Halloween and Christmas are built from the same shared pieces as the Sakura pair (the falling
+engine, the ground, trees, hills and branches), plus one new one: sprites, small pictures painted
+once and stamped each frame, which is how the bats, the sleigh and every glow are drawn.
+
 ## All screensavers
 
 - Run on every monitor, at native resolution (4K included).
@@ -69,7 +102,7 @@ Remove with `.\scripts\uninstall.ps1` (all) or `.\scripts\uninstall.ps1 -Saver S
 ## Try one without installing
 
 ```powershell
-.\scripts\publish.ps1                                  # builds dist\MatrixRain.scr and dist\Sakura.scr
+.\scripts\publish.ps1                                  # builds one dist\<Name>.scr per screensaver
 .\dist\Sakura.scr /s                                   # full screen; move the mouse to exit
 ```
 
@@ -107,6 +140,8 @@ src/Peckworks.Screensavers.Core/   the engine (command line, windows, drawing, g
 src/MatrixRain/                    the Matrix Rain screensaver
 src/Sakura/                        the Sakura screensaver
 src/SakuraDusk/                    the Sakura Dusk screensaver
+src/Halloween/                     the Halloween screensaver
+src/Christmas/                     the Christmas screensaver
 scripts/                           publish / install / uninstall / verify
 docs/                              the how-it-works guide
 ```
@@ -115,10 +150,10 @@ docs/                              the how-it-works guide
 
 Time per frame (update + render):
 
-| Resolution | Matrix Rain | Sakura      | Sakura Dusk |
-|------------|-------------|-------------|-------------|
-| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  |
-| 3840x2160  | about 29 ms | about 11 ms | about 12 ms |
+| Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   |
+|------------|-------------|-------------|-------------|-------------|-------------|
+| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 12 ms | about 14 ms |
 
 Under about 16 ms means the full 60 frames per second. Matrix Rain at 4K runs at about 34, above
 the film's own 24.

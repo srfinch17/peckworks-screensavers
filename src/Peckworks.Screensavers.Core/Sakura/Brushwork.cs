@@ -173,14 +173,18 @@ public static class Brushwork
     /// The trunk runs all the way to the ground, which is passed in, so the
     /// pine stands on the bank like everything else.
     /// </summary>
-    public static void Pine(Graphics g, float x, float top, float ground, float u, Random rng)
+    /// <param name="snowy">
+    /// True lays a dab of snow along the top of each row of boughs, for a
+    /// winter scene. Snow settles on top of things, so the dabs sit on the
+    /// upper side of each row and leave the green showing underneath.
+    /// </param>
+    public static void Pine(Graphics g, float x, float top, float ground, float u, Random rng, bool snowy = false)
     {
         using (var trunk = new Pen(Color.FromArgb(48, 38, 34), u * 0.007f))
             g.DrawLine(trunk, x, ground, x, top + u * 0.02f);
 
         float bottom = ground - u * 0.03f;
-        float height = bottom - top;
-        float HalfWidthAt(float y) => u * (0.006f + 0.070f * (y - top) / height);   // the cone: wider lower down
+        float HalfWidthAt(float y) => PineHalfWidth(y, top, ground, u);
 
         // Pass 1: the silhouette. Left edge going down, then right edge coming back up.
         var leftEdge = new List<PointF> { new(x, top) };
@@ -217,6 +221,76 @@ public static class Brushwork
                 g.FillEllipse(needles, px - pw, py - ph, pw * 2, ph * 2);
             }
         }
+
+        if (!snowy) return;
+
+        // Pass 3 (winter only): snow resting on each row of boughs. Flat, wide
+        // dabs that follow the same droop as the boughs, with gaps left at
+        // random so the tree is frosted and not buried.
+        using var snow = new SolidBrush(Color.FromArgb(225, 236, 243, 255));
+        for (float y = top + rowStep; y <= bottom; y += rowStep)
+        {
+            float hw = HalfWidthAt(y);
+            int dabs = 2 + (int)(hw / (u * 0.012f));
+            for (int k = 0; k < dabs; k++)
+            {
+                if (rng.NextDouble() < 0.3) continue;
+                float f = (k + (float)rng.NextDouble()) / dabs * 2 - 1;
+                float pw = u * (0.007f + 0.008f * (float)rng.NextDouble());
+                float px = x + f * (hw - pw * 0.5f);
+                float py = y + MathF.Abs(f) * hw * 0.2f - rowStep * 0.25f;
+                g.FillEllipse(snow, px - pw, py - pw * 0.3f, pw * 2, pw * 0.6f);
+            }
+        }
+        g.FillEllipse(snow, x - u * 0.008f, top - u * 0.002f, u * 0.016f, u * 0.012f);   // a cap on the very tip
+    }
+
+    /// <summary>
+    /// How far a pine's boughs reach to either side of its trunk at height y.
+    /// The pine is a cone: nearly a point at the top, widest at the foot. A
+    /// scene that hangs things ON a pine (strings of lights) asks this so the
+    /// lights follow the tree's real outline instead of guessing it.
+    /// </summary>
+    public static float PineHalfWidth(float y, float top, float ground, float u)
+    {
+        float height = ground - u * 0.03f - top;
+        return u * (0.006f + 0.070f * (y - top) / height);   // the cone: wider lower down
+    }
+
+    /// <summary>
+    /// A range of hills as a filled shape: a wavy top edge made of three sine
+    /// waves added together (different wavelengths, random starting points),
+    /// closed off along the horizon. Adding waves of different lengths is the
+    /// cheap way to get a line that looks natural: no single rhythm repeats.
+    /// </summary>
+    /// <param name="baseRise">How far the range stands above the horizon on average, in u.</param>
+    /// <param name="a1">Height of the long rolling wave, in u.</param>
+    /// <param name="a2">Height of the short bumpy wave, in u.</param>
+    /// <param name="a3">Height of the rounded peaks, in u.</param>
+    public static PointF[] Ridge(int w, float horizon, float u, float baseRise, float a1, float a2, float a3, Random rng)
+    {
+        float p1 = (float)rng.NextDouble() * 6, p2 = (float)rng.NextDouble() * 6, p3 = (float)rng.NextDouble() * 6;
+        var pts = new List<PointF> { new(-2, horizon + 2) };
+        for (float x = -2; x <= w + 2; x += Math.Max(2, u / 200f))
+        {
+            float t = x / u;
+            float rise = baseRise
+                       + a1 * MathF.Sin(t * 2.6f + p1)
+                       + a2 * MathF.Sin(t * 6.1f + p2)
+                       + a3 * MathF.Abs(MathF.Sin(t * 1.4f + p3));   // Abs makes rounded peaks
+            pts.Add(new PointF(x, horizon - u * rise));
+        }
+        pts.Add(new PointF(w + 2, horizon + 2));
+        return [.. pts];
+    }
+
+    /// <summary>The top of a ridge at x (the nearest point on its wavy edge), so a house can stand on it.</summary>
+    public static float RidgeYAt(PointF[] ridge, float x)
+    {
+        PointF best = ridge[1];
+        for (int i = 1; i < ridge.Length - 1; i++)   // skip the two closing corners on the horizon
+            if (MathF.Abs(ridge[i].X - x) < MathF.Abs(best.X - x)) best = ridge[i];
+        return best.Y;
     }
 
     /// <summary>Where a branch starts and which way it heads. See <see cref="Branches"/>.</summary>
@@ -241,8 +315,13 @@ public static class Brushwork
     /// <param name="u">The size unit (see the class summary). Flower and cluster sizes come from it.</param>
     /// <param name="petalLight">The palest blossom color.</param>
     /// <param name="petalDeep">The deepest blossom color.</param>
+    /// <param name="bare">
+    /// True grows the wood only, with no flowers: a winter or dead tree. The
+    /// spots where flowers WOULD have been are still returned, which is handy
+    /// for hanging something else there (Christmas lights, say).
+    /// </param>
     public static List<PointF> Branches(Graphics g, IEnumerable<BranchSeed> seeds, float u, Random rng,
-                                        Color wood, Color petalLight, Color petalDeep)
+                                        Color wood, Color petalLight, Color petalDeep, bool bare = false)
     {
         var timber = new List<(PointF A, PointF B, float Width)>();
         var flowers = new List<(PointF C, float R, Color Petal, float Turn)>();
@@ -251,6 +330,7 @@ public static class Brushwork
         void Cluster(PointF at, float spread)
         {
             spots.Add(at);
+            if (bare) return;
             int n = 3 + rng.Next(5);
             for (int i = 0; i < n; i++)
             {

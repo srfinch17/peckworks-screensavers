@@ -66,6 +66,32 @@ public sealed class PetalField
     /// </summary>
     public (float R, float G, float B) Tint { get; set; } = (1f, 1f, 1f);
 
+    /// <summary>
+    /// What is falling. The motion (fall, sway, spin, tumble, depth) is the
+    /// same for all three; only the outline changes. That is why autumn leaves
+    /// and snow can borrow the petal engine instead of each needing their own.
+    /// </summary>
+    public enum FlakeShape
+    {
+        /// <summary>A cherry petal: narrow base, broad tip with a little notch.</summary>
+        Petal,
+        /// <summary>A leaf: pointed at both ends, like an almond, with a darker vein down the middle.</summary>
+        Leaf,
+        /// <summary>A snowflake: a soft round dot that does not show its tumble.</summary>
+        Snow,
+    }
+
+    /// <summary>The outline of each falling thing. Cherry petals unless a scene says otherwise.</summary>
+    public FlakeShape Shape { get; set; } = FlakeShape.Petal;
+
+    /// <summary>
+    /// The two colors every falling thing is mixed from. Each one picks its own
+    /// spot between them when it is born, so a flurry is a blend rather than
+    /// one flat color. Petals run from near-white to pink; an autumn scene
+    /// might run from gold to deep red; snow sets both to white.
+    /// </summary>
+    public (Color Pale, Color Deep) Colors { get; set; } = (Color.FromArgb(255, 246, 249), Color.FromArgb(255, 176, 199));
+
     /// <param name="count">How many petals are in the air at once.</param>
     /// <param name="speedScale">1 = a slow, snow-like drift. 2 = twice as fast.</param>
     /// <param name="windScale">1 = a normal breeze. 0 = still air.</param>
@@ -228,6 +254,9 @@ public sealed class PetalField
     /// </summary>
     private void DrawPetal(FrameBuffer fb, in Petal p)
     {
+        if (Shape == FlakeShape.Snow) { DrawSnow(fb, p); return; }
+        bool leaf = Shape == FlakeShape.Leaf;
+
         float swayTilt = 0.5f * MathF.Sin(p.Sway);          // petals tilt into their swing
         float angle = p.Angle + swayTilt;
         float ca = MathF.Cos(angle), sa = MathF.Sin(angle);
@@ -240,7 +269,10 @@ public sealed class PetalField
         // petal (flip < 0) is a touch darker, so the tumble reads as the petal
         // turning over.
         float side = flip >= 0 ? 1f : 0.86f;
-        float baseR = 255 * Tint.R, baseG = (246 - 70 * p.Pink) * Tint.G, baseB = (249 - 50 * p.Pink) * Tint.B;
+        var (pale, deep) = Colors;
+        float baseR = (pale.R + (deep.R - pale.R) * p.Pink) * Tint.R;
+        float baseG = (pale.G + (deep.G - pale.G) * p.Pink) * Tint.G;
+        float baseB = (pale.B + (deep.B - pale.B) * p.Pink) * Tint.B;
         float opacity = (0.55f + 0.45f * p.Z) * p.Fade * 0.95f;  // far petals are fainter
 
         int reach = (int)MathF.Ceiling(halfLen) + 1;
@@ -262,14 +294,18 @@ public sealed class PetalField
                 float av = MathF.Abs(v);
 
                 // How wide the petal is at position u (as a fraction of halfWid).
-                float halfWidthHere = u >= 0
-                    ? MathF.Sqrt(MathF.Max(0, 1 - u * u * u * u))                 // broad, rounded outer end
-                    : MathF.Sqrt(MathF.Max(0, 1 - u * u)) * (0.4f + 0.6f * (1 + u)); // tapering toward the base
+                // A leaf is widest in the middle and comes to a point at both
+                // ends: 1 - u*u is 1 at the middle (u = 0) and 0 at each end.
+                float halfWidthHere = leaf
+                    ? MathF.Max(0, 1 - u * u)
+                    : u >= 0
+                        ? MathF.Sqrt(MathF.Max(0, 1 - u * u * u * u))                 // broad, rounded outer end
+                        : MathF.Sqrt(MathF.Max(0, 1 - u * u)) * (0.4f + 0.6f * (1 + u)); // tapering toward the base
 
                 // Distance (in pixels) inside each edge. Negative = outside.
                 float dSide = (halfWidthHere - av) * halfWid;
                 float dEnd = (1 - MathF.Abs(u)) * halfLen;
-                float dNotch = (0.78f + 0.9f * av - u) * halfLen * 0.7f;          // the V notch at the tip
+                float dNotch = leaf ? dEnd : (0.78f + 0.9f * av - u) * halfLen * 0.7f;   // the V notch at a petal's tip
                 float inside = MathF.Min(dSide, MathF.Min(dEnd, dNotch));
 
                 float coverage = inside + 0.5f;                  // 1 px wide soft edge
@@ -278,9 +314,45 @@ public sealed class PetalField
 
                 // Deeper pink toward the base, lighter toward the tip.
                 float k = 0.78f + 0.22f * (u + 1) * 0.5f;
+                if (leaf && av * halfWid < 0.7f) k *= 0.72f;     // the leaf's vein: a darker line down the middle
                 float r = baseR * k * side, g = baseG * (k - 0.06f * (1 - u)) * side, b = baseB * k * side;
 
                 fb.Pixels[row + px] = FrameBuffer.Blend(fb.Pixels[row + px], (int)r, (int)g, (int)b, coverage * opacity);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Draws one snowflake: a soft round dot. From across a yard you cannot see
+    /// a snowflake's six arms, only a pale blur, so a dot is the honest shape.
+    /// The dot is solid in the middle and fades out toward its edge, which is
+    /// what makes it look soft instead of like a white coin.
+    /// </summary>
+    private void DrawSnow(FrameBuffer fb, in Petal p)
+    {
+        float radius = MathF.Max(1.2f, p.Size * 0.3f);
+        var (pale, deep) = Colors;
+        int r = (int)((pale.R + (deep.R - pale.R) * p.Pink) * Tint.R);
+        int g = (int)((pale.G + (deep.G - pale.G) * p.Pink) * Tint.G);
+        int b = (int)((pale.B + (deep.B - pale.B) * p.Pink) * Tint.B);
+        float opacity = (0.5f + 0.5f * p.Z) * p.Fade;   // far flakes are fainter
+
+        int reach = (int)MathF.Ceiling(radius) + 1;
+        int x0 = Math.Max(0, (int)p.X - reach), x1 = Math.Min(fb.Width - 1, (int)p.X + reach);
+        int y0 = Math.Max(0, (int)p.Y - reach), y1 = Math.Min(fb.Height - 1, (int)p.Y + reach);
+
+        for (int py = y0; py <= y1; py++)
+        {
+            float dy = py + 0.5f - p.Y;
+            int row = py * fb.Width;
+            for (int px = x0; px <= x1; px++)
+            {
+                float dx = px + 0.5f - p.X;
+                float dist = MathF.Sqrt(dx * dx + dy * dy);
+                // 1 in the inner half of the dot, sliding down to 0 at its edge.
+                float coverage = Math.Clamp((radius - dist) / (radius * 0.5f), 0f, 1f);
+                if (coverage <= 0) continue;
+                fb.Pixels[row + px] = FrameBuffer.Blend(fb.Pixels[row + px], r, g, b, coverage * opacity);
             }
         }
     }
