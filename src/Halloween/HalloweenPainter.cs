@@ -17,8 +17,8 @@ internal sealed class HalloweenScenery
 /// Paints the backdrop: a purple night sky with a big full moon and a few
 /// streaks of cloud, two ranges of dark hills with a haunted house on the far
 /// one, a band of mist, a graveyard hill with tombstones, a dead tree, autumn
-/// trees in orange leaf, jack-o'-lanterns, and bare branches clawing in from
-/// the top corners.
+/// trees in orange leaf, jack-o'-lanterns, a waving skeleton, and bare
+/// branches clawing in from the top corners.
 ///
 /// Like the Sakura painters, this runs ONCE at startup (the scenery never
 /// moves) and paints back to front: whatever is farthest away goes down
@@ -77,6 +77,8 @@ internal static class HalloweenPainter
         (float X, float R)[] patch = [(0.30f, 0.030f), (0.345f, 0.020f), (0.73f, 0.024f), (0.775f, 0.032f)];
         foreach (var p in patch)
             pumpkins.Add(PaintPumpkin(g, w * p.X, ground.YAt(w * p.X) + u * 0.012f, u * p.R));
+
+        PaintSkeleton(g, w * 0.225f, ground.YAt(w * 0.225f) + u * 0.006f, u * 0.14f);
 
         PaintCornerBranches(g, w, h, u, rng);
 
@@ -357,6 +359,58 @@ internal static class HalloweenPainter
             P(0.36f, 0.50f), P(0f, 0.58f), P(-0.36f, 0.50f)]);
 
         return (new PointF(x, cy), r);
+    }
+
+    /// <summary>
+    /// A skeleton standing on the ground at (x, footY), "tall" pixels high,
+    /// waving one arm. It is a stick figure drawn in bone color: every bone
+    /// is one thick line with rounded ends, plus a skull, a rib cage of four
+    /// U-shaped curves, and a pelvis.
+    ///
+    /// Every point below is (across, up) from the spot between its feet, as
+    /// a fraction of its height, so 0.9 up is the middle of the skull. The
+    /// little helper P turns those into real pixels. That keeps the whole
+    /// figure in proportion at any size.
+    /// </summary>
+    private static void PaintSkeleton(Graphics g, float x, float footY, float tall)
+    {
+        PointF P(float across, float up) => new(x + tall * across, footY - tall * up);
+        Color boneColor = Color.FromArgb(232, 226, 204);
+        using var bone = new Pen(boneColor, Math.Max(1.5f, tall * 0.022f)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        using var thin = new Pen(boneColor, Math.Max(1f, tall * 0.014f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        using var fill = new SolidBrush(boneColor);
+        using var hollow = new SolidBrush(Ink);
+
+        // Legs: hip, knee, ankle, then a short foot pointing outward.
+        foreach (int side in (int[])[-1, 1])
+            g.DrawLines(bone, [P(side * 0.045f, 0.43f), P(side * 0.065f, 0.22f), P(side * 0.055f, 0.01f), P(side * 0.11f, 0f)]);
+
+        // Pelvis, spine, collar bones.
+        g.FillEllipse(fill, x - tall * 0.075f, footY - tall * 0.47f, tall * 0.15f, tall * 0.07f);
+        g.DrawLine(bone, P(0, 0.44f), P(0, 0.79f));
+        g.DrawLine(bone, P(-0.105f, 0.765f), P(0.105f, 0.765f));
+
+        // Ribs: four U shapes hanging from the spine, narrower toward the waist.
+        (float Up, float HalfWidth)[] ribs = [(0.72f, 0.085f), (0.67f, 0.092f), (0.62f, 0.085f), (0.57f, 0.07f)];
+        foreach (var r in ribs)
+            g.DrawBezier(thin, P(-r.HalfWidth, r.Up), P(-r.HalfWidth, r.Up - 0.035f), P(r.HalfWidth, r.Up - 0.035f), P(r.HalfWidth, r.Up));
+
+        // Arms: the left one hangs, the right one is raised in a wave.
+        g.DrawLines(bone, [P(-0.105f, 0.765f), P(-0.155f, 0.60f), P(-0.135f, 0.44f)]);
+        g.DrawLines(bone, [P(0.105f, 0.765f), P(0.20f, 0.80f), P(0.235f, 0.97f)]);
+        foreach (float finger in (float[])[-0.03f, 0f, 0.03f])       // three spread fingers on the waving hand
+            g.DrawLine(thin, P(0.235f, 0.97f), P(0.24f + finger, 1.02f));
+
+        // Skull: a round top, a narrower jaw, then the dark hollows that make it a face.
+        g.FillEllipse(fill, x - tall * 0.078f, footY - tall * 0.99f, tall * 0.156f, tall * 0.16f);
+        g.FillRectangle(fill, x - tall * 0.048f, footY - tall * 0.86f, tall * 0.096f, tall * 0.05f);
+        g.FillEllipse(hollow, x - tall * 0.052f, footY - tall * 0.93f, tall * 0.04f, tall * 0.046f);   // left eye socket
+        g.FillEllipse(hollow, x + tall * 0.012f, footY - tall * 0.93f, tall * 0.04f, tall * 0.046f);   // right eye socket
+        g.FillPolygon(hollow, [P(0, 0.885f), P(-0.012f, 0.86f), P(0.012f, 0.86f)]);                    // nose
+        using var gap = new Pen(Ink, Math.Max(1f, tall * 0.008f));
+        g.DrawLine(gap, P(-0.04f, 0.835f), P(0.04f, 0.835f));                                           // the line between the teeth
+        foreach (float tooth in (float[])[-0.024f, -0.008f, 0.008f, 0.024f])
+            g.DrawLine(gap, P(tooth, 0.85f), P(tooth, 0.82f));
     }
 
     /// <summary>Bare branches reaching in from the top corners, like fingers. The sakura branches with the flowers switched off.</summary>

@@ -47,8 +47,8 @@ blossoms, branches) in the Core project, so they have the same illustrative hand
 ## Halloween
 
 Autumn leaves in gold and red drifting down over a moonlit graveyard hill: a big full moon, a
-haunted house with lit windows on the far hill, a dead tree, tombstones, autumn trees, and bare
-branches clawing in from the top corners.
+haunted house with lit windows on the far hill, a dead tree, tombstones, a waving skeleton, autumn
+trees, and bare branches clawing in from the top corners.
 
 ![Halloween](docs/images/halloween.png)
 
