@@ -58,7 +58,7 @@ public sealed class Boat
         _length = u * 0.11f * scale;
         _speed = u * 0.012f * scale;                           // slow: about two and a half minutes to cross a wide screen at scale 1
 
-        int sheetW = (int)(SheetWidth * _length), sheetH = (int)(SheetHeight * _length);
+        int sheetW = (int)MathF.Ceiling(SheetWidth * _length) + 1, sheetH = (int)MathF.Ceiling(SheetHeight * _length) + 1;
         // Start somewhere in the open middle of the water (30% to 60% of the
         // way across), so the boat is in view from the first frame and not
         // hidden behind the trees at the sides.
@@ -82,18 +82,24 @@ public sealed class Boat
     /// <summary>Stamp the boat and its reflection wherever the stencil says there is open water.</summary>
     public void Draw(FrameBuffer fb, bool[] openWater)
     {
+        // In the tiny preview box the boat would be a few pixels long, and a
+        // glow bigger than itself: leave it out there.
+        if (_length < 12) return;
+
         // One trip = across the screen, plus the boat's own length, plus a
         // stretch out of sight. "%" (remainder) makes the trip repeat.
         double trip = _screenWidth + _boat.Width + _length * 3;
         int left = (int)((_time * _speed + _startOffset) % trip) - _boat.Width;
 
-        // A slow, small rise and fall, as if on a gentle swell.
-        float bob = _length * 0.006f * (float)Math.Sin(_time * 0.9);
-        int top = (int)(_waterlineY - Waterline * _length + bob);
+        // A slow, small rise and fall, as if on a gentle swell: at least a
+        // pixel and a half, so it still shows on a small screen, rounded to
+        // whole pixels once so the boat and its reflection move together.
+        int bob = (int)MathF.Round(MathF.Max(1.5f, _length * 0.012f) * (float)Math.Sin(_time * 0.9));
+        int top = (int)(_waterlineY - Waterline * _length) + bob;
 
         // The reflection hangs directly below the waterline. On the flipped
         // sheet the waterline sits (SheetHeight - Waterline) from the top.
-        int reflectionTop = (int)(_waterlineY - (SheetHeight - Waterline) * _length - bob);
+        int reflectionTop = (int)(_waterlineY - (SheetHeight - Waterline) * _length) - bob;
         _reflection.Draw(fb, left, reflectionTop, 0.26f, openWater);
         _boat.Draw(fb, left, top, 1f, openWater);
 

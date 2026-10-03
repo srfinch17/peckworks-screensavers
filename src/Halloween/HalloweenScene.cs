@@ -250,8 +250,10 @@ internal sealed class HalloweenScene : IScreensaverScene
 
         // 3. The skeleton's wave: the forearm rocks side to side about twice
         //    a second, in bursts (it waves for a while, rests, waves again).
-        float burst = MathF.Sin((float)(_time * 0.35));                // slow clock: above zero = waving
-        float swing = burst > 0 ? MathF.Sin((float)(_time * 11)) * MathF.Min(1f, burst * 4) : 0f;
+        //    (Math.Sin on the double clock, not MathF on a float copy: after
+        //    days of running a float copy of the clock is too coarse.)
+        float burst = (float)Math.Sin(_time * 0.35);                   // slow clock: above zero = waving
+        float swing = burst > 0 ? (float)Math.Sin(_time * 11) * MathF.Min(1f, burst * 4) : 0f;
         int armPose = Math.Clamp((int)MathF.Round((swing + 1) / 2 * (ArmPoses - 1)), 0, ArmPoses - 1);
         Sprite arm = _arms[armPose];
         arm.Draw(fb, (int)_scenery.SkeletonShoulder.X - ArmShoulderInset(_scenery.SkeletonHeight),

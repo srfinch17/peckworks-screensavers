@@ -53,8 +53,9 @@ internal static class DuskPainter
         PaintSky(g, w, horizon, sun, u);
 
         // The birds are animated (Flock.cs) and fly in front of the sun but
-        // behind everything else. Keep a copy of the bare sky; pixels that
-        // are still the same at the end are where the birds may be drawn.
+        // behind everything else (in practice, the corner branches). Keep a
+        // copy of the bare sky; pixels that are still the same at the end
+        // are where the birds may be drawn.
         g.Flush();
         uint[] bareSky = Brushwork.ToPixels(bmp);
 
@@ -100,7 +101,11 @@ internal static class DuskPainter
             Pixels = pixels, BlossomSpots = spots, SunPath = sunPath,
             OpenWater = Brushwork.Unchanged(behindBoat, pixels),
             OpenSky = Brushwork.Unchanged(bareSky, pixels),
-            BoatWaterline = horizon + u * 0.014f,   // far out, just off the opposite shore, well above the bridge's railing
+            // Far out, just off the opposite shore, and always on water: a
+            // little below the lowest point the near ridge reaches along the
+            // boat's path, so the hull never crosses land on any seed. The
+            // bridge's railing peaks much lower, so the boat stays clear of it.
+            BoatWaterline = MathF.Max(horizon + u * 0.014f, hills.NearRidgeLowestBetween(0, w) + u * 0.010f),
         };
     }
 
@@ -162,6 +167,20 @@ internal static class DuskPainter
 
         /// <summary>The top of the farthest ridge at x, so the sun can be placed on it.</summary>
         public float FarRidgeAt(float x) => HeightAt(0, x);
+
+        /// <summary>
+        /// The lowest point of the nearest ridge's edge between x0 and x1
+        /// (the largest Y, since the screen's y grows downward). The near
+        /// ridge's waves can dip BELOW the horizon line on some seeds, and a
+        /// boat placed by the horizon alone would then sail across dry land.
+        /// </summary>
+        public float NearRidgeLowestBetween(float x0, float x1)
+        {
+            float lowest = float.MinValue;
+            for (int i = 1; i < _layers[2].Length - 1; i++)   // skip the two closing corners on the horizon
+                if (_layers[2][i].X >= x0 && _layers[2][i].X <= x1) lowest = MathF.Max(lowest, _layers[2][i].Y);
+            return lowest;
+        }
 
         public Hills(int w, int h, float horizon, float u, Random rng)
         {

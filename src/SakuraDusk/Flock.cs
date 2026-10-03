@@ -15,8 +15,9 @@ namespace SakuraDusk;
 /// keeps seven birds from looking like one bird copied seven times.
 ///
 /// The birds are only stamped where the backdrop is open sky (the painter
-/// hands over a stencil), so they pass behind the hills, the pagoda and the
-/// blossom branches, and in front of the sun.
+/// hands over a stencil), so they pass behind the blossom branches that
+/// reach in from the top corners, and in front of the sun. (They fly well
+/// above the hills, so in practice only the branches ever cover them.)
 /// </summary>
 internal sealed class Flock
 {
@@ -57,18 +58,38 @@ internal sealed class Flock
 
         _birds = new Bird[7];
         for (int i = 0; i < _birds.Length; i++)
+        {
+            int size = rng.Next(spans.Length);
+            // Pick a place in the flock that does not overlap a bird already
+            // placed: try random spots until one is clear (or give up after
+            // many tries and take the last one). Two birds are "clear" of
+            // each other when they are apart across OR apart in height.
+            float ox = 0, oy = 0;
+            for (int attempt = 0; attempt < 60; attempt++)
+            {
+                ox = u * 0.26f * ((float)rng.NextDouble() - 0.5f);
+                oy = u * 0.12f * ((float)rng.NextDouble() - 0.5f);
+                bool clear = true;
+                for (int j = 0; j < i && clear; j++)
+                {
+                    float apartX = (spans[size] + spans[_birds[j].Size]) * 1.5f;
+                    clear = MathF.Abs(ox - _birds[j].OffsetX) > apartX || MathF.Abs(oy - _birds[j].OffsetY) > u * 0.032f;
+                }
+                if (clear) break;
+            }
             _birds[i] = new Bird
             {
-                OffsetX = u * 0.24f * ((float)rng.NextDouble() - 0.5f),
-                OffsetY = u * 0.11f * ((float)rng.NextDouble() - 0.5f),
+                OffsetX = ox,
+                OffsetY = oy,
                 Bob = (float)(rng.NextDouble() * Math.PI * 2),
                 BobSpeed = 0.5f + 0.6f * (float)rng.NextDouble(),
                 Flap = (float)(rng.NextDouble() * Math.PI * 2),
                 FlapSpeed = 6f + 3f * (float)rng.NextDouble(),   // about one to one and a half beats a second
                 Lift = 0.45f,
                 GlidePhase = (float)(rng.NextDouble() * Math.PI * 2),
-                Size = rng.Next(spans.Length),
+                Size = size,
             };
+        }
     }
 
     /// <summary>
@@ -105,12 +126,15 @@ internal sealed class Flock
         for (int i = 0; i < _birds.Length; i++)
         {
             ref Bird b = ref _birds[i];
-            b.Bob += b.BobSpeed * dt;
-            b.GlidePhase += 0.35f * dt;
+            // Each phase is an angle, so it is kept wrapped to one turn
+            // (Tau = 2 pi). A float that just kept growing would, after a few
+            // days of running, be too coarse to register one frame's step.
+            b.Bob = (b.Bob + b.BobSpeed * dt) % MathF.Tau;
+            b.GlidePhase = (b.GlidePhase + 0.35f * dt) % MathF.Tau;
             // Gliding: when this bird's slow clock is high, the wings stop
             // beating and settle slightly raised. Otherwise they beat.
             bool gliding = MathF.Sin(b.GlidePhase) > 0.55f;
-            if (!gliding) b.Flap += b.FlapSpeed * dt;
+            if (!gliding) b.Flap = (b.Flap + b.FlapSpeed * dt) % MathF.Tau;
             float target = gliding ? 0.45f : MathF.Sin(b.Flap);
 
             // Ease toward the target instead of jumping to it: each frame the
@@ -126,8 +150,8 @@ internal sealed class Flock
     public void Draw(FrameBuffer fb, bool[] openSky)
     {
         // The flock's center comes straight from the clock, wrapped so the
-        // flock crosses, spends a while out of sight, and comes back in on
-        // the same side it left from (it keeps flying the same way).
+        // flock crosses, spends a while out of sight, and comes back in from
+        // the side it first appeared on (it keeps flying the same way).
         float span = _u * 0.3f;                                   // the flock's width, so it is fully off screen before wrapping
         double trip = _w + 2 * span + _u * 0.8f;
         double along = ((_time * Math.Abs(_speed) + _startX + span) % trip) - span;
