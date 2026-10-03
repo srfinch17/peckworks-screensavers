@@ -35,6 +35,9 @@
 .PARAMETER WindowsLaunch
     Also run the real Windows launch test (briefly changes, then restores, your
     selected screensaver; the screensaver will cover the screen for ~6 seconds).
+    Keep your hands off the mouse and keyboard for the WHOLE run (about 40
+    seconds per screensaver): any input quits a real screensaver, which then
+    counts as a FAIL.
 
 .EXAMPLE
     .\scripts\verify.ps1
@@ -148,6 +151,17 @@ foreach ($scr in $files) {
         $had = (Get-ItemProperty $desk).PSObject.Properties.Name -contains 'SCRNSAVE.EXE'
         $orig = (Get-ItemProperty $desk).'SCRNSAVE.EXE'
         try {
+            # If a screensaver is ALREADY running, Windows ignores "start the
+            # screensaver now" and this check fails for the wrong reason. That
+            # happens for real: the person keeps their hands off the mouse for
+            # the test, so their own screensaver starts on its idle timer
+            # partway through. Clear it first, and say so.
+            $already = @(Get-Process | Where-Object { $_.Path -like '*.scr' })
+            if ($already) {
+                $already | Stop-Process -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Milliseconds 800
+                Write-Host "  (stopped a screensaver that was already running: $($already[0].Name); your own idle timer probably started it)"
+            }
             Set-ItemProperty $desk -Name 'SCRNSAVE.EXE' -Value $scr
             # WM_SYSCOMMAND (0x0112) + SC_SCREENSAVE (0xF140): "start the screensaver now",
             # exactly what Windows does when you go idle.
