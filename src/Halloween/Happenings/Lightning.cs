@@ -76,21 +76,28 @@ internal sealed class Lightning : Happening
         float x0 = _s.Width * (0.08f + 0.84f * (float)rng.NextDouble());
         float step = u * 0.03f;                                  // each segment's sideways nudge is about this big
 
-        // Pick the finish line first: the far hill's height under where the bolt ends.
-        float yTop = -u * 0.02f;
-        float xEndGuess = Math.Clamp(x0, 0, _s.Width - 1);
-        float yEnd = Brushwork.RidgeYAt(_s.FarRidge, xEndGuess) + u * 0.02f;   // a hair below the ridge, so it plunges behind it
-
-        var main = new PointF[Joints + 1];
+        // First the sideways wander of every joint, a "leaky" random walk:
+        // keep most of the last sideways offset (so the bolt meanders
+        // instead of jittering in place) and add a new nudge.
+        var offs = new float[Joints + 1];
         float off = 0;
         for (int i = 0; i <= Joints; i++)
         {
-            // A "leaky" random walk: keep most of the last sideways offset
-            // (so the bolt meanders instead of jittering in place) and add a new nudge.
             off = off * 0.65f + ((float)rng.NextDouble() * 2 - 1) * step * 1.2f;
-            float y = yTop + (yEnd - yTop) * i / Joints;
-            main[i] = new PointF(x0 + off, y);
+            offs[i] = off;
         }
+
+        // Then the finish line: the far hill's height under where the bolt
+        // really ENDS, which is its last joint, not the x it started above.
+        // (Asking the hill at the start x left the bolt hanging in the air
+        // whenever it wandered off over lower ground.)
+        float yTop = -u * 0.02f;
+        float xEnd = Math.Clamp(x0 + offs[Joints], 0, _s.Width - 1);
+        float yEnd = Brushwork.RidgeYAt(_s.FarRidge, xEnd) + u * 0.02f;   // a hair below the ridge, so it plunges behind it
+
+        var main = new PointF[Joints + 1];
+        for (int i = 0; i <= Joints; i++)
+            main[i] = new PointF(x0 + offs[i], yTop + (yEnd - yTop) * i / Joints);
         _bolts.Add((main, 1f));
         _middle = main[Joints / 2];
 

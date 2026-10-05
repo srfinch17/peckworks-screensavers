@@ -35,7 +35,7 @@ internal sealed class PumpkinFace : Happening
     private int _pumpkin, _a, _b;                          // this showing: which pumpkin, and its two faces
 
     public override float Seconds => 15f;
-    public override string? Claims => "pumpkins";
+    public override string? Claims => "graveyard";         // shared with the ghost, the hand and the cat: the cat walks in front of the pumpkins
 
     // The timeline, in seconds. Each change is a 0.4 s crossfade.
     private const float ToA = 0.5f, ToB = 7.0f, Back = 13.5f, Fading = 0.4f;
@@ -65,6 +65,18 @@ internal sealed class PumpkinFace : Happening
                 int face = f;
                 _faces[i][f] = Sprite.Paint(width, height, g =>
                 {
+                    // Keep only an oval patch in the middle, where the face is,
+                    // well inside the pumpkin. Stamping the WHOLE body would
+                    // stamp its soft outline on top of the same soft outline in
+                    // the backdrop, and soft on soft comes out a little too
+                    // solid: the pumpkin grew a faint harder edge. Inside the
+                    // patch the sprite and the backdrop are the same solid
+                    // orange, so its edge cannot show.
+                    using (var patch = new GraphicsPath())
+                    {
+                        patch.AddEllipse(at.X - left - r * 0.84f, at.Y - top - r * 0.70f, r * 1.68f, r * 1.40f);
+                        g.SetClip(patch);
+                    }
                     // Same x and footY as the backdrop, just measured from this sprite's corner.
                     float cy = HalloweenPainter.PaintPumpkinBody(g, at.X - left, footY - top, r).Y;
                     Carve(g, at.X - left, cy, r, face);

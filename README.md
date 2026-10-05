@@ -178,10 +178,12 @@ Under about 16 ms means the full 60 frames per second. Matrix Rain at 4K runs at
 the film's own 24.
 
 Halloween's happenings cost almost nothing on average: four minutes of ordinary play at 4K
-averaged 14.9 ms, against 14.3 to 15.1 ms for the same scene with nothing on, measured in the same
-minutes. One is dearer while it lasts: the blood moon, about 21 ms per frame at 4K (about 48
-frames per second for its 12 seconds). A lightning flash costs more still, for under half a
-second. At 1920x1080 none of them is measurable. `scripts\happening.ps1 -Sweep` prints the cost
-of each one.
+averaged 12.5 ms, against 13.0 to 13.2 ms for the same scene with nothing on, measured in the same
+minutes. Three are dearer while they last. At 4K each adds about 5 to 6 ms per frame in its worst
+second, which is about 50 frames per second for that moment: the blood moon for its 12 seconds, a
+firework for the half second of each burst, and a lightning flash for under half a second. The
+hill monster adds about 2 ms. At 1920x1080 none of them drops a frame (the worst second of ten
+minutes of play was 5.7 ms). `scripts\happening.ps1 -Sweep` prints the average, the worst second
+and the slowest single frame for each one.
 
 Measure your own with `/snapshot`; the timing lands in `out.png.txt`.

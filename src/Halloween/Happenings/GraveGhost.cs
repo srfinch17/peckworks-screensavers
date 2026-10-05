@@ -35,6 +35,10 @@ internal sealed class GraveGhost : Happening
     private float _stoneTop;                     // the y of the top of that stone
 
     public override float Seconds => 11f;
+    // One happening at a time among the stones and pumpkins: they are drawn
+    // in the order they began, with no idea of who stands in front, so a cat
+    // and a zombie hand on the same spot would be drawn through each other.
+    public override string? Claims => "graveyard";
 
     public GraveGhost(HalloweenScenery s)
     {

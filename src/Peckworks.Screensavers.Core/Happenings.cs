@@ -67,21 +67,28 @@ public abstract class Happening
 /// out is it shuffled again. So over a few minutes you see every happening
 /// once before any repeats, in an order that is different every time.
 ///
-/// Happenings are built lazily: the first time one is dealt, not at startup.
-/// Painting every set of sprites up front would slow the launch for things
-/// that may not show for minutes.
+/// Building a happening means painting its sprites, which takes a moment
+/// (up to a twelfth of a second on a 4K screen). Doing all of them at
+/// startup would slow the launch. Doing each one at the moment it is first
+/// dealt freezes the picture for that moment, a visible stutter. So they are
+/// built by a HELPER: a second line of work (a "background thread") that
+/// starts when the scene does and paints them one after another while the
+/// picture carries on. If one is dealt before the helper has reached it, it
+/// is simply built on the spot.
 ///
 /// FOR TESTING: set the environment variable PECKWORKS_HAPPENING before
 /// launching. A happening's name plays that one alone, starting at time zero
 /// and repeating, so "/snapshot out.png 1920 1080 2.5" shows it 2.5 seconds
 /// in. The word "all" plays every happening back to back, a showreel.
+/// PECKWORKS_SEED (any whole number) makes the scene's dice repeatable, so
+/// two runs paint the same scenery: see SceneRandom.
 /// </summary>
 public sealed class HappeningDirector
 {
     private const int MaxAtOnce = 3;
 
     private readonly (string Name, Func<Happening> Make)[] _cast;
-    private readonly Happening?[] _made;                       // built on first use
+    private readonly Happening?[] _made;                       // each one once it is built (by the helper, or on first use)
     private readonly Random _rng;
     private readonly List<int> _deck = [];                     // cards still to deal this round
     private readonly List<(int Who, double Start)> _running = [];
@@ -118,7 +125,42 @@ public sealed class HappeningDirector
                     throw new ArgumentException($"PECKWORKS_HAPPENING='{test}' is not a happening. Known: all, {string.Join(", ", cast.Select(c => c.Name))}");
             }
         }
+
+        // Start the helper (see the class summary). Not in testing: a test
+        // wants one happening and clean timings, not eighteen others being
+        // painted alongside. If the helper trips over anything, it just
+        // stops; whatever it did not build is built on first use instead,
+        // and any real fault shows up there, on the main line of work.
+        if (!_off && _only < 0 && !_reel)
+            Task.Run(() =>
+            {
+                try { for (int i = 0; i < _cast.Length; i++) Built(i); }
+                catch { }
+            });
     }
+
+    /// <summary>
+    /// The scene's dice. Normally different on every launch. For testing, set
+    /// the environment variable PECKWORKS_SEED to a whole number and every
+    /// launch rolls the same numbers, so the scenery (and which tombstone the
+    /// ghost picks) comes out the same each time. That is how you look at
+    /// three moments of ONE scene, or check a fix on the exact scene that
+    /// showed the fault. A scene uses it in place of "new Random()".
+    /// </summary>
+    public static Random SceneRandom() =>
+        int.TryParse(Environment.GetEnvironmentVariable("PECKWORKS_SEED"), out int seed) ? new Random(seed) : new Random();
+
+    /// <summary>
+    /// Happening number "who", built if it is not yet. The helper and the
+    /// main line may both get here for the same one at the same moment, and
+    /// there must only ever be ONE of each (a showing that began on one copy
+    /// and was drawn from another would be drawn before its dice were
+    /// rolled). CompareExchange is the tie-break: "put mine in the slot only
+    /// if the slot is still empty, and tell me what was there". Whoever
+    /// loses the race throws its copy away and uses the winner's.
+    /// </summary>
+    private Happening Built(int who) =>
+        _made[who] ?? Interlocked.CompareExchange(ref _made[who], _cast[who].Make(), null) ?? _made[who]!;
 
     public void Update(double elapsedSeconds)
     {
@@ -138,10 +180,15 @@ public sealed class HappeningDirector
             return;
         }
 
-        Happening h = _made[who] ??= _cast[who].Make();
+        Happening h = Built(who);
         h.Begin(_rng);
         _running.Add((who, _time));
-        _nextAt = testing ? _time + h.Seconds + 1 : _time + _gapMin + (_gapMax - _gapMin) * _rng.NextDouble();
+        _nextAt = testing ? _time + h.Seconds + 1
+                // A showing that found nothing to draw (no branch to hang a web
+                // on) says so with a tiny Seconds. Deal again in a second
+                // instead of leaving the stage empty for a whole turn.
+                : h.Seconds < 0.5f ? _time + 1
+                : _time + _gapMin + (_gapMax - _gapMin) * _rng.NextDouble();
     }
 
     /// <summary>
@@ -165,7 +212,7 @@ public sealed class HappeningDirector
         {
             int who = _deck[i];
             if (_running.Any(r => r.Who == who)) continue;
-            string? claim = (_made[who] ??= _cast[who].Make()).Claims;
+            string? claim = Built(who).Claims;
             if (claim != null && _running.Any(r => _made[r.Who]!.Claims == claim)) continue;
             _deck.RemoveAt(i);
             return who;

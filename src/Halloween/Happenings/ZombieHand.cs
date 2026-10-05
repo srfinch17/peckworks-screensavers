@@ -49,6 +49,10 @@ internal sealed class ZombieHand : Happening
     private readonly float[] _clodDx = new float[Clods];         // where along the mound it starts
 
     public override float Seconds => 9f;
+    // One happening at a time among the stones and pumpkins: they are drawn
+    // in the order they began, with no idea of who stands in front, so a cat
+    // and a zombie hand on the same spot would be drawn through each other.
+    public override string? Claims => "graveyard";
 
     public ZombieHand(HalloweenScenery s)
     {

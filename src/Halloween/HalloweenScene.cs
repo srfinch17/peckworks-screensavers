@@ -39,7 +39,7 @@ internal sealed class HalloweenScene : IScreensaverScene
 
     private const int Poses = 7;      // wing positions per size, from fully down to fully up
 
-    private readonly Random _rng = new();
+    private readonly Random _rng = HappeningDirector.SceneRandom();   // new dice every launch, unless PECKWORKS_SEED asks for a repeat
     private readonly HalloweenScenery _scenery;
     private readonly PetalField _leaves;
     private readonly Sprite[,] _batSprites;   // [size, pose]

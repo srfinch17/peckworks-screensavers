@@ -27,13 +27,20 @@
     as FRACTIONS of the screen (0 to 1). "-Crop 0.5,0,0.5,0.5" keeps the top
     right quarter. A crop is saved next to the full picture as *-crop.png.
 
+.PARAMETER Seed
+    Optional whole number. Fixes the scene's dice (it sets PECKWORKS_SEED), so
+    every run paints the same scenery and the happening makes the same random
+    choices. Without it each run is a new random scene.
+
 .PARAMETER Sweep
     Instead of one happening, run EVERY happening in the saver's cast for
-    -SweepSeconds each and print the average time per frame, with a quiet
-    baseline (nothing on) before and after. This is the cost and crash check:
-    a happening whose number stands well above the baseline is stamping too
-    many pixels. Run it at 3840x2160 (where cost shows) and at 152x112 (the
-    preview box, where crashes show).
+    -SweepSeconds each and print three times: the average per frame, the
+    WORST SECOND (the slowest 60 frames in a row) and the slowest single
+    frame, with a quiet baseline (nothing on) before and after. This is the
+    cost and crash check. Read the worst second: a happening that is slow
+    only in bursts (a firework) hides in the average. Run it at 3840x2160 (where cost shows) and at 152x112
+    (the preview box, where crashes show). The default 45 seconds is longer
+    than the longest happening, so every one plays right through.
 
 .EXAMPLE
     .\scripts\happening.ps1 -Name ShootingStar -At 0.4,0.9,1.4
@@ -49,8 +56,9 @@ param(
     [double[]]$Crop,
     [string]$OutDir,
     [switch]$Build,
+    [int]$Seed = -1,
     [switch]$Sweep,
-    [double]$SweepSeconds = 15
+    [double]$SweepSeconds = 45
 )
 $ErrorActionPreference = 'Stop'
 
@@ -65,6 +73,8 @@ if ($Build) {
 $exe = Join-Path $repo "src\$Saver\bin\Release\net10.0-windows\$Saver.exe"
 if (-not (Test-Path $exe)) { throw "Not built yet: $exe. Run with -Build." }
 
+$env:PECKWORKS_SEED = if ($Seed -ge 0) { "$Seed" } else { $null }
+
 if ($Sweep) {
     # The names come straight from the cast file: every "nameof(Something)" in it.
     $cast = Join-Path $repo "src\$Saver\Happenings\Cast.cs"
@@ -78,15 +88,18 @@ if ($Sweep) {
         $started = Get-Date
         $p = Start-Process -FilePath $exe -ArgumentList '/snapshot', "`"$(Join-Path $OutDir "sweep-$label.png")`"", $Width, $Height, $seconds.ToString([Globalization.CultureInfo]::InvariantCulture) -Wait -PassThru
         if ($p.ExitCode -ne 0 -or -not (Test-Path $timing) -or (Get-Item $timing).LastWriteTime -lt $started) { return "CRASHED (exit code $($p.ExitCode))" }
-        return ((Get-Content $timing) -replace '^.*average ', '' -replace ' \(.*$', '')
+        return ((Get-Content $timing) -replace '^.*average ', 'average ' -replace ' per frame( \(update \+ render\))?', '')
     }
     try {
         # Nothing comes on in the first 3 seconds of a normal run, so 2.9 s is the quiet baseline.
         Write-Host ("{0,-18} {1}" -f '(quiet baseline)', (Measure-Run '' 2.9))
         foreach ($n in $names) { Write-Host ("{0,-18} {1}" -f $n, (Measure-Run $n $SweepSeconds)) }
         Write-Host ("{0,-18} {1}" -f '(quiet baseline)', (Measure-Run '' 2.9))
+        Write-Host "A happening builds its sprites the first time it shows, and in this test mode that pause lands in the first second, which the worst-second number leaves out."
+
     } finally {
         $env:PECKWORKS_HAPPENING = $null
+        $env:PECKWORKS_SEED = $null
     }
     return
 }
@@ -120,4 +133,5 @@ try {
     }
 } finally {
     Remove-Item Env:PECKWORKS_HAPPENING -ErrorAction SilentlyContinue
+    $env:PECKWORKS_SEED = $null
 }

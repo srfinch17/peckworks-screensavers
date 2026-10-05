@@ -141,11 +141,26 @@ internal sealed class HillMonster : Happening
         // at least 0.21 u away from it (a bit over the 0.16 u minimum, so the horns clear the tower). Try a few random spots, then fall
         // back to the far side from the house (which always satisfies it
         // unless the screen is tiny).
+        //
+        // It also keeps clear of the dead tree if it can. Behind the tree's
+        // thin twigs a big dark shape shows a fault of the stencil: a twig's
+        // soft edge pixels are part twig, part bright sky, the stencil leaves
+        // them alone, and against the dark monster they light up as a thin
+        // bright rim round every twig. So the first 40 tries want both rules;
+        // only if no spot passes both (a narrow screen) is the tree let go.
+        float treeLeft = _s.DeadTreeFoot.X, treeRight = _s.DeadTreeFoot.X;
+        foreach (PointF spot in _s.DeadTreeSpots)
+        {
+            treeLeft = MathF.Min(treeLeft, spot.X);
+            treeRight = MathF.Max(treeRight, spot.X);
+        }
         _cx = -1;
-        for (int tries = 0; tries < 40 && _cx < 0; tries++)
+        for (int tries = 0; tries < 80 && _cx < 0; tries++)
         {
             float x = _s.Width * (0.10f + 0.80f * (float)rng.NextDouble());
-            if (MathF.Abs(x - _s.House.X) >= u * 0.21f) _cx = x;
+            bool clearOfHouse = MathF.Abs(x - _s.House.X) >= u * 0.21f;
+            bool clearOfTree = x + _bodyW / 2f < treeLeft || x - _bodyW / 2f > treeRight;
+            if (clearOfHouse && (clearOfTree || tries >= 40)) _cx = x;
         }
         if (_cx < 0) _cx = _s.House.X < _s.Width / 2f ? _s.Width * 0.9f : _s.Width * 0.1f;
 

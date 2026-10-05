@@ -21,7 +21,7 @@ internal sealed class HalloweenScenery
     public required float U { get; init; }                           // the size unit: the height, or less on a tall screen. Size everything by this.
     public required float Horizon { get; init; }                     // the y where the sky ends behind the hills
     public required (PointF At, float R) Moon { get; init; }         // the moon's center and radius
-    public required bool[] OpenSky { get; init; }                    // stencil: true where nothing was painted over the sky, moon and clouds
+    public required bool[] OpenSky { get; init; }                    // stencil: true where nothing SOLID was painted over the sky, moon and clouds (the mist is haze, not solid: see Paint)
     public required bool[] OpenFromHouse { get; init; }              // stencil: true where nothing was painted after the haunted house (so: nothing is in front of it)
     public required PointF[] FarRidge { get; init; }                 // the far hill's outline; ask Brushwork.RidgeYAt(FarRidge, x) for its height
     public required Bank Ground { get; init; }                       // the graveyard hill; ask Ground.YAt(x) for its height
@@ -97,7 +97,18 @@ internal static class HalloweenPainter
             g.FillPolygon(near, nearRidge);
             g.FillRectangle(near, 0, horizon, w, h - horizon);   // the valley floor, down to where the graveyard hill covers it
         }
+        // The mist is haze, not a solid thing, so it must not count as
+        // "something in front of the sky". (It did at first. The far hill is
+        // often lower than the top of the mist, and a monster rising behind
+        // the hill was then cut off in a ruler-straight line along the top
+        // of the mist, with open sky between it and the hill.) So we take a
+        // copy just before the mist and another just after: "sky" is judged
+        // up to the first, "nothing in front" from the second onward.
+        g.Flush();
+        uint[] beforeMist = Brushwork.ToPixels(bmp);
         PaintMist(g, w, horizon, u);
+        g.Flush();
+        uint[] afterMist = Brushwork.ToPixels(bmp);
 
         Bank ground = MakeGround(w, h);
         ground.Paint(g, Color.FromArgb(40, 28, 56), Color.FromArgb(10, 6, 16), Color.FromArgb(110, 130, 104, 150), Math.Max(1.5f, u * 0.004f));
@@ -128,6 +139,16 @@ internal static class HalloweenPainter
 
         g.Flush();
         uint[] pixels = Brushwork.ToPixels(bmp);
+
+        // Open sky = still sky when the hills were done (nothing solid behind
+        // the mist) AND untouched since the mist (nothing in front of it).
+        // The price of leaving the mist out: a stamp low on the horizon is
+        // drawn over the haze there instead of under it. That is a faint
+        // difference in a thin band; the flat cut was not faint.
+        var openSky = new bool[pixels.Length];
+        for (int i = 0; i < openSky.Length; i++)
+            openSky[i] = skyOnly[i] == beforeMist[i] && afterMist[i] == pixels[i];
+
         return new HalloweenScenery
         {
             Pixels = pixels, LeafSpots = leafSpots, Pumpkins = pumpkins,
@@ -135,7 +156,7 @@ internal static class HalloweenPainter
             SkeletonHeight = skeletonTall,
 
             Width = w, Height = h, U = u, Horizon = horizon, Moon = moon,
-            OpenSky = Brushwork.Unchanged(skyOnly, pixels), OpenFromHouse = Brushwork.Unchanged(upToHouse, pixels),
+            OpenSky = openSky, OpenFromHouse = Brushwork.Unchanged(upToHouse, pixels),
             FarRidge = farRidge, Ground = ground,
             House = house, HouseWindows = HouseWindows(house.X, house.Y, u),
             HouseTowerTip = new PointF(house.X - u * 0.05f, house.Y - u * 0.175f),
@@ -257,24 +278,51 @@ internal static class HalloweenPainter
             new PointF(towerX - towerW * 0.8f, baseY - towerH), new PointF(towerX, baseY - towerH - u * 0.06f),
             new PointF(towerX + towerW * 0.8f, baseY - towerH)]);
 
+        // The glows are kept ON the walls: a "clip" tells the drawing kit
+        // "only paint inside this shape", and the shape here is the house
+        // itself. Without it the tower window's glow, which is wider than the
+        // tower, spilled a faint yellow smudge onto the sky either side, and
+        // that smudge stayed lit when a happening turned the window dark.
+        // (Intersect, between Save and Restore: add to the caller's clip,
+        // never replace it.)
+        GraphicsState before = g.Save();
+        using (var walls = new Region(new RectangleF(x - bodyW / 2, top, bodyW, bodyH)))
+        {
+            walls.Union(new RectangleF(towerX - towerW / 2, baseY - towerH, towerW, towerH));
+            using var roofs = new GraphicsPath();
+            roofs.AddPolygon([new PointF(x - bodyW * 0.6f, top), new PointF(x, top - u * 0.05f), new PointF(x + bodyW * 0.6f, top)]);
+            walls.Union(roofs);
+            using var hat = new GraphicsPath();
+            hat.AddPolygon([
+                new PointF(towerX - towerW * 0.8f, baseY - towerH), new PointF(towerX, baseY - towerH - u * 0.06f),
+                new PointF(towerX + towerW * 0.8f, baseY - towerH)]);
+            walls.Union(hat);
+            g.SetClip(walls, CombineMode.Intersect);
+        }
+
+        Color usual = Color.FromArgb(255, 206, 96);
         RectangleF[] windows = HouseWindows(x, baseY, u);
         for (int i = 0; i < windows.Length; i++)
         {
-            Color? light = lights == null ? Color.FromArgb(255, 206, 96) : lights[i];
+            Color? light = lights == null ? usual : lights[i];
             if (light is not Color lit) continue;                                   // this window is dark
+            bool isUsual = lit.ToArgb() == usual.ToArgb();
             RectangleF win = windows[i];
             float cx = win.X + win.Width / 2, cy = win.Y + win.Height / 2, glowR = u * 0.022f;
             using var glowPath = new GraphicsPath();
             glowPath.AddEllipse(cx - glowR, cy - glowR, glowR * 2, glowR * 2);
             using var glow = new PathGradientBrush(glowPath)
             {
-                CenterColor = Color.FromArgb(110, Brushwork.Mix(lit, Color.FromArgb(255, 170, 40), 0.35f)),   // the glow is a shade deeper than the pane
-                SurroundColors = [Color.FromArgb(0, lit)],
+                // The usual yellow keeps its own hand-picked glow colors. Any
+                // other light gets a glow a shade deeper than its pane.
+                CenterColor = isUsual ? Color.FromArgb(110, 255, 190, 70) : Color.FromArgb(110, Brushwork.Mix(lit, Color.FromArgb(255, 170, 40), 0.35f)),
+                SurroundColors = [isUsual ? Color.FromArgb(0, 255, 170, 50) : Color.FromArgb(0, lit)],
             };
             g.FillPath(glow, glowPath);
             using var pane = new SolidBrush(lit);
             g.FillRectangle(pane, win);
         }
+        g.Restore(before);
     }
 
     /// <summary>

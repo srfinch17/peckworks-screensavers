@@ -85,7 +85,14 @@ public static class ScreensaverApp
     /// Usage:  MatrixRain.exe /snapshot out.png [width height seconds]
     ///
     /// It also writes out.png.txt with how many milliseconds a frame took, which
-    /// is the honest measure of whether the animation will run smoothly.
+    /// is the honest measure of whether the animation will run smoothly. Three
+    /// numbers: the average over the whole run; the WORST SECOND (the slowest
+    /// stretch of 60 frames in a row); and the SLOWEST single FRAME. The last
+    /// two leave out the first second, while the program warms up. Each one
+    /// catches what the one before hides: a firework that is slow for half a
+    /// second vanishes in a 15 second average and shows in the worst second;
+    /// one frozen frame (a stutter) vanishes in both and shows in the slowest
+    /// frame.
     /// </summary>
     private static void RunSnapshot(ScreensaverDefinition definition, string[] extra)
     {
@@ -100,6 +107,8 @@ public static class ScreensaverApp
         const double step = 1.0 / 60;
         var timer = new Stopwatch();
         int frames = 0;
+        var lastSixty = new Queue<double>();   // the last 60 frame times, oldest first: a one-second window that slides along
+        double windowSum = 0, worstSecond = 0, slowestFrame = 0, before = 0;
         for (double t = 0; t < seconds; t += step)
         {
             timer.Start();
@@ -107,11 +116,21 @@ public static class ScreensaverApp
             scene.Render(frame);   // render every step, so the timing is realistic
             timer.Stop();
             frames++;
+
+            double now = timer.Elapsed.TotalMilliseconds, took = now - before;
+            before = now;
+            if (frames <= 60) continue;                         // the first second is warm-up, not the scene
+            slowestFrame = Math.Max(slowestFrame, took);
+            lastSixty.Enqueue(took);
+            windowSum += took;
+            if (lastSixty.Count > 60) windowSum -= lastSixty.Dequeue();
+            if (lastSixty.Count == 60) worstSecond = Math.Max(worstSecond, windowSum / 60);
         }
 
         using Bitmap bmp = frame.ToBitmap();
         bmp.Save(path, ImageFormat.Png);
         File.WriteAllText(path + ".txt",
-            $"{width}x{height}, {frames} frames, average {timer.Elapsed.TotalMilliseconds / frames:F2} ms per frame (update + render)\n");
+            $"{width}x{height}, {frames} frames, average {timer.Elapsed.TotalMilliseconds / frames:F2} ms per frame (update + render)"
+            + (worstSecond > 0 ? $", worst second {worstSecond:F2} ms per frame, slowest frame {slowestFrame:F1} ms" : "") + "\n");
     }
 }

@@ -63,7 +63,16 @@ fixed to a prop) before writing one. They are the pattern.
    `OpenFromHouse` for things at the haunted house (in front of the house, behind anything
    nearer). Things on the graveyard ground need no stencil: they are in front of everything in
    the backdrop, and the candles, bats and leaves are drawn after the happenings, over them.
+   Two limits to know. A stencil is yes or no per pixel, and the soft edge pixels of a thin
+   branch (part branch, part sky) count as "no": behind a big shape much darker or redder than
+   the sky they show as a thin bright rim round every twig. Keep big dark shapes clear of the
+   twigs (`HillMonster.cs`), or repair the stencil by testing the pixels (`BloodMoon.cs`). And
+   the mist does not count as "in front" (it is haze), so a stamp low on the horizon is drawn
+   over the haze, not under it.
 5. **Paint sprites in the constructor, never in `Draw`.** Painting is slow; stamping is fast.
+   The director runs the constructors on a helper thread while the scene is already playing,
+   so a constructor must only READ the scenery, never change it, and must not roll dice (that
+   is what `Begin` is for).
 6. **Give every size a floor in pixels** (`Math.Max(2, (int)(u * 0.01f))`). The preview box in
    Windows' Screen Saver Settings is about 150 pixels wide, and the same code runs there.
    Nothing may crash, divide by zero, or index an empty list at that size.
@@ -78,12 +87,18 @@ fixed to a prop) before writing one. They are the pattern.
     on exactly the same pixels. Stamps land on whole pixels, so: pick the sprite's whole-number
     left and top first (`left = (int)MathF.Floor(x - halfWidth) - 2`), then paint inside the
     sprite at `(x - left, y - top)`, and stamp with `Draw(fb, left, top)`, not `DrawCentered`.
-12. **Claim a shared prop.** Two happenings that both change the moon say
-    `Claims => "moon"`, and the director will not run them together.
+12. **Claim a shared prop, or a shared patch of ground.** Two happenings that both change the
+    moon say `Claims => "moon"`, and the director will not run them together. The same goes for
+    two that can stand on the same spot: happenings are drawn in the order they began, with no
+    idea of who is in front, so a cat and a zombie hand in one place are drawn through each
+    other. Halloween's ghost, hand, cat and pumpkin face all claim `"graveyard"`. When you add
+    one, check it against EVERY existing one for a shared prop or place, not only the obvious
+    pair. (A happening has one claim. If one ever needs two, widen the claim to cover both.)
 13. **Size it to be seen, not to take over.** It should catch the eye from across a room and
     still be a small surprise, not the main act.
 14. **Nothing to show? End at once.** If a showing finds it has nothing to draw (no branch to
-    hang a web on), make `Seconds` tiny for that showing so the director moves on.
+    hang a web on), make `Seconds` tiny (under half a second) for that showing. The director
+    takes that as "nothing happened" and deals another within a second.
 15. Comments are heavy and plain, like the rest of the repo: one idea at a time, a real-world
     comparison where it helps, no em or en dashes.
 
@@ -102,15 +117,20 @@ calling a happening done, look at: three or four moments (start, middle, end), t
 separate runs, a tall screen (1080x1920) and a very wide one (2560x1080).
 
 Each run is its own launch. `-At 1,5,10` is therefore three different random scenes, not three
-moments of one scene.
+moments of one scene, unless you fix the dice: `-Seed 7` paints the same scene every time (any
+whole number; a different number is a different scene). Use it to watch one happening unfold in
+one place, and to re-check a fix on the exact scene that showed the fault.
 
 **Cost and crashes.** Every pixel a stamp covers costs time, so one wide soft glow can cost more
 than the whole rest of the scene (the first blood moon halved the frame rate on a 4K screen). The
-sweep runs every happening and prints its time per frame next to a quiet baseline:
+sweep runs every happening right through and prints three times next to a quiet baseline: the
+average per frame, the worst second, and the slowest single frame. Read the worst second. A
+firework is slow for half a second at each burst, which an average over the whole showing hides.
+(The slowest frame catches a stutter: one frozen frame that both of the others hide.)
 
 ```powershell
-.\scripts\happening.ps1 -Sweep -Width 3840 -Height 2160   # cost: anything well above the baseline is too big
-.\scripts\happening.ps1 -Sweep -Width 152 -Height 112     # the preview box: nothing may crash
+.\scripts\happening.ps1 -Sweep -Width 3840 -Height 2160   # cost: anything well above the baseline is too big (takes a quarter of an hour)
+.\scripts\happening.ps1 -Sweep -Width 152 -Height 112     # the preview box: nothing may crash (takes seconds)
 ```
 
 Cures for a costly one: make the glow smaller, punch out the part something else covers (see

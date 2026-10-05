@@ -11,14 +11,21 @@ namespace Halloween.Happenings;
 /// yellow.
 ///
 /// How it works: the backdrop already shows the house with four yellow
-/// windows. For each window we paint three small round "patch" sprites of
-/// the wall around that window:
-///   - DARK: the wall with the window unlit (hides the yellow glow).
-///   - GREEN: the window lit green.
-///   - YELLOW: the window lit yellow again (the same as the backdrop).
-/// Every frame, for each window, we work out "how yellow" and "how green" it
-/// is right now and stamp the patches at those opacities. Think of three
-/// sheets of colored glass laid over a lamp, each one dimmed separately.
+/// windows. For each window we paint three small round sprites:
+///   - DARK: a patch of bare wall (hides the window and its yellow glow).
+///   - GREEN: the green pane and its glow, and nothing else (no wall).
+///   - YELLOW: the yellow pane and its glow, the same as the backdrop's.
+/// Every frame we work out "how yellow" and "how green" each window is
+/// right now. Then, in two passes: first ALL FOUR windows are wiped to dark
+/// wall, then each window's light is laid back on top at its strength.
+/// Think of switching every lamp off and then turning each one up on its
+/// own dimmer.
+///
+/// Why two passes, and why the lights carry no wall: the windows stand so
+/// close that their glows overlap. If each window were wiped and relit in
+/// turn, the wall in one window's patch would take a round bite out of its
+/// neighbor's glow. Wiping everything first, then adding lights that are
+/// glow only, lets the glows overlap exactly as they do in the backdrop.
 ///
 /// What color is the dark wall? The house is not pure black in the backdrop:
 /// a band of mist was painted over its foot afterwards, so the wall gets a
@@ -90,36 +97,54 @@ internal sealed class HouseLights : Happening
                 // The shape the patch may cover: round, and inside the walls.
                 using var round = new GraphicsPath();
                 round.AddEllipse(cx - left - patchR, cy - top - patchR, patchR * 2, patchR * 2);
-                using var walls = new GraphicsPath();
-                if (which == 0)       // the tower: a narrow upright rectangle
-                    walls.AddRectangle(new RectangleF(towerX - towerW / 2 + inset - left, 0, towerW - 2 * inset, size));
-                else                  // the main house: its walls and roof as one outline
+                // The walls: the tower (a narrow upright rectangle) AND the
+                // main house (its walls and roof as one outline), joined into
+                // one shape. Both, for every window, because a glow does not
+                // stop at the join: the tower window's glow reaches onto the
+                // roof beside it. (A patch cut to the tower alone left that
+                // bit of yellow glowing on the roof while the tower was dark.)
+                using var walls = new Region(new RectangleF(towerX - towerW / 2 + inset - left, 0, towerW - 2 * inset, size));
+                using (var house = new GraphicsPath())
                 {
                     float l = hx - bodyW / 2 + inset - left, r = hx + bodyW / 2 - inset - left, t = bodyTop - top;
-                    walls.AddPolygon([
+                    house.AddPolygon([
                         new PointF(l, t + bodyH), new PointF(l, t), new PointF(hx - bodyW * 0.6f + 2 * inset - left, t),
                         new PointF(hx - left, t - u * 0.05f + 2.5f * inset), new PointF(hx + bodyW * 0.6f - 2 * inset - left, t),
                         new PointF(r, t), new PointF(r, t + bodyH)]);
+                    walls.Union(house);
                 }
                 g.SetClip(round);
                 g.SetClip(walls, CombineMode.Intersect);
 
-                // The wall: a smooth top-to-bottom blend of the two measured colors.
-                using (var wall = new LinearGradientBrush(new PointF(0, cy - top - patchR - 1), new PointF(0, cy - top + patchR + 1), above, below))
+                if (lit is not Color color)
+                {
+                    // Dark: just the wall, a smooth top-to-bottom blend of the two measured colors.
+                    using var wall = new LinearGradientBrush(new PointF(0, cy - top - patchR - 1), new PointF(0, cy - top + patchR + 1), above, below);
                     g.FillRectangle(wall, 0, 0, size, size);
+                    return;
+                }
 
-                if (lit is not Color color) return;                                   // dark: just the wall
-                // The window and its glow, painted exactly as PaintHouse does.
+                // Lit: the pane and its glow ONLY, on clear glass, with the
+                // same colors PaintHouse uses. One thing PaintHouse does not
+                // have to think about: the mist is painted over the house
+                // afterwards, so a window low enough to stand in the mist is
+                // a little paled by it. We pale ours by the same amount
+                // (thinner glow, pane mixed toward the mist color), or the
+                // window would jump brighter when the happening takes it over.
+                float haze = MistAt(s, cy);
+                bool usual = color.ToArgb() == Yellow.ToArgb();
+                Color glowColor = usual ? Color.FromArgb(255, 190, 70) : Brushwork.Mix(color, Color.FromArgb(255, 170, 40), 0.35f);
+                Color rimColor = usual ? Color.FromArgb(255, 170, 50) : color;
                 float glowR = u * 0.022f, wx = cx - left, wy = cy - top;
                 using var glowPath = new GraphicsPath();
                 glowPath.AddEllipse(wx - glowR, wy - glowR, glowR * 2, glowR * 2);
                 using var glow = new PathGradientBrush(glowPath)
                 {
-                    CenterColor = Color.FromArgb(110, Brushwork.Mix(color, Color.FromArgb(255, 170, 40), 0.35f)),
-                    SurroundColors = [Color.FromArgb(0, color)],
+                    CenterColor = Color.FromArgb((int)(110 * (1 - haze)), Brushwork.Mix(glowColor, Mist, haze)),
+                    SurroundColors = [Color.FromArgb(0, rimColor)],
                 };
                 g.FillPath(glow, glowPath);
-                using var pane = new SolidBrush(color);
+                using var pane = new SolidBrush(Brushwork.Mix(color, Mist, haze));
                 g.FillRectangle(pane, new RectangleF(win.X - left, win.Y - top, win.Width, win.Height));
             });
             _dark[i] = Make(null);
@@ -152,11 +177,19 @@ internal sealed class HouseLights : Happening
     /// </summary>
     private static Color WallAt(HalloweenScenery s, float y)
     {
+        float a = MistAt(s, y);
+        Color ink = Color.FromArgb(12, 8, 20);
+        return Color.FromArgb((int)(ink.R + (Mist.R - ink.R) * a), (int)(ink.G + (Mist.G - ink.G) * a), (int)(ink.B + (Mist.B - ink.B) * a));
+    }
+
+    private static readonly Color Mist = Color.FromArgb(170, 150, 190);           // the mist's color, as in PaintMist
+
+    /// <summary>How thick the mist is at height y: 0 = none, up to about 0.47 in the middle of its band.</summary>
+    private static float MistAt(HalloweenScenery s, float y)
+    {
         float top = s.Horizon - s.U * 0.07f - 1, bottom = s.Horizon + s.U * 0.08f + 1;
         float pos = Math.Clamp((y - top) / (bottom - top), 0f, 1f);
-        float a = (pos < 0.5f ? pos : 1 - pos) * 2 * 120f / 255f;             // mist strength, 0 to about 0.47
-        Color ink = Color.FromArgb(12, 8, 20), mist = Color.FromArgb(170, 150, 190);
-        return Color.FromArgb((int)(ink.R + (mist.R - ink.R) * a), (int)(ink.G + (mist.G - ink.G) * a), (int)(ink.B + (mist.B - ink.B) * a));
+        return (pos < 0.5f ? pos : 1 - pos) * 2 * 120f / 255f;
     }
 
     public override void Begin(Random rng)
@@ -186,9 +219,12 @@ internal sealed class HouseLights : Happening
 
     public override void Draw(FrameBuffer fb, float t)
     {
+        // ---- how yellow and how green is each window right now? ----
+        // (stackalloc: a tiny scratch list that costs nothing to make each frame)
+        Span<float> yellows = stackalloc float[_dark.Length], greens = stackalloc float[_dark.Length];
+        bool allAsPainted = true;
         for (int i = 0; i < _dark.Length; i++)
         {
-            // ---- how yellow and how green is this window right now? ----
             float yellow, green = 0;
             if (t < _goesDark[i])
             {
@@ -211,13 +247,23 @@ internal sealed class HouseLights : Happening
                 yellow = toYellow;
             }
 
-            // A window that is plain yellow is already in the backdrop: stamp nothing, so the end is pixel-perfect.
-            if (yellow >= 0.999f && green <= 0) continue;
+            yellows[i] = yellow;
+            greens[i] = green;
+            if (yellow < 0.999f || green > 0) allAsPainted = false;
+        }
 
-            (int left, int top) = _where[i];
-            _dark[i].Draw(fb, left, top, 1f, _stencil);                         // wipe the window to dark first,
-            if (green > 0) _green[i].Draw(fb, left, top, green, _stencil);      // then the green light,
-            if (yellow > 0) _yellow[i].Draw(fb, left, top, yellow, _stencil);   // then the yellow on top.
+        // Every window plain yellow is exactly the backdrop: stamp nothing, so the start and the end are pixel-perfect.
+        if (allAsPainted) return;
+
+        // Pass 1: every window to dark wall, even the ones still lit.
+        for (int i = 0; i < _dark.Length; i++)
+            _dark[i].Draw(fb, _where[i].Left, _where[i].Top, 1f, _stencil);
+
+        // Pass 2: each window's light back on top (see the class note for why it is two passes).
+        for (int i = 0; i < _dark.Length; i++)
+        {
+            if (greens[i] > 0) _green[i].Draw(fb, _where[i].Left, _where[i].Top, greens[i], _stencil);
+            if (yellows[i] > 0) _yellow[i].Draw(fb, _where[i].Left, _where[i].Top, yellows[i], _stencil);
         }
     }
 }

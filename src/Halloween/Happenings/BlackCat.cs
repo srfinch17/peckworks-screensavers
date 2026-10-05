@@ -57,6 +57,10 @@ internal sealed class BlackCat : Happening
     private float _dir, _startX, _endX, _stopX, _v0;
 
     public override float Seconds => 13f;
+    // One happening at a time among the stones and pumpkins: they are drawn
+    // in the order they began, with no idea of who stands in front, so a cat
+    // and a zombie hand on the same spot would be drawn through each other.
+    public override string? Claims => "graveyard";
 
     public BlackCat(HalloweenScenery s)
     {
