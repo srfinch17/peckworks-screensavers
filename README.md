@@ -59,13 +59,13 @@ trees, and bare branches clawing in from the top corners.
 - Bats flap across the sky in three sizes, swooping as they go.
 - The jack-o'-lanterns flicker like candles, and the skeleton waves.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the autumn trees.
-- Twenty small **happenings** come and go at random, one every 5 to 12 seconds, shuffled like a
+- Nineteen small **happenings** come and go at random, one every 5 to 12 seconds, shuffled like a
   deck of cards so you see them all before any repeats:
 
   | Where | What happens |
   |-------|--------------|
   | The sky | Halloween fireworks (purple and orange, or green) burst and sparkle. A shooting star. A bolt of lightning. Stars join up into a constellation (a bat, a pumpkin, a ghost...). Three little ghosts float past in single file. |
-  | The moon | A face fades into the moon and out again. The moon turns blood red. A witch on a broomstick flies across it. |
+  | The moon | The moon turns blood red. A witch on a broomstick flies across it. |
   | The far hill | The haunted house's windows flicker out and come back green. A cloud of bats pours out of its tower. Something huge with glowing eyes peeks over the hill. |
   | The graveyard | A ghost rises from a grave and says boo. A zombie hand claws up out of the ground. Will-o'-the-wisps drift among the stones. The skeleton's eyes glow red. A jack-o'-lantern changes its expression. A black cat trots through. |
   | The trees | A spider spins a web in the dead tree, strand by strand. Another lowers itself from a branch on a thread. Pairs of eyes open in the dark. |

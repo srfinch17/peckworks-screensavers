@@ -98,7 +98,7 @@ src/
     HalloweenScene.cs              backdrop + candle flicker + bats + the shared engine dropping leaves
     HalloweenPainter.cs            paints the moon, haunted house, graveyard, pumpkins, trees
     HalloweenSettings.cs           declares its knobs
-    Happenings/                    twenty small random events, one class per file
+    Happenings/                    nineteen small random events, one class per file
       Cast.cs                      the list of them all
       ShootingStar.cs, ...         each one: how long it lasts, and how it looks t seconds in
 
@@ -266,7 +266,7 @@ well above the pines, so in practice it is only the corner branches that cover h
 from a grave, a spider spinning a web. Think of a cuckoo clock: each happening is one bird behind
 a little door, and a **director** (`Core/Happenings.cs`) is the clockwork that opens one door
 every few seconds. The director shuffles the happenings like a deck of cards and deals from it,
-so you see all twenty before any repeats.
+so you see them all before any repeats.
 
 Each happening is one small class with one rule: it is told `t`, the number of seconds since it
 began, and works out the whole picture from that number alone. It keeps no notes from one frame

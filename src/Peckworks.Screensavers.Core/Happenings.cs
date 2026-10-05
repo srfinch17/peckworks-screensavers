@@ -68,7 +68,7 @@ public abstract class Happening
 /// once before any repeats, in an order that is different every time.
 ///
 /// Happenings are built lazily: the first time one is dealt, not at startup.
-/// Painting twenty sets of sprites up front would slow the launch for things
+/// Painting every set of sprites up front would slow the launch for things
 /// that may not show for minutes.
 ///
 /// FOR TESTING: set the environment variable PECKWORKS_HAPPENING before

@@ -38,7 +38,7 @@
 .EXAMPLE
     .\scripts\happening.ps1 -Name ShootingStar -At 0.4,0.9,1.4
     .\scripts\happening.ps1 -Sweep -Width 3840 -Height 2160
-    .\scripts\happening.ps1 -Name MoonFace -At 2,4 -Width 1080 -Height 1920 -Crop 0.4,0.1,0.6,0.3 -Build
+    .\scripts\happening.ps1 -Name BloodMoon -At 3,6 -Width 1080 -Height 1920 -Crop 0.4,0.1,0.6,0.3 -Build
 #>
 param(
     [string]$Name,

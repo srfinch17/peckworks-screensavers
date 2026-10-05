@@ -97,7 +97,7 @@ internal sealed class BloodMoon : Happening
     /// of each about 130). Only the branch's solid middle stays untouched;
     /// its soft edge takes the tint along with the moon showing through it.
     /// </summary>
-    internal static bool[] MoonStencil(HalloweenScenery s)
+    private static bool[] MoonStencil(HalloweenScenery s)
     {
         var stencil = (bool[])s.OpenSky.Clone();
         int x0 = Math.Max(0, (int)(s.Moon.At.X - s.Moon.R) - 3), x1 = Math.Min(s.Width, (int)(s.Moon.At.X + s.Moon.R) + 4);

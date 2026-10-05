@@ -27,7 +27,6 @@ internal static class HalloweenHappenings
         (nameof(Constellation), () => new Constellation(s)),
         (nameof(GhostParade), () => new GhostParade(s)),
         // ---- the moon ----
-        (nameof(MoonFace), () => new MoonFace(s)),
         (nameof(BloodMoon), () => new BloodMoon(s)),
         (nameof(WitchFlyby), () => new WitchFlyby(s)),
         // ---- the far hill and the haunted house ----

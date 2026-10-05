@@ -20,7 +20,7 @@ namespace Halloween;
 ///     pages of a flip-book.
 ///   - The CANDLES in the jack-o'-lanterns: a soft orange glow stamped over
 ///     each pumpkin, brighter and dimmer on a jittery rhythm.
-///   - The HAPPENINGS: twenty small surprises (a shooting star, a ghost, a
+///   - The HAPPENINGS: nineteen small surprises (a shooting star, a ghost, a
 ///     spider spinning a web) that each come on for a few seconds now and
 ///     then. Each is one class in the Happenings folder; a "director" from
 ///     the engine (Core/Happenings.cs) decides which goes on when.

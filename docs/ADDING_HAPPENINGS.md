@@ -1,7 +1,7 @@
 # Adding happenings to a screensaver
 
 A **happening** is one small thing that occurs now and then in a scene: a shooting star, a ghost
-rising from a grave, a firework. Halloween has twenty. This page is the recipe for adding more,
+rising from a grave, a firework. Halloween has nineteen. This page is the recipe for adding more,
 to Halloween or to any other screensaver in this repo.
 
 Think of a cuckoo clock. Most of the time the little door is shut. Now and then it opens, the
@@ -94,7 +94,7 @@ fixed to a prop) before writing one. They are the pattern.
 .\scripts\happening.ps1 -Name ShootingStar -At 0.5,1.0,1.4 -Build
 
 # A tall screen, keeping only part of the picture (fractions: left, top, width, height)
-.\scripts\happening.ps1 -Name MoonFace -At 2,5 -Width 1080 -Height 1920 -Crop 0.4,0.1,0.6,0.3
+.\scripts\happening.ps1 -Name BloodMoon -At 3,6 -Width 1080 -Height 1920 -Crop 0.4,0.1,0.6,0.3
 ```
 
 Each run is a new random scene, so three runs are three different trees and hills. Before
@@ -136,7 +136,7 @@ $env:PECKWORKS_HAPPENING = 'all'; Start-Process .\dist\Halloween.scr -ArgumentLi
 This is what was done for Halloween, in order.
 
 1. **Decide the list.** Write one short paragraph per happening: what happens, how long, where,
-   and what it goes behind. Twenty is a good number: with one dealt every 5 to 12 seconds, the
+   and what it goes behind. About twenty is a good number: with one dealt every 5 to 12 seconds, the
    whole deck takes about three minutes to come round.
 2. **Expose the scenery facts** those paragraphs need. The painter already knows where it put
    the moon; add those numbers to the scenery object it returns (see the "Facts for the
