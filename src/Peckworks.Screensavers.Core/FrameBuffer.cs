@@ -79,6 +79,49 @@ public sealed class FrameBuffer
     }
 
     /// <summary>
+    /// Draws a straight line from a to b, straight into the pixels. For thin
+    /// things that change every frame and so cannot be a sprite: a strand of
+    /// spider silk being spun, a shooting star's tail.
+    ///
+    /// How: walk along the line's LONG direction one pixel at a time (across
+    /// for a flat line, down for a steep one). At each step the line covers a
+    /// short run of pixels in the other direction, "thickness" tall. The
+    /// pixels wholly inside the run get the full color; the two at its ends
+    /// get only the fraction the line really covers. Those part-colored end
+    /// pixels are what make the edge look smooth instead of like a staircase
+    /// ("anti-aliasing").
+    /// </summary>
+    /// <param name="alpha">0 = invisible, 1 = solid.</param>
+    /// <param name="onlyWhere">An optional stencil, as in Sprite.Draw: where it is false the line leaves the frame alone.</param>
+    public void Line(PointF a, PointF b, Color color, float alpha = 1f, float thickness = 1f, bool[]? onlyWhere = null)
+    {
+        alpha *= color.A / 255f;
+        if (alpha <= 0) return;
+        float dx = b.X - a.X, dy = b.Y - a.Y;
+        bool flat = Math.Abs(dx) >= Math.Abs(dy);
+        int steps = Math.Max(1, (int)MathF.Ceiling(flat ? Math.Abs(dx) : Math.Abs(dy)));
+        float half = Math.Max(0.5f, thickness / 2);
+
+        for (int i = 0; i <= steps; i++)
+        {
+            float x = a.X + dx * i / steps, y = a.Y + dy * i / steps;
+            int along = (int)MathF.Floor(flat ? x : y);                 // the pixel we are at in the long direction
+            float center = flat ? y : x;                                // where the line crosses it in the other
+            float lo = center - half, hi = center + half;
+            for (int p = (int)MathF.Floor(lo); p <= (int)MathF.Floor(hi); p++)
+            {
+                float cover = Math.Min(hi, p + 1) - Math.Max(lo, p);    // how much of this pixel the line covers, 0 to 1
+                if (cover <= 0) continue;
+                int px = flat ? along : p, py = flat ? p : along;
+                if (px < 0 || px >= Width || py < 0 || py >= Height) continue;
+                int at = py * Width + px;
+                if (onlyWhere != null && !onlyWhere[at]) continue;
+                Pixels[at] = Blend(Pixels[at], color.R, color.G, color.B, alpha * cover);
+            }
+        }
+    }
+
+    /// <summary>
     /// Copies the whole sheet onto a real window in one fast call.
     /// "hdc" is a Handle to a Device Context: Windows' name for "a surface you can
     /// draw on", here the inside of our window.

@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using Peckworks.Screensavers.Core;
 using Peckworks.Screensavers.Core.Sakura;
+using Halloween.Happenings;
 
 namespace Halloween;
 
@@ -19,6 +20,10 @@ namespace Halloween;
 ///     pages of a flip-book.
 ///   - The CANDLES in the jack-o'-lanterns: a soft orange glow stamped over
 ///     each pumpkin, brighter and dimmer on a jittery rhythm.
+///   - The HAPPENINGS: twenty small surprises (a shooting star, a ghost, a
+///     spider spinning a web) that each come on for a few seconds now and
+///     then. Each is one class in the Happenings folder; a "director" from
+///     the engine (Core/Happenings.cs) decides which goes on when.
 /// </summary>
 internal sealed class HalloweenScene : IScreensaverScene
 {
@@ -44,6 +49,7 @@ internal sealed class HalloweenScene : IScreensaverScene
     private readonly float[] _candlePhases;
     private readonly Sprite[] _arms;          // the skeleton's waving arm, one sprite per position of the wave
     private const int ArmPoses = 16;
+    private readonly HappeningDirector _happenings;
     private readonly int _w, _h;
     // A "double" (a decimal number with about 15 digits of precision), not a
     // "float" (about 7 digits). A screensaver can run for days. A float clock
@@ -107,6 +113,9 @@ internal sealed class HalloweenScene : IScreensaverScene
             _candlePhases[i] = (float)(_rng.NextDouble() * 20);
         }
 
+        // ---- The happenings: hand the director the cast list and how often to deal ----
+        _happenings = new HappeningDirector(HalloweenHappenings.Cast(_scenery), _rng, settings.SurprisePercent / 100f);
+
         // ---- The skeleton's waving arm: one sprite per position of the wave ----
         _arms = new Sprite[ArmPoses];
         for (int i = 0; i < ArmPoses; i++)
@@ -158,9 +167,11 @@ internal sealed class HalloweenScene : IScreensaverScene
     /// point of the wing), the tip, and back to the body. The edge from the
     /// tip back to the body is scalloped, three little arcs, which is the
     /// detail that makes it read as a bat and not a bird. Only the right wing
-    /// is worked out; the left is the same shape mirrored.
+    /// is worked out; the left is the same shape mirrored. "s" is half the
+    /// wingspan in pixels. (Internal, not private, so the BatBurst happening
+    /// can paint its swarm with the same bat.)
     /// </summary>
-    private static Sprite PaintBat(float s, float lift)
+    internal static Sprite PaintBat(float s, float lift)
     {
         int size = (int)(s * 2.3f) + 4;
         float cx = size / 2f, cy = size / 2f;
@@ -215,6 +226,7 @@ internal sealed class HalloweenScene : IScreensaverScene
         float dt = (float)elapsedSeconds;
         _time += dt;
         _leaves.Update(dt);
+        _happenings.Update(elapsedSeconds);
 
         for (int i = 0; i < _bats.Length; i++)
         {
@@ -238,6 +250,12 @@ internal sealed class HalloweenScene : IScreensaverScene
     {
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
         Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
+
+        // 1b. The happenings, straight onto the backdrop, so the candles,
+        //     the bats and the leaves all pass in front of them. One that
+        //     must go BEHIND scenery (a firework behind the hills) uses a
+        //     stencil from the painter to stay off those pixels.
+        _happenings.Draw(fb);
 
         // 2. Candlelight. Two waves of different speeds added together make
         //    the brightness wander unevenly, the way a real flame does.

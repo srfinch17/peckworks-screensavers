@@ -13,6 +13,29 @@ internal sealed class HalloweenScenery
     public required List<(PointF At, float R)> Pumpkins { get; init; } // each jack-o'-lantern's center and size, for its candle glow
     public required PointF SkeletonShoulder { get; init; }           // where the waving arm hinges
     public required float SkeletonHeight { get; init; }              // its height in pixels, so the arm is drawn to scale
+
+    // ---- Facts for the happenings (src/Halloween/Happenings): where things are, so a ghost
+    //      can rise from a real tombstone and a face can appear in the real moon. ----
+    public required int Width { get; init; }
+    public required int Height { get; init; }
+    public required float U { get; init; }                           // the size unit: the height, or less on a tall screen. Size everything by this.
+    public required float Horizon { get; init; }                     // the y where the sky ends behind the hills
+    public required (PointF At, float R) Moon { get; init; }         // the moon's center and radius
+    public required bool[] OpenSky { get; init; }                    // stencil: true where nothing was painted over the sky, moon and clouds
+    public required bool[] OpenFromHouse { get; init; }              // stencil: true where nothing was painted after the haunted house (so: nothing is in front of it)
+    public required PointF[] FarRidge { get; init; }                 // the far hill's outline; ask Brushwork.RidgeYAt(FarRidge, x) for its height
+    public required Bank Ground { get; init; }                       // the graveyard hill; ask Ground.YAt(x) for its height
+    public required PointF House { get; init; }                      // the haunted house: the middle of its base (pass to HalloweenPainter.PaintHouse)
+    public required RectangleF[] HouseWindows { get; init; }         // its four lit windows; [0] is the tower's, [3] the attic's
+    public required PointF HouseTowerTip { get; init; }              // the point of the tower's witch-hat roof
+    public required PointF HouseChimneyTop { get; init; }            // the top of the crooked chimney
+    public required List<(PointF Foot, float Tilt, bool Cross)> Tombstones { get; init; } // where each stone meets the ground, its lean in degrees, slab or cross
+    public required SizeF TombstoneSize { get; init; }               // a slab's width and height
+    public required PointF SkeletonFoot { get; init; }               // the spot between the skeleton's feet (see PaintSkeleton for how its points are measured)
+    public required PointF DeadTreeFoot { get; init; }               // where the dead tree's trunk meets the ground
+    public required List<PointF> DeadTreeSpots { get; init; }        // points on the dead tree's thin branches and at its tips
+    public required List<PointF> CornerBranchSpots { get; init; }    // the same for the bare branches in the top corners
+    public required List<(PointF At, float R)> Canopies { get; init; } // each autumn tree's cloud of leaves: center and size
 }
 
 /// <summary>
@@ -48,13 +71,25 @@ internal static class HalloweenPainter
 
         // ---- The paint order, back to front. Keep this list explicit. ----
         PaintSky(g, w, h, horizon, u, rng);
-        PaintMoon(g, w * 0.70f, h * 0.27f, u * 0.12f, rng);
+        PaintMoon(g, w * 0.70f, h * 0.27f, u * 0.12f, rng);   // (the same numbers as "moon" a few lines down)
         PaintClouds(g, w, h, u, rng);
+
+        // Stencils for the happenings (the same trick as Santa's sleigh in
+        // Christmas): copy the picture now, compare at the very end, and any
+        // pixel that did not change still has nothing in front of it. A
+        // firework stamped "only where the sky is open" then goes behind the
+        // hills and branches without knowing where they are.
+        g.Flush();
+        uint[] skyOnly = Brushwork.ToPixels(bmp);
+        var moon = (At: new PointF(w * 0.70f, h * 0.27f), R: u * 0.12f);
 
         PointF[] farRidge = Brushwork.Ridge(w, horizon, u, 0.07f, 0.05f, 0.015f, 0.06f, rng);
         using (var far = new SolidBrush(Color.FromArgb(44, 26, 66)))
             g.FillPolygon(far, farRidge);
-        PaintHouse(g, w * 0.26f, Brushwork.RidgeYAt(farRidge, w * 0.26f) + u * 0.012f, u);
+        var house = new PointF(w * 0.26f, Brushwork.RidgeYAt(farRidge, w * 0.26f) + u * 0.012f);
+        PaintHouse(g, house.X, house.Y, u);
+        g.Flush();
+        uint[] upToHouse = Brushwork.ToPixels(bmp);   // a second copy: "unchanged since here" = nothing stands in front of the house
 
         PointF[] nearRidge = Brushwork.Ridge(w, horizon, u, 0.02f, 0.03f, 0.012f, 0.03f, rng);
         using (var near = new SolidBrush(Color.FromArgb(28, 16, 44)))
@@ -69,11 +104,17 @@ internal static class HalloweenPainter
 
         (float X, float Tilt, bool Cross)[] stones =
             [(0.41f, -6, false), (0.47f, 4, true), (0.535f, -3, false), (0.60f, 8, false), (0.655f, -5, true)];
+        var tombstones = new List<(PointF Foot, float Tilt, bool Cross)>();
         foreach (var s in stones)
-            PaintTombstone(g, w * s.X, ground.YAt(w * s.X) + u * 0.006f, u, s.Tilt, s.Cross);
+        {
+            var foot = new PointF(w * s.X, ground.YAt(w * s.X) + u * 0.006f);
+            PaintTombstone(g, foot.X, foot.Y, u, s.Tilt, s.Cross);
+            tombstones.Add((foot, s.Tilt, s.Cross));
+        }
 
-        PaintDeadTree(g, w * 0.565f, ground.YAt(w * 0.565f) + u * 0.01f, u, rng);
-        List<PointF> leafSpots = PaintAutumnTrees(g, w, u, ground, rng);
+        var deadTreeFoot = new PointF(w * 0.565f, ground.YAt(w * 0.565f) + u * 0.01f);
+        List<PointF> deadTreeSpots = PaintDeadTree(g, deadTreeFoot.X, deadTreeFoot.Y, u, rng);
+        var (leafSpots, canopies) = PaintAutumnTrees(g, w, u, ground, rng);
 
         var pumpkins = new List<(PointF At, float R)>();
         (float X, float R)[] patch = [(0.30f, 0.030f), (0.345f, 0.020f), (0.73f, 0.024f), (0.775f, 0.032f)];
@@ -83,13 +124,25 @@ internal static class HalloweenPainter
         float skeletonX = w * 0.225f, skeletonFoot = ground.YAt(skeletonX) + u * 0.006f, skeletonTall = u * 0.14f;
         PaintSkeleton(g, skeletonX, skeletonFoot, skeletonTall);
 
-        PaintCornerBranches(g, w, h, u, rng);
+        List<PointF> cornerSpots = PaintCornerBranches(g, w, h, u, rng);
 
+        g.Flush();
+        uint[] pixels = Brushwork.ToPixels(bmp);
         return new HalloweenScenery
         {
-            Pixels = Brushwork.ToPixels(bmp), LeafSpots = leafSpots, Pumpkins = pumpkins,
+            Pixels = pixels, LeafSpots = leafSpots, Pumpkins = pumpkins,
             SkeletonShoulder = new PointF(skeletonX + skeletonTall * 0.105f, skeletonFoot - skeletonTall * 0.765f),
             SkeletonHeight = skeletonTall,
+
+            Width = w, Height = h, U = u, Horizon = horizon, Moon = moon,
+            OpenSky = Brushwork.Unchanged(skyOnly, pixels), OpenFromHouse = Brushwork.Unchanged(upToHouse, pixels),
+            FarRidge = farRidge, Ground = ground,
+            House = house, HouseWindows = HouseWindows(house.X, house.Y, u),
+            HouseTowerTip = new PointF(house.X - u * 0.05f, house.Y - u * 0.175f),
+            HouseChimneyTop = new PointF(house.X + u * 0.031f, house.Y - u * 0.119f),
+            Tombstones = tombstones, TombstoneSize = new SizeF(u * 0.030f, u * 0.046f),
+            SkeletonFoot = new PointF(skeletonX, skeletonFoot),
+            DeadTreeFoot = deadTreeFoot, DeadTreeSpots = deadTreeSpots, CornerBranchSpots = cornerSpots, Canopies = canopies,
         };
     }
 
@@ -180,8 +233,13 @@ internal static class HalloweenPainter
     /// with a steep roof, a taller tower with a witch-hat roof, a crooked
     /// chimney, and a few windows lit a sickly yellow. Each lit window gets a
     /// small soft glow painted first, underneath, so the window edge stays crisp.
+    ///
+    /// "lights" lets a happening repaint the house onto a sprite with its
+    /// windows in another state: one color per window (same order as
+    /// HouseWindows), where null means that window is dark. Leave "lights"
+    /// out and every window is the usual yellow.
     /// </summary>
-    private static void PaintHouse(Graphics g, float x, float baseY, float u)
+    internal static void PaintHouse(Graphics g, float x, float baseY, float u, Color?[]? lights = null)
     {
         using var ink = new SolidBrush(Ink);
         float bodyW = u * 0.10f, bodyH = u * 0.065f;
@@ -199,28 +257,43 @@ internal static class HalloweenPainter
             new PointF(towerX - towerW * 0.8f, baseY - towerH), new PointF(towerX, baseY - towerH - u * 0.06f),
             new PointF(towerX + towerW * 0.8f, baseY - towerH)]);
 
-        // (center x, center y, width, height) of each lit window.
-        (float X, float Y, float W, float H)[] windows =
-        [
-            (towerX, baseY - towerH * 0.78f, u * 0.010f, u * 0.016f),
-            (x - bodyW * 0.08f, top + bodyH * 0.38f, u * 0.011f, u * 0.014f),
-            (x + bodyW * 0.26f, top + bodyH * 0.38f, u * 0.011f, u * 0.014f),
-            (x + bodyW * 0.05f, top - u * 0.018f, u * 0.008f, u * 0.008f),      // the attic
-        ];
-        foreach (var win in windows)
+        RectangleF[] windows = HouseWindows(x, baseY, u);
+        for (int i = 0; i < windows.Length; i++)
         {
-            float glowR = u * 0.022f;
+            Color? light = lights == null ? Color.FromArgb(255, 206, 96) : lights[i];
+            if (light is not Color lit) continue;                                   // this window is dark
+            RectangleF win = windows[i];
+            float cx = win.X + win.Width / 2, cy = win.Y + win.Height / 2, glowR = u * 0.022f;
             using var glowPath = new GraphicsPath();
-            glowPath.AddEllipse(win.X - glowR, win.Y - glowR, glowR * 2, glowR * 2);
+            glowPath.AddEllipse(cx - glowR, cy - glowR, glowR * 2, glowR * 2);
             using var glow = new PathGradientBrush(glowPath)
             {
-                CenterColor = Color.FromArgb(110, 255, 190, 70),
-                SurroundColors = [Color.FromArgb(0, 255, 170, 50)],
+                CenterColor = Color.FromArgb(110, Brushwork.Mix(lit, Color.FromArgb(255, 170, 40), 0.35f)),   // the glow is a shade deeper than the pane
+                SurroundColors = [Color.FromArgb(0, lit)],
             };
             g.FillPath(glow, glowPath);
-            using var lit = new SolidBrush(Color.FromArgb(255, 206, 96));
-            g.FillRectangle(lit, win.X - win.W / 2, win.Y - win.H / 2, win.W, win.H);
+            using var pane = new SolidBrush(lit);
+            g.FillRectangle(pane, win);
         }
+    }
+
+    /// <summary>
+    /// Where the haunted house's four windows are, for a house whose base is
+    /// centered at (x, baseY): [0] the tower, [1] and [2] the main floor,
+    /// [3] the attic. The sizes here must match PaintHouse above.
+    /// </summary>
+    internal static RectangleF[] HouseWindows(float x, float baseY, float u)
+    {
+        float bodyW = u * 0.10f, bodyH = u * 0.065f, top = baseY - bodyH;
+        float towerH = u * 0.115f, towerX = x - bodyW * 0.5f;
+        RectangleF Window(float cx, float cy, float ww, float wh) => new(cx - ww / 2, cy - wh / 2, ww, wh);
+        return
+        [
+            Window(towerX, baseY - towerH * 0.78f, u * 0.010f, u * 0.016f),
+            Window(x - bodyW * 0.08f, top + bodyH * 0.38f, u * 0.011f, u * 0.014f),
+            Window(x + bodyW * 0.26f, top + bodyH * 0.38f, u * 0.011f, u * 0.014f),
+            Window(x + bodyW * 0.05f, top - u * 0.018f, u * 0.008f, u * 0.008f),
+        ];
     }
 
     /// <summary>A band of pale mist lying in the valley at the foot of the hills, thickest right at the horizon.</summary>
@@ -294,19 +367,20 @@ internal static class HalloweenPainter
     /// rule's built-in "sag" then bends it over to the right as it climbs,
     /// which is what gives it that hunched, reaching look.
     /// </summary>
-    private static void PaintDeadTree(Graphics g, float x, float footY, float u, Random rng)
+    private static List<PointF> PaintDeadTree(Graphics g, float x, float footY, float u, Random rng)
     {
         Brushwork.BranchSeed[] seeds = [new(new PointF(x, footY), -MathF.PI / 2 - 0.45f, u * 0.40f, u * 0.024f, 3)];
-        Brushwork.Branches(g, seeds, u, rng, wood: Ink, petalLight: Ink, petalDeep: Ink, bare: true);
+        return Brushwork.Branches(g, seeds, u, rng, wood: Ink, petalLight: Ink, petalDeep: Ink, bare: true);
     }
 
     /// <summary>
     /// Autumn trees at both sides, each standing on the ground under it. They
     /// are the sakura trees (same trunk, same cloud of dots) in an orange
     /// palette. Returns random spots inside the canopies, so the falling
-    /// leaves can let go of the trees they belong to.
+    /// leaves can let go of the trees they belong to, and each canopy's
+    /// center and size.
     /// </summary>
-    private static List<PointF> PaintAutumnTrees(Graphics g, int w, float u, Bank ground, Random rng)
+    private static (List<PointF> LeafSpots, List<(PointF At, float R)> Canopies) PaintAutumnTrees(Graphics g, int w, float u, Bank ground, Random rng)
     {
         var autumn = new BlossomPalette(Color.FromArgb(240, 190, 92, 28), Color.FromArgb(136, 46, 16), Color.FromArgb(248, 176, 56));
 
@@ -319,9 +393,11 @@ internal static class HalloweenPainter
             Brushwork.Trunk(g, w * t.X, ground.YAt(w * t.X) + u * 0.03f, ground.YAt(w * t.X) - u * t.Lift, u * t.R, rng, Ink);
 
         var spots = new List<PointF>();
+        var canopies = new List<(PointF At, float R)>();
         foreach (var t in trees)
         {
             float cx = w * t.X, cy = ground.YAt(cx) - u * t.Lift, r = u * t.R;
+            canopies.Add((new PointF(cx, cy), r));
             Brushwork.Canopy(g, cx, cy, r, u, rng, autumn);
             for (int i = 0; i < 8; i++)
             {
@@ -329,7 +405,7 @@ internal static class HalloweenPainter
                 if (spot.X >= 0 && spot.X < w) spots.Add(spot);
             }
         }
-        return spots;
+        return (spots, canopies);
     }
 
     /// <summary>
@@ -339,6 +415,31 @@ internal static class HalloweenPainter
     /// Returns its center and size so the scene can flicker a glow over it.
     /// </summary>
     private static (PointF At, float R) PaintPumpkin(Graphics g, float x, float footY, float r)
+    {
+        float cy = PaintPumpkinBody(g, x, footY, r).Y;
+
+        // The face. Every point is (across, down) from the pumpkin's center, in units of r.
+        PointF P(float ax, float ay) => new(x + r * ax, cy + r * ay);
+        using var candle = new SolidBrush(Color.FromArgb(255, 222, 110));
+        g.FillPolygon(candle, [P(-0.52f, -0.12f), P(-0.30f, -0.42f), P(-0.14f, -0.12f)]);   // left eye
+        g.FillPolygon(candle, [P(0.14f, -0.12f), P(0.30f, -0.42f), P(0.52f, -0.12f)]);      // right eye
+        g.FillPolygon(candle, [P(-0.08f, 0.10f), P(0f, -0.06f), P(0.08f, 0.10f)]);          // nose
+        g.FillPolygon(candle, [                                                             // a jagged grin
+            P(-0.62f, 0.16f), P(-0.40f, 0.26f), P(-0.30f, 0.38f), P(-0.18f, 0.27f), P(0.02f, 0.27f),
+            P(0.12f, 0.39f), P(0.24f, 0.27f), P(0.40f, 0.26f), P(0.62f, 0.16f),
+            P(0.36f, 0.50f), P(0f, 0.58f), P(-0.36f, 0.50f)]);
+
+        return (new PointF(x, cy), r);
+    }
+
+    /// <summary>
+    /// The pumpkin with no face: stem and three lobes, standing at (x, footY).
+    /// Split out so a happening can paint the same pumpkin onto a sprite and
+    /// carve a different face on it. Returns the center the face is measured
+    /// from (the same point the Pumpkins list holds). It reaches 1.0 r left
+    /// and right of the center, 1.1 r above it and 0.8 r below.
+    /// </summary>
+    internal static PointF PaintPumpkinBody(Graphics g, float x, float footY, float r)
     {
         float cy = footY - r * 0.8f;
 
@@ -354,19 +455,7 @@ internal static class HalloweenPainter
         }
         using (var middle = new SolidBrush(Color.FromArgb(234, 118, 28)))
             g.FillEllipse(middle, x - r * 0.55f, cy - r * 0.80f, r * 1.1f, r * 1.60f);
-
-        // The face. Every point is (across, down) from the pumpkin's center, in units of r.
-        PointF P(float ax, float ay) => new(x + r * ax, cy + r * ay);
-        using var candle = new SolidBrush(Color.FromArgb(255, 222, 110));
-        g.FillPolygon(candle, [P(-0.52f, -0.12f), P(-0.30f, -0.42f), P(-0.14f, -0.12f)]);   // left eye
-        g.FillPolygon(candle, [P(0.14f, -0.12f), P(0.30f, -0.42f), P(0.52f, -0.12f)]);      // right eye
-        g.FillPolygon(candle, [P(-0.08f, 0.10f), P(0f, -0.06f), P(0.08f, 0.10f)]);          // nose
-        g.FillPolygon(candle, [                                                             // a jagged grin
-            P(-0.62f, 0.16f), P(-0.40f, 0.26f), P(-0.30f, 0.38f), P(-0.18f, 0.27f), P(0.02f, 0.27f),
-            P(0.12f, 0.39f), P(0.24f, 0.27f), P(0.40f, 0.26f), P(0.62f, 0.16f),
-            P(0.36f, 0.50f), P(0f, 0.58f), P(-0.36f, 0.50f)]);
-
-        return (new PointF(x, cy), r);
+        return new PointF(x, cy);
     }
 
     /// <summary>
@@ -423,13 +512,13 @@ internal static class HalloweenPainter
     }
 
     /// <summary>Bare branches reaching in from the top corners, like fingers. The sakura branches with the flowers switched off.</summary>
-    private static void PaintCornerBranches(Graphics g, int w, int h, float u, Random rng)
+    private static List<PointF> PaintCornerBranches(Graphics g, int w, int h, float u, Random rng)
     {
         Brushwork.BranchSeed[] seeds =
         [
             new(new PointF(-w * 0.01f, h * 0.04f), 0.30f, u * 0.46f, u * 0.018f, 3),            // top left, reaching right
             new(new PointF(w * 1.01f, h * 0.02f), MathF.PI - 0.30f, u * 0.40f, u * 0.016f, 3),  // top right, reaching left
         ];
-        Brushwork.Branches(g, seeds, u, rng, wood: Ink, petalLight: Ink, petalDeep: Ink, bare: true);
+        return Brushwork.Branches(g, seeds, u, rng, wood: Ink, petalLight: Ink, petalDeep: Ink, bare: true);
     }
 }
