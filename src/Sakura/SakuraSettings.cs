@@ -8,7 +8,7 @@ namespace Sakura;
 /// </summary>
 public sealed class SakuraSettings : ScreensaverSettings
 {
-    private readonly IntSetting _density, _speed, _wind, _size;
+    private readonly IntSetting _density, _speed, _wind, _size, _surprises;
 
     public SakuraSettings() : base("Sakura")
     {
@@ -16,6 +16,7 @@ public sealed class SakuraSettings : ScreensaverSettings
         _speed = Add(nameof(FallSpeedPercent), "Fall speed", 25, 300, 100, "%");
         _wind = Add(nameof(WindPercent), "Breeze", 0, 300, 100, "%");
         _size = Add(nameof(PetalSizePercent), "Petal size", 50, 200, 100, "%");
+        _surprises = Add(nameof(SurprisePercent), "Surprises", 0, 300, 100, "%");
     }
 
     /// <summary>How many petals are falling at once.</summary>
@@ -29,6 +30,9 @@ public sealed class SakuraSettings : ScreensaverSettings
 
     /// <summary>Petal size.</summary>
     public int PetalSizePercent => _size.Value;
+
+    /// <summary>How often a happening (a kingfisher, a floating lantern...) comes on. 100 = one every 5 to 12 seconds, 0 = never.</summary>
+    public int SurprisePercent => _surprises.Value;
 
     public static SakuraSettings LoadSaved()
     {

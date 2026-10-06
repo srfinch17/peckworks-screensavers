@@ -85,6 +85,7 @@ src/
     SakuraScene.cs                 backdrop + glints + the shared petals
     SceneryPainter.cs              paints Mount Fuji, the lake, trees, and branches once
     SakuraSettings.cs              declares its knobs
+    Happenings/                    twenty small random events (Red Fuji, a kingfisher, a Shiba Inu), one class per file
 
   SakuraDusk/                      the same petals over a sunset pond
     Program.cs                     Main(), plus the definition
@@ -92,6 +93,7 @@ src/
     DuskPainter.cs                 paints the sunset, hills, pagoda, pond, bridge, lantern, trees
     Flock.cs                       the birds: sprites that cross the sky, flapping and gliding
     SakuraDuskSettings.cs          declares its knobs
+    Happenings/                    twenty more, all different (floating lanterns, Basho's frog, the first star)
 
   Halloween/                       falling leaves, bats, and jack-o'-lanterns
     Program.cs                     Main(), plus the definition
@@ -263,11 +265,11 @@ that did not change is still sky. That gives a stencil with one yes/no per pixel
 is only ever stamped on the "yes" pixels. Nothing has to know where the branches are. (He flies
 well above the pines, so in practice it is only the corner branches that cover him.)
 
-**Happenings** (Halloween and Christmas) are small events that come and go: a shooting star, a
+**Happenings** (in every painted saver) are small events that come and go: a shooting star, a
 ghost rising from a grave, a spider spinning a web, a snowman building itself. Think of a cuckoo clock: each happening is one bird behind
 a little door, and a **director** (`Core/Happenings.cs`) is the clockwork that opens one door
 every few seconds. The director shuffles the happenings like a deck of cards and deals from it,
-so you see them all before any repeats. Christmas has its own deck of twenty.
+so you see them all before any repeats. Christmas, Sakura and Sakura Dusk each have their own deck of twenty, none repeated.
 
 Each happening is one small class with one rule: it is told `t`, the number of seconds since it
 began, and works out the whole picture from that number alone. It keeps no notes from one frame

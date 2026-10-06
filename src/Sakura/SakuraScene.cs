@@ -1,5 +1,6 @@
 using Peckworks.Screensavers.Core;
 using Peckworks.Screensavers.Core.Sakura;
+using Sakura.Happenings;
 
 namespace Sakura;
 
@@ -13,6 +14,10 @@ namespace Sakura;
 ///      engine (Core/Sakura/PetalField.cs, which explains how a petal falls,
 ///      sways, spins and tumbles). Each frame we copy the backdrop, twinkle a
 ///      few glints on the lake, then draw every petal where it is right now.
+///   3. The HAPPENINGS: twenty small surprises (a cap cloud on Fuji, a
+///      kingfisher, a shiba inu) that each come on for a few seconds now and
+///      then. Each is one class in the Happenings folder; the engine's
+///      director (Core/Happenings.cs) decides which goes on when.
 /// </summary>
 internal sealed class SakuraScene : IScreensaverScene
 {
@@ -23,12 +28,16 @@ internal sealed class SakuraScene : IScreensaverScene
         public float Phase, Speed;
     }
 
-    private readonly Random _rng = new();
+    private readonly Random _rng = HappeningDirector.SceneRandom();   // new dice every launch, unless PECKWORKS_SEED asks for a repeat
     private readonly Scenery _scenery;
     private readonly PetalField _petals;
     private readonly Glint[] _glints;
     private readonly Boat _boat;
-    private float _time;
+    private readonly HappeningDirector _happenings;
+    // A "double" (about 15 digits of precision), not a "float" (about 7). A
+    // screensaver can run for days, and a float clock that large can no
+    // longer register a 16 millisecond step: the glints would freeze.
+    private double _time;
 
     public SakuraScene(int width, int height, SakuraSettings settings)
     {
@@ -58,6 +67,9 @@ internal sealed class SakuraScene : IScreensaverScene
                 Speed = 0.8f + 2.2f * (float)_rng.NextDouble(),
             };
         }
+
+        // ---- The happenings: hand the director the cast list and how often to deal ----
+        _happenings = new HappeningDirector(SakuraHappenings.Cast(_scenery), _rng, settings.SurprisePercent / 100f);
     }
 
     public void Update(double elapsedSeconds)
@@ -66,6 +78,7 @@ internal sealed class SakuraScene : IScreensaverScene
         _time += dt;
         _petals.Update(dt);
         _boat.Update(dt);
+        _happenings.Update(elapsedSeconds);
     }
 
     public void Render(FrameBuffer fb)
@@ -73,20 +86,32 @@ internal sealed class SakuraScene : IScreensaverScene
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
         Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
 
+        // 1b. The FAR happenings (layer 0): the sky, Fuji, the far shore. Before
+        //     the boat, so a shinkansen on the shore is behind it.
+        _happenings.Draw(fb, 0);
+
         // 2. The boat, only where the lake is open, so the banks and trees hide it.
         _boat.Draw(fb, _scenery.OpenWater);
 
         // 3. Glints twinkling on the lake.
         foreach (ref readonly Glint gl in _glints.AsSpan())
         {
-            float s = MathF.Sin(_time * gl.Speed + gl.Phase);
+            float s = (float)Math.Sin(_time * gl.Speed + gl.Phase);   // Math.Sin of the double clock (see _time)
             if (s <= 0.2f) continue;                       // dark most of the time, flashing briefly
             float alpha = (s - 0.2f) / 0.8f * 0.45f;
             DrawGlint(fb, gl, alpha);
         }
 
+        // 3b. The NEAR happenings (layer 1): on the lake in front of the boat,
+        //     on the banks, in the trees and branches.
+        _happenings.Draw(fb, 1);
+
         // 4. The petals, far to near.
         _petals.Draw(fb);
+
+        // 5. Happenings NEARER than the petals (layer 2): a petal blizzard
+        //    blowing right past the viewer.
+        _happenings.Draw(fb, 2);
     }
 
     /// <summary>A short horizontal streak of light. Only lands on water (bluish pixels), never on the trees.</summary>

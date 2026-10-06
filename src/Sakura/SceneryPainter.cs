@@ -12,6 +12,30 @@ internal sealed class Scenery
     public required List<PointF> BlossomSpots { get; init; } // clusters on the top branches that petals can drop from
     public required bool[] OpenWater { get; init; }          // one true/false per pixel: true where no bank, tree or branch was painted in front
     public required float BoatWaterline { get; init; }       // the height on the lake where the boat floats
+
+    // ---- Facts for the happenings (src/Sakura/Happenings): where things are, so a kingfisher
+    //      dives into the real lake and a shinkansen runs along the real far shore. ----
+    public required int Width { get; init; }
+    public required int Height { get; init; }
+    public required float U { get; init; }                   // the size unit: the height, or less on a tall screen. Size everything by this.
+    public required PointF FujiSummit { get; init; }         // the middle of Fuji's crater rim
+    public required float FujiBase { get; init; }            // where its slopes meet the far shore (the horizon)
+    public required float FujiHalfWidth { get; init; }       // half its width at the base (a fraction of h, not u: Fuji is sized by height)
+    public required bool[] FujiMask { get; init; }           // stencil: true on the mountain (rock and snow) where nothing nearer covers it
+    public required bool[] OpenSky { get; init; }            // stencil: true on bare sky (not the mountain; the mist at its foot does not count as in front)
+    public bool[] OpenBehindBanks => OpenWater;              // stencil: true where nothing nearer than the far shore was painted (the lake, the shore, the mountain, the sky)
+    public required Bank LeftBank { get; init; }             // the dark bank at the lower left (the grove stands on it)
+    public required Bank RightHill { get; init; }            // the grassy rise at the lower right (one tree on it)
+    public required List<(PointF At, float R)> Canopies { get; init; } // every blossom tree's canopy: center and size (the six in the grove, then the one on the right hill)
+    public required (float X, float Top, float Foot) Pine { get; init; } // the pine in the grove
+    public required List<PointF> BranchSpots { get; init; }  // every blossom cluster on the overhanging branches that is on screen (perches)
+
+    /// <summary>
+    /// Where to STAND on the right hill at x: a little way down from its rim
+    /// (RightHill.YAt is the rim, its FAR edge). The tree there is planted
+    /// in front of the rim, so a walker on the rim would be behind it.
+    /// </summary>
+    public float RightWalkY(float x) => RightHill.YAt(Math.Clamp(x, Width * 0.52f, Width - 1)) + U * 0.04f;
 }
 
 /// <summary>
@@ -62,8 +86,14 @@ internal static class SceneryPainter
         float u = Math.Min(h, w * 9f / 16f);
 
         PaintSky(g, w, horizon);
+        g.Flush();
+        uint[] skyOnly = Brushwork.ToPixels(bmp);      // stencil copies for the happenings: the bare sky,
         PaintMountain(g, fuji, 1f);
+        g.Flush();
+        uint[] withFuji = Brushwork.ToPixels(bmp);     // the sky with the mountain on it,
         PaintHaze(g, w, fuji);
+        g.Flush();
+        uint[] withHaze = Brushwork.ToPixels(bmp);     // and that with the mist at its foot (haze is not solid; see OpenSky below)
         PaintHills(g, w, h, horizon, rng);
         PaintLake(g, w, h, horizon, fuji, rng);
         PaintShore(g, w, h, horizon, rng);
@@ -76,16 +106,39 @@ internal static class SceneryPainter
 
         var (leftBank, rightHill) = MakeGround(w, h);
         PaintGround(g, u, leftBank, rightHill);
-        PaintGrove(g, w, h, u, leftBank, rightHill, rng);
-        List<PointF> spots = PaintBranches(g, w, h, u, rng);
+        var (canopies, pine) = PaintGrove(g, w, h, u, leftBank, rightHill, rng);
+        List<PointF> allSpots = PaintBranches(g, w, h, u, rng);
+        List<PointF> spots = allSpots.Where(s => s.Y < h * 0.7f).ToList();   // petals drop only from the upper clusters
 
         g.Flush();
         uint[] pixels = Brushwork.ToPixels(bmp);
+        bool[] openWater = Brushwork.Unchanged(behindBoat, pixels);
+
+        // The happenings' stencils. The mountain is every pixel the mountain
+        // changed, where nothing nearer was painted later. Open sky is every
+        // pixel that was still bare sky when the mountain was done AND that
+        // nothing solid covered after the mist. (The mist itself is left out
+        // on purpose: it is haze, and "unchanged since the sky" would have
+        // stopped the sky at the top of the mist band, a lesson from the
+        // Halloween review.)
+        var fujiMask = new bool[pixels.Length];
+        var openSky = new bool[pixels.Length];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            fujiMask[i] = withFuji[i] != skyOnly[i] && openWater[i];
+            openSky[i] = withFuji[i] == skyOnly[i] && withHaze[i] == pixels[i];
+        }
+
         return new Scenery
         {
             Pixels = pixels, HorizonY = horizon, BlossomSpots = spots,
-            OpenWater = Brushwork.Unchanged(behindBoat, pixels),
+            OpenWater = openWater,
             BoatWaterline = horizon + u * 0.07f,   // a little way out from the far shore
+            Width = w, Height = h, U = u,
+            FujiSummit = new PointF(fuji.CenterX, fuji.Top), FujiBase = fuji.Base, FujiHalfWidth = fuji.HalfWidth,
+            FujiMask = fujiMask, OpenSky = openSky,
+            LeftBank = leftBank, RightHill = rightHill, Canopies = canopies, Pine = pine,
+            BranchSpots = allSpots,
         };
     }
 
@@ -415,7 +468,8 @@ internal static class SceneryPainter
     /// width scale together on every screen shape; only its foot follows the
     /// bank, which is measured in h.
     /// </summary>
-    private static void PaintGrove(Graphics g, int w, int h, float u, Bank left, Bank right, Random rng)
+    private static (List<(PointF At, float R)> Canopies, (float X, float Top, float Foot) Pine) PaintGrove(
+        Graphics g, int w, int h, float u, Bank left, Bank right, Random rng)
     {
         (float X, float Lift, float R)[] trees =
         [
@@ -438,6 +492,10 @@ internal static class SceneryPainter
         float rx = w * 0.87f, ry = right.YAt(rx) - u * 0.165f;
         Brushwork.Trunk(g, rx, right.YAt(rx) + u * 0.03f, ry, u * 0.14f, rng);
         Brushwork.Canopy(g, rx, ry, u * 0.14f, u, rng);
+
+        var canopies = trees.Select(t => (new PointF(w * t.X, left.YAt(w * t.X) - u * t.Lift), u * t.R)).ToList();
+        canopies.Add((new PointF(rx, ry), u * 0.14f));
+        return (canopies, (w * 0.21f, pineFoot - u * 0.37f, pineFoot));
     }
 
     // ================================================================ branches
@@ -466,7 +524,7 @@ internal static class SceneryPainter
             petalLight: Color.FromArgb(255, 246, 249),
             petalDeep: Color.FromArgb(244, 162, 192));
 
-        // Only clusters actually on screen and in the upper part are good drop points.
-        return spots.Where(s => s.X >= 0 && s.X < w && s.Y >= 0 && s.Y < h * 0.7f).ToList();
+        // Only clusters actually on screen are any use (the caller keeps the upper ones as petal drop points).
+        return spots.Where(s => s.X >= 0 && s.X < w && s.Y >= 0 && s.Y < h).ToList();
     }
 }

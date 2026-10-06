@@ -28,8 +28,18 @@ across a lake, framed by branches in full bloom. Stylized rather than photoreali
 - A small wooden boat with a roofed cabin, a boatman in a straw hat and a red lantern drifts
   slowly across the lake, passing behind the banks and trees.
 - Branches and trees are grown randomly, so each run looks a little different.
+- Twenty small **happenings** come and go at random, one every 5 to 12 seconds:
 
-Settings: number of petals, fall speed, breeze, petal size.
+  | Where | What happens |
+  |-------|--------------|
+  | Fuji and the sky | A lens-shaped cap cloud (kasa-gumo) forms on the summit. The mountain blushes red, like Hokusai's Red Fuji. The sun crests the summit and blazes into a "Diamond Fuji". Origami paper cranes glide past. A painted kite dances on its string. A rainbow arcs over the lake. Cloud shadows drift across the mountain and the water. |
+  | The far shore and the lake | A shinkansen races along the far shore. A sun shower glitters down and dimples the lake. A raft of fallen petals (hanaikada) drifts by. A mother duck leads her ducklings across. A kingfisher dives for a fish. Swallows skim the water. |
+  | The banks | A heron stands in the shallows and strikes. A Shiba Inu trots along the hill, sits and smiles. Butterflies dance around the blossom trees. |
+  | The branches | A pair of white-eyes (mejiro) visits the blossoms. A squirrel scampers along a branch. A glass wind chime (furin) swings and rings. |
+  | Everywhere | A gust tears a blizzard of petals (hanafubuki) off the branches and sweeps it past you. |
+
+Settings: number of petals, fall speed, breeze, petal size, and how often a surprise happens
+(0 turns them off).
 
 ## Sakura Dusk
 
@@ -43,7 +53,16 @@ slowly across the sky, each bird on its own rhythm, gliding now and then.
 - Petals are tinted by the evening light, and golden glints twinkle in the sun's reflection.
 - The nearest hills, the pagoda, and the bridge are mirrored faintly in the still water.
 - The same boat as Sakura's, here a small silhouette far out near the opposite shore.
-- Same four settings as Sakura, saved separately.
+- Twenty happenings of its own, none shared with Sakura:
+
+  | Where | What happens |
+  |-------|--------------|
+  | The sky and the sun | The sun's top edge flashes green. Rays of light fan up from the sun. The first star of evening appears and twinkles, then others. A crescent moon rises over the hills. Golden clouds drift by. The light deepens into a richer "magic hour". A crane flies across the face of the sun. |
+  | The hills | A procession of fox lights (kitsune-bi) winds along the far hillside. |
+  | The pond | Paper lanterns float across the water (toro nagashi). Koi glide under the surface. A lotus opens. Mist gathers over the water. A breeze ripples across the pond. A frog leaps in, as in Basho's haiku. |
+  | The bridge and the banks | A cat crosses the bridge and sits to watch the sunset. Red paper lanterns light up along the rail. A tanuki waddles along the bank and tries to catch a petal. The cherry trees light up from below (yozakura). |
+  | The air | Fireflies rise from the banks. Red dragonflies dart over the pond. |
+- The same settings as Sakura (petals, fall speed, breeze, petal size, surprises), saved separately.
 
 Sakura and Sakura Dusk share one petal engine and one set of painting brushes (banks, trunks,
 blossoms, branches) in the Core project, so they have the same illustrative hand.
@@ -197,6 +216,12 @@ firework for the half second of each burst, and a lightning flash for under half
 hill monster adds about 2 ms. At 1920x1080 none of them drops a frame (the worst second of ten
 minutes of play was 5.7 ms). `scripts\happening.ps1 -Sweep` prints the average, the worst second
 and the slowest single frame for each one.
+
+The sakura pair's happenings, measured the same way at 4K (each alone, against a quiet baseline
+in the same minutes): most cost nothing measurable. Four are dearer while they last, each by
+about 4 to 7 ms per frame in its worst second: Red Fuji and the rainbow in Sakura, the god rays
+and magic hour in Sakura Dusk. Each pair shares a claim, so the two dear ones in a scene never
+run at the same time. At 1920x1080 none of them drops a frame.
 
 Christmas's happenings measure the same way: four minutes of ordinary play at 4K averaged 16.9 ms
 against 15.7 to 21.3 ms quiet in the same minutes. The two dearer ones are the northern lights

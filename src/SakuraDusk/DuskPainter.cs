@@ -13,6 +13,31 @@ internal sealed class DuskScenery
     public required bool[] OpenWater { get; init; }          // one true/false per pixel: true where no bank, bridge, tree or branch was painted in front
     public required bool[] OpenSky { get; init; }            // one true/false per pixel: true where nothing at all was painted over the sky (the birds fly there)
     public required float BoatWaterline { get; init; }       // the height on the pond where the boat floats
+
+    // ---- Facts for the happenings (src/SakuraDusk/Happenings): where things are, so a frog can
+    //      jump into the real pond and lanterns can hang on the real bridge. ----
+    public required int Width { get; init; }
+    public required int Height { get; init; }
+    public required float U { get; init; }                   // the size unit: the height, or less on a tall screen. Size everything by this.
+    public required float Horizon { get; init; }             // where the water meets the hills
+    public required (PointF At, float R) Sun { get; init; }  // the setting sun's center and radius
+    public required PointF[][] Ridges { get; init; }         // the three hill ranges, far [0] to near [2]; Brushwork.RidgeYAt(Ridges[k], x) gives a range's top at x
+    public required (float X, float Base, float Top) Pagoda { get; init; } // the pagoda on the near range: middle, foot, tip of its spire
+    public required DuskPainter.BridgeShape Bridge { get; init; } // the arched footbridge: points along its deck and rail
+    public required PointF LanternWindow { get; init; }      // the middle of the stone lantern's glowing window
+    public required Bank LeftBank { get; init; }
+    public required Bank RightBank { get; init; }
+    public required List<(PointF At, float R)> Canopies { get; init; } // every cherry tree's canopy: center and size
+    public required List<PointF> BranchSpots { get; init; }  // every blossom cluster on the overhanging branches that is on screen
+
+    /// <summary>
+    /// Where to STAND on a bank at x: a little way down from its rim (the
+    /// rim, YAt, is its FAR edge; the trees are planted in front of it, so a
+    /// walker on the rim would be behind them). Left bank for x left of the
+    /// pond's middle, right bank otherwise.
+    /// </summary>
+    public float WalkY(float x) =>
+        (x < Width * 0.5f ? LeftBank.YAt(Math.Clamp(x, 0, Width * 0.38f)) : RightBank.YAt(Math.Clamp(x, Width * 0.60f, Width - 1))) + U * 0.04f;
 }
 
 /// <summary>
@@ -85,8 +110,9 @@ internal static class DuskPainter
         right.Paint(g, Color.FromArgb(70, 52, 84), Color.FromArgb(30, 22, 42), Color.FromArgb(120, 150, 104, 96), rim);
         bridge.Paint(g, 1f);
         PaintLantern(g, w * 0.26f, left.YAt(w * 0.26f) + u * 0.01f, u);
-        PaintTrees(g, w, u, left, right, rng);
-        List<PointF> spots = PaintBranches(g, w, h, u, rng);
+        var canopies = PaintTrees(g, w, u, left, right, rng);
+        List<PointF> allSpots = PaintBranches(g, w, h, u, rng);
+        List<PointF> spots = allSpots.Where(s => s.Y < h * 0.6f).ToList();   // petals drop only from the upper clusters
 
         // The sun's reflection: the strip of water under the sun, from the far
         // shore down to where the reflection has faded out. The bridge crosses
@@ -96,8 +122,17 @@ internal static class DuskPainter
 
         g.Flush();
         uint[] pixels = Brushwork.ToPixels(bmp);
+        float lanternGround = left.YAt(w * 0.26f) + u * 0.01f;
         return new DuskScenery
         {
+            Width = w, Height = h, U = u, Horizon = horizon,
+            Sun = (new PointF(sun.X, sun.Y), sun.R),
+            Ridges = hills.Layers, Pagoda = hills.Pagoda,
+            Bridge = new BridgeShape(bridge),
+            // (The same measurements PaintLantern uses: plinth, post, then the box, whose window is a little above the box's middle.)
+            LanternWindow = new PointF(w * 0.26f, lanternGround - u * (0.012f + 0.032f) - u * 0.024f * 0.51f),
+            LeftBank = left, RightBank = right, Canopies = canopies,
+            BranchSpots = allSpots,
             Pixels = pixels, BlossomSpots = spots, SunPath = sunPath,
             OpenWater = Brushwork.Unchanged(behindBoat, pixels),
             OpenSky = Brushwork.Unchanged(bareSky, pixels),
@@ -164,6 +199,13 @@ internal static class DuskPainter
         private readonly PointF[][] _layers = new PointF[3][];
         private readonly float _pagodaX, _pagodaBase;
         private readonly float _u;
+
+        /// <summary>The three ranges' outlines, far to near (for the happenings).</summary>
+        public PointF[][] Layers => _layers;
+
+        /// <summary>The pagoda's middle, its foot, and the tip of its spire (the heights PaintPagoda stacks up).</summary>
+        public (float X, float Base, float Top) Pagoda =>
+            (_pagodaX, _pagodaBase, _pagodaBase - _u * 0.005f - 5 * _u * 0.014f - 5 * _u * 0.013f - _u * 0.03f);
 
         /// <summary>The top of the farthest ridge at x, so the sun can be placed on it.</summary>
         public float FarRidgeAt(float x) => HeightAt(0, x);
@@ -390,7 +432,20 @@ internal static class DuskPainter
     /// rail following the same curve, with a thin warm highlight where the
     /// last light catches the rail.
     /// </summary>
-    private sealed class Bridge
+    /// <summary>
+    /// The bridge's shape, handed to the happenings: where its deck and its
+    /// top rail are at any point across it (t = 0 at the left foot, 1 at
+    /// the right foot). A cat walks along DeckAt; a lantern hangs from RailAt.
+    /// </summary>
+    internal sealed class BridgeShape(Bridge b)
+    {
+        public PointF DeckAt(float t) => b.DeckAt(t);
+        public PointF RailAt(float t) => b.RailAt(t);
+        public float Top => b.Top;
+        public float WaterLine => b.WaterLine;
+    }
+
+    internal sealed class Bridge
     {
         private readonly PointF _a, _b, _ctrlDeck, _ctrlRail, _ctrlUnder;
         private readonly float _u;
@@ -420,6 +475,9 @@ internal static class DuskPainter
             return new PointF(s * s * p0.X + 2 * s * t * c.X + t * t * p1.X,
                               s * s * p0.Y + 2 * s * t * c.Y + t * t * p1.Y);
         }
+
+        public PointF DeckAt(float t) => On(_a, _ctrlDeck, _b, t);
+        public PointF RailAt(float t) => On(_a, _ctrlRail, _b, t);
 
         private static PointF[] Curve(PointF p0, PointF c, PointF p1, int n = 40)
         {
@@ -511,7 +569,7 @@ internal static class DuskPainter
     /// the canopies. The blossoms use a warmer, deeper palette than daylight
     /// Sakura, because the low sun is lighting them from behind and below.
     /// </summary>
-    private static void PaintTrees(Graphics g, int w, float u, Bank left, Bank right, Random rng)
+    private static List<(PointF At, float R)> PaintTrees(Graphics g, int w, float u, Bank left, Bank right, Random rng)
     {
         var dusk = new BlossomPalette(Color.FromArgb(240, 222, 140, 156), Color.FromArgb(182, 84, 118), Color.FromArgb(255, 216, 198));
         Color bark = Color.FromArgb(44, 26, 40);
@@ -526,6 +584,7 @@ internal static class DuskPainter
             Brushwork.Trunk(g, w * t.X, t.On.YAt(w * t.X) + u * 0.03f, t.On.YAt(w * t.X) - u * t.Lift, u * t.R, rng, bark);
         foreach (var t in trees)
             Brushwork.Canopy(g, w * t.X, t.On.YAt(w * t.X) - u * t.Lift, u * t.R, u, rng, dusk);
+        return trees.Select(t => (new PointF(w * t.X, t.On.YAt(w * t.X) - u * t.Lift), u * t.R)).ToList();
     }
 
     /// <summary>Two blossom branches reaching in from the top corners. Returns the cluster spots petals can fall from.</summary>
@@ -540,6 +599,6 @@ internal static class DuskPainter
             wood: Color.FromArgb(44, 26, 40),
             petalLight: Color.FromArgb(255, 228, 216),
             petalDeep: Color.FromArgb(236, 148, 170));
-        return spots.Where(s => s.X >= 0 && s.X < w && s.Y >= 0 && s.Y < h * 0.6f).ToList();
+        return spots.Where(s => s.X >= 0 && s.X < w && s.Y >= 0 && s.Y < h).ToList();   // on screen; the caller keeps the upper ones for petals
     }
 }
