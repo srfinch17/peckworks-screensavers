@@ -38,7 +38,12 @@ namespace Christmas.Happenings;
 /// </summary>
 internal sealed class Fox : Happening
 {
-    private const float Total = 14f;            // seconds, the whole showing
+    // How long the whole showing lasts. NOT a fixed number: the fox trots
+    // at a fixed SPEED (a fraction of U per second), so a wide screen takes
+    // it longer to cross. A fixed time made it twice as fast, legs a blur,
+    // on a very wide screen.
+    private readonly float _total;
+    private const float Cruise = 0.17f;         // trotting speed, in U per second
     private const float Ramp = 0.6f;            // seconds to slow to the stop, and again to get going
     private const float TransIn = 0.4f;         // legs gather and head goes down
     private const float Sniff = 1.5f;           // nose in the snow
@@ -69,7 +74,8 @@ internal sealed class Fox : Happening
 
     private int _dir = 1;                       // 1 = heads right, -1 = heads left
 
-    public override float Seconds => Total;
+    public override float Seconds => _total;
+    public override int Layer => 1;                        // in front of the scenery, Santa and the lights (see ChristmasScene.Render)
     public override string? Claims => "snow";
 
     public Fox(ChristmasScenery s)
@@ -88,7 +94,8 @@ internal sealed class Fox : Happening
         float hold = TransIn + Sniff + TransOut;
         _margin = 0.85f * _k;
         float distance = s.Width + 2 * _margin;
-        _v0 = distance / (Total - Ramp - hold);
+        _v0 = Cruise * s.U;
+        _total = distance / _v0 + Ramp + hold;
         _a = distance / 2 / _v0 - Ramp / 2;                     // slow so that the stop is about the middle
         float stopAt = _v0 * (_a + Ramp / 2);                   // how far it has gone when it stops
         float wanted = 4 * Reach * _k;                          // a stride that keeps feet planted
@@ -149,7 +156,7 @@ internal sealed class Fox : Happening
         float dist = _v0 * (t - Lost(t));                         // how far along its path, in pixels
         float start = _dir > 0 ? -_margin : _s.Width + _margin;
         float x = start + _dir * dist;
-        float y = _s.Ground.YAt(Math.Clamp(x, 0, _s.Width - 1)) + _s.U * 0.004f;   // feet on the snow
+        float y = _s.WalkY(x);                                    // feet on the near snow, in front of the pines and the cabin
 
         int d = _dir > 0 ? 0 : 1;
         float stopStart = _a + Ramp, hold = TransIn + Sniff + TransOut;

@@ -23,7 +23,8 @@ namespace Christmas.Happenings;
 ///    out from t alone: PathAt(where the wand was when it let go) plus drift
 ///    times its age.
 ///
-/// It is in front of everything, so there is no stencil.
+/// It is in front of the scenery, Santa and the lights (layer 1; only the
+/// falling snow is nearer), so there is no stencil.
 /// </summary>
 internal sealed class FairyDust : Happening
 {
@@ -44,6 +45,7 @@ internal sealed class FairyDust : Happening
     private readonly bool[] _big = new bool[Specks];
 
     public override float Seconds => WandTime + Life;
+    public override int Layer => 1;                        // in front of the scenery, Santa and the lights (see ChristmasScene.Render)
 
     public FairyDust(ChristmasScenery s)
     {

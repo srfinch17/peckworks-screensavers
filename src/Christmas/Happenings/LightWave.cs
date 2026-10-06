@@ -28,7 +28,10 @@ internal sealed class LightWave : Happening
     private readonly Sprite _sparkle;
 
     public override float Seconds => 8f;
-    public override string? Claims => "lights";
+    // "costly" is shared by the two happenings that take the most time to
+    // draw on a 4K screen (this one and the northern lights). A claim means "never
+    // at the same time", so their costs can never add up in one frame.
+    public override string? Claims => "costly";
 
     public LightWave(ChristmasScenery s)
     {

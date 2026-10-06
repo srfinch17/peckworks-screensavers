@@ -39,6 +39,7 @@ internal sealed class SnowGust : Happening
     private readonly int[] _size = new int[Max + Big];             // 0..2 small dots, 3 = big blurry flake
 
     public override float Seconds => 6f;
+    public override int Layer => 1;                        // in front of the scenery, Santa and the lights (see ChristmasScene.Render)
 
     public SnowGust(ChristmasScenery s)
     {

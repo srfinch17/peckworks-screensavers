@@ -54,10 +54,22 @@ fixed to a prop) before writing one. They are the pattern.
 1. **Never use a fixed pixel position.** The scenery is different on every launch: the dead
    tree grows a new shape, the hills move, the screen may be tall and narrow. Ask the scenery
    facts where things are.
-2. **Positions are fractions of the width and height. SIZES are fractions of `U`** (the size
-   unit: the screen height, or less on a tall screen). Something sized by height alone swallows
-   a portrait monitor.
-3. **Anything standing on the ground asks the ground**: `s.Ground.YAt(x)`.
+2. **Positions are fractions of the width and height. SIZES and SPEEDS are fractions of `U`**
+   (the size unit: the screen height, or less on a tall screen). Something sized by height
+   alone swallows a portrait monitor. Something that crosses the screen "in 11 seconds" runs
+   twice as fast on a screen twice as wide, its legs a blur: give it a speed in `U` per second
+   and work the seconds out from the distance (`Fox.cs`, `ToyTrain.cs`).
+3. **Anything standing on the ground asks the ground WHERE TO STAND, which is not the same as
+   where the ground starts.** `s.Ground.YAt(x)` is the hill's crest: its FAR edge, the line it
+   makes against whatever is behind it. Trees and houses are planted a little in front of that
+   line. A walker whose feet are on the crest is behind every tree it is drawn over, and seems
+   to trot along their lowest branches. Give the scenery a "walk here" fact that is nearer than
+   everything planted (`ChristmasScenery.WalkY`), and stand on that. Check a walker AT a tree
+   and AT a building, zoomed in, not only in the open.
+3b. **Trust the picture, not the formula that painted it.** A tree's painted edge is ragged; the
+   formula for its width is only a guide. Anything that must sit ON a painted thing tests the
+   pixels there (a stencil says "something is painted here") and tries again if it missed
+   (`SnowSlide.cs`).
 4. **To pass behind scenery, use a stencil.** `sprite.Draw(fb, x, y, opacity, s.OpenSky)` and
    `fb.Line(..., s.OpenSky)` only touch pixels where nothing was painted over the sky. Use
    `OpenFromHouse` for things at the haunted house (in front of the house, behind anything
@@ -96,9 +108,12 @@ fixed to a prop) before writing one. They are the pattern.
     pair. (A happening has one claim. If one ever needs two, widen the claim to cover both.)
 13. **Size it to be seen, not to take over.** It should catch the eye from across a room and
     still be a small surprise, not the main act.
-14. **Nothing to show? End at once.** If a showing finds it has nothing to draw (no branch to
-    hang a web on), make `Seconds` tiny (under half a second) for that showing. The director
-    takes that as "nothing happened" and deals another within a second.
+14. **Nothing to show? Say so before you are dealt, or end at once.** If a happening can tell
+    in advance that it has nothing to show (Santa is off screen, so there is no sleigh to drop
+    a present from), return false from `CanBegin`: the director leaves its card in the deck and
+    deals another, so it still comes round as often as the rest. If it only finds out in
+    `Begin` (no branch to hang a web on), make `Seconds` tiny (under half a second) for that
+    showing; the director deals another within a second.
 15. Comments are heavy and plain, like the rest of the repo: one idea at a time, a real-world
     comparison where it helps, no em or en dashes.
 
@@ -134,7 +149,9 @@ firework is slow for half a second at each burst, which an average over the whol
 ```
 
 Cures for a costly one: make the glow smaller, punch out the part something else covers (see
-`BloodMoon.cs`), and skip the stamp while it is too faint to see (see `Lightning.cs`).
+`BloodMoon.cs`), and skip the stamp while it is too faint to see (see `Lightning.cs`). Then
+give the two or three dearest ones a shared claim (`"costly"` in Christmas), so they never run
+at the same time and their costs never add up in one frame.
 
 To watch them all for real, play the showreel, every happening back to back:
 
@@ -166,9 +183,15 @@ list, the facts, the wiring, two pattern happenings, and the helpers.
    happenings" block in `HalloweenScenery`). Add stencils with the copy-and-compare trick
    (`Brushwork.Unchanged`) at each depth something must pass behind.
 3. **Wire the director into the scene**: build it in the constructor from the cast, call
-   `Update` in `Update`, and call `Draw` in `Render` right after the backdrop is copied. Decide
-   where in the draw order they go: in Christmas they are drawn before Santa and the bulb
-   glows, so a firework is behind him and the twinkle lies over a fox. If a happening must
+   `Update` in `Update`, and call `Draw` in `Render`. If the scene has no moving actors of its
+   own that a happening could be behind or in front of, one call right after the backdrop is
+   copied will do (Halloween). If it has, the happenings need LAYERS, because they are not all
+   at one depth: Christmas calls `Draw(fb, 0)` before Santa for the far ones (fireworks,
+   northern lights), `Draw(fb, 1)` after Santa and the bulb glows for the near ones (the fox,
+   the owl on its twig), and `Draw(fb, 2)` after the falling snow for frost on the glass. Each
+   happening says which it is with `Layer`. With a single call, a sleigh that flies behind a
+   branch was painted over an owl sitting on that branch. For every happening ask: what in
+   this scene moves, and am I in front of it or behind it? If a happening must
    know where a moving actor is (a present falling from the sleigh), the scene writes that
    actor's position into the scenery facts every frame before the happenings draw, and the
    happening reads it in `Begin`. Use the engine's dice (`HappeningDirector.SceneRandom()`)

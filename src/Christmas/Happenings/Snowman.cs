@@ -55,6 +55,7 @@ internal sealed class Snowman : Happening
     private readonly float[] _puffVy = new float[3 * Puffs];    // and how hard it is thrown up
 
     public override float Seconds => Life;
+    public override int Layer => 1;                        // in front of the scenery, Santa and the lights (see ChristmasScene.Render)
     public override string? Claims => "snow";
 
     public Snowman(ChristmasScenery s)
@@ -209,7 +210,7 @@ internal sealed class Snowman : Happening
             if (clear >= u * 0.09f) break;
         }
         _x = bestX;
-        _foot = _s.Ground.YAt(_x);
+        _foot = _s.WalkY(_x);                                // on the near snow, in front of the tree line
 
         for (int i = 0; i < _puffVx.Length; i++)
         {

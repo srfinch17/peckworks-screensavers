@@ -47,6 +47,7 @@ internal sealed class SnowSlide : Happening
     private readonly float[] _dvx = new float[MaxDots], _dvy = new float[MaxDots];
 
     public override float Seconds => _n == 0 ? 0.2f : 4f;      // no pine to use? end at once
+    public override int Layer => 1;                        // in front of the scenery, Santa and the lights (see ChristmasScene.Render)
 
     public SnowSlide(ChristmasScenery s)
     {
@@ -95,17 +96,47 @@ internal sealed class SnowSlide : Happening
         });
     }
 
+    /// <summary>Is this point on a painted tree (or anything else standing in front of the valley)?</summary>
+    private bool OnTree(float x, float y)
+    {
+        int px = (int)x, py = (int)y;
+        return px >= 0 && px < _s.Width && py >= 0 && py < _s.Height && !_s.OpenValley[py * _s.Width + px];
+    }
+
+    /// <summary>
+    /// Where the pieces come to rest at x: on the snow just in FRONT of the
+    /// trunk they fell past. (The crest line, Ground.YAt, is behind the
+    /// tree; pieces that stopped there looked as if they hung in the air.)
+    /// </summary>
+    private float Snow(float x) => _s.Ground.YAt(x) + _s.U * 0.03f;
+
     public override void Begin(Random rng)
     {
         _n = 0;
         if (_s.Pines.Count == 0) return;
-        var pine = _s.Pines[rng.Next(_s.Pines.Count)];
-        float up = 0.30f + 0.40f * (float)rng.NextDouble();             // how far up the tree, 0.3 to 0.7
-        float y = pine.Foot - (pine.Foot - pine.Top) * up;
-        _side = rng.Next(2) == 0 ? -1 : 1;
-        float hw = Brushwork.PineHalfWidth(y, pine.Top, pine.Foot, _s.U);
-        _x0 = pine.X + _side * hw * 0.70f;                              // well inside the painted edge (the painted boughs are a bit narrower than the formula), so it sits ON the bough
-        _y0 = y;
+        // Pick a spot on a bough, and CHECK it against the picture. The
+        // formula for a pine's width is only a guide: the painted boughs
+        // are ragged, with notches between the rows, and a clump placed by
+        // the formula alone started in mid air beside the tree about one
+        // time in sixteen. "Is there tree here?" is asked of the valley
+        // stencil: it is false wherever something was painted in front of
+        // the valley, and up in a pine that something is the pine. Twelve
+        // tries; if none lands on a bough, there is no showing.
+        (float X, float Foot, float Top) pine = default;
+        bool found = false;
+        for (int tries = 0; tries < 12 && !found; tries++)
+        {
+            pine = _s.Pines[rng.Next(_s.Pines.Count)];
+            float up = 0.30f + 0.40f * (float)rng.NextDouble();         // how far up the tree, 0.3 to 0.7
+            float y = pine.Foot - (pine.Foot - pine.Top) * up;
+            _side = rng.Next(2) == 0 ? -1 : 1;
+            float hw = Brushwork.PineHalfWidth(y, pine.Top, pine.Foot, _s.U);
+            _x0 = pine.X + _side * hw * 0.70f;
+            _y0 = y;
+            found = OnTree(_x0, _y0) && OnTree(_x0 - _side * _s.U * 0.008f, _y0 + _s.U * 0.006f)
+                    && OnTree(_x0, _y0 + 0.9f * _bigR);          // and under the clump's bottom edge, where it rests
+        }
+        if (!found) return;                                             // _n stays 0: Seconds is tiny and nothing is drawn
 
         // The main clump lets go after TipTime, and falls from there.
         float vxMain = _side * _s.U * 0.02f;
@@ -127,12 +158,12 @@ internal sealed class SnowSlide : Happening
             for (int k = 0; k < 4; k++)
             {
                 x = Math.Clamp(_xb + _vx[i] * tf, 0, _s.Width - 1);
-                float d = _s.Ground.YAt(x) - rr * 0.6f - _yb;
+                float d = Snow(x) - rr * 0.6f - _yb;
                 tf = d <= 0 ? 0.05f : (-vy + MathF.Sqrt(vy * vy + 2 * _g * d)) / _g;
             }
             _tf[i] = tf;
             _xl[i] = x;
-            _yl[i] = _s.Ground.YAt(x) - rr * 0.6f;
+            _yl[i] = Snow(x) - rr * 0.6f;
             for (int j = 0; j < DotsPer; j++)
             {
                 _dvx[i * DotsPer + j] = _s.U * 0.035f * ((float)rng.NextDouble() * 2 - 1);

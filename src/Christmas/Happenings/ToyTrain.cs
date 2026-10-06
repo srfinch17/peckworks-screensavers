@@ -25,7 +25,9 @@ namespace Christmas.Happenings;
 internal sealed class ToyTrain : Happening
 {
     private const int Poses = 4;                           // wheel flip-book pages
-    private const float Trip = 14f;                        // seconds to cross
+    // Seconds to cross. Worked out from a fixed SPEED (0.14 U per second),
+    // so the train does not race on a very wide screen.
+    private readonly float _trip;
     private const float PuffEvery = 0.4f;                  // a new puff this often
     private const float PuffLife = 2.4f;
 
@@ -40,12 +42,13 @@ internal sealed class ToyTrain : Happening
     private readonly float _funnelX;                       // where the funnel is, in a right-heading sprite, from its left edge
     private bool _left;                                    // this showing's direction
 
-    public override float Seconds => Trip;
+    public override float Seconds => _trip;
 
     public ToyTrain(ChristmasScenery s)
     {
         _s = s;
         _len = Math.Max(24, (int)(s.U * 0.12f));
+        _trip = (s.Width + _len) / (0.14f * s.U);            // distance divided by speed
         _h = Math.Max(6, (int)(s.U * 0.012f));
         _funnelX = _len * 0.925f;
         for (int pose = 0; pose < Poses; pose++)
@@ -116,7 +119,7 @@ internal sealed class ToyTrain : Happening
     /// <summary>Where the train's left edge is, t seconds in: it starts wholly off one side and ends wholly off the other.</summary>
     private float LeftEdge(float t)
     {
-        float k = t / Trip, run = _s.Width + _len;
+        float k = t / _trip, run = _s.Width + _len;
         return _left ? _s.Width - run * k : -_len + run * k;
     }
 
@@ -129,7 +132,7 @@ internal sealed class ToyTrain : Happening
         // The smoke first, so the train is stamped over it. Puff j left the funnel at j * PuffEvery.
         float funnelDX = _left ? _len - _funnelX : _funnelX;
         float rise = _s.U * 0.02f;
-        for (int j = 0; j * PuffEvery < Trip; j++)
+        for (int j = 0; j * PuffEvery < _trip; j++)
         {
             float age = t - j * PuffEvery;
             if (age < 0 || age > PuffLife) continue;

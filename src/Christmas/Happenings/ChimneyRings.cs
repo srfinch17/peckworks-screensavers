@@ -36,6 +36,7 @@ internal sealed class ChimneyRings : Happening
     private readonly float[] _phase = new float[4];         // each ring's own wobble phase
 
     public override float Seconds => 10f;
+    public override int Layer => 1;                        // in front of the scenery, Santa and the lights (see ChristmasScene.Render)
 
     public ChimneyRings(ChristmasScenery s)
     {

@@ -45,7 +45,10 @@ internal sealed class Aurora : Happening
     private readonly float[,] _wave = new float[MaxCurtains, 12];  // 12 numbers: waves for base, height (x3) and ripple
 
     public override float Seconds => 22f;
-    public override string? Claims => "aurora";
+    // "costly" is shared by the two happenings that take the most time to
+    // draw on a 4K screen (this one and the wave through the lights). A claim means "never
+    // at the same time", so their costs can never add up in one frame.
+    public override string? Claims => "costly";
 
     // Strokes are spaced one and a half widths apart (a narrow dark gap between rays), which also saves a third of the pixels to paint at 4K.
     // One ready-painted stroke for each of Levels heights. A stroke is a soft-edged vertical bar,

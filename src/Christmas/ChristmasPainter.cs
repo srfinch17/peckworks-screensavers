@@ -23,7 +23,19 @@ internal sealed class ChristmasScenery
     public required bool[] OpenValley { get; init; }                    // stencil: true where nothing was painted after the near mountains (so: the valley floor and everything above it is clear)
     public required PointF[] FarRange { get; init; }                    // the far mountains' outline; ask Brushwork.RidgeYAt(FarRange, x) for their height
     public required PointF[] NearRange { get; init; }                   // the near mountains' outline, the same way
-    public required Bank Ground { get; init; }                          // the snowy hill; ask Ground.YAt(x) for its height
+    public required Bank Ground { get; init; }                          // the snowy hill; Ground.YAt(x) is its far edge, the crest line against the valley
+    public required bool[] OpenOfBranches { get; init; }                // stencil: true where the bare corner branches (and their bulbs) did NOT paint. For things nearer than the pines but behind those branches.
+
+    /// <summary>
+    /// Where to STAND on the snow at x: a little way down the hill from its
+    /// crest. The crest line (Ground.YAt) is the FAR edge of the snow, and
+    /// the pines and the cabin are planted just in front of it. A fox whose
+    /// paws were on the crest line was behind every tree it was drawn over,
+    /// and seemed to trot along their lowest boughs. This path is nearer
+    /// than the pines' trunks and the cabin's foot, so a walker on it
+    /// passes in front of them, which is how it is drawn.
+    /// </summary>
+    public float WalkY(float x) => Ground.YAt(Math.Clamp(x, 0, Width - 1)) + U * 0.04f;
     public required PointF CabinFoot { get; init; }                     // the middle of the cabin's base, on the snow
     public required SizeF CabinWall { get; init; }                      // the cabin wall's width and height (the roof rises 0.042 U above the wall)
     public required RectangleF[] CabinWindows { get; init; }            // its two warm windows
@@ -130,6 +142,8 @@ internal static class ChristmasPainter
         PaintStar(g, starX, starY, u * 0.016f);
         lights.Add((new PointF(starX, starY), Butter));
 
+        g.Flush();
+        uint[] upToBranches = Brushwork.ToPixels(bmp);   // a third stencil copy: "unchanged since here" = no corner branch in front
         List<PointF> cornerSpots = PaintCornerBranches(g, w, h, u, rng, lights);
 
         g.Flush();
@@ -144,6 +158,7 @@ internal static class ChristmasPainter
             Width = w, Height = h, U = u, Horizon = horizon,
             Moon = (new PointF(w * 0.24f, h * 0.20f), u * 0.065f),   // the same numbers PaintMoon was given above
             OpenValley = Brushwork.Unchanged(upToValley, pixels),
+            OpenOfBranches = Brushwork.Unchanged(upToBranches, pixels),
             FarRange = farRange, NearRange = nearRange, Ground = ground,
             CabinFoot = cabinFoot, CabinWall = new SizeF(wallW, wallH),
             CabinWindows = [.. new[] { -1f, 1f }.Select(side =>

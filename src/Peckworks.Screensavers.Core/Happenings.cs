@@ -31,6 +31,26 @@ public abstract class Happening
     /// </summary>
     public virtual string? Claims => null;
 
+    /// <summary>
+    /// How near the viewer this happening is, as a layer number. The scene
+    /// draws its picture back to front, and asks the director for one layer
+    /// at a time at the right points in that order. 0 (the usual) is "on
+    /// the backdrop, behind the scene's own actors". A scene may offer more:
+    /// Christmas draws layer 1 in front of Santa and the lights, and layer 2
+    /// on the glass, in front of even the falling snow. Without layers every
+    /// happening shared one depth, and a sleigh that flies BEHIND a branch
+    /// was painted over an owl sitting ON that branch.
+    /// </summary>
+    public virtual int Layer => 0;
+
+    /// <summary>
+    /// False when this happening has nothing to show right now (Santa is
+    /// off screen, so there is no sleigh for a present to fall from). The
+    /// director then leaves its card in the deck and deals another, so it
+    /// comes round as often as the rest instead of wasting its turn.
+    /// </summary>
+    public virtual bool CanBegin => true;
+
     /// <summary>Called at the start of each showing. Pick this showing's random details here (which tombstone, which color).</summary>
     public virtual void Begin(Random rng) { }
 
@@ -73,8 +93,8 @@ public abstract class Happening
 /// dealt freezes the picture for that moment, a visible stutter. So they are
 /// built by a HELPER: a second line of work (a "background thread") that
 /// starts when the scene does and paints them one after another while the
-/// picture carries on. If one is dealt before the helper has reached it, it
-/// is simply built on the spot.
+/// picture carries on. A card the helper has not reached yet stays in the
+/// deck until it is built; the director deals something else meanwhile.
 ///
 /// FOR TESTING: set the environment variable PECKWORKS_HAPPENING before
 /// launching. A happening's name plays that one alone, starting at time zero
@@ -129,16 +149,20 @@ public sealed class HappeningDirector
 
         // Start the helper (see the class summary). Not in testing: a test
         // wants one happening and clean timings, not eighteen others being
-        // painted alongside. If the helper trips over anything, it just
-        // stops; whatever it did not build is built on first use instead,
-        // and any real fault shows up there, on the main line of work.
+        // painted alongside. If one happening fails to build, the helper
+        // skips it and carries on with the rest (each has its own "try").
+        // The one that failed is built again when it is dealt, on the main
+        // line of work, and a real fault shows itself there.
         if (!_off && _only < 0 && !_reel)
         {
             _building = true;
             Task.Run(() =>
             {
-                try { for (int i = 0; i < _cast.Length; i++) Built(i); }
-                catch { }
+                try
+                {
+                    for (int i = 0; i < _cast.Length; i++)
+                        try { Built(i); } catch { }
+                }
                 finally { _building = false; }
             });
         }
@@ -221,18 +245,26 @@ public sealed class HappeningDirector
             // yet is left in the deck: building it here, on the main line,
             // would freeze the picture (the fox takes half a second at 4K).
             if (_building && _made[who] == null) continue;
-            string? claim = Built(who).Claims;
+            Happening h = Built(who);
+            string? claim = h.Claims;
             if (claim != null && _running.Any(r => _made[r.Who]!.Claims == claim)) continue;
+            if (!h.CanBegin) continue;                         // nothing to show right now: its card waits in the deck
             _deck.RemoveAt(i);
             return who;
         }
         return -1;
     }
 
-    /// <summary>Draws every happening that is on right now, oldest first.</summary>
-    public void Draw(FrameBuffer fb)
+    /// <summary>
+    /// Draws every happening of one layer that is on right now, oldest
+    /// first. A scene with a single depth calls this once; a scene with
+    /// actors of its own calls it once per layer, at the right points in
+    /// its back-to-front order (see Happening.Layer).
+    /// </summary>
+    public void Draw(FrameBuffer fb, int layer = 0)
     {
         foreach (var (who, start) in _running)
-            _made[who]!.Draw(fb, (float)(_time - start));
+            if (_made[who]!.Layer == layer)
+                _made[who]!.Draw(fb, (float)(_time - start));
     }
 }

@@ -43,6 +43,7 @@ internal sealed class PresentDrop : Happening
     private float _x0, _y0, _vx, _landX, _landY, _fall, _turns;
 
     public override float Seconds => _seconds;
+    public override int Layer => 1;                        // in front of the scenery, Santa and the lights (see ChristmasScene.Render)
 
     public PresentDrop(ChristmasScenery s)
     {
@@ -93,10 +94,13 @@ internal sealed class PresentDrop : Happening
         return poses;
     }
 
+    /// <summary>Is Santa over the screen, with room either side? If not, there is nothing to drop it from, and the director keeps this card for later.</summary>
+    public override bool CanBegin => _s.SantaOnScreen && _s.SantaSleigh.X > _s.Width * 0.05f && _s.SantaSleigh.X < _s.Width * 0.95f;
+
     public override void Begin(Random rng)
     {
-        // Is Santa actually over the screen? If not, there is nothing to drop it from.
-        _show = _s.SantaOnScreen && _s.SantaSleigh.X > _s.Width * 0.05f && _s.SantaSleigh.X < _s.Width * 0.95f;
+        // The same question again, for the test mode, which begins a happening without asking.
+        _show = CanBegin;
         if (!_show) { _seconds = 0.2f; return; }
         _seconds = 6f;
 
@@ -172,6 +176,8 @@ internal sealed class PresentDrop : Happening
 
         // Pick the pose nearest the angle. Whole turns end back at pose 0, so it lands upright.
         int pose = ((int)MathF.Round(turn * Poses) % Poses + Poses) % Poses;
-        _boxes[_style][pose].DrawCentered(fb, x, y, fade);
+        // Through the "no corner branch here" stencil: the sleigh it falls
+        // from flies BEHIND those branches, so the present must too.
+        _boxes[_style][pose].DrawCentered(fb, x, y, fade, _s.OpenOfBranches);
     }
 }

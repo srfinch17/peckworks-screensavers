@@ -201,8 +201,8 @@ and the slowest single frame for each one.
 Christmas's happenings measure the same way: four minutes of ordinary play at 4K averaged 16.9 ms
 against 15.7 to 21.3 ms quiet in the same minutes. The two dearer ones are the northern lights
 (about 6 ms per frame more in their worst second at 4K, for 22 seconds) and the wave through the
-lights (about 5 ms more, for 8 seconds). The fox takes about half a second to paint its 48
-poses on a 4K screen, which is why every happening is painted on a helper thread while the
-scene plays, and never on the frame it is first dealt.
+lights (about 5 ms more, for 8 seconds). Painting all twenty sets of sprites takes about two thirds
+of a second on a 4K screen (the fox alone about a fifth), which is why they are painted on a
+helper thread while the scene plays, and a happening is not dealt until it has been painted.
 
 Measure your own with `/snapshot`; the timing lands in `out.png.txt`.

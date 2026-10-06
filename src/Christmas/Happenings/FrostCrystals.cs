@@ -39,6 +39,7 @@ internal sealed class FrostCrystals : Happening
     private Random _rng = new();
 
     public override float Seconds => 16f;
+    public override int Layer => 2;                        // on the glass: in front of everything, even the falling snow
 
     public FrostCrystals(ChristmasScenery s)
     {

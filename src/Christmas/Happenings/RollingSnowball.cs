@@ -42,6 +42,7 @@ internal sealed class RollingSnowball : Happening
     private float _x0, _x1, _dir;                           // start x, stop x, and +1 (rolling right) or -1 (rolling left)
 
     public override float Seconds => 8f;
+    public override int Layer => 1;                        // in front of the scenery, Santa and the lights (see ChristmasScene.Render)
     public override string? Claims => "snow";
 
     public RollingSnowball(ChristmasScenery s)

@@ -260,16 +260,16 @@ internal sealed class ChristmasScene : IScreensaverScene
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
         Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
 
-        // 2. The happenings, before Santa so a firework or the northern
-        //    lights are behind him, and before the bulb glows and the snow,
-        //    which pass in front of them. They are told where Santa is right
-        //    now first (a present has to fall from the real sleigh).
+        // 2. The FAR happenings (layer 0): the ones in the sky and on the
+        //    mountains, before Santa so a firework or the northern lights
+        //    are behind him. They are told where Santa is right now first
+        //    (a present has to fall from the real sleigh).
         (Sprite sheet, int left, int top) = SantaPlace();
         PointF nose = NoseOnSheet(_s);
         _scenery.SantaSleigh = new PointF(left + 0.7f * _s, top + (TopMargin + 0.5f) * _s);
         _scenery.SantaNose = new PointF(left + nose.X, top + nose.Y);
         _scenery.SantaOnScreen = left + sheet.Width > 0 && left < _w;
-        _happenings.Draw(fb);
+        _happenings.Draw(fb, 0);
 
         // 3. Santa, behind everything that is not sky (in practice, the corner branches).
         DrawSanta(fb, sheet, left, top);
@@ -283,8 +283,19 @@ internal sealed class ChristmasScene : IScreensaverScene
             _bulbGlows[l.Color].DrawCentered(fb, l.X, l.Y, bright);
         }
 
+        // 4b. The NEAR happenings (layer 1): everything that is in front of
+        //     the scenery, like the fox on the snow and the owl on its twig.
+        //     After Santa and the glows, so the sleigh (which flies behind
+        //     the branches) cannot be painted over an owl sitting on one,
+        //     and a tree's lights do not shine through a fox in front of it.
+        _happenings.Draw(fb, 1);
+
         // 5. The snow, far to near, in front of everything.
         _snow.Draw(fb);
+
+        // 6. Happenings on the GLASS (layer 2): frost on the window pane is
+        //    nearer than the falling snow outside it.
+        _happenings.Draw(fb, 2);
     }
 
     /// <summary>

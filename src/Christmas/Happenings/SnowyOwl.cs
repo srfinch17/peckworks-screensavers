@@ -55,6 +55,7 @@ internal sealed class SnowyOwl : Happening
     private PointF _spot;
 
     public override float Seconds => _ok ? Total : 0.1f;
+    public override int Layer => 1;                        // in front of the scenery, Santa and the lights (see ChristmasScene.Render)
 
     public SnowyOwl(ChristmasScenery s)
     {

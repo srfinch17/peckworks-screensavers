@@ -72,6 +72,7 @@ internal sealed class Rabbit : Happening
     private float _startX, _sitX;
 
     public override float Seconds => Total;
+    public override int Layer => 1;                        // in front of the scenery, Santa and the lights (see ChristmasScene.Render)
     public override string? Claims => "snow";
 
     public Rabbit(ChristmasScenery s)
@@ -177,7 +178,7 @@ internal sealed class Rabbit : Happening
             page = HopAt(tt - hopsEnd - 2 * Trans - Sit, _sitX, d, out x, out lift);
 
         float op = Fade(t, Total, 0.4f, 0.5f);
-        float y = _s.Ground.YAt(Math.Clamp(x, 0, _s.Width - 1)) + _s.U * 0.003f;
+        float y = _s.WalkY(x);                                             // on the near snow, in front of the pines and the cabin
         float shade = op * (1 - 0.7f * Math.Min(1, lift / _hopHigh));      // the shadow thins as it rises
         _shadow.DrawCentered(fb, x + _dir * 0.02f * _k, y, shade);
         page.Draw(fb, (int)MathF.Round(x - (d == 0 ? _ox : _w - _ox)), (int)MathF.Round(y - lift) - _by, op);
