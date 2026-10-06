@@ -1,8 +1,8 @@
 # Adding happenings to a screensaver
 
 A **happening** is one small thing that occurs now and then in a scene: a shooting star, a ghost
-rising from a grave, a firework. Halloween has nineteen. This page is the recipe for adding more,
-to Halloween or to any other screensaver in this repo.
+rising from a grave, a firework. Halloween has nineteen and Christmas twenty. This page is the
+recipe for adding more, to either of them or to any other screensaver in this repo.
 
 Think of a cuckoo clock. Most of the time the little door is shut. Now and then it opens, the
 bird does its routine, and the door shuts. Each happening is one bird. The **director** is the
@@ -16,9 +16,9 @@ clockwork that decides when each door opens.
 | `HappeningDirector` | same file | Shuffles the happenings like a deck of cards and deals one every few seconds. |
 | `FrameBuffer.Line` | `Core/FrameBuffer.cs` | Draws a thin line straight into the picture (spider silk, a star's tail). |
 | `Sprite` | `Core/Sprite.cs` | A small picture painted once and stamped each frame. `Sprite.Glow` makes a soft light. |
-| Scenery facts | the saver's painter, for example `HalloweenScenery` in `src/Halloween/HalloweenPainter.cs` | Where things are: the moon, each tombstone, the ground height, the stencils. |
-| The cast | `src/Halloween/Happenings/Cast.cs` | The list of every happening, one line each. |
-| The happenings | `src/Halloween/Happenings/*.cs` | One class per file. |
+| Scenery facts | the saver's painter: `HalloweenScenery` in `src/Halloween/HalloweenPainter.cs`, `ChristmasScenery` in `src/Christmas/ChristmasPainter.cs` | Where things are: the moon, each tombstone, the ground height, the stencils. |
+| The cast | `src/<Saver>/Happenings/Cast.cs` | The list of every happening, one line each. |
+| The happenings | `src/<Saver>/Happenings/*.cs` | One class per file. |
 | `scripts/happening.ps1` | | Renders one happening at chosen moments to PNG files, for looking at. |
 
 ## How a happening works
@@ -149,11 +149,14 @@ $env:PECKWORKS_HAPPENING = 'all'; Start-Process .\dist\Halloween.scr -ArgumentLi
 1. Write the class in the saver's `Happenings` folder.
 2. Add its line to `Cast.cs`.
 3. Look at it with `scripts\happening.ps1` (the list above).
-4. Update the list of happenings in `README.md`.
+4. Update the list of happenings in `README.md`. (For another saver, give `happening.ps1`
+   its name: `-Saver Christmas`.)
 
 ## Giving a saver its first happenings
 
-This is what was done for Halloween, in order.
+This is what was done for Halloween and then Christmas, in order. The second time took a
+fraction of the first: the engine, the script and this page already existed, so the work was the
+list, the facts, the wiring, two pattern happenings, and the helpers.
 
 1. **Decide the list.** Write one short paragraph per happening: what happens, how long, where,
    and what it goes behind. About twenty is a good number: with one dealt every 5 to 12 seconds, the
@@ -163,7 +166,13 @@ This is what was done for Halloween, in order.
    happenings" block in `HalloweenScenery`). Add stencils with the copy-and-compare trick
    (`Brushwork.Unchanged`) at each depth something must pass behind.
 3. **Wire the director into the scene**: build it in the constructor from the cast, call
-   `Update` in `Update`, and call `Draw` in `Render` right after the backdrop is copied.
+   `Update` in `Update`, and call `Draw` in `Render` right after the backdrop is copied. Decide
+   where in the draw order they go: in Christmas they are drawn before Santa and the bulb
+   glows, so a firework is behind him and the twinkle lies over a fox. If a happening must
+   know where a moving actor is (a present falling from the sleigh), the scene writes that
+   actor's position into the scenery facts every frame before the happenings draw, and the
+   happening reads it in `Begin`. Use the engine's dice (`HappeningDirector.SceneRandom()`)
+   for the scene's Random, so `-Seed` works.
 4. **Add the settings knob** ("Surprises", 0 to 300 percent, 0 = off).
 5. **Write two happenings by hand** as the pattern, and look at them.
 6. **Build the rest.** Each is one self-contained file, so they can be built side by side.

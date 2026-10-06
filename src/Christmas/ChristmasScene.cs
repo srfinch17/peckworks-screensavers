@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using Peckworks.Screensavers.Core;
 using Peckworks.Screensavers.Core.Sakura;
+using Christmas.Happenings;
 
 namespace Christmas;
 
@@ -26,6 +27,10 @@ namespace Christmas;
 ///     passes behind the branches that reach in from the top corners, and
 ///     in front of the moon and stars. (He flies well above the pines, so
 ///     those never actually cover him.)
+///   - The HAPPENINGS: twenty small surprises (a fox, a snowman building
+///     itself, fireworks) that each come on for a few seconds now and then.
+///     Each is one class in the Happenings folder; a "director" from the
+///     engine (Core/Happenings.cs) decides which goes on when.
 /// </summary>
 internal sealed class ChristmasScene : IScreensaverScene
 {
@@ -45,13 +50,14 @@ internal sealed class ChristmasScene : IScreensaverScene
     private const float FirstReindeer = 1.95f, ReindeerGap = 0.95f;
     private const int TeamSize = 4;                 // three reindeer and Rudolph, who leads
 
-    private readonly Random _rng = new();
+    private readonly Random _rng = HappeningDirector.SceneRandom();   // new dice every launch, unless PECKWORKS_SEED asks for a repeat
     private readonly ChristmasScenery _scenery;
     private readonly PetalField _snow;
     private readonly Light[] _lights;
     private readonly Sprite[] _bulbGlows;           // one soft glow per pastel color
     private readonly Sprite[] _sleigh;              // one per gallop frame
     private readonly Sprite _noseGlow, _noseSparkle;
+    private readonly HappeningDirector _happenings;
     private readonly float _s;                      // the sleigh's size unit, in pixels
     private readonly float _u;
     private readonly int _w, _h;
@@ -96,6 +102,9 @@ internal sealed class ChristmasScene : IScreensaverScene
 
         _noseGlow = Sprite.Glow((int)(_s * 0.45f), Color.FromArgb(255, 48, 40));
         _noseSparkle = PaintSparkle((int)(_s * 0.9f));
+
+        // ---- The happenings: hand the director the cast list and how often to deal ----
+        _happenings = new HappeningDirector(ChristmasHappenings.Cast(_scenery), _rng, settings.SurprisePercent / 100f);
     }
 
     // ==================================================================
@@ -243,6 +252,7 @@ internal sealed class ChristmasScene : IScreensaverScene
         float dt = (float)elapsedSeconds;
         _time += dt;
         _snow.Update(dt);
+        _happenings.Update(elapsedSeconds);
     }
 
     public void Render(FrameBuffer fb)
@@ -250,10 +260,21 @@ internal sealed class ChristmasScene : IScreensaverScene
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
         Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
 
-        // 2. Santa, behind everything that is not sky (in practice, the corner branches).
-        DrawSanta(fb);
+        // 2. The happenings, before Santa so a firework or the northern
+        //    lights are behind him, and before the bulb glows and the snow,
+        //    which pass in front of them. They are told where Santa is right
+        //    now first (a present has to fall from the real sleigh).
+        (Sprite sheet, int left, int top) = SantaPlace();
+        PointF nose = NoseOnSheet(_s);
+        _scenery.SantaSleigh = new PointF(left + 0.7f * _s, top + (TopMargin + 0.5f) * _s);
+        _scenery.SantaNose = new PointF(left + nose.X, top + nose.Y);
+        _scenery.SantaOnScreen = left + sheet.Width > 0 && left < _w;
+        _happenings.Draw(fb);
 
-        // 3. The lights. sin() swings between -1 and 1; the arithmetic turns
+        // 3. Santa, behind everything that is not sky (in practice, the corner branches).
+        DrawSanta(fb, sheet, left, top);
+
+        // 4. The lights. sin() swings between -1 and 1; the arithmetic turns
         //    that into "between 35% and 100% bright", so a bulb dims but
         //    never goes fully out.
         foreach (ref readonly Light l in _lights.AsSpan())
@@ -262,7 +283,7 @@ internal sealed class ChristmasScene : IScreensaverScene
             _bulbGlows[l.Color].DrawCentered(fb, l.X, l.Y, bright);
         }
 
-        // 4. The snow, far to near, in front of everything.
+        // 5. The snow, far to near, in front of everything.
         _snow.Draw(fb);
     }
 
@@ -273,14 +294,18 @@ internal sealed class ChristmasScene : IScreensaverScene
     /// pause before he comes round again), and wraps back to the left. The
     /// "%" (remainder) is what makes the trip repeat.
     /// </summary>
-    private void DrawSanta(FrameBuffer fb)
+    private (Sprite Sheet, int Left, int Top) SantaPlace()
     {
         Sprite sheet = _sleigh[(int)(_time * 7 % GallopFrames)];    // 7 flip-book pages a second
         double trip = _w + sheet.Width + _u * 0.7f;                 // on-screen crossing plus the off-screen pause
         double travelled = (_time * _u * 0.085f + sheet.Width + _w * 0.03f) % trip;
         int left = (int)(travelled - sheet.Width);
         int top = (int)(_h * 0.12f + _u * 0.022f * Math.Sin(_time * 0.7));   // a gentle rise and dip
+        return (sheet, left, top);
+    }
 
+    private void DrawSanta(FrameBuffer fb, Sprite sheet, int left, int top)
+    {
         sheet.Draw(fb, left, top, 1f, _scenery.IsSky);
 
         // Rudolph's nose. Its shine goes through the same sky stencil as the

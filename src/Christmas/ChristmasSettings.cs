@@ -9,7 +9,7 @@ namespace Christmas;
 /// </summary>
 public sealed class ChristmasSettings : ScreensaverSettings
 {
-    private readonly IntSetting _density, _speed, _wind, _size;
+    private readonly IntSetting _density, _speed, _wind, _size, _surprises;
 
     public ChristmasSettings() : base("Christmas")
     {
@@ -17,6 +17,7 @@ public sealed class ChristmasSettings : ScreensaverSettings
         _speed = Add(nameof(FallSpeedPercent), "Fall speed", 25, 300, 100, "%");
         _wind = Add(nameof(WindPercent), "Breeze", 0, 300, 100, "%");
         _size = Add(nameof(FlakeSizePercent), "Flake size", 50, 200, 100, "%");
+        _surprises = Add(nameof(SurprisePercent), "Surprises", 0, 300, 100, "%");
     }
 
     /// <summary>How many snowflakes are falling at once.</summary>
@@ -30,6 +31,9 @@ public sealed class ChristmasSettings : ScreensaverSettings
 
     /// <summary>Snowflake size.</summary>
     public int FlakeSizePercent => _size.Value;
+
+    /// <summary>How often a happening (a fox, a snowman, fireworks...) comes on. 100 = one every 5 to 12 seconds, 0 = never.</summary>
+    public int SurprisePercent => _surprises.Value;
 
     public static ChristmasSettings LoadSaved()
     {

@@ -107,6 +107,7 @@ src/
     ChristmasScene.cs              backdrop + Santa's sleigh + twinkling lights + the shared engine dropping snow
     ChristmasPainter.cs            paints the night sky, mountains, cabin, snowy pines, strings of lights
     ChristmasSettings.cs           declares its knobs
+    Happenings/                    twenty small random events (a fox, a snowman, fireworks), one class per file
 ```
 
 A screensaver only has to write one class with two methods:
@@ -262,11 +263,11 @@ that did not change is still sky. That gives a stencil with one yes/no per pixel
 is only ever stamped on the "yes" pixels. Nothing has to know where the branches are. (He flies
 well above the pines, so in practice it is only the corner branches that cover him.)
 
-**Halloween's happenings** are small events that come and go: a shooting star, a ghost rising
-from a grave, a spider spinning a web. Think of a cuckoo clock: each happening is one bird behind
+**Happenings** (Halloween and Christmas) are small events that come and go: a shooting star, a
+ghost rising from a grave, a spider spinning a web, a snowman building itself. Think of a cuckoo clock: each happening is one bird behind
 a little door, and a **director** (`Core/Happenings.cs`) is the clockwork that opens one door
 every few seconds. The director shuffles the happenings like a deck of cards and deals from it,
-so you see them all before any repeats.
+so you see them all before any repeats. Christmas has its own deck of twenty.
 
 Each happening is one small class with one rule: it is told `t`, the number of seconds since it
 began, and works out the whole picture from that number alone. It keeps no notes from one frame

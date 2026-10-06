@@ -87,8 +87,20 @@ warm windows and a smoking chimney, snowy mountains, and a moon.
   galloping reindeer. Rudolph leads, and his red nose glows and sparkles.
 - Every bulb (pink, mint, baby blue, lavender, butter, peach) brightens and dims on its own rhythm.
 - The snow is the Sakura petal engine drawing soft white dots.
+- Twenty small **happenings** come and go at random, as in Halloween:
 
-Settings: amount of snow, fall speed, breeze, flake size.
+  | Where | What happens |
+  |-------|--------------|
+  | The sky | A shooting star to wish on. The northern lights ripple. Stars join up into a snowflake, a star, a tree, a candy cane or a bell. Festive fireworks (gold and silver, red and green, or icy blue). A gust of wind whirls snow across. A drift of golden fairy dust swoops through. |
+  | The moon | An ice halo with a faint rainbow forms around it. |
+  | Santa | A present tumbles off the sleigh and lands in the snow. |
+  | Far off | A toy train with lit windows crosses the valley. A reindeer stands on the mountain ridge. |
+  | The snow | A fox trots through and stops to sniff. A rabbit hops by. A snowman builds itself and waves. A snowball rolls across, growing. A clump of snow slides off a pine. |
+  | The cabin and the lights | Smoke rings (and a heart) from the chimney. A wave of brightness runs through every light. The star on the tree flares and showers sparkles. |
+  | The corners | Frost crystals grow across a corner of the glass. A snowy owl perches on a branch and blinks. |
+
+Settings: amount of snow, fall speed, breeze, flake size, and how often a surprise happens
+(0 turns them off).
 
 Halloween and Christmas are built from the same shared pieces as the Sakura pair (the falling
 engine, the ground, trees, hills and branches), plus one new one: sprites, small pictures painted
@@ -185,5 +197,12 @@ firework for the half second of each burst, and a lightning flash for under half
 hill monster adds about 2 ms. At 1920x1080 none of them drops a frame (the worst second of ten
 minutes of play was 5.7 ms). `scripts\happening.ps1 -Sweep` prints the average, the worst second
 and the slowest single frame for each one.
+
+Christmas's happenings measure the same way: four minutes of ordinary play at 4K averaged 16.9 ms
+against 15.7 to 21.3 ms quiet in the same minutes. The two dearer ones are the northern lights
+(about 6 ms per frame more in their worst second at 4K, for 22 seconds) and the wave through the
+lights (about 5 ms more, for 8 seconds). The fox takes about half a second to paint its 48
+poses on a 4K screen, which is why every happening is painted on a helper thread while the
+scene plays, and never on the frame it is first dealt.
 
 Measure your own with `/snapshot`; the timing lands in `out.png.txt`.

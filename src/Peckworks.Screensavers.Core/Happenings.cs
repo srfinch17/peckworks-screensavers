@@ -96,6 +96,7 @@ public sealed class HappeningDirector
     private readonly bool _off, _reel;
     private readonly int _only = -1;                           // testing: play just this one
     private int _reelNext;
+    private volatile bool _building;                           // true while the helper is still painting (volatile: both lines of work read it)
     private double _time, _nextAt;                             // a double: this clock runs for days (see the scene's clock)
 
     /// <param name="cast">Every happening: a name, and how to build it.</param>
@@ -132,11 +133,15 @@ public sealed class HappeningDirector
         // stops; whatever it did not build is built on first use instead,
         // and any real fault shows up there, on the main line of work.
         if (!_off && _only < 0 && !_reel)
+        {
+            _building = true;
             Task.Run(() =>
             {
                 try { for (int i = 0; i < _cast.Length; i++) Built(i); }
                 catch { }
+                finally { _building = false; }
             });
+        }
     }
 
     /// <summary>
@@ -212,6 +217,10 @@ public sealed class HappeningDirector
         {
             int who = _deck[i];
             if (_running.Any(r => r.Who == who)) continue;
+            // While the helper is still painting, a card it has not reached
+            // yet is left in the deck: building it here, on the main line,
+            // would freeze the picture (the fox takes half a second at 4K).
+            if (_building && _made[who] == null) continue;
             string? claim = Built(who).Claims;
             if (claim != null && _running.Any(r => _made[r.Who]!.Claims == claim)) continue;
             _deck.RemoveAt(i);

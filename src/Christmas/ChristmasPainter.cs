@@ -11,6 +11,34 @@ internal sealed class ChristmasScenery
     public required uint[] Pixels { get; init; }                        // the painted picture, same layout as a FrameBuffer
     public required List<(PointF At, int Color)> Lights { get; init; }  // every bulb: where it is, and which pastel (an index into Pastels)
     public required bool[] IsSky { get; init; }                         // one true/false per pixel: true where nothing was painted over the sky
+
+    // ---- Facts for the happenings (src/Christmas/Happenings): where things are, so a fox can
+    //      walk on the real snow and a present can fall from the real sleigh. ----
+    public required int Width { get; init; }
+    public required int Height { get; init; }
+    public required float U { get; init; }                              // the size unit: the height, or less on a tall screen. Size everything by this.
+    public required float Horizon { get; init; }                        // the y where the sky ends behind the mountains
+    public required (PointF At, float R) Moon { get; init; }            // the moon's center and radius
+    public bool[] OpenSky => IsSky;                                     // stencil: true where nothing was painted over the sky and moon (the same one Santa uses)
+    public required bool[] OpenValley { get; init; }                    // stencil: true where nothing was painted after the near mountains (so: the valley floor and everything above it is clear)
+    public required PointF[] FarRange { get; init; }                    // the far mountains' outline; ask Brushwork.RidgeYAt(FarRange, x) for their height
+    public required PointF[] NearRange { get; init; }                   // the near mountains' outline, the same way
+    public required Bank Ground { get; init; }                          // the snowy hill; ask Ground.YAt(x) for its height
+    public required PointF CabinFoot { get; init; }                     // the middle of the cabin's base, on the snow
+    public required SizeF CabinWall { get; init; }                      // the cabin wall's width and height (the roof rises 0.042 U above the wall)
+    public required RectangleF[] CabinWindows { get; init; }            // its two warm windows
+    public required RectangleF CabinDoor { get; init; }
+    public required PointF ChimneyTop { get; init; }                    // where the smoke comes out
+    public required int CabinBulbs { get; init; }                       // the first this-many entries of Lights are the bulbs along the cabin's roof
+    public required List<(float X, float Foot, float Top)> Pines { get; init; } // each pine: trunk x, where it meets the snow, its tip (ask Brushwork.PineHalfWidth for its width at any height)
+    public required int StarPine { get; init; }                         // which pine wears the star
+    public required PointF StarAt { get; init; }                        // the star on top of it
+    public required List<PointF> CornerBranchSpots { get; init; }       // points on the bare corner branches' thin twigs and tips
+
+    // ---- Live facts, set by the scene every frame before the happenings draw ----
+    public PointF SantaSleigh { get; set; }                             // the middle of the sleigh's body, in pixels
+    public PointF SantaNose { get; set; }                               // Rudolph's nose
+    public bool SantaOnScreen { get; set; }                             // false while he is on his off-screen pause
 }
 
 /// <summary>
@@ -72,11 +100,14 @@ internal static class ChristmasPainter
             g.FillPolygon(near, nearRange);
             g.FillRectangle(near, 0, horizon, w, h - horizon);   // the valley floor, down to where the snowy hill covers it
         }
+        g.Flush();
+        uint[] upToValley = Brushwork.ToPixels(bmp);   // a second stencil copy: "unchanged since here" = the valley floor is still clear (for the toy train)
 
         Bank ground = MakeGround(w, h);
         ground.Paint(g, Color.FromArgb(222, 233, 252), Color.FromArgb(118, 140, 196), Color.FromArgb(220, 255, 255, 255), Math.Max(1.5f, u * 0.004f));
 
-        PaintCabin(g, w * 0.58f, ground.YAt(w * 0.58f) + u * 0.008f, u, lights);
+        var cabinFoot = new PointF(w * 0.58f, ground.YAt(w * 0.58f) + u * 0.008f);
+        int cabinBulbs = PaintCabin(g, cabinFoot.X, cabinFoot.Y, u, lights);
 
         // (X as a fraction of the width, height in u). Tallest first in each
         // group, so the shorter trees in front overlap the taller ones behind.
@@ -85,25 +116,44 @@ internal static class ChristmasPainter
             (0.05f, 0.44f), (0.23f, 0.37f), (0.14f, 0.30f), (0.34f, 0.22f),
             (0.88f, 0.45f), (0.80f, 0.33f), (0.96f, 0.31f),
         ];
+        var pineFacts = new List<(float X, float Foot, float Top)>();
         foreach (var p in pines)
         {
             float x = w * p.X, foot = ground.YAt(x) + u * 0.02f, top = foot - u * p.Height;
             Brushwork.Pine(g, x, top, foot, u, rng, snowy: true);
             StringLights(g, x, top, foot, u, rng, lights);
+            pineFacts.Add((x, foot, top));
         }
-        // The star goes on the tallest tree (the one at 88% across).
+        // The star goes on the tallest tree (the one at 88% across, number 4 in the list).
+        const int starPine = 4;
         float starX = w * 0.88f, starY = ground.YAt(starX) + u * 0.02f - u * 0.45f - u * 0.008f;
         PaintStar(g, starX, starY, u * 0.016f);
         lights.Add((new PointF(starX, starY), Butter));
 
-        PaintCornerBranches(g, w, h, u, rng, lights);
+        List<PointF> cornerSpots = PaintCornerBranches(g, w, h, u, rng, lights);
 
         g.Flush();
         uint[] pixels = Brushwork.ToPixels(bmp);
         var isSky = new bool[pixels.Length];
         for (int i = 0; i < pixels.Length; i++) isSky[i] = pixels[i] == skyOnly[i];
 
-        return new ChristmasScenery { Pixels = pixels, Lights = lights, IsSky = isSky };
+        float wallW = u * 0.15f, wallH = u * 0.062f, cabinTop = cabinFoot.Y - wallH;
+        return new ChristmasScenery
+        {
+            Pixels = pixels, Lights = lights, IsSky = isSky,
+            Width = w, Height = h, U = u, Horizon = horizon,
+            Moon = (new PointF(w * 0.24f, h * 0.20f), u * 0.065f),   // the same numbers PaintMoon was given above
+            OpenValley = Brushwork.Unchanged(upToValley, pixels),
+            FarRange = farRange, NearRange = nearRange, Ground = ground,
+            CabinFoot = cabinFoot, CabinWall = new SizeF(wallW, wallH),
+            CabinWindows = [.. new[] { -1f, 1f }.Select(side =>
+                new RectangleF(cabinFoot.X + side * wallW * 0.30f - u * 0.012f, cabinTop + wallH * 0.42f - u * 0.011f, u * 0.024f, u * 0.022f))],
+            CabinDoor = new RectangleF(cabinFoot.X - u * 0.010f, cabinFoot.Y - wallH * 0.70f, u * 0.020f, wallH * 0.70f),
+            ChimneyTop = new PointF(cabinFoot.X + wallW * 0.20f + u * 0.008f, cabinTop - u * 0.060f),
+            CabinBulbs = cabinBulbs,
+            Pines = pineFacts, StarPine = starPine, StarAt = new PointF(starX, starY),
+            CornerBranchSpots = cornerSpots,
+        };
     }
 
     // ================================================================ sky
@@ -172,9 +222,10 @@ internal static class ChristmasPainter
     /// thick blanket of snow for a roof, a chimney with smoke, a door, and
     /// two warm windows. Warm light spills onto the snow in front, and a
     /// string of pastel bulbs hangs along the edge of the roof (added to the
-    /// same list as the tree lights, so they twinkle too).
+    /// same list as the tree lights, so they twinkle too). Returns how many
+    /// bulbs it added, so the scene knows which entries are the roof's.
     /// </summary>
-    private static void PaintCabin(Graphics g, float x, float footY, float u, List<(PointF At, int Color)> lights)
+    private static int PaintCabin(Graphics g, float x, float footY, float u, List<(PointF At, int Color)> lights)
     {
         float wallW = u * 0.15f, wallH = u * 0.062f, top = footY - wallH;
 
@@ -236,6 +287,7 @@ internal static class ChristmasPainter
             PaintBulb(g, at, u, i % Pastels.Length);
             lights.Add((at, i % Pastels.Length));
         }
+        return bulbs + 1;
     }
 
     // ================================================================ lights
@@ -316,7 +368,7 @@ internal static class ChristmasPainter
     /// branches with the flowers switched off), with a bulb wherever a
     /// blossom cluster would have been.
     /// </summary>
-    private static void PaintCornerBranches(Graphics g, int w, int h, float u, Random rng, List<(PointF At, int Color)> lights)
+    private static List<PointF> PaintCornerBranches(Graphics g, int w, int h, float u, Random rng, List<(PointF At, int Color)> lights)
     {
         Color wood = Color.FromArgb(30, 26, 40);
         Brushwork.BranchSeed[] seeds =
@@ -336,5 +388,6 @@ internal static class ChristmasPainter
             PaintBulb(g, at, u, color);
             lights.Add((at, color));
         }
+        return spots;
     }
 }
