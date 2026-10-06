@@ -56,7 +56,7 @@ internal sealed class BashoFrog : Happening
     {
         _s = s;
         _u = s.U;
-        _size = Math.Max(15f, s.U * 0.050f);
+        _size = Math.Max(10f, s.U * 0.028f);     // a small pond frog: well under the tanuki and the lantern, at the same distance
         for (int i = 0; i < 5; i++)
             _sit[i] = MakeFrog(_size, 0f, 0f, blink: i == 1, puff: i < 2 ? 0f : (i - 1) / 3f);
         for (int k = 0; k < JumpPoses; k++)
@@ -123,8 +123,10 @@ internal sealed class BashoFrog : Happening
     {
         int size = (int)(3.3f * S) + 4;
         float t = Math.Clamp(stretch, 0f, 1f), c = Math.Clamp(-stretch / 0.3f, 0f, 1f);
-        Color light = Color.FromArgb(150, 220, 84), mid = Color.FromArgb(104, 188, 66), dark = Color.FromArgb(62, 140, 56);
-        Color line = Color.FromArgb(44, 108, 50), belly = Color.FromArgb(250, 242, 168), ink = Color.FromArgb(28, 22, 34);
+        // Evening greens: deeper and duller than daylight, so the frog sits in the
+        // dusk like every other creature here, with the warm rim light doing the work.
+        Color light = Color.FromArgb(112, 156, 72), mid = Color.FromArgb(78, 124, 58), dark = Color.FromArgb(48, 90, 50);
+        Color line = Color.FromArgb(34, 70, 42), belly = Color.FromArgb(206, 186, 138), ink = Color.FromArgb(28, 22, 34);
 
         return Stamp.Paint(size, size, g =>
         {
@@ -240,7 +242,11 @@ internal sealed class BashoFrog : Happening
         {
             bool left = rng.NextDouble() < 0.5;
             float x = w * (left ? 0.21f + 0.12f * (float)rng.NextDouble() : 0.665f + 0.10f * (float)rng.NextDouble());
-            if (_s.Canopies.Any(c => Math.Abs(c.At.X - x) < _u * 0.07f) || Math.Abs(x - w * 0.26f) < _u * 0.05f) continue;   // not in front of a trunk or the lantern     // not in front of a trunk
+            if (_s.Canopies.Any(c => Math.Abs(c.At.X - x) < _u * 0.07f) || Math.Abs(x - w * 0.26f) < _u * 0.05f) continue;   // not in front of a trunk or the lantern
+            // Not on the bridge's feet either (0.30 and 0.69 of the width): sitting
+            // there it read as a frog climbing onto the bridge, on more than half of scenes.
+            float clear = _size * 0.8f + _u * 0.02f;
+            if (Math.Abs(x - w * 0.30f) < clear || Math.Abs(x - w * 0.69f) < clear) continue;
             float gy = _s.WalkY(x);
             float dir = left ? 1f : -1f;
             float reach = _u * (0.10f + 0.18f * (float)rng.NextDouble());

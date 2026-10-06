@@ -47,7 +47,7 @@ internal sealed class CraneAcrossSun : Happening
     private float _phase;                                  // this showing's starting point in the wingbeat
 
     public override float Seconds => _seconds;
-    public override string? Claims => "sun";
+    public override string? Claims => "sun,clouds";
 
     public CraneAcrossSun(DuskScenery s)
     {

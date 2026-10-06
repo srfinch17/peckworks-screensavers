@@ -115,7 +115,12 @@ internal static class SceneryPainter
         bool[] openWater = Brushwork.Unchanged(behindBoat, pixels);
 
         // The happenings' stencils. The mountain is every pixel the mountain
-        // changed, where nothing nearer was painted later. Open sky is every
+        // changed, where nothing nearer was painted after the mist. (Not
+        // "after the boat's copy": the foothills, the far shore's trees and
+        // its white buildings are painted over the mountain's foot before
+        // that copy, and a stencil built from it let Red Fuji paint them
+        // all rust red, with a hard seam where they left the mountain's
+        // outline.) Open sky is every
         // pixel that was still bare sky when the mountain was done AND that
         // nothing solid covered after the mist. (The mist itself is left out
         // on purpose: it is haze, and "unchanged since the sky" would have
@@ -125,7 +130,7 @@ internal static class SceneryPainter
         var openSky = new bool[pixels.Length];
         for (int i = 0; i < pixels.Length; i++)
         {
-            fujiMask[i] = withFuji[i] != skyOnly[i] && openWater[i];
+            fujiMask[i] = withFuji[i] != skyOnly[i] && withHaze[i] == pixels[i];
             openSky[i] = withFuji[i] == skyOnly[i] && withHaze[i] == pixels[i];
         }
 

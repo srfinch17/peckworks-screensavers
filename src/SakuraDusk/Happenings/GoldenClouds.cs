@@ -31,6 +31,10 @@ internal sealed class GoldenClouds : Happening
     private (int Shape, int Side, float X, float Y, float Speed, float Delay)[] _clouds = [];
 
     public override float Seconds => 18f;
+    // Never with the moon, the first star or the crane: happenings at one depth are drawn in the
+    // order they began, so a moon that began first would be veiled by a cloud, and one that began
+    // later would sit on top of it. Never together is simpler than sorting them.
+    public override string? Claims => "clouds";
 
     public GoldenClouds(DuskScenery s)
     {

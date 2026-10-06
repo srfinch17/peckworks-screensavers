@@ -39,7 +39,7 @@ internal sealed class BridgeCat : Happening
 {
     private const int Pages = 24;
     private const int N = 240;                       // steps used to measure the deck
-    private const float Turn = 0.7f;                 // the crossfade between walking and sitting, seconds
+    private const float Turn = 0.4f;                 // the pause between walking and sitting, seconds (it turns halfway through)
     private const float Sit = 7.0f;                  // how long it sits
     private const float Big = 2f;                    // pages are painted at 2x and sampled down
 
@@ -295,11 +295,12 @@ internal sealed class BridgeCat : Happening
 
         if (t < tSitStart || t >= tStand)
         {
-            // Turning between walking and sitting: the two stamps overlap, a dissolve.
+            // Turning between walking and sitting: a clean cut halfway through,
+            // never both cats at once. (A dissolve showed two see-through cats
+            // for half a second, twice a showing, which read as a glitch.)
             float x = t < tSitStart ? Smooth((t - W) / Turn) : 1 - Smooth((t - tStand) / Turn);
-            float walkOp = 1 - Smooth((x - 0.35f) / 0.65f);
-            Stamp(fb, _walk[WalkPage(half, stride)], half, op * walkOp, mirror: false);
-            SitStamp(fb, t - tSitStart, Smooth(x), op);
+            if (x < 0.5f) Stamp(fb, _walk[WalkPage(half, stride)], half, op, mirror: false);
+            else SitStamp(fb, t - tSitStart, 1f, op);
             return;
         }
         SitStamp(fb, t - tSitStart, 1f, op);

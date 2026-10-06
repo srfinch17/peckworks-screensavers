@@ -29,7 +29,22 @@ public abstract class Happening
     /// or null. The director never runs two happenings with the same claim
     /// at once, so a face cannot appear in the moon while it is turning red.
     /// </summary>
+    /// A happening may claim SEVERAL things, separated by commas ("sun,costly"):
+    /// it then never runs with anything that claims any one of them.
     public virtual string? Claims => null;
+
+    /// <summary>
+    /// Do two claims share anything? Each is a comma-separated list of
+    /// names ("sun,costly"); they clash if any name is in both.
+    /// </summary>
+    public static bool ClaimsClash(string? a, string? b)
+    {
+        if (a == null || b == null) return false;
+        foreach (string x in a.Split(','))
+            foreach (string y in b.Split(','))
+                if (x.Trim() == y.Trim()) return true;
+        return false;
+    }
 
     /// <summary>
     /// How near the viewer this happening is, as a layer number. The scene
@@ -224,33 +239,52 @@ public sealed class HappeningDirector
     /// Deals the next card that is free to go on: not already running, and
     /// not after a prop that a running happening has claimed. Returns -1 if
     /// the stage is full or every remaining card is blocked.
+    ///
+    /// One trap this guards against. A card that cannot begin (CanBegin is
+    /// false) stays in the deck, so it can come round as soon as it is
+    /// able. But some cards can NEVER begin on a given screen: a rainbow
+    /// that a tall screen's mountain would hide entirely, a squirrel on a
+    /// scene with no branch it can run along. Left alone, such a card is
+    /// the last one in the deck forever; the deck never empties, so it is
+    /// never shuffled again, and after one round no surprise ever plays.
+    /// (That is exactly what happened, on about a third of screens.) So
+    /// when every card left is waiting ONLY on CanBegin (not on another
+    /// happening finishing, which will pass), the round is over: shuffle a
+    /// fresh deck. A card that is merely waiting for its moment (Santa off
+    /// screen) is not lost; it is in the fresh deck too.
     /// </summary>
     private int Deal()
     {
         if (_running.Count >= MaxAtOnce) return -1;
-        if (_deck.Count == 0)
+        for (int attempt = 0; attempt < 2; attempt++)
         {
-            _deck.AddRange(Enumerable.Range(0, _cast.Length));
-            for (int i = _deck.Count - 1; i > 0; i--)          // shuffle: swap each card with a random earlier one
+            if (_deck.Count == 0)
             {
-                int j = _rng.Next(i + 1);
-                (_deck[i], _deck[j]) = (_deck[j], _deck[i]);
+                _deck.AddRange(Enumerable.Range(0, _cast.Length));
+                for (int i = _deck.Count - 1; i > 0; i--)      // shuffle: swap each card with a random earlier one
+                {
+                    int j = _rng.Next(i + 1);
+                    (_deck[i], _deck[j]) = (_deck[j], _deck[i]);
+                }
             }
-        }
-        for (int i = _deck.Count - 1; i >= 0; i--)
-        {
-            int who = _deck[i];
-            if (_running.Any(r => r.Who == who)) continue;
-            // While the helper is still painting, a card it has not reached
-            // yet is left in the deck: building it here, on the main line,
-            // would freeze the picture (the fox takes half a second at 4K).
-            if (_building && _made[who] == null) continue;
-            Happening h = Built(who);
-            string? claim = h.Claims;
-            if (claim != null && _running.Any(r => _made[r.Who]!.Claims == claim)) continue;
-            if (!h.CanBegin) continue;                         // nothing to show right now: its card waits in the deck
-            _deck.RemoveAt(i);
-            return who;
+            bool waitingOnOthers = false;                      // is any card held back by something that WILL pass?
+            for (int i = _deck.Count - 1; i >= 0; i--)
+            {
+                int who = _deck[i];
+                if (_running.Any(r => r.Who == who)) { waitingOnOthers = true; continue; }
+                // While the helper is still painting, a card it has not reached
+                // yet is left in the deck: building it here, on the main line,
+                // would freeze the picture (the fox takes half a second at 4K).
+                if (_building && _made[who] == null) { waitingOnOthers = true; continue; }
+                Happening h = Built(who);
+                string? claim = h.Claims;
+                if (claim != null && _running.Any(r => Happening.ClaimsClash(_made[r.Who]!.Claims, claim))) { waitingOnOthers = true; continue; }
+                if (!h.CanBegin) continue;                     // nothing to show right now: its card waits in the deck
+                _deck.RemoveAt(i);
+                return who;
+            }
+            if (waitingOnOthers) return -1;                    // something will finish soon; try again then
+            _deck.Clear();                                     // every card left can only wait on CanBegin: start a fresh round
         }
         return -1;
     }

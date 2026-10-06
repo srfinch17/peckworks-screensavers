@@ -56,7 +56,10 @@ public sealed class PetalField
     private readonly IReadOnlyList<PointF> _blossomSpots;
     private readonly Petal[] _petals;
     private readonly float _speedScale, _windScale, _sizeScale;
-    private float _time;
+    // A double (about 15 digits), not a float (about 7): a screensaver runs for
+    // days, and a float clock that large can no longer register a 16
+    // millisecond step, so the breeze would freeze.
+    private double _time;
 
     /// <summary>
     /// The color of the light on the petals, as a multiplier for red, green
@@ -199,7 +202,7 @@ public sealed class PetalField
         // an irregular rhythm instead of a steady beat. Mostly blowing right,
         // occasionally stilling almost to nothing.
         float wind = _u * 0.03f * _windScale *
-                     (0.55f + 0.5f * MathF.Sin(_time * 0.11f) + 0.3f * MathF.Sin(_time * 0.043f + 2f));
+                     (0.55f + 0.5f * (float)Math.Sin(_time * 0.11) + 0.3f * (float)Math.Sin(_time * 0.043 + 2));
 
         float margin = _h * 0.1f;
         for (int i = 0; i < _petals.Length; i++)

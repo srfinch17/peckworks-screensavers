@@ -39,7 +39,7 @@ internal sealed class CloudShadows : Happening
     private readonly float[] _x0 = new float[Lanes], _vx = new float[Lanes], _dy = new float[Lanes];
 
     public override float Seconds => 18f;
-    public override string? Claims => "weather";
+    public override string? Claims => "fuji,costly";               // it shades the mountain, and it is one of the dearest to draw at 4K: sharing "fuji" keeps it from running with Red Fuji or the rainbow, so their costs never add up
 
     public CloudShadows(Scenery s)
     {

@@ -52,7 +52,7 @@ internal sealed class Rainbow : Happening
     // mountain's claim also keeps it from running at the same time as Red Fuji.
     // Those two are the dearest happenings to draw on a 4K screen, and a claim
     // means "never at once", so their costs never add up in one frame.
-    public override string? Claims => "fuji";
+    public override string? Claims => "fuji,costly";
 
     public Rainbow(Scenery s)
     {

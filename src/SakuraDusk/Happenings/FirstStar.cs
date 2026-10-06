@@ -30,7 +30,7 @@ internal sealed class FirstStar : Happening
     private (PointF At, float Phase, float Rate, float Delay)[] _others = [];
 
     public override float Seconds => _seconds;
-    public override string? Claims => "night";
+    public override string? Claims => "night,clouds";
 
     public FirstStar(DuskScenery s)
     {

@@ -5,7 +5,7 @@ namespace SakuraDusk.Happenings;
 
 /// <summary>
 /// (Body length: 0.03 U.)
-/// Akatombo, the red dragonflies of a Japanese summer evening (and the title
+/// Akatombo, the red dragonflies of a Japanese late-summer and autumn evening (and the title
 /// of a famous lullaby-like song about them). Three to five of them dart and
 /// hover over the pond and around the bridge. A dragonfly does not drift: it
 /// flicks in a straight line, stops dead, hangs in the air with its wings a

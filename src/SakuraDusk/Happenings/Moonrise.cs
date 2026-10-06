@@ -5,9 +5,14 @@ using Peckworks.Screensavers.Core.Sakura;
 namespace SakuraDusk.Happenings;
 
 /// <summary>
-/// Mikazuki, the "three-day moon": a thin crescent rises over the far hills,
-/// on the side of the sky away from the setting sun, like a figure in a
-/// woodblock print.
+/// Mikazuki, the "three-day moon": a thin crescent hangs low over the far
+/// hills in the evening glow, and slowly sinks behind them, like a figure in
+/// a woodblock print.
+///
+/// Why sinking and not rising? A young crescent is only ever seen in the
+/// evening, low in the west, following the sun down: it SETS at dusk. (The
+/// class keeps its first name, Moonrise, so the test commands that use it
+/// still work; it now shows a moonset.)
 ///
 /// Why do the horns point the way they do? The bright edge of a crescent
 /// always faces the sun. The sun is low on the right, so the bright edge is
@@ -18,9 +23,9 @@ namespace SakuraDusk.Happenings;
 /// whisper of "earthshine" (light bounced off the Earth) lets you just see
 /// it, and a soft glow sits around the whole thing.
 ///
-/// It rises from BEHIND the farthest hills: it starts lower than the highest
-/// point of the hill line along its path, and the sky stencil hides whatever
-/// part is still below the ridge. It is stamped through that stencil, so the
+/// It sinks BEHIND the farthest hills: it ends lower than the highest point
+/// of the hill line along its path, and the sky stencil hides whatever part
+/// is already below the ridge. It is stamped through that stencil, so the
 /// hills and branches always stay in front.
 /// </summary>
 internal sealed class Moonrise : Happening
@@ -31,7 +36,7 @@ internal sealed class Moonrise : Happening
     private float _x0, _y0, _x1, _y1;                             // where it starts and ends (centers)
 
     public override float Seconds => 18f;
-    public override string? Claims => "night";
+    public override string? Claims => "night,clouds";
 
     public Moonrise(DuskScenery s)
     {
@@ -77,7 +82,7 @@ internal sealed class Moonrise : Happening
     {
         float u = _s.U;
         float x = _s.Width * (0.10f + 0.25f * (float)rng.NextDouble());
-        float slant = u * 0.04f;                                  // it drifts a little to the left as it climbs
+        float slant = u * 0.04f;                                  // it drifts a little to the right as it sinks
         // The highest point of the far hills anywhere along the path: the moon
         // starts below the LOWEST ridge height there, so it is fully hidden.
         float lowest = 0;
@@ -90,9 +95,10 @@ internal sealed class Moonrise : Happening
 
     public override void Draw(FrameBuffer fb, float t)
     {
-        float p = Smooth(t / Seconds);                            // eased, so the rise starts and stops gently
-        float x = _x0 + (_x1 - _x0) * p, y = _y0 + (_y1 - _y0) * p;
-        float on = Fade(t, Seconds, 2f, 3f);
+        float p = Smooth(t / Seconds);                            // eased, so the sinking starts and stops gently
+        // From high (the "1" end) down to behind the hills (the "0" end).
+        float x = _x1 + (_x0 - _x1) * p, y = _y1 + (_y0 - _y1) * p;
+        float on = Fade(t, Seconds, 3f, 1f);                     // it appears as the sky darkens; the hill hides it at the end
         _glow.DrawCentered(fb, x, y, 0.8f * on, _s.OpenSky);
         _moon.DrawCentered(fb, x, y, on, _s.OpenSky);
     }

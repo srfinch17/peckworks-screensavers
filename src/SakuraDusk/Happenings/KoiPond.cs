@@ -45,7 +45,7 @@ internal sealed class KoiPond : Happening
 
     public override float Seconds => _seconds;
     public override string? Claims => "pond";
-    public override int Layer => 1;                  // in front of the boat and the lake's glints
+    public override int Layer => 0;                  // under the water: the surface glints are drawn over them (the boat is far out, so it never overlaps)
 
     public KoiPond(DuskScenery s)
     {

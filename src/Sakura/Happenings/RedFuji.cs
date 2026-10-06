@@ -29,7 +29,7 @@ internal sealed class RedFuji : Happening
     private readonly uint[] _red;      // the red twin of each of those pixels
 
     public override float Seconds => 11f;
-    public override string? Claims => "fuji";
+    public override string? Claims => "fuji,costly";
 
     public RedFuji(Scenery s)
     {

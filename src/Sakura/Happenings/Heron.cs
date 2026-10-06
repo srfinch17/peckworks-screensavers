@@ -74,7 +74,7 @@ internal sealed class Heron : Happening
     public override float Seconds => _found ? TTotal : 0.3f;
     public override bool CanBegin => _found;
     public override int Layer => 1;                         // in front of the lake, boat and glints
-    public override string? Claims => "righthill";
+    public override string? Claims => "water";              // it stands in the lake, where the ducks and the kingfisher go
 
     private static readonly Color Edge = Color.FromArgb(150, 70, 84, 104);
 

@@ -43,7 +43,7 @@ internal sealed class PondMist : Happening
     private Band[] _bands = [];
 
     public override float Seconds => 18f;
-    public override string? Claims => null;
+    public override string? Claims => "costly";
     public override int Layer => 1;
 
     public PondMist(DuskScenery s)
@@ -89,7 +89,7 @@ internal sealed class PondMist : Happening
             var b = new Band
             {
                 Y = _s.Horizon + _u * 0.045f + d * (_s.Bridge.WaterLine - _s.Horizon - _u * 0.045f) * 1.05f,
-                Scale = 0.75f + 0.55f * d,                                  // nearer mist is bigger
+                Scale = 0.75f + 0.55f * d,                                  // (not read yet: every band is drawn at one size)
                 Speed = _u * (0.010f + 0.020f * (float)rng.NextDouble()) * (rng.Next(2) == 0 ? 1 : -1),
                 Peak = 0.50f + 0.10f * (float)rng.NextDouble(),             // each oval's strength; they overlap to about 0.25
                 Count = cnt,

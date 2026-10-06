@@ -40,7 +40,7 @@ internal sealed class MagicHour : Happening
     // the god rays. Those two and this are also the dearest to draw on a 4K
     // screen, and sharing a claim ("never at once") keeps their costs from
     // ever adding up in one frame.
-    public override string? Claims => "sun";                      // it swells the sun's glow, so it never runs with the green flash or the rays
+    public override string? Claims => "sun,costly";                      // it swells the sun's glow, so it never runs with the green flash or the rays
 
     public MagicHour(DuskScenery s)
     {

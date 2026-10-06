@@ -57,8 +57,8 @@ slowly across the sky, each bird on its own rhythm, gliding now and then.
 
   | Where | What happens |
   |-------|--------------|
-  | The sky and the sun | The sun's top edge flashes green. Rays of light fan up from the sun. The first star of evening appears and twinkles, then others. A crescent moon rises over the hills. Golden clouds drift by. The light deepens into a richer "magic hour". A crane flies across the face of the sun. |
-  | The hills | A procession of fox lights (kitsune-bi) winds along the far hillside. |
+  | The sky and the sun | The sun's top edge flashes green. Rays of light fan up from the sun. The first star of evening appears and twinkles, then others. A crescent moon sinks behind the hills. Golden clouds drift by. The light deepens into a richer "magic hour". A crane flies across the face of the sun. |
+  | The hills | A procession of fox lights (kitsune-bi) winds along the hills. |
   | The pond | Paper lanterns float across the water (toro nagashi). Koi glide under the surface. A lotus opens. Mist gathers over the water. A breeze ripples across the pond. A frog leaps in, as in Basho's haiku. |
   | The bridge and the banks | A cat crosses the bridge and sits to watch the sunset. Red paper lanterns light up along the rail. A tanuki waddles along the bank and tries to catch a petal. The cherry trees light up from below (yozakura). |
   | The air | Fireflies rise from the banks. Red dragonflies dart over the pond. |
@@ -217,11 +217,13 @@ hill monster adds about 2 ms. At 1920x1080 none of them drops a frame (the worst
 minutes of play was 5.7 ms). `scripts\happening.ps1 -Sweep` prints the average, the worst second
 and the slowest single frame for each one.
 
-The sakura pair's happenings, measured the same way at 4K (each alone, against a quiet baseline
-in the same minutes): most cost nothing measurable. Four are dearer while they last, each by
-about 4 to 7 ms per frame in its worst second: Red Fuji and the rainbow in Sakura, the god rays
-and magic hour in Sakura Dusk. Each pair shares a claim, so the two dear ones in a scene never
-run at the same time. At 1920x1080 none of them drops a frame.
+The sakura pair's happenings, measured the same way at 4K (each alone, next to a quiet baseline
+in the same minutes; the quiet scene's worst second was about 14 to 15 ms): most add 1 to 3 ms in
+their worst second. Six are dearer while they last: Red Fuji (about 7.5 ms more), cloud shadows
+(about 4.5) and the petal blizzard (about 3.5) in Sakura; magic hour (about 8.5), the god rays
+(about 7) and the lit trees (about 4) in Sakura Dusk. All six share one claim ("costly"), so the
+director never lets two of them run at once and their costs never add up. At 1920x1080 none of
+them drops a frame.
 
 Christmas's happenings measure the same way: four minutes of ordinary play at 4K averaged 16.9 ms
 against 15.7 to 21.3 ms quiet in the same minutes. The two dearer ones are the northern lights

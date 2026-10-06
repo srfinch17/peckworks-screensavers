@@ -53,7 +53,7 @@ internal sealed class Fireflies : Happening
     public Fireflies(DuskScenery s)
     {
         _s = s;
-        int r = Math.Max(4, (int)(s.U * 0.014f));              // pixel floor: 3, so a light still shows in the preview box
+        int r = Math.Max(4, (int)(s.U * 0.014f));              // pixel floor: 4, so a light still shows in the preview box
         _glow = Sprite.Glow(r, Lime);
         _halo = Sprite.Glow(Math.Max(9, (int)(s.U * 0.04f)), Lime);
     }

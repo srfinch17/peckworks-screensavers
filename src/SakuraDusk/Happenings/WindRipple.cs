@@ -1,4 +1,5 @@
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Sakura;
 
 namespace SakuraDusk.Happenings;
 
@@ -88,6 +89,11 @@ internal sealed class WindRipple : Happening
             float bend = _dir * (0.5f - Math.Abs(d.Depth - 0.5f)) * _bandW * 0.25f;
             float x = centre + d.Along * half + bend;
             if (x < -_u * 0.03f || x > _s.Width + _u * 0.03f) continue;
+            // The near hill can dip below the horizon on some scenes, and the
+            // water stencil counts it as open (it was painted before the copy
+            // the stencil compares with). So keep each dash below the hill's
+            // edge at its own x.
+            if (y < Brushwork.RidgeYAt(_s.Ridges[2], Math.Clamp(x, 0, _s.Width - 1)) + _u * 0.004f) continue;
 
             // Blink: on about 60 percent of the time, with soft ends.
             float blink = Math.Clamp((float)Math.Sin(t * d.Rate + d.Phase) * 1.6f, 0f, 1f);

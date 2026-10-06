@@ -69,6 +69,7 @@ internal sealed class Hanafubuki : Happening
     private readonly int[] _order = new int[MaxPetals];   // petal numbers sorted small (far) to big (near)
 
     public override float Seconds => _seconds;
+    public override string? Claims => "costly";                 // hundreds of petals: one of the dearest to draw at 4K, so never on screen with another
     public override int Layer => 2;                   // right in front of the viewer, even over the falling petals
 
     public Hanafubuki(Scenery s)

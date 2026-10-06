@@ -33,7 +33,7 @@ public sealed class SakuraDuskSettings : ScreensaverSettings
     /// <summary>Petal size.</summary>
     public int PetalSizePercent => _size.Value;
 
-    /// <summary>How often a happening (a kingfisher, a floating lantern...) comes on. 100 = one every 5 to 12 seconds, 0 = never.</summary>
+    /// <summary>How often a happening (a floating lantern, a frog, the first star...) comes on. 100 = one every 5 to 12 seconds, 0 = never.</summary>
     public int SurprisePercent => _surprises.Value;
 
     public static SakuraDuskSettings LoadSaved()

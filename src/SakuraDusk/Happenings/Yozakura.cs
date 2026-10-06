@@ -43,6 +43,7 @@ internal sealed class Yozakura : Happening
     private readonly List<(int Tree, PointF At, float Phase, float Beat)> _sparks = [];
 
     public override float Seconds => Total;
+    public override string? Claims => "costly";                 // one of the dearest to draw at 4K: never on screen with another (see docs/ADDING_HAPPENINGS.md, rule 12)
     public override int Layer => 1;               // on the banks and in the trees, in front of the boat
 
     public Yozakura(DuskScenery s)

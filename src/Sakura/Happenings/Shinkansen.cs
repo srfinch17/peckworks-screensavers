@@ -36,8 +36,8 @@ internal sealed class Shinkansen : Happening
     public Shinkansen(Scenery s)
     {
         _s = s;
-        _length = s.U * 0.45f;
-        float speed = s.U * 0.4f;                                   // 0.4 screen heights per second: fast, but you can see the cars
+        _length = s.U * 0.28f;                                      // long, but not a third of Fuji: it is far away
+        float speed = s.U * 0.2f;                                   // 0.2 U per second: it covers its own length in about 1.4 s, quick but readable
         _seconds = (s.Width + _length) / speed;                     // the time to go from fully off one side to fully off the other
         int h = Math.Max(5, (int)MathF.Round(s.U * 0.014f));
         int w = Math.Max(30, (int)MathF.Round(_length));

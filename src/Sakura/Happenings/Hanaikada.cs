@@ -84,8 +84,15 @@ internal sealed class Hanaikada : Happening
         float drift = u * 0.025f * 18f;                    // how far the whole raft slides in 18 s
         var open = _s.OpenBehindBanks;
         _ok = false;
-        // Find a depth and a start where the raft's whole path is open lake.
-        for (int tries = 0; tries < 60 && !_ok; tries++)
+        // Find a depth and a start where most of the raft's path is open lake.
+        // "Most", not "all": the lake between the grove and the lone tree is
+        // narrow on a 16:9 screen, and demanding every sample be open water
+        // left the raft with nowhere to go four times in five. Petals are
+        // only stamped on open water anyway, so a raft that drifts behind a
+        // tree's canopy for a while simply passes behind it. Keep the best
+        // of 60 tries, and settle for it if it is at least 70% open.
+        float best = 0;
+        for (int tries = 0; tries < 60; tries++)
         {
             float dir = rng.Next(2) == 0 ? 1 : -1;
             float cy = _s.HorizonY + u * (0.07f + 0.11f * (float)rng.NextDouble());   // the lake is only 0.22 U deep, banks eat its lower part
@@ -93,18 +100,21 @@ internal sealed class Hanaikada : Happening
             if (hi <= lo) break;
             float cx = lo + (hi - lo) * (float)rng.NextDouble();
             float startX = dir > 0 ? cx : cx + drift;      // the centre where it starts
-            _ok = true;
-            for (int k = 0; k <= 8 && _ok; k++)
-                for (int e = -1; e <= 1 && _ok; e++)       // both ends and the middle of the ribbon
-                    for (int r = -1; r <= 1 && _ok; r++)   // and a row above and below
+            int good = 0, all = 0;
+            for (int k = 0; k <= 8; k++)
+                for (int e = -1; e <= 1; e++)              // both ends and the middle of the ribbon
+                    for (int r = -1; r <= 1; r++)          // and a row above and below
                     {
                         float x = startX + dir * drift * k / 8f + e * len / 2;
                         float y = cy + r * u * 0.035f;
                         int ix = (int)x, iy = (int)y;
-                        _ok = ix >= 0 && ix < _s.Width && iy >= 0 && iy < _s.Height && open[iy * _s.Width + ix];
+                        all++;
+                        if (ix >= 0 && ix < _s.Width && iy >= 0 && iy < _s.Height && open[iy * _s.Width + ix]) good++;
                     }
-            if (_ok) { _cx0 = startX; _cy = cy; _dir = dir; }
+            float share = good / (float)all;
+            if (share > best) { best = share; _cx0 = startX; _cy = cy; _dir = dir; }
         }
+        _ok = best >= 0.7f;
         _sec = _ok ? 18f : 0.3f;                           // no clear water: end at once
         _wave = (float)(rng.NextDouble() * 6.283);
         for (int i = 0; i < PetalCount; i++)

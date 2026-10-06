@@ -106,15 +106,24 @@ fixed to a prop) before writing one. They are the pattern.
     idea of who is in front, so a cat and a zombie hand in one place are drawn through each
     other. Halloween's ghost, hand, cat and pumpkin face all claim `"graveyard"`. When you add
     one, check it against EVERY existing one for a shared prop or place, not only the obvious
-    pair. (A happening has one claim. If one ever needs two, widen the claim to cover both.)
+    pair. A happening may claim several things, comma separated (`"sun,costly"`); it then never
+    runs with anything that claims any one of them. Use that for COST too: give every happening
+    that is dear to draw at 4K one shared extra claim (`"costly"`), so at most one of them is
+    ever on screen. (A single claim per happening let two dear ones that each held a different
+    prop run together, and their costs added up.)
 13. **Size it to be seen, not to take over.** It should catch the eye from across a room and
     still be a small surprise, not the main act.
 14. **Nothing to show? Say so before you are dealt, or end at once.** If a happening can tell
     in advance that it has nothing to show (Santa is off screen, so there is no sleigh to drop
     a present from), return false from `CanBegin`: the director leaves its card in the deck and
-    deals another, so it still comes round as often as the rest. If it only finds out in
-    `Begin` (no branch to hang a web on), make `Seconds` tiny (under half a second) for that
-    showing; the director deals another within a second.
+    deals another, so it still comes round as often as the rest. `CanBegin` may also be false
+    for the whole run on some screens (a rainbow a tall screen's mountain would hide): when
+    every card left in the deck can only wait on `CanBegin`, the director starts a fresh round,
+    so such a card never jams the deck. If it only finds out in `Begin` (no branch to hang a
+    web on), make `Seconds` tiny (under half a second) for that showing; the director deals
+    another within a second. Either way, COUNT how often a happening has nothing to show, over
+    many seeds and screen shapes: one that is empty four times in five is one the owner never
+    sees, and still listed in the README as if he would.
 15. Comments are heavy and plain, like the rest of the repo: one idea at a time, a real-world
     comparison where it helps, no em or en dashes.
 

@@ -38,7 +38,7 @@ internal sealed class GodRays : Happening
     private Ray[] _rays = [];
 
     public override float Seconds => 14f;
-    public override string? Claims => "sun";
+    public override string? Claims => "sun,costly";
 
     public GodRays(DuskScenery s)
     {
