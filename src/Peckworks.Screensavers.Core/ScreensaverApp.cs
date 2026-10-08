@@ -119,6 +119,7 @@ public static class ScreensaverApp
 
             double now = timer.Elapsed.TotalMilliseconds, took = now - before;
             before = now;
+            SaveFrameIfAsked(frame, t);
             if (frames <= 60) continue;                         // the first second is warm-up, not the scene
             slowestFrame = Math.Max(slowestFrame, took);
             lastSixty.Enqueue(took);
@@ -132,5 +133,27 @@ public static class ScreensaverApp
         File.WriteAllText(path + ".txt",
             $"{width}x{height}, {frames} frames, average {timer.Elapsed.TotalMilliseconds / frames:F2} ms per frame (update + render)"
             + (worstSecond > 0 ? $", worst second {worstSecond:F2} ms per frame, slowest frame {slowestFrame:F1} ms" : "") + "\n");
+    }
+
+    /// <summary>
+    /// A testing aid for motion. A single picture cannot show whether
+    /// something MOVES smoothly, so with PECKWORKS_FRAMES set to
+    /// "folder;from;count" the snapshot also saves every frame from "from"
+    /// seconds on, "count" of them, as numbered PNGs: a flip-book to compare
+    /// frame by frame (or to measure how much changes between frames). The
+    /// saving happens outside the timer, so the timing stays honest.
+    /// </summary>
+    private static void SaveFrameIfAsked(FrameBuffer frame, double t)
+    {
+        string? ask = Environment.GetEnvironmentVariable("PECKWORKS_FRAMES");
+        if (ask is null) return;
+        string[] parts = ask.Split(';');
+        double from = double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture);
+        int count = int.Parse(parts[2]);
+        int n = (int)Math.Round((t - from) * 60);
+        if (t < from - 1e-9 || n >= count) return;
+        Directory.CreateDirectory(parts[0]);
+        using Bitmap bmp = frame.ToBitmap();
+        bmp.Save(Path.Combine(parts[0], $"frame{n:D4}.png"), ImageFormat.Png);
     }
 }

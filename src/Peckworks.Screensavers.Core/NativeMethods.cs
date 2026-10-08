@@ -108,4 +108,60 @@ internal static class NativeMethods
         uint[] bits,
         ref BITMAPINFOHEADER bitmapInfo,
         uint colorUse);
+
+    /// <summary>
+    /// The same copy, but stretched: our smaller sheet of pixels is enlarged
+    /// to fill a bigger area on the way to the screen. Used when a saver
+    /// draws at 1920 wide on a 4K screen (see ScreensaverDefinition.MaxRenderWidth).
+    /// </summary>
+    [DllImport("gdi32.dll")]
+    public static extern int StretchDIBits(
+        IntPtr hdc,
+        int xDest, int yDest, int destWidth, int destHeight,
+        int xSrc, int ySrc, int srcWidth, int srcHeight,
+        uint[] bits,
+        ref BITMAPINFOHEADER bitmapInfo,
+        uint colorUse,
+        uint rasterOp);
+
+    /// <summary>How StretchDIBits enlarges: COLORONCOLOR (3) simply repeats pixels, the fastest way.</summary>
+    [DllImport("gdi32.dll")]
+    public static extern int SetStretchBltMode(IntPtr hdc, int mode);
+
+    /// <summary>SRCCOPY: "copy the source as it is" (as opposed to mixing it with what is there).</summary>
+    public const uint SRCCOPY = 0x00CC0020;
+
+    // ------------------------------------------------------------------
+    // Frame pacing: one frame per screen refresh.
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Waits until Windows has put the next refresh on screen (the "desktop
+    /// window manager", DWM, composes every window into the final picture 60
+    /// or so times a second). Calling this after each frame means each
+    /// screen refresh gets exactly one new frame: no doubled or skipped ones.
+    /// Returns 0 when it worked.
+    /// </summary>
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmFlush();
+
+    /// <summary>A message waiting for the window (a mouse move, a key, a repaint request).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public IntPtr wParam, lParam;
+        public uint time;
+        public int ptX, ptY;
+    }
+
+    /// <summary>Peeks at the message queue without taking anything out: "is anything waiting?"</summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PeekMessage(out MSG msg, IntPtr hwnd, uint filterMin, uint filterMax, uint remove);
+
+    /// <summary>Asks Windows' clock to tick every millisecond (default 15.6), so short sleeps are accurate.</summary>
+    [DllImport("winmm.dll")]
+    public static extern uint timeBeginPeriod(uint milliseconds);
 }

@@ -2,7 +2,7 @@
 
 Native Windows screensavers written in C# (.NET 10, Windows Forms), plus a small reusable engine
 for making more of them. So far: **Matrix Rain**, **Sakura**, **Sakura Dusk**, **Halloween**,
-**Christmas**, and **Cabin by Stream**.
+**Christmas**, **Cabin by Stream**, and **Cotswold Brook**.
 
 ## Matrix Rain
 
@@ -149,6 +149,30 @@ stars are out overhead; mist lies at the feet of the far forest.
   windows and the door lamp flicker like firelight; the brighter stars twinkle.
 - No happenings yet.
 
+## Cotswold Brook
+
+A real photograph brought to life: honey-coloured stone cottages beside a brook in the Cotswolds
+at golden hour, with a low stone footbridge and reeds in the foreground. Painting by code topped
+out at "storybook" (Cabin by Stream above is the attempt), so this one starts from a photo and
+animates only what moves.
+
+![Cotswold Brook](docs/images/cotswold-brook.png)
+
+Photo by [Martin Fenton](https://unsplash.com/@mhfphotographygb) on
+[Unsplash](https://unsplash.com/photos/9BFnbb1sfZo), used under the Unsplash License.
+
+- Ripples run through the reflections in the brook, bigger and wider in the near water.
+- Brown trout hold just under the surface, tails swaying, now and then darting to a new spot or
+  turning round; now and then one rises and leaves spreading rings.
+- A thin, sun-warmed plume of smoke drifts from one chimney.
+- Evening falls and returns on a slow cycle: the gold drains out of the light, the sky deepens
+  to blue with a rose afterglow behind the roofs, the windows light up one by one, and fireflies
+  come out over the reeds, near ones bigger and quicker than far ones, each a faint dot that
+  flashes green every few seconds.
+
+Settings: ripples, trout, how often they rise, chimney smoke, fireflies, and how many minutes
+one turn of the evening takes (0 keeps it golden).
+
 Settings: fireflies, number of fish, number of squirrels, chimney smoke, breeze.
 
 ## All screensavers
@@ -218,6 +242,7 @@ src/SakuraDusk/                    the Sakura Dusk screensaver
 src/Halloween/                     the Halloween screensaver
 src/Christmas/                     the Christmas screensaver
 src/CabinByStream/                 the Cabin by Stream screensaver
+src/CotswoldBrook/                 the Cotswold Brook screensaver (and its photo, brook.jpg)
 scripts/                           publish / install / uninstall / verify / happening (render one happening)
 docs/                              the how-it-works guide
 ```
@@ -226,12 +251,15 @@ docs/                              the how-it-works guide
 
 Time per frame (update + render):
 
-| Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Cabin by Stream |
-|------------|-------------|-------------|-------------|-------------|-------------|-----------------|
-| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  | about 2 ms      |
-| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms | about 9 ms      |
+| Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Cabin by Stream | Cotswold Brook |
+|------------|-------------|-------------|-------------|-------------|-------------|-----------------|----------------|
+| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  | about 2 ms      | about 4 ms     |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms | about 9 ms      | about 11 ms    |
 
-Under about 16 ms means the full 60 frames per second. Matrix Rain at 4K runs at about 34, above
+Under about 16 ms means the full 60 frames per second. Each frame waits for the screen's next
+refresh before the next one is drawn, so frames reach the screen evenly, one per refresh (an
+earlier timer ran slightly faster than the screen and showed a frame twice now and then: a
+small judder you could see in anything moving steadily). Matrix Rain at 4K runs at about 34, above
 the film's own 24.
 
 Halloween's happenings cost almost nothing on average: four minutes of ordinary play at 4K

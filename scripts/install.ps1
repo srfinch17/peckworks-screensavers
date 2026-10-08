@@ -19,7 +19,7 @@
     move or delete it afterward).
 
 .PARAMETER Saver
-    Which screensaver(s) to install (MatrixRain, Sakura, SakuraDusk, Halloween, Christmas, CabinByStream). Leave out for all.
+    Which screensaver(s) to install (MatrixRain, Sakura, SakuraDusk, Halloween, Christmas, CabinByStream, CotswoldBrook). Leave out for all.
 
 .PARAMETER Activate
     Also make this your active screensaver. Needs exactly one -Saver.

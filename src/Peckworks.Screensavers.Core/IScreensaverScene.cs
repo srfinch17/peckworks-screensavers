@@ -47,6 +47,16 @@ public abstract class ScreensaverDefinition
     public abstract IScreensaverScene CreateScene(int width, int height, bool isPreview);
 
     /// <summary>
+    /// The widest this saver ever needs to DRAW. On a wider screen it draws at
+    /// this width and Windows stretches the picture to fill the screen. A
+    /// saver built on a small photo gains nothing from drawing every one of a
+    /// 4K screen's eight million pixels (the photo has no detail that fine),
+    /// and drawing a quarter as many keeps it smooth. Most savers leave this
+    /// alone (no limit).
+    /// </summary>
+    public virtual int MaxRenderWidth => int.MaxValue;
+
+    /// <summary>
     /// Build the dialog shown when the user clicks "Settings..." in Windows.
     /// </summary>
     public abstract Form CreateSettingsForm();

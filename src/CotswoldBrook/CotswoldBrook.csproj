@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Cotswold Brook: a real photograph of stone cottages beside a brook at
+    golden hour, brought to life. The water ripples and trout rise in it,
+    smoke drifts from a chimney, the evening slowly falls, windows light up
+    and fireflies come out over the reeds.
+
+    Unlike the other savers, the backdrop is not painted by code: it is a
+    photo (brook.jpg, see docs/CREDITS.md), baked into the .scr file itself
+    so the screensaver is still one single file to install.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>CotswoldBrook</AssemblyName>
+    <RootNamespace>CotswoldBrook</RootNamespace>
+
+    <!-- Per monitor DPI aware: see CabinByStream.csproj. A photo blurred by Windows' stretching would throw away the whole point. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+
+    <Product>Cotswold Brook Screensaver</Product>
+    <Company>Peckworks</Company>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Peckworks.Screensavers.Core\Peckworks.Screensavers.Core.csproj" />
+    <!--
+      "EmbeddedResource" packs the photo's bytes inside the program, like a
+      letter sealed in with the parcel instead of posted separately. The
+      scene reads it back with GetManifestResourceStream.
+    -->
+    <EmbeddedResource Include="brook.jpg" LogicalName="CotswoldBrook.brook.jpg" />
+  </ItemGroup>
+
+</Project>

@@ -80,6 +80,7 @@ public sealed class ScreensaverWindow : Form
         _view = new SceneView((width, height) => def.CreateScene(width, height, isPreview))
         {
             Dock = DockStyle.Fill,          // fill the whole window
+            MaxRenderWidth = def.MaxRenderWidth,
         };
         Controls.Add(_view);
 

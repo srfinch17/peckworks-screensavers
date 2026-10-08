@@ -140,6 +140,18 @@ public sealed class FrameBuffer
     }
 
     /// <summary>
+    /// Copies the sheet onto a window, enlarged to fill destWidth x destHeight
+    /// (used when the sheet is smaller than the screen on purpose).
+    /// </summary>
+    public void PresentTo(IntPtr hdc, int destWidth, int destHeight)
+    {
+        if (destWidth == Width && destHeight == Height) { PresentTo(hdc); return; }
+        NativeMethods.SetStretchBltMode(hdc, 3);   // COLORONCOLOR: repeat pixels, the fastest way to enlarge
+        NativeMethods.StretchDIBits(hdc, 0, 0, destWidth, destHeight, 0, 0, Width, Height,
+            Pixels, ref _header, 0, NativeMethods.SRCCOPY);
+    }
+
+    /// <summary>
     /// Makes a normal .NET Bitmap copy of the current picture (used to save PNG
     /// snapshots for testing and tuning).
     /// </summary>

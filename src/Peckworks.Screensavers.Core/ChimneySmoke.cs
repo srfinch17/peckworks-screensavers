@@ -1,10 +1,8 @@
 using System.Drawing.Drawing2D;
-using Peckworks.Screensavers.Core;
-
-namespace CabinByStream;
+namespace Peckworks.Screensavers.Core;
 
 /// <summary>
-/// White smoke from the cottage chimney.
+/// Smoke from a chimney (Cabin by Stream's cottage, Cotswold Brook's row of houses).
 ///
 /// FEYNMAN VERSION: smoke is a crowd of little puffs. Each puff is born at
 /// the chimney top, rises fast while it is hot, slows as it cools, spreads
@@ -18,7 +16,7 @@ namespace CabinByStream;
 /// A sprite cannot be scaled when it is stamped, so eight sizes are painted
 /// once at startup and each puff picks the one nearest its size right now.
 /// </summary>
-internal sealed class ChimneySmoke
+public sealed class ChimneySmoke
 {
     private struct Puff
     {
@@ -38,8 +36,11 @@ internal sealed class ChimneySmoke
 
     /// <param name="amount">1 = normal, 0 = the fire is out, 2 = a roaring fire.</param>
     /// <param name="breeze">1 = a light breeze leaning the plume to the right, 0 = still air.</param>
-    public ChimneySmoke(PointF chimneyTop, float u, float amount, float breeze, Random rng)
+    /// <param name="color">The smoke's colour. Left out: white with a hint of blue-grey, as
+    /// in shade or at dusk. Smoke lit by a low sun takes the sun's warmth instead.</param>
+    public ChimneySmoke(PointF chimneyTop, float u, float amount, float breeze, Random rng, Color? color = null)
     {
+        Color c = color ?? Color.FromArgb(236, 238, 244);
         _at = chimneyTop; _u = u; _amount = amount; _breeze = breeze; _rng = rng;
         _maxR = u * 0.040f;
         // The eight discs, smallest to largest. No hot centre as a glow has:
@@ -53,8 +54,8 @@ internal sealed class ChimneySmoke
                 path.AddEllipse(0, 0, r * 2, r * 2);
                 using var soft = new PathGradientBrush(path)
                 {
-                    CenterColor = Color.FromArgb(255, 236, 238, 244),
-                    SurroundColors = [Color.FromArgb(0, 236, 238, 244)],
+                    CenterColor = Color.FromArgb(255, c),
+                    SurroundColors = [Color.FromArgb(0, c)],
                     Blend = Sprite.SoftFalloff,
                 };
                 g.FillPath(soft, path);
@@ -104,7 +105,8 @@ internal sealed class ChimneySmoke
         if (_emit > 2f) _emit = 2f;                    // the plume is full: do not bank up a burst for later
     }
 
-    public void Draw(FrameBuffer fb)
+    /// <param name="opacity">1 = as normal; less to dim the whole plume (smoke in fading light).</param>
+    public void Draw(FrameBuffer fb, float opacity = 1f)
     {
         // Oldest first: the top of the plume is painted under the fresher
         // puffs lower down, which overlap it where the column is dense.
@@ -114,7 +116,7 @@ internal sealed class ChimneySmoke
             float q = p.Age / p.Life;                                       // 0 new ... 1 gone
             float radius = _u * 0.006f + (_maxR - _u * 0.006f) * MathF.Sqrt(q);
             int size = Math.Clamp((int)(radius / _maxR * Sizes) , 0, Sizes - 1);
-            float alpha = 0.40f * MathF.Pow(1 - q, 1.5f) * MathF.Min(1f, p.Age * 4f) * MathF.Min(1f, _amount);
+            float alpha = 0.40f * MathF.Pow(1 - q, 1.5f) * MathF.Min(1f, p.Age * 4f) * MathF.Min(1f, _amount) * opacity;
             if (alpha < 0.01f) continue;
             _discs[size].DrawCentered(fb, MathF.Round(p.X), MathF.Round(p.Y), alpha);
         }

@@ -61,7 +61,7 @@ src/
     CommandLine.cs                 reads /s /p /c
     ScreensaverApp.cs              the front door: picks a mode and starts it
     ScreensaverWindow.cs           full-screen / preview / windowed; the wake-up rule
-    SceneView.cs                   the "little TV": runs the update-render loop
+    SceneView.cs                   the "little TV": runs the update-render loop, one frame per screen refresh
     FrameBuffer.cs                 our private sheet of pixels, and the fast copy to screen
     BloomEffect.cs                 the soft glow
     NativeMethods.cs               the few raw Windows functions .NET doesn't wrap
@@ -73,6 +73,12 @@ src/
     Sakura/PetalField.cs           the falling petals (or leaves, or snow), shared by every painted scene
     Sakura/Brushwork.cs            banks, hills, trunks, blossoms, a pine, and self-growing branches
     Sakura/Boat.cs                 the little boat that crosses the water in both sakura scenes
+    ChimneySmoke.cs                puffs that rise, cool, spread and thin (Cabin by Stream, Cotswold Brook)
+    Photo/PhotoBackdrop.cs         a photo fitted to the screen, plus where its water is
+    Photo/WaterRipples.cs          a still brook's reflections, rippling; trout rising
+    Photo/FlowingWater.cs          a running river: the fine texture carried downstream, rocks left still
+    Photo/PhotoEvening.cs          evening on a daytime photo: dusk, lamplit windows, lamps
+    Photo/PhotoFireflies.cs        fireflies that fly their own paths and flash, near and far
 
   MatrixRain/                      a screensaver built on the engine
     Program.cs                     Main(), plus the "definition" handed to the engine
@@ -115,11 +121,17 @@ src/
     Program.cs                     Main(), plus the definition
     CabinByStreamScene.cs          backdrop + light sliding down the stream + the windows' flicker + the actors below
     MeadowPainter.cs               paints the dusk sky, the far forest, the textured meadow, the stream, the cottage, the trees
-    ChimneySmoke.cs                puffs that rise, cool, spread and thin
     FishSchool.cs                  trout holding against the current
     Squirrels.cs                   squirrels running between the trees and climbing them, each on a plan
     Fireflies.cs                   blinking lights over the meadow, mirrored in the stream
     CabinByStreamSettings.cs       declares its knobs
+
+  CotswoldBrook/                   a real photo of cottages by a brook, brought to life
+    Program.cs                     Main(), plus the definition
+    CotswoldBrookScene.cs          what this photo holds: where its water, chimney and windows are
+    Trout.cs                       trout just under the surface, holding and darting
+    CotswoldBrookSettings.cs       declares its knobs
+    brook.jpg                      the photo, packed inside the .scr
 ```
 
 A screensaver only has to write one class with two methods:
@@ -148,6 +160,19 @@ each running 0 to 255. Pure green is `0x0000FF00`.
 We color the private sheet, then copy the whole finished sheet to the screen in one call
 (`SetDIBitsToDevice`). Drawing on a hidden sheet and swapping it in whole is called **double
 buffering**. It prevents flicker, because the viewer never sees a half-drawn frame.
+
+*One frame per refresh.* The screen redraws itself at a steady rate, 60 times a second on most
+screens, like the pages of a flip-book turning. The first version drew on a Windows timer that
+ticked about 64 times a second, slightly out of step with the pages, so a few times a second one
+drawing was never seen or one was shown twice. Falling petals hid it; a river flowing steadily
+showed it as a judder (measured on a 4K laptop: 41 frames a second, gaps from 17 to 59 ms). Now
+`FramePump` (in `SceneView.cs`) draws a frame and then waits for the screen to turn its page
+(`DwmFlush`) before drawing the next: 57 to 58 frames a second, nearly every gap 16 to 18 ms.
+
+*Drawing smaller on purpose.* A saver built from a small photo can say `MaxRenderWidth`: on a
+wider screen it draws its sheet at that width and Windows stretches it to fill the screen
+(`StretchDIBits`). Drawing every pixel of a 4K screen from a 1500 pixel picture adds work, not
+detail.
 
 The normal .NET way to draw text (`Graphics.DrawString`) is far too slow for thousands of
 characters, 60 times a second. So `GlyphAtlas` draws each character **once** at startup and keeps
@@ -335,6 +360,49 @@ same poses turned a quarter turn for climbing (head up going up, head down comin
 squirrels do), and a mirrored stamp for running left. The **fireflies** are the Sakura Dusk
 happening's idea made permanent: a home spot, two sine waves per direction for the wander, a blink
 cycle of its own, and a reflection in the stream where one crosses it.
+
+**Cotswold Brook** takes the next step: no painting at all. However much texture and light the
+meadow got, code strokes stayed an illustration; a camera does stone and a thousand leaves
+better. So the backdrop is a photograph (packed inside the `.scr`, credited in the README), and
+only what moves is animated. What the saver's own file holds is knowledge of THIS photo, measured
+by eye on a grid laid over it: the outline of the water, the bridge piers standing in it, the
+chimney, a box round each window.
+
+*Cover fitting.* The photo is enlarged just enough to fill the screen both ways and the overflow
+trimmed (more from the right than the left, so the cottages stay), the way a phone fits a
+wallpaper. Every place is written as a fraction of the photo, and `ToScreen` turns it into a
+pixel wherever the trim fell. Sizes of things tied to the scenery (ripples, smoke, windows) are
+fractions of the photo's height on screen; free-flying things (fireflies) are fractions of the
+screen, so they stay firefly-sized whatever the photo's shape.
+
+*Water.* The ripples do not paint anything: each water pixel shows the photo's pixel from a
+fraction of a pixel to the side, by an amount that is a wave travelling toward you. So the
+reflections wobble with the photo's own colours. Trout are dark slim shapes stamped only on open
+water, and only over BRIGHT reflections: over the dark mirror of the reeds a real trout is
+invisible from the bank, and so is a drawn one.
+
+*Day for night.* Film crews shoot "night" in daylight and darken it afterwards; this does the same.
+A second copy of the photo is made at startup: darker, most of the colour gone, tinted blue (the
+light at dusk comes from the sky, not the sun), with the sky itself repainted deep blue overhead
+and rose at the horizon, and green things darkened further so trees read as silhouettes. The
+screen shows a mix of the two copies. The mix moves one step of 256 at a time, each step spread
+over four frames: redoing a whole 4K picture at once made a frame late, and letting one sweep
+jump many steps showed as a wave running down the screen. Windows light up one by one: inside
+each window's box, anything that is not bright and strongly coloured (the stone frame) counts as
+glass and is blended toward lamplight, keeping its curtains and glazing bars.
+
+*Fireflies* are little insects in the picture's space rather than lights pasted on the glass:
+each lives in a place with a depth (the reeds in front, the water, the far bank), flies a curving
+path that turns by two slow waves of its own, shows as a faint dot, and flashes every few
+seconds. Near ones are bigger and cross faster.
+
+A running river (`FlowingWater.cs`, in the engine for any photo with one) works differently from
+the brook. In real rapids the big shapes hold still: the rocks, and the white water piled up
+behind each rock, are made by the riverbed. What travels is the fine texture on top. So the photo
+is split: a slightly blurred copy keeps the big shapes and stays put, and only the difference
+(the flecks and wrinkles) is carried downstream along the channel, fastest in the middle, with
+rocks left out entirely. It is carried on a "flow map": two copies of the texture slide
+downstream half a cycle apart, each faded out as it resets, a trick games use for rivers.
 
 ## 9. High-DPI screens
 
