@@ -110,6 +110,16 @@ src/
     ChristmasPainter.cs            paints the night sky, mountains, cabin, snowy pines, strings of lights
     ChristmasSettings.cs           declares its knobs
     Happenings/                    twenty small random events (a fox, a snowman, fireworks), one class per file
+
+  CabinByStream/                   a cottage in a flowery meadow at dusk, aiming at a photograph's look
+    Program.cs                     Main(), plus the definition
+    CabinByStreamScene.cs          backdrop + light sliding down the stream + the windows' flicker + the actors below
+    MeadowPainter.cs               paints the dusk sky, the far forest, the textured meadow, the stream, the cottage, the trees
+    ChimneySmoke.cs                puffs that rise, cool, spread and thin
+    FishSchool.cs                  trout holding against the current
+    Squirrels.cs                   squirrels running between the trees and climbing them, each on a plan
+    Fireflies.cs                   blinking lights over the meadow, mirrored in the stream
+    CabinByStreamSettings.cs       declares its knobs
 ```
 
 A screensaver only has to write one class with two methods:
@@ -289,6 +299,42 @@ water is finished, and compares it with the final backdrop to get an "open water
 boat slips behind the banks, the trees and the bridge. In Sakura Dusk the boat is smaller and
 sails far out near the opposite shore: any closer and it lined up with the bridge's railing and
 looked as if it were riding on the bridge.
+
+**Cabin by Stream** is the same theater with a different ambition: to look like a photograph
+rather than an illustration. Nothing in the engine changed for it; the difference is all in how
+the backdrop is painted (`MeadowPainter.cs`), and three ideas do most of the work.
+
+*Texture, pixel by pixel.* A flat green gradient looks painted at once. So after the meadow's base
+colours go down, the picture is pulled out as a plain array of pixels and every meadow pixel is
+nudged lighter or darker by noise: small clumps near the horizon, bigger ones near the bottom
+(near grass looks coarser than far grass), plus broad soft patches, plus a fine per-pixel
+speckle. Then it goes back into the picture and painting carries on. The water near each bank is
+darkened the same way (it mirrors the grass above it; only the middle of the channel sees the
+sky). At the very end, a vignette darkens the corners and a tiny grain is added to every pixel,
+which breaks up the smooth bands a computer gradient has.
+
+*One light.* The afterglow low on the left decides everything: the lit front of the cottage and
+its shadowed side, the warm rim on the upper-left of every tree crown and bush, the long soft
+shadows that all fall to the right, and the violet haze that far things fade toward.
+
+*Depth cues.* Perspective is faked by scale: flowers, grass blades, stones, fish and fireflies
+are all bigger near the bottom of the picture than near the horizon, and the stream widens as it
+comes toward you. Mist lies along the foot of the far forest, and the stream's far end is lost in
+it. Dark bushes in the middle distance and blades of grass along the bottom edge give the eye
+steps to judge the distance by. On a tall screen the meadow's depth is capped and the sky takes
+the room instead, so the cottage is never a speck in an endless field.
+
+The moving parts are all actors in the usual sense. The **smoke** is a crowd of puffs, each born at
+the chimney with an upward speed that eases off as it cools, a sideways lean from the breeze, a
+size that grows and an opacity that fades. The **trout** face up the screen and hold against the
+current: they drift slowly down, then dart up a body length, wagging harder as they go, and are
+stamped only on open water so the stones and banks are always in front of them (the same stencil
+trick as the boat). Each **squirrel** follows a short plan of legs (sit, run, climb up, sit, climb
+down, run back) at speeds in u per second, and is drawn from a flip-book of running poses, the
+same poses turned a quarter turn for climbing (head up going up, head down coming down, as real
+squirrels do), and a mirrored stamp for running left. The **fireflies** are the Sakura Dusk
+happening's idea made permanent: a home spot, two sine waves per direction for the wander, a blink
+cycle of its own, and a reflection in the stream where one crosses it.
 
 ## 9. High-DPI screens
 

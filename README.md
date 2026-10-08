@@ -1,8 +1,8 @@
 # Peckworks Screensavers
 
 Native Windows screensavers written in C# (.NET 10, Windows Forms), plus a small reusable engine
-for making more of them. So far: **Matrix Rain**, **Sakura**, **Sakura Dusk**, **Halloween**, and
-**Christmas**.
+for making more of them. So far: **Matrix Rain**, **Sakura**, **Sakura Dusk**, **Halloween**,
+**Christmas**, and **Cabin by Stream**.
 
 ## Matrix Rain
 
@@ -126,6 +126,31 @@ engine, the ground, trees, hills and branches), plus one new one: sprites, small
 once and stamped each frame, which is how the bats, the sleigh and every moving light (candles,
 bulbs, Rudolph's nose) are drawn.
 
+## Cabin by Stream
+
+A flowery meadow at dusk, painted to look as much like a photograph as a painted scene can: a
+small thatched cottage with lit windows and white smoke rising from its chimney, a stream winding
+toward you with trout holding in the current, squirrels running between the trees and up them,
+and fireflies blinking over the grass. The last of the sunset glows low on the left; the first
+stars are out overhead; mist lies at the feet of the far forest.
+
+![Cabin by Stream](docs/images/cabin-by-stream.png)
+
+- The grass is textured pixel by pixel (coarser near you, hazier far away), with thousands of
+  small wildflowers in drifts, blades and seed heads in the near meadow, long soft shadows that all
+  fall away from the glow, and a camera's vignette and grain over the whole picture.
+- The smoke is a crowd of puffs that rise fast while hot, slow as they cool, spread, lean with the
+  breeze and thin away.
+- The trout face upstream, drift slowly back and dart forward to hold their place, seen through
+  the water. Light slides down the stream's surface.
+- Each squirrel follows a plan: sit, run to the next tree (sometimes stopping to sit up and look
+  about), climb, sit on the trunk, come down head first, run back.
+- Fireflies blink on their own slow cycles and are mirrored in the stream when they cross it. The
+  windows and the door lamp flicker like firelight; the brighter stars twinkle.
+- No happenings yet.
+
+Settings: fireflies, number of fish, number of squirrels, chimney smoke, breeze.
+
 ## All screensavers
 
 - Run on every monitor, at native resolution (4K included).
@@ -192,6 +217,7 @@ src/Sakura/                        the Sakura screensaver
 src/SakuraDusk/                    the Sakura Dusk screensaver
 src/Halloween/                     the Halloween screensaver
 src/Christmas/                     the Christmas screensaver
+src/CabinByStream/                 the Cabin by Stream screensaver
 scripts/                           publish / install / uninstall / verify / happening (render one happening)
 docs/                              the how-it-works guide
 ```
@@ -200,10 +226,10 @@ docs/                              the how-it-works guide
 
 Time per frame (update + render):
 
-| Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   |
-|------------|-------------|-------------|-------------|-------------|-------------|
-| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  |
-| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms |
+| Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Cabin by Stream |
+|------------|-------------|-------------|-------------|-------------|-------------|-----------------|
+| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  | about 2 ms      |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms | about 9 ms      |
 
 Under about 16 ms means the full 60 frames per second. Matrix Rain at 4K runs at about 34, above
 the film's own 24.

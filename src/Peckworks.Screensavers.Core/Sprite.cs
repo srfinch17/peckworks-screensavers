@@ -120,8 +120,8 @@ public sealed class Sprite
         (int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
 
     /// <summary>Stamps the sprite with its CENTER at (x, y). Handy for glows.</summary>
-    public void DrawCentered(FrameBuffer fb, float x, float y, float opacity = 1f, bool[]? onlyWhere = null) =>
-        Draw(fb, (int)(x - Width / 2f), (int)(y - Height / 2f), opacity, onlyWhere);
+    public void DrawCentered(FrameBuffer fb, float x, float y, float opacity = 1f, bool[]? onlyWhere = null, bool mirror = false) =>
+        Draw(fb, (int)(x - Width / 2f), (int)(y - Height / 2f), opacity, onlyWhere, mirror);
 
     /// <summary>
     /// Stamps the sprite with its top-left corner at (left, top).
@@ -132,7 +132,12 @@ public sealed class Sprite
     /// false the stamp leaves the frame alone. A scene uses this to make
     /// something pass BEHIND the scenery: "only draw where the backdrop is sky".
     /// </param>
-    public void Draw(FrameBuffer fb, int left, int top, float opacity = 1f, bool[]? onlyWhere = null)
+    /// <param name="mirror">
+    /// True stamps the sprite flipped left to right. Paint a fish or a
+    /// squirrel facing right once; the same sticker turned over is the one
+    /// facing left, so no second set of sprites is needed.
+    /// </param>
+    public void Draw(FrameBuffer fb, int left, int top, float opacity = 1f, bool[]? onlyWhere = null, bool mirror = false)
     {
         if (opacity <= 0) return;
         // Work out which part of the sprite is actually on screen, so a sprite
@@ -153,7 +158,8 @@ public sealed class Sprite
             int src = sy * Width, dst = (top + sy) * fb.Width + left;
             for (int sx = x0; sx < x1; sx++)
             {
-                uint c = _argb[src + sx];
+                // Mirrored: read the sheet from its right edge inward instead.
+                uint c = _argb[src + (mirror ? Width - 1 - sx : sx)];
                 int a = (int)(c >> 24) * opacity256 >> 8;                // how solid this pixel is, 0 to 255
                 if (a == 0) continue;                                    // clear glass: nothing to do
                 if (onlyWhere != null && !onlyWhere[dst + sx]) continue; // the stencil says hands off
