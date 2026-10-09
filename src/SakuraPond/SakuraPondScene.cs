@@ -7,8 +7,10 @@ namespace SakuraPond;
 ///
 /// Layers, back to front, the order things really sit in:
 ///
-///   1. The BACKDROP (PondPainter.cs): banks, the pond bed and water, rocks,
-///      lily pads, the overhanging branches and their shadows. Painted once.
+///   1. The BACKDROP (PondPainter.cs, ShorePainter in Shore.cs): the pond bed
+///      and water, the corner of land with its lawn, rocks and stones, lily
+///      pads, the overhanging branches and their shadows. Painted once. Then
+///      the GRASS tufts swaying on the lawn (Grass.cs).
 ///   2. Under the water: the KOI (Koi.cs), and just under the surface the
 ///      TURTLES (Turtle.cs).
 ///   3. On the water: RIPPLES (Ripples.cs), floating PETALS (Petals.cs), and
@@ -26,6 +28,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Pond _pond;
     private readonly bool[] _waterInView;     // open water that no branch hides
     private readonly Ripples _ripples;
+    private readonly Grass _grass;
     private readonly KoiSchool _koi;
     private readonly Turtles _turtles;
     private readonly Petals _petals;
@@ -39,6 +42,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
         _ripples = new Ripples(_pond, _waterInView);
+        _grass = new Grass(_pond, _rng);
         _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng);
         _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng);
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _rng);
@@ -50,6 +54,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     public void Update(double elapsedSeconds)
     {
         float dt = (float)Math.Min(elapsedSeconds, 0.1);
+        _grass.Update(dt);
         _koi.Update(dt);
         _turtles.Update(dt);
         _petals.Update(dt);
@@ -62,6 +67,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     public void Render(FrameBuffer fb)
     {
         Array.Copy(_pond.Pixels, fb.Pixels, fb.Pixels.Length);
+        _grass.Draw(fb);
         _koi.Draw(fb);
         _turtles.Draw(fb);
         _ripples.Draw(fb);

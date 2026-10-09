@@ -105,7 +105,9 @@ src/
   SakuraPond/                      a koi pond seen from above, under cherry branches
     Program.cs                     Main(), plus the definition (draws at most 2560 wide)
     SakuraPondScene.cs             the layers, back to front
-    PondPainter.cs                 paints the pond bed and water, the corner of bank, stones, pads, branches and their shadows
+    PondPainter.cs                 paints the pond bed and water, lily pads, branches and their shadows; calls the shore painter
+    Shore.cs                       paints the corner of land: the lawn, the sand edge, rocks that look like rocks, stepping stones
+    Grass.cs                       the lawn in the wind: the carpet slid and lit by a travelling gust, tufts that lean and spring back
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
     Turtle.cs                      the turtle: paddling, floating, a breath at the surface
@@ -466,6 +468,32 @@ animal says what colour it is there; the markings are stuck to (s, v), so they r
 body as it bends. Each short piece of spine paints only its own strip of pixels, and
 neighbouring strips meet on the line halving the angle at their joint, like the corner of a
 picture frame, so no pixel is painted twice.
+
+*Grass in the wind.* The lawn is painted twice: the ground once into the backdrop, and the
+thousands of short blades onto a clear sheet of their own, the "carpet" (`Shore.cs`). Every frame
+the carpet is laid back over the ground SHIFTED a few pixels downwind by how hard the wind leans
+the grass at that spot, and brightened where it leans hardest, because bent blades show their pale
+tips (`Grass.cs`). The wind at any spot is one number, the lean: a slow swell that comes and goes
+over half a minute (the same rhythm as the petals' breeze), times two waves travelling downwind,
+with the long wave's crests sharpened so the lawn is mostly calm with a band of bent grass rolling
+through it. Taller tufts stand in the carpet, each a flip-book of 24 pages from "springing back a
+little upwind" to "flat downwind"; the blades of a page are worked out in three dimensions (the
+bend angle grows from root to tip, each short step going a little less up and a little more along
+the ground) and projected like everything else here: height lifts a point up the screen, and
+throws its shadow down and to the right. A tuft stamps the page nearest its lean. The lean itself
+comes from a coarse grid worked out once a frame (a sine per pixel would cost more than the
+drawing), and the tufts are drawn in horizontal bands on several cores, even bands then odd, since
+a tuft can only ever touch tufts in its own band or the next.
+
+*Rocks that look like rocks.* A rock is a lumpy ring of 9 to 13 points (two slow waves of radius
+plus jitter), a touch wider than tall because we look down on a rounded lump at a slant. It is
+painted in the order light builds a stone: a soft shadow on the ground to its lower right, a pale
+rim on the water round its wet foot, the body with a gentle rounding toward the sun, then a lit
+FACE (the rim points on the sunny side joined by a ragged inner edge, filled three times at three
+sizes so its edge is a soft crease) and a dark face on the far side, short crack lines from the
+rim part of the way in, a fine speckle of grain, moss and a spot of lichen on top, a light edge
+where the rim faces the sun and a dark edge where it faces away, and a dark wet band where it
+stands in the water. Stones are not one grey: warm, cool, greenish, light and dark.
 
 *Rigid animals turn as a whole.* A dragonfly or a swallow does not bend, so it is a picture
 painted once (several, for the wingbeat) and stamped at any angle every frame (`TurningStamp.cs`),

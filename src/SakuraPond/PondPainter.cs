@@ -30,6 +30,12 @@ internal sealed class Pond
     /// <summary>Not under the overhanging branches. Everything below the branches (water, koi, dragonflies) shows only here.</summary>
     public required bool[] Open { get; init; }
 
+    /// <summary>The lawn: land that is neither bare sand, a stone nor a rock. Grass tufts root only here.</summary>
+    public required bool[] Grassy { get; init; }
+
+    /// <summary>The lawn's blades, on a clear sheet (0xAARRGGBB), laid over the ground by Grass.cs every frame.</summary>
+    public required uint[] Carpet { get; init; }
+
     /// <summary>How deep the water is, 0 (the very edge) to 255 (the middle of the pond). 0 off the water.</summary>
     public required byte[] Depth { get; init; }
 
@@ -110,7 +116,6 @@ internal sealed class Pond
 /// </summary>
 internal static class PondPainter
 {
-    private static readonly Color Moss = Color.FromArgb(78, 102, 60);
     private static readonly Color Bed = Color.FromArgb(112, 104, 78);
     private static readonly Color Deep = Color.FromArgb(22, 66, 72);
     private static readonly Color Shallow = Color.FromArgb(86, 140, 118);
@@ -156,18 +161,28 @@ internal static class PondPainter
         Write(bmp, px);
         Murk(g, inPond, w, h, u, rng);
 
-        // ---- 3: the bank ----
-        using (var moss = new SolidBrush(Moss)) g.FillPath(moss, land);
-        PaintGround(g, land, w, h, u, rng);
-        Gravel(g, bank, corner, u, rng);
-        Rocks(g, gb, bank, corner, u, rng);
-        Irises(g, gb, bank, corner, u, rng);
-        SteppingStones(g, gb, bank, corner, leftCorner, u, h, rng);
+        DriftedPetals(g, inPond, dist, w, h, u, rng);                    // before the rocks, which sit on top of them
+
+        // ---- 3: the bank (ShorePainter): the lawn, the bare edge, stones, rocks, irises ----
+        using var noGrassSheet = new Bitmap(w, h, PixelFormat.Format32bppRgb);   // white where no grass may root (sand, stones, rocks)
+        using var gn = Graphics.FromImage(noGrassSheet);
+        gn.Clear(Color.Black);
+        gn.SmoothingMode = SmoothingMode.AntiAlias;
+        using var water = new Region(new RectangleF(-10, -10, w + 20, h + 20));
+        water.Exclude(land);
+        using var carpetSheet = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        using var gc = Graphics.FromImage(carpetSheet);
+        gc.Clear(Color.Transparent);
+        gc.SmoothingMode = SmoothingMode.AntiAlias;
+        ShorePainter.Lawn(g, gc, land, w, h, u, rng);
+        ShorePainter.BareEdge(g, gn, bank, corner, u, rng);
+        ShorePainter.SteppingStones(g, gb, gn, bank, corner, leftCorner, u, h, rng);
+        Irises(g, gb, gn, bank, corner, u, rng);
+        ShorePainter.Rocks(g, gb, gn, bank, corner, water, u, rng);       // after the irises: a clump behind a rock is hidden by it
 
         // ---- 4: on the water ----
         var pads = new List<LilyPad>();
         LilyPads(g, gp, pads, inPond, dist, w, h, u, rng);
-        DriftedPetals(g, inPond, dist, w, h, u, rng);
 
         // ---- 5: branch shadows, then the branches ----
         int seed = rng.Next();
@@ -190,9 +205,11 @@ internal static class PondPainter
         uint[] final = Read(bmp);
 
         bool[] open = Brushwork.Unchanged(beforeBranches, final);
-        uint[] blocked = Read(blockers), padded = Read(padSheet);
-        var water = new bool[w * h];
-        for (int i = 0; i < water.Length; i++) water[i] = inPond[i] && (blocked[i] & 0xFF) < 128 && (padded[i] & 0xFF) < 128;
+        uint[] blocked = Read(blockers), padded = Read(padSheet), noGrass = Read(noGrassSheet);
+        var grassy = new bool[w * h];
+        for (int i = 0; i < grassy.Length; i++) grassy[i] = !inPond[i] && (blocked[i] & 0xFF) < 128 && (noGrass[i] & 0xFF) < 128;
+        var waterMask = new bool[w * h];
+        for (int i = 0; i < waterMask.Length; i++) waterMask[i] = inPond[i] && (blocked[i] & 0xFF) < 128 && (padded[i] & 0xFF) < 128;
 
         // ---- the steering grid: room to swim, in pixels, every "cell" pixels ----
         float cell = Math.Max(4f, u / 90f);
@@ -214,7 +231,7 @@ internal static class PondPainter
         return new Pond(room, gw, gh, cell)
         {
             Width = w, Height = h, U = u,
-            Pixels = final, Water = water, Open = open, Depth = depth, Sun = sun,
+            Pixels = final, Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Sun = sun,
             BlossomSpots = spots, Pads = pads, Centre = centre, Reach = reach,
         };
     }
@@ -256,33 +273,6 @@ internal static class PondPainter
         path.AddLine(new PointF(outX, h + m), new PointF(outX, first.Y));
         path.CloseFigure();
         return path;
-    }
-
-    /// <summary>Moss and grass on the land: thousands of small dabs in a few greens and browns.</summary>
-    private static void PaintGround(Graphics g, GraphicsPath land, int w, int h, float u, Random rng)
-    {
-        Color[] greens =
-        [
-            Color.FromArgb(64, 88, 50), Color.FromArgb(92, 118, 66), Color.FromArgb(104, 128, 70),
-            Color.FromArgb(70, 96, 58), Color.FromArgb(118, 134, 78), Color.FromArgb(96, 88, 62),
-        ];
-        GraphicsState st = g.Save();
-        g.SetClip(land, CombineMode.Intersect);
-        RectangleF box = land.GetBounds();
-        float x0 = MathF.Max(0, box.Left), x1 = MathF.Min(w, box.Right), y0 = MathF.Max(0, box.Top), y1 = MathF.Min(h, box.Bottom);
-        int dabs = (int)Math.Min(60000, (x1 - x0) * (y1 - y0) / (u * 0.008f * u * 0.008f) * 0.6f);
-        for (int i = 0; i < dabs; i++)
-        {
-            float x = x0 + (float)rng.NextDouble() * (x1 - x0), y = y0 + (float)rng.NextDouble() * (y1 - y0);
-            float r = u * (0.002f + 0.005f * (float)rng.NextDouble());
-            // Lighter toward the upper left, where the sun comes from.
-            Color c = greens[rng.Next(greens.Length)];
-            float light = 0.12f * (1 - x / w) + 0.08f * (1 - y / h);
-            c = Brushwork.Mix(c, Color.FromArgb(170, 182, 120), light);
-            using var b = new SolidBrush(Color.FromArgb(150, c));
-            g.FillEllipse(b, x - r, y - r * 0.8f, r * 2, r * 1.6f);
-        }
-        g.Restore(st);
     }
 
     /// <summary>A random point on the water (or anywhere, if 400 tries find none).</summary>
@@ -392,121 +382,6 @@ internal static class PondPainter
                 px[i] = (uint)(((int)r << 16) | ((int)gg << 8) | (int)b);
             }
         }
-    }
-
-    /// <summary>
-    /// Pale gravel along the water's edge, the way a garden pond is edged:
-    /// small grey and sand dots scattered in a band on the land side of the
-    /// bank. "Landward" at any point of the bank is simply toward the corner
-    /// the land sits in.
-    /// </summary>
-    private static void Gravel(Graphics g, PointF[] bank, PointF corner, float u, Random rng)
-    {
-        for (int i = 0; i < bank.Length - 1; i++)
-        {
-            PointF a = bank[i], b = bank[i + 1];
-            int n = 160;
-            for (int k = 0; k < n; k++)
-            {
-                float t = (float)rng.NextDouble();
-                float x = a.X + (b.X - a.X) * t, y = a.Y + (b.Y - a.Y) * t;
-                float ox = corner.X - x, oy = corner.Y - y, ol = MathF.Max(1, MathF.Sqrt(ox * ox + oy * oy));
-                float out_ = u * 0.045f * (float)Math.Pow(rng.NextDouble(), 1.6);
-                x += ox / ol * out_; y += oy / ol * out_;
-                float r = u * (0.0018f + 0.0025f * (float)rng.NextDouble());
-                int k0 = 150 + rng.Next(70);
-                using var br = new SolidBrush(Color.FromArgb(200, k0, k0 - 6, k0 - 18));
-                g.FillEllipse(br, x - r, y - r * 0.8f, r * 2, r * 1.6f);
-            }
-        }
-    }
-
-    /// <summary>
-    /// A path of flat stepping stones coming down through the moss from the
-    /// land's corner to the water's edge, the way a garden path leads you to
-    /// the pond: flat, pale, rounded slabs, each with a soft shadow, set a
-    /// stride apart.
-    /// </summary>
-    private static void SteppingStones(Graphics g, Graphics gb, PointF[] bank, PointF corner, bool left, float u, int h, Random rng)
-    {
-        // Start just off the corner of the screen and walk toward a point
-        // near the middle of the bank (the nearest point would be where the
-        // bank meets the screen's side, and the path would hug the edge).
-        var start = new PointF(corner.X + (left ? -u * 0.02f : u * 0.02f), h + u * 0.03f);
-        PointF end = bank[bank.Length / 2 + rng.Next(-4, 5)];
-        float dx = end.X - start.X, dy = end.Y - start.Y, d = MathF.Sqrt(dx * dx + dy * dy);
-        float stride = u * 0.075f;
-        int n = Math.Max(2, (int)(d / stride));
-        for (int i = 0; i < n; i++)
-        {
-            float t = (i + 0.3f) / n;
-            float side = (i % 2 == 0 ? 1 : -1) * u * 0.012f;                  // left foot, right foot
-            float x = start.X + dx * t - dy / d * side, y = start.Y + dy * t + dx / d * side;
-            float rx = u * (0.028f + 0.008f * (float)rng.NextDouble()), ry = rx * 0.72f;
-            using (var sb = new SolidBrush(Color.FromArgb(55, 10, 26, 14)))
-                g.FillEllipse(sb, x - rx + u * 0.004f, y - ry + u * 0.006f, rx * 2, ry * 2);
-            using var path = new GraphicsPath();
-            path.AddEllipse(x - rx, y - ry, rx * 2, ry * 2);
-            int k = 150 + rng.Next(25);
-            using var body = new PathGradientBrush(path)
-            {
-                CenterPoint = new PointF(x - rx * 0.3f, y - ry * 0.35f),
-                CenterColor = Color.FromArgb(k + 34, k + 30, k + 20),
-                SurroundColors = [Color.FromArgb(k - 40, k - 40, k - 44)],
-            };
-            g.FillPath(body, path);
-        }
-    }
-
-    /// <summary>
-    /// Rounded grey stones set along the bank, half in the water, each with a
-    /// cap of moss on its sunny (upper left) side and a soft shadow on the
-    /// water to its lower right.
-    /// </summary>
-    private static void Rocks(Graphics g, Graphics gb, PointF[] bank, PointF corner, float u, Random rng)
-    {
-        for (int i = 0; i < bank.Length; i++)
-        {
-            if (rng.NextDouble() < 0.45) continue;
-            PointF p = bank[i];
-            float r = u * (0.018f + 0.03f * (float)Math.Pow(rng.NextDouble(), 1.5));
-            // Nudge it landward a little, so it sits ON the edge rather than in the water.
-            float ox = corner.X - p.X, oy = corner.Y - p.Y, ol = MathF.Max(1, MathF.Sqrt(ox * ox + oy * oy));
-            float x = p.X + ox / ol * r * 0.35f, y = p.Y + oy / ol * r * 0.35f;
-            float rx = r * (1 + 0.3f * (float)rng.NextDouble()), ry = r * 0.78f;
-            Stone(g, gb, x, y, rx, ry, u, rng);
-        }
-    }
-
-    private static void Stone(Graphics g, Graphics gb, float x, float y, float rx, float ry, float u, Random rng)
-    {
-        // The shadow: a few soft, growing, faint ovals down and to the right.
-        for (int k = 3; k >= 1; k--)
-            using (var sb = new SolidBrush(Color.FromArgb(34, 6, 18, 20)))
-                g.FillEllipse(sb, x - rx + rx * 0.25f - k * u * 0.002f, y - ry + ry * 0.35f - k * u * 0.002f,
-                    rx * 2 + k * u * 0.004f, ry * 2 + k * u * 0.004f);
-        using var path = new GraphicsPath();
-        path.AddEllipse(x - rx, y - ry, rx * 2, ry * 2);
-        int k0 = 128 + rng.Next(30);
-        using (var body = new PathGradientBrush(path)
-        {
-            CenterPoint = new PointF(x - rx * 0.35f, y - ry * 0.4f),
-            CenterColor = Color.FromArgb(k0 + 40, k0 + 38, k0 + 30),
-            SurroundColors = [Color.FromArgb(k0 - 60, k0 - 58, k0 - 52)],
-        })
-            g.FillPath(body, path);
-        // Moss on the top and left.
-        GraphicsState st = g.Save();
-        g.SetClip(path, CombineMode.Intersect);
-        for (int m = 0; m < 40; m++)
-        {
-            float mx = x - rx + (float)rng.NextDouble() * rx * 1.4f, my = y - ry + (float)rng.NextDouble() * ry * 1.1f;
-            float mr = u * (0.002f + 0.004f * (float)rng.NextDouble());
-            using var mb = new SolidBrush(Color.FromArgb(150, 84 + rng.Next(30), 110 + rng.Next(30), 54));
-            g.FillEllipse(mb, mx - mr, my - mr, mr * 2, mr * 2);
-        }
-        g.Restore(st);
-        gb.FillEllipse(Brushes.White, x - rx, y - ry, rx * 2, ry * 2);
     }
 
     /// <summary>
@@ -643,11 +518,11 @@ internal static class PondPainter
     /// Clumps of iris leaves on the bank near the water: long sword blades
     /// fanning out from one root, leaning out over the edge.
     /// </summary>
-    private static void Irises(Graphics g, Graphics gb, PointF[] bank, PointF corner, float u, Random rng)
+    private static void Irises(Graphics g, Graphics gb, Graphics gn, PointF[] bank, PointF corner, float u, Random rng)
     {
         for (int i = 0; i < bank.Length; i += 1)
         {
-            if (rng.NextDouble() < 0.82) continue;
+            if (rng.NextDouble() < 0.86) continue;
             PointF p = bank[i];
             float ox = corner.X - p.X, oy = corner.Y - p.Y, ol = MathF.Max(1, MathF.Sqrt(ox * ox + oy * oy));
             float rootX = p.X + ox / ol * u * 0.03f, rootY = p.Y + oy / ol * u * 0.03f;
@@ -668,6 +543,7 @@ internal static class PondPainter
                 using var lb = new LinearGradientBrush(blade[0], tipP, Brushwork.Mix(leaf, Color.Black, 0.25f), Brushwork.Mix(leaf, Color.FromArgb(190, 210, 130), 0.25f));
                 g.FillPolygon(lb, blade);
                 gb.FillPolygon(Brushes.White, blade);
+                gn.FillPolygon(Brushes.White, blade);
             }
         }
     }
@@ -813,6 +689,24 @@ internal static class PondPainter
     }
 
     private static uint[] Read(Bitmap bmp) => Brushwork.ToPixels(bmp);
+
+    /// <summary>Reads a clear-sheet bitmap with its alpha kept: one 0xAARRGGBB per pixel.</summary>
+    private static uint[] ReadArgb(Bitmap bmp)
+    {
+        var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            var raw = new int[bmp.Width * bmp.Height];
+            Marshal.Copy(data.Scan0, raw, 0, raw.Length);
+            var px = new uint[raw.Length];
+            Buffer.BlockCopy(raw, 0, px, 0, raw.Length * 4);
+            return px;
+        }
+        finally
+        {
+            bmp.UnlockBits(data);
+        }
+    }
 
     /// <summary>Writes a pixel array back into a bitmap (the reverse of Brushwork.ToPixels), so painting can carry on over it.</summary>
     private static void Write(Bitmap bmp, uint[] px)

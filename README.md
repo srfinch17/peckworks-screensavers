@@ -71,10 +71,13 @@ blossoms, branches) in the Core project, so they have the same illustrative hand
 
 A koi pond seen from above, the way you see one leaning on the rail of a bridge. The pond is
 bigger than the view: still water fills the screen under cherry branches in full bloom, and the
-only shore in sight is a corner of mossy ground at the bottom (left or right, the seed decides)
-edged with gravel, rocks half in the water and iris leaves, with a path of stepping stones down
-to the water, lily pads and water lilies in the calm water near it, and the branches' dappled
-shadows on the water.
+only shore in sight is a corner of lawn at the bottom (left or right, the seed decides). Rocks
+of every size sit along the water's edge, half in the water, each with a sunny face, a shaded
+face, moss and lichen; a strip of damp sand and pebbles runs between them and the grass; iris
+clumps stand among the stones; a path of stepping stones leads down to the water; lily pads and
+water lilies float in the calm water nearby; and the branches throw dappled shadows on the water.
+The lawn is grass in a breeze: a band of bent, lightened blades rolls across it as each gust
+passes, and tufts of taller grass lean over and spring back as the wave reaches them.
 
 ![Sakura Pond](docs/images/sakura-pond.png)
 
@@ -287,12 +290,10 @@ earlier timer ran slightly faster than the screen and showed a frame twice now a
 small judder you could see in anything moving steadily). Matrix Rain at 4K runs at about 34, above
 the film's own 24.
 
-Sakura Pond: about 10 ms at 1920x1080 and about 16 ms at 4K, where it draws at 2560x1440 and
-Windows enlarges the picture. Those were measured while another program kept the processor
-about 80% busy; Sakura, measured alongside in the same minutes, read 5.2 ms at 1080p against its
-usual 4, so on a quiet machine expect roughly three quarters of them. Its busiest seconds (a
-snake's wake and the swallows' rings on top of the koi) read up to twice its average under that
-load, and will be re-measured on a quiet machine.
+Sakura Pond: about 11 ms at 1920x1080 and about 15 ms at 4K, where it draws at 2560x1440 and
+Windows enlarges the picture (measured on a quiet machine, worst second 15 ms). The lawn in the
+wind is about half of that: the carpet of blades slid and lit by the wind each frame costs about
+3 ms at 1440p and the swaying tufts about 2 ms, drawn in parallel bands.
 
 Halloween's happenings cost almost nothing on average: four minutes of ordinary play at 4K
 averaged 12.5 ms, against 13.0 to 13.2 ms for the same scene with nothing on, measured in the same
