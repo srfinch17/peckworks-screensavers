@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Sakura Pond: a koi pond seen from above, under cherry branches in bloom.
+
+    A Windows screensaver is just a normal .exe program whose file name
+    ends in .scr instead of .exe. So we build a normal WinExe here, and the
+    publish script (scripts/publish.ps1) renames SakuraPond.exe to
+    SakuraPond.scr at the end.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SakuraPond</AssemblyName>
+    <RootNamespace>SakuraPond</RootNamespace>
+
+    <!-- See Sakura.csproj: handle high-resolution screens ourselves so fine edges stay sharp. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+
+    <Product>Sakura Pond Screensaver</Product>
+    <Company>Peckworks</Company>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Peckworks.Screensavers.Core\Peckworks.Screensavers.Core.csproj" />
+  </ItemGroup>
+
+</Project>

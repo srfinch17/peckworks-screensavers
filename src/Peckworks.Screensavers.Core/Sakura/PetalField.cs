@@ -268,37 +268,56 @@ public sealed class PetalField
     private void DrawPetal(FrameBuffer fb, in Petal p)
     {
         if (Shape == FlakeShape.Snow) { DrawSnow(fb, p); return; }
-        bool leaf = Shape == FlakeShape.Leaf;
-
         float swayTilt = 0.5f * MathF.Sin(p.Sway);          // petals tilt into their swing
-        float angle = p.Angle + swayTilt;
+        float opacity = (0.55f + 0.45f * p.Z) * p.Fade * 0.95f;  // far petals are fainter
+        PaintPetal(fb, p.X, p.Y, p.Size, p.Angle + swayTilt, MathF.Cos(p.Flip), p.Pink, opacity, Colors, Tint,
+            Shape == FlakeShape.Leaf);
+    }
+
+    /// <summary>
+    /// Paints one petal (or leaf) anywhere, for any scene that moves its own
+    /// petals: the same shape and colouring as the falling flurry. Sakura
+    /// Pond uses it for petals floating on its water, lying flat.
+    /// </summary>
+    /// <param name="size">Length, in pixels.</param>
+    /// <param name="angle">Turn in the screen plane, in radians.</param>
+    /// <param name="flip">The tumble: 1 = face on, 0 = edge on, negative = its back showing.</param>
+    /// <param name="pink">0 = the pale colour, 1 = the deep one.</param>
+    /// <param name="opacity">0 = invisible, 1 = solid.</param>
+    /// <param name="squash">
+    /// 1 = as is. Less flattens the petal top to bottom: a petal lying on water
+    /// seen at a slant looks a little shorter up and down than across.
+    /// </param>
+    /// <param name="onlyWhere">An optional stencil, as in Sprite.Draw: where it is false the petal is not painted.</param>
+    public static void PaintPetal(FrameBuffer fb, float x, float y, float size, float angle, float flip, float pink, float opacity,
+        (Color Pale, Color Deep) colors, (float R, float G, float B) tint, bool leaf = false, float squash = 1f, bool[]? onlyWhere = null)
+    {
         float ca = MathF.Cos(angle), sa = MathF.Sin(angle);
 
-        float halfLen = p.Size * 0.5f;
-        float flip = MathF.Cos(p.Flip);
+        float halfLen = size * 0.5f;
         float halfWid = halfLen * 0.72f * MathF.Max(0.12f, MathF.Abs(flip));  // the tumble squash
 
         // Color: blend white and pink, lit by the scene's light. The back of a
         // petal (flip < 0) is a touch darker, so the tumble reads as the petal
         // turning over.
         float side = flip >= 0 ? 1f : 0.86f;
-        var (pale, deep) = Colors;
-        float baseR = (pale.R + (deep.R - pale.R) * p.Pink) * Tint.R;
-        float baseG = (pale.G + (deep.G - pale.G) * p.Pink) * Tint.G;
-        float baseB = (pale.B + (deep.B - pale.B) * p.Pink) * Tint.B;
-        float opacity = (0.55f + 0.45f * p.Z) * p.Fade * 0.95f;  // far petals are fainter
+        var (pale, deep) = colors;
+        float baseR = (pale.R + (deep.R - pale.R) * pink) * tint.R;
+        float baseG = (pale.G + (deep.G - pale.G) * pink) * tint.G;
+        float baseB = (pale.B + (deep.B - pale.B) * pink) * tint.B;
 
         int reach = (int)MathF.Ceiling(halfLen) + 1;
-        int x0 = Math.Max(0, (int)p.X - reach), x1 = Math.Min(fb.Width - 1, (int)p.X + reach);
-        int y0 = Math.Max(0, (int)p.Y - reach), y1 = Math.Min(fb.Height - 1, (int)p.Y + reach);
+        int x0 = Math.Max(0, (int)x - reach), x1 = Math.Min(fb.Width - 1, (int)x + reach);
+        int y0 = Math.Max(0, (int)y - reach), y1 = Math.Min(fb.Height - 1, (int)y + reach);
 
         for (int py = y0; py <= y1; py++)
         {
-            float dy = py + 0.5f - p.Y;
+            float dy = (py + 0.5f - y) / squash;            // unsquash: back into the petal's own flat shape
             int row = py * fb.Width;
             for (int px = x0; px <= x1; px++)
             {
-                float dx = px + 0.5f - p.X;
+                if (onlyWhere != null && !onlyWhere[row + px]) continue;
+                float dx = px + 0.5f - x;
 
                 // Into the petal's own frame.
                 float u = (dx * ca + dy * sa) / halfLen;         // -1 base ... +1 tip

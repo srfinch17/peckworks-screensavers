@@ -102,6 +102,21 @@ src/
     SakuraDuskSettings.cs          declares its knobs
     Happenings/                    twenty more, all different (floating lanterns, Basho's frog, the first star)
 
+  SakuraPond/                      a koi pond seen from above, under cherry branches
+    Program.cs                     Main(), plus the definition (draws at most 2560 wide)
+    SakuraPondScene.cs             the layers, back to front
+    PondPainter.cs                 paints the banks, the pond bed and water, stones, pads, branches and their shadows
+    Body.cs                        draws a bending animal (koi, snake) along its spine
+    Koi.cs                         the koi: swimming, steering, beat and glide, varieties
+    Petals.cs                      petals falling from the blossom, landing, floating
+    Ripples.cs                     rings spreading on the water
+    Dragonflies.cs                 hover, dart, perch, dip
+    Swallows.cs                    swooping visits to drink
+    Snake.cs                       a snake swimming across, now and then
+    TurningStamp.cs                a picture stamped at any angle (dragonflies, swallows, their shadows)
+    Light.cs                       where the sun is and how we look at the pond
+    SakuraPondSettings.cs          declares its knobs
+
   Halloween/                       falling leaves, bats, and jack-o'-lanterns
     Program.cs                     Main(), plus the definition
     HalloweenScene.cs              backdrop + candle flicker + bats + the shared engine dropping leaves
@@ -422,6 +437,46 @@ saver: a creature is either right in every way (really visible there, drawn in t
 perspective, turning by bending, moving the way that animal moves) or left out; and anything
 that moves is judged by watching it move, never from still frames. `src/CotswoldBrook/RETIRED.md`
 has the full list.
+
+**Sakura Pond** goes back to painting, and changes the camera: we look DOWN at a koi pond,
+from above and a little in front. That changes how everything is drawn.
+
+*Things lying on the water* (koi, lily pads, ripples, floating petals) are seen at a slant, so
+each is squashed a little top to bottom (`Ripples.Squash`): a circle on the water looks like a
+slightly flattened oval, and a koi swimming up the screen looks a little shorter than one
+swimming across it.
+
+*Height becomes a position.* A thing high above a spot on the water shows a little further up
+the screen than the spot, and its shadow (the sun is up and to the left) falls down and to the
+right of the spot, further away the higher it is (`Light.cs`). So a falling petal slides down
+the screen toward the spot where it will land, while its faint shadow slides in from the other
+side to meet it; the moment they meet, it lands. Dragonflies and swallows carry their shadows on
+the water below them the same way, and that gap between animal and shadow is what tells your eye
+how high each one flies.
+
+*A body that bends.* The koi and the snake are drawn along a SPINE: a line of points from nose to
+tail, each with how wide the body is there (`Body.cs`). The head swims a path; the body is laid
+along the path the head has already swum, like train carriages following the track, so every
+turn bends the whole body through the curve. A swimming wave runs down the koi's body (the head
+nearly still, the tail swinging widest); the snake's head weaves side to side and the body
+follows it point for point, which is how a snake really swims. For every pixel near the spine
+we work out two numbers, how far along the body (s) and how far out to the side (v), and the
+animal says what colour it is there; the markings are stuck to (s, v), so they ride along the
+body as it bends. Each short piece of spine paints only its own strip of pixels, and
+neighbouring strips meet on the line halving the angle at their joint, like the corner of a
+picture frame, so no pixel is painted twice.
+
+*Rigid animals turn as a whole.* A dragonfly or a swallow does not bend, so it is a picture
+painted once (several, for the wingbeat) and stamped at any angle every frame (`TurningStamp.cs`),
+reading the picture smoothly between its pixels so a slow turn never steps. Never flipped.
+
+*Behaviour from watching the real thing.* Koi beat and glide, steer toward a spot they have
+picked anywhere in the pond (a few headings tried either side when the bank comes close, taking
+the smallest turn that clears it), and keep clear of each other. Dragonflies hover, dart and stop
+dead, perch, and dip. Swallows sweep in long curves and skim the water to drink. A creature that
+cannot be made right in all four ways (really visible there, drawn in this view's perspective,
+turning by bending or turning as a whole, moving the way that animal moves) is left out: that
+rule came from Cotswold Brook's trout.
 
 A running river (`FlowingWater.cs`, in the engine for any photo with one) works differently from
 the brook. In real rapids the big shapes hold still: the rocks, and the white water piled up

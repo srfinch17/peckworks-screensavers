@@ -70,6 +70,13 @@ public sealed class Sprite
     }
 
     /// <summary>
+    /// Makes a sprite from pixels worked out in code rather than painted with
+    /// the drawing kit: one 0xAARRGGBB number per pixel, row by row (AA = how
+    /// solid, 0 = clear glass).
+    /// </summary>
+    public static Sprite FromPixels(int width, int height, uint[] argb) => new(width, height, argb);
+
+    /// <summary>
     /// A soft round light: strongest in the middle, fading to nothing at the
     /// edge, with a small near-white hot spot at the center. Stamp it over a
     /// light bulb, a candle, or a certain reindeer's nose to make it shine.

@@ -1,8 +1,8 @@
 # Peckworks Screensavers
 
 Native Windows screensavers written in C# (.NET 10, Windows Forms), plus a small reusable engine
-for making more of them. So far: **Matrix Rain**, **Sakura**, **Sakura Dusk**, **Halloween**,
-**Christmas** and **Cabin by Stream**.
+for making more of them. So far: **Matrix Rain**, **Sakura**, **Sakura Dusk**, **Sakura Pond**,
+**Halloween**, **Christmas** and **Cabin by Stream**.
 
 ## Matrix Rain
 
@@ -66,6 +66,34 @@ slowly across the sky, each bird on its own rhythm, gliding now and then.
 
 Sakura and Sakura Dusk share one petal engine and one set of painting brushes (banks, trunks,
 blossoms, branches) in the Core project, so they have the same illustrative hand.
+
+## Sakura Pond
+
+A koi pond seen from above, the way you see one leaning on the rail of a bridge: still water
+under cherry branches in full bloom, mossy stones and gravel round its edge, lily pads and water
+lilies, iris leaves, a path of stepping stones, and the branches' dappled shadows on the water.
+
+![Sakura Pond](docs/images/sakura-pond.png)
+
+- **Koi** of eight real varieties (kohaku, sanke, showa, yamabuki ogon, chagoi, asagi, tancho,
+  plain red-orange) cruise the whole pond: a few tail beats, then a long glide. Each body bends
+  through its turns along the path its head swam, never flipped or slid. They drift up and down
+  in the water, hazier when deep, slip under the lily pads, and now and then come up to gulp at
+  the surface, leaving a ring.
+- **Petals** let go of the blossom, sway and tumble down, their shadows sliding in to meet them,
+  touch the water with a tiny ring, then float, drifting slowly and gathering against the banks.
+- **Dragonflies** (shiokara tombo, the pale blue dragonfly of Japanese ponds) hover, dart and stop
+  dead, perch on lily pads, and the golden female dips to touch her tail to the water.
+- **Swallows** visit to drink: low, fast, sweeping curves with bursts of wingbeats and swept-back
+  glides, skimming the surface with a line of rings, their shadows racing below them.
+- Now and then a **snake** (a shimahebi, the four-lined rat snake) comes out of the grass, swims
+  across the pond with its body weaving behind its head and a small wake, and slips away.
+
+Settings: petals, number of koi, number of dragonflies, how often the swallows visit, and how
+often the snake crosses.
+
+On a 4K screen it draws at 2560 wide and Windows enlarges the picture: the scene is soft and
+painterly, so the enlarging loses almost nothing, and it keeps the frame rate.
 
 ## Halloween
 
@@ -227,6 +255,7 @@ src/Peckworks.Screensavers.Core/   the engine (command line, windows, drawing, g
 src/MatrixRain/                    the Matrix Rain screensaver
 src/Sakura/                        the Sakura screensaver
 src/SakuraDusk/                    the Sakura Dusk screensaver
+src/SakuraPond/                    the Sakura Pond screensaver
 src/Halloween/                     the Halloween screensaver
 src/Christmas/                     the Christmas screensaver
 src/CabinByStream/                 the Cabin by Stream screensaver
@@ -250,6 +279,13 @@ refresh before the next one is drawn, so frames reach the screen evenly, one per
 earlier timer ran slightly faster than the screen and showed a frame twice now and then: a
 small judder you could see in anything moving steadily). Matrix Rain at 4K runs at about 34, above
 the film's own 24.
+
+Sakura Pond: about 10 ms at 1920x1080 and about 16 ms at 4K, where it draws at 2560x1440 and
+Windows enlarges the picture. Those were measured while another program kept the processor
+about 80% busy; Sakura, measured alongside in the same minutes, read 5.2 ms at 1080p against its
+usual 4, so on a quiet machine expect roughly three quarters of them. Its busiest seconds (a
+snake's wake and the swallows' rings on top of the koi) read up to twice its average under that
+load, and will be re-measured on a quiet machine.
 
 Halloween's happenings cost almost nothing on average: four minutes of ordinary play at 4K
 averaged 12.5 ms, against 13.0 to 13.2 ms for the same scene with nothing on, measured in the same
