@@ -9,9 +9,9 @@ namespace Peckworks.Screensavers.Core.Photo;
 /// colour (a sprite, painted once), slid a little to the right every frame.
 /// When one drifts off the right of its area, a new one comes in from the
 /// left at a new height, size and thickness, so the mist never settles into
-/// a pattern. A stencil says where mist may show at all: Mountain Cabin's
-/// keeps it in the pines; Cotswold Brook's is made from the depth map, so the
-/// mist lies over the far water and the near reeds stand crisp in front of it.
+/// a pattern. A stencil says where mist may show at all: drawn round a stand
+/// of far pines, say, or made from a depth map, so the mist lies over the far
+/// water and the near reeds stand crisp in front of it.
 ///
 /// Banks alone read as separate streaks over water. Mist lying on water is a
 /// SHEET with the banks only stirring it; the sheet never moves, so it is
@@ -37,7 +37,7 @@ public sealed class PhotoMist
     /// <param name="area">Where the banks drift, as a box on the photo (left, top, width, height, fractions).</param>
     /// <param name="onlyWhere">Where on the screen mist may show (one true/false per pixel).</param>
     /// <param name="amount">1 = six banks, 0 = none.</param>
-    /// <param name="size">1 = Mountain Cabin's banks; 2 = twice as long and as thick.</param>
+    /// <param name="size">1 = banks about a twentieth of the photo's height long; 2 = twice as long and as thick.</param>
     /// <param name="stretch">How much longer than that, for the same thickness: mist lying on water is long and thin.</param>
     public PhotoMist(PhotoBackdrop photo, RectangleF area, bool[] onlyWhere, float amount, Random rng,
         Color colour, float size = 1f, float stretch = 1f)

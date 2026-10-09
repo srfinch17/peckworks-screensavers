@@ -73,7 +73,7 @@ src/
     Sakura/PetalField.cs           the falling petals (or leaves, or snow), shared by every painted scene
     Sakura/Brushwork.cs            banks, hills, trunks, blossoms, a pine, and self-growing branches
     Sakura/Boat.cs                 the little boat that crosses the water in both sakura scenes
-    ChimneySmoke.cs                puffs that rise, cool, spread and thin (Cabin by Stream, Cotswold Brook)
+    ChimneySmoke.cs                puffs that rise, cool, spread and thin (Cabin by Stream)
     Photo/PhotoBackdrop.cs         a photo fitted to the screen, plus where its water is
     Photo/WaterRipples.cs          a still brook's reflections, rippling; trout rising
     Photo/FlowingWater.cs          a running river: the fine texture carried downstream, rocks left still
@@ -127,13 +127,7 @@ src/
     Fireflies.cs                   blinking lights over the meadow, mirrored in the stream
     CabinByStreamSettings.cs       declares its knobs
 
-  CotswoldBrook/                   a real photo of cottages by a brook, brought to life
-    Program.cs                     Main(), plus the definition
-    CotswoldBrookScene.cs          what this photo holds: where its water, chimney and windows are
-    Trout.cs                       trout just under the surface, holding and darting
-    CotswoldBrookSettings.cs       declares its knobs
-    brook.jpg                      the photo, packed inside the .scr
-    brook_depth.png                its depth map (white = near), made once by scripts/depthmap.py
+  CotswoldBrook/                   RETIRED: kept as a reference, not built (RETIRED.md says why)
 ```
 
 A screensaver only has to write one class with two methods:
@@ -363,7 +357,7 @@ squirrels do), and a mirrored stamp for running left. The **fireflies** are the 
 happening's idea made permanent: a home spot, two sine waves per direction for the wander, a blink
 cycle of its own, and a reflection in the stream where one crosses it.
 
-**Cotswold Brook** takes the next step: no painting at all. However much texture and light the
+**Cotswold Brook** (now retired; see "Why it was retired" below) took the next step: no painting at all. However much texture and light the
 meadow got, code strokes stayed an illustration; a camera does stone and a thousand leaves
 better. So the backdrop is a photograph (packed inside the `.scr`, credited in the README), and
 only what moves is animated. What the saver's own file holds is knowledge of THIS photo, measured
@@ -419,6 +413,15 @@ and the dusk copy of the photo (more into the dusk one: mist gathers as the air 
 nothing per frame; blended in every frame at 4K it cost several milliseconds. Soft banks drift
 through it to keep it alive, shown only where the map says the scenery is beyond the reeds.
 Banks alone looked like streaks of light, not mist: mist on water is a sheet, stirred.
+
+*Why it was retired.* Its trout were one flat, side-on picture, able to face only left or right,
+flipped like a playing card to turn round and slid sideways to "dart", swimming under a pond so
+bright with reflections that no real fish could be seen through it. On a painted scene that
+might pass; on a photograph it is the one thing the eye goes to. Two lessons hold for any photo
+saver: a creature is either right in every way (really visible there, drawn in the photo's own
+perspective, turning by bending, moving the way that animal moves) or left out; and anything
+that moves is judged by watching it move, never from still frames. `src/CotswoldBrook/RETIRED.md`
+has the full list.
 
 A running river (`FlowingWater.cs`, in the engine for any photo with one) works differently from
 the brook. In real rapids the big shapes hold still: the rocks, and the white water piled up

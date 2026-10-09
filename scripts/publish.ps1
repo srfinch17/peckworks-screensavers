@@ -22,10 +22,11 @@
     Then we rename Name.exe to Name.scr. That rename is the whole difference
     between "a program" and "a screensaver" as far as Windows cares.
 
-    Every folder under src\ except the Core engine is a screensaver.
+    Every folder under src\ except the Core engine is a screensaver, unless it
+    holds a RETIRED.md: a retired saver is kept as a reference but not built.
 
 .PARAMETER Saver
-    Which screensaver(s) to build, by folder name (MatrixRain, Sakura, SakuraDusk, Halloween, Christmas, CabinByStream, CotswoldBrook).
+    Which screensaver(s) to build, by folder name (MatrixRain, Sakura, SakuraDusk, Halloween, Christmas, CabinByStream).
     Leave it out to build all of them.
 
 .EXAMPLE
@@ -41,6 +42,7 @@ New-Item -ItemType Directory -Force $outDir | Out-Null
 
 $all = Get-ChildItem (Join-Path $repo 'src') -Directory |
     Where-Object { $_.Name -ne 'Peckworks.Screensavers.Core' } |
+    Where-Object { -not (Test-Path (Join-Path $_.FullName 'RETIRED.md')) } |
     ForEach-Object Name
 if (-not $Saver) { $Saver = $all }
 

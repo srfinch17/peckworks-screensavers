@@ -6,7 +6,7 @@ namespace Peckworks.Screensavers.Core.Photo;
 
 /// <summary>
 /// A photograph, fitted to the screen, plus where its water is. The base of
-/// every photo saver (Cotswold Brook, and any after it): the saver hands over
+/// every photo saver: the saver hands over
 /// the photo and the water's outline, and gets back the fitted pixels and a
 /// water mask for the ripples (WaterRipples.cs) to work on.
 ///

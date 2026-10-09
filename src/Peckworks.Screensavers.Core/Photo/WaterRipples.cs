@@ -13,7 +13,7 @@ namespace Peckworks.Screensavers.Core.Photo;
 /// <param name="Speed">How fast the waves travel toward the viewer.</param>
 public sealed record WaterLook(float ShiftFar, float ShiftNear, float WaveFar, float WaveNear, float Across, float Speed)
 {
-    /// <summary>A calm brook: the look tuned on Cotswold Brook.</summary>
+    /// <summary>A calm brook: the look tuned on the retired Cotswold Brook.</summary>
     public static readonly WaterLook Brook = new(0.00035f, 0.00145f, 0.007f, 0.029f, 0.21f, 1.3f);
 }
 

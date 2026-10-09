@@ -13,7 +13,7 @@ namespace Peckworks.Screensavers.Core.Photo;
 /// <param name="FrameBright">How bright (0 to 1) a frame pixel must also be. Dark coloured things behind the glass (a brown curtain) are still glass.</param>
 public sealed record EveningLook(float Horizon, float FrameColour, float FrameBright)
 {
-    /// <summary>Cotswold Brook: honey-coloured stone in low sun around grey glass.</summary>
+    /// <summary>Honey-coloured stone in low sun around grey glass (tuned on the retired Cotswold Brook).</summary>
     public static readonly EveningLook SunlitStone = new(0.45f, 0.36f, 0.30f);
 }
 

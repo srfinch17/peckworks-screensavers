@@ -2,7 +2,7 @@
 
 Native Windows screensavers written in C# (.NET 10, Windows Forms), plus a small reusable engine
 for making more of them. So far: **Matrix Rain**, **Sakura**, **Sakura Dusk**, **Halloween**,
-**Christmas**, **Cabin by Stream**, and **Cotswold Brook**.
+**Christmas** and **Cabin by Stream**.
 
 ## Matrix Rain
 
@@ -151,40 +151,17 @@ stars are out overhead; mist lies at the feet of the far forest.
 
 Settings: fireflies, number of fish, number of squirrels, chimney smoke, breeze.
 
-## Cotswold Brook
+## Retired: Cotswold Brook
 
-A real photograph brought to life: honey-coloured stone cottages beside a brook in the Cotswolds
-at golden hour, with a low stone footbridge and reeds in the foreground. Painting by code topped
-out at "storybook" (Cabin by Stream above is the attempt), so this one starts from a photo and
-animates only what moves.
-
-![Cotswold Brook](docs/images/cotswold-brook.png)
-
-Photo by [Martin Fenton](https://unsplash.com/@mhfphotographygb) on
-[Unsplash](https://unsplash.com/photos/9BFnbb1sfZo), used under the Unsplash License.
-
-- Ripples run through the reflections in the brook, bigger and wider in the near water.
-- Brown trout hold just under the surface, tails swaying, now and then darting to a new spot or
-  turning round; now and then one rises and leaves spreading rings.
-- A thin, sun-warmed plume of smoke drifts from one chimney.
-- Evening falls and returns on a slow cycle: the gold drains out of the light, the sky deepens
-  to blue with a rose afterglow behind the roofs, the windows light up one by one, and fireflies
-  come out over the reeds, near ones bigger and quicker than far ones, each a faint dot that
-  flashes green every few seconds.
-- The fireflies fly IN the scene, not on the glass: one deep in the reed bed slips behind the
-  blades and flowers nearer to you than it is, and its glow stops at their edges.
-- Mist lies on the far water, thickest by the bridge and thinning toward you, with soft banks
-  drifting through it. It is a faint haze in the golden light and gathers as dusk falls; the
-  near reeds stand in front of it.
-
-Settings: ripples, trout, how often they rise, chimney smoke, mist on the water, fireflies, and
-how many minutes one turn of the evening takes (0 keeps it golden).
-
-The fireflies and the mist know how far away each part of the photo is from a **depth map**: a
-grey copy of the photo where white is near and black is far, made once by
-[Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) (the Small model,
-Apache 2.0 licence), an AI model that judges distance from a single picture.
-`scripts\depthmap.py` makes it; the map ships inside the `.scr`, the model does not.
+A real photograph of Cotswold cottages by a brook, with ripples, trout, smoke, a falling dusk,
+fireflies and mist animated over it. Retired: its fish were flat stickers that only faced left
+or right, flipped to turn and slid about, swimming under a mirror-bright pond where no fish
+could be seen. The code stays in `src/CotswoldBrook/` as a reference for what not to do; it is
+no longer built. Its `RETIRED.md` says what went wrong and the rules that came out of it. The
+engine pieces it pioneered (fitting a photo, day for night, fireflies, mist, and the depth map
+that lets a moving thing pass behind nearer scenery) stay in `Core/Photo/` for photo savers to
+come. `scripts\depthmap.py` makes a depth map with
+[Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) (Small model, Apache 2.0).
 
 ## All screensavers
 
@@ -253,7 +230,7 @@ src/SakuraDusk/                    the Sakura Dusk screensaver
 src/Halloween/                     the Halloween screensaver
 src/Christmas/                     the Christmas screensaver
 src/CabinByStream/                 the Cabin by Stream screensaver
-src/CotswoldBrook/                 the Cotswold Brook screensaver (its photo brook.jpg, and brook_depth.png)
+src/CotswoldBrook/                 retired: kept as a reference, not built (its RETIRED.md says why)
 scripts/                           publish / install / uninstall / verify / happening (render one happening)
                                    / depthmap.py (a photo's depth map, made once)
 docs/                              the how-it-works guide
@@ -263,21 +240,16 @@ docs/                              the how-it-works guide
 
 Time per frame (update + render):
 
-| Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Cabin by Stream | Cotswold Brook |
-|------------|-------------|-------------|-------------|-------------|-------------|-----------------|----------------|
-| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  | about 2 ms      | about 4 ms     |
-| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms | about 9 ms      | about 11 ms    |
+| Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Cabin by Stream |
+|------------|-------------|-------------|-------------|-------------|-------------|-----------------|
+| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  | about 2 ms      |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms | about 9 ms      |
 
 Under about 16 ms means the full 60 frames per second. Each frame waits for the screen's next
 refresh before the next one is drawn, so frames reach the screen evenly, one per refresh (an
 earlier timer ran slightly faster than the screen and showed a frame twice now and then: a
 small judder you could see in anything moving steadily). Matrix Rain at 4K runs at about 34, above
 the film's own 24.
-
-Cotswold Brook's column predates its mist and depth-aware fireflies. Timed section by section
-inside one run at 4K, the drifting mist banks add about 2.5 to 3 ms per frame and the fireflies'
-depth test about 0.4 ms at dusk; the still sheet of mist costs nothing per frame (it is painted
-into the photo once). The column will be re-measured on an otherwise idle machine.
 
 Halloween's happenings cost almost nothing on average: four minutes of ordinary play at 4K
 averaged 12.5 ms, against 13.0 to 13.2 ms for the same scene with nothing on, measured in the same

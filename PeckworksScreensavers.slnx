@@ -1,7 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/CabinByStream/CabinByStream.csproj" />
-    <Project Path="src/CotswoldBrook/CotswoldBrook.csproj" />
     <Project Path="src/Christmas/Christmas.csproj" />
     <Project Path="src/Halloween/Halloween.csproj" />
     <Project Path="src/MatrixRain/MatrixRain.csproj" />

@@ -2,7 +2,7 @@ using System.Drawing.Drawing2D;
 namespace Peckworks.Screensavers.Core;
 
 /// <summary>
-/// Smoke from a chimney (Cabin by Stream's cottage, Cotswold Brook's row of houses).
+/// Smoke from a chimney (Cabin by Stream's cottage, or a photo's chimney).
 ///
 /// FEYNMAN VERSION: smoke is a crowd of little puffs. Each puff is born at
 /// the chimney top, rises fast while it is hot, slows as it cools, spreads
