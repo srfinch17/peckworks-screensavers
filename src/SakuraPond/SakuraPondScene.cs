@@ -9,7 +9,8 @@ namespace SakuraPond;
 ///
 ///   1. The BACKDROP (PondPainter.cs): banks, the pond bed and water, rocks,
 ///      lily pads, the overhanging branches and their shadows. Painted once.
-///   2. Under the water: the KOI (Koi.cs).
+///   2. Under the water: the KOI (Koi.cs), and just under the surface the
+///      TURTLES (Turtle.cs).
 ///   3. On the water: RIPPLES (Ripples.cs), floating PETALS (Petals.cs), and
 ///      now and then a swimming SNAKE (Snake.cs).
 ///   4. In the air: the SHADOWS of the dragonflies and swallows on the water,
@@ -26,6 +27,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly bool[] _waterInView;     // open water that no branch hides
     private readonly Ripples _ripples;
     private readonly KoiSchool _koi;
+    private readonly Turtles _turtles;
     private readonly Petals _petals;
     private readonly Snake _snake;
     private readonly Dragonflies _dragonflies;
@@ -38,6 +40,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
         _ripples = new Ripples(_pond, _waterInView);
         _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng);
+        _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng);
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _rng);
         _snake = new Snake(_pond, _ripples, settings.SnakePercent / 100f, _rng);
         _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng);
@@ -48,6 +51,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     {
         float dt = (float)Math.Min(elapsedSeconds, 0.1);
         _koi.Update(dt);
+        _turtles.Update(dt);
         _petals.Update(dt);
         _snake.Update(dt);
         _dragonflies.Update(dt);
@@ -59,6 +63,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     {
         Array.Copy(_pond.Pixels, fb.Pixels, fb.Pixels.Length);
         _koi.Draw(fb);
+        _turtles.Draw(fb);
         _ripples.Draw(fb);
         _petals.DrawFloating(fb);
         _snake.Draw(fb);

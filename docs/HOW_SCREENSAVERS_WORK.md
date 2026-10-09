@@ -105,9 +105,10 @@ src/
   SakuraPond/                      a koi pond seen from above, under cherry branches
     Program.cs                     Main(), plus the definition (draws at most 2560 wide)
     SakuraPondScene.cs             the layers, back to front
-    PondPainter.cs                 paints the banks, the pond bed and water, stones, pads, branches and their shadows
-    Body.cs                        draws a bending animal (koi, snake) along its spine
+    PondPainter.cs                 paints the pond bed and water, the corner of bank, stones, pads, branches and their shadows
+    Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
+    Turtle.cs                      the turtle: paddling, floating, a breath at the surface
     Petals.cs                      petals falling from the blossom, landing, floating
     Ripples.cs                     rings spreading on the water
     Dragonflies.cs                 hover, dart, perch, dip
@@ -468,7 +469,11 @@ picture frame, so no pixel is painted twice.
 
 *Rigid animals turn as a whole.* A dragonfly or a swallow does not bend, so it is a picture
 painted once (several, for the wingbeat) and stamped at any angle every frame (`TurningStamp.cs`),
-reading the picture smoothly between its pixels so a slow turn never steps. Never flipped.
+reading the picture smoothly between its pixels so a slow turn never steps. Never flipped. The
+turtle is rigid too, but it lives in the water with the koi, so it uses the same spine drawing
+as the koi with a STRAIGHT spine that turns as one piece: that way it gets the same haze with
+depth, the same branch shadows and the same squash for free. Its legs are four small ovals
+swinging from under the shell's rim, the diagonal pairs in step, as a pond turtle paddles.
 
 *Behaviour from watching the real thing.* Koi beat and glide, steer toward a spot they have
 picked anywhere in the pond (a few headings tried either side when the bank comes close, taking

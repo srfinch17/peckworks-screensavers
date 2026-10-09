@@ -69,9 +69,12 @@ blossoms, branches) in the Core project, so they have the same illustrative hand
 
 ## Sakura Pond
 
-A koi pond seen from above, the way you see one leaning on the rail of a bridge: still water
-under cherry branches in full bloom, mossy stones and gravel round its edge, lily pads and water
-lilies, iris leaves, a path of stepping stones, and the branches' dappled shadows on the water.
+A koi pond seen from above, the way you see one leaning on the rail of a bridge. The pond is
+bigger than the view: still water fills the screen under cherry branches in full bloom, and the
+only shore in sight is a corner of mossy ground at the bottom (left or right, the seed decides)
+edged with gravel, rocks half in the water and iris leaves, with a path of stepping stones down
+to the water, lily pads and water lilies in the calm water near it, and the branches' dappled
+shadows on the water.
 
 ![Sakura Pond](docs/images/sakura-pond.png)
 
@@ -80,6 +83,10 @@ lilies, iris leaves, a path of stepping stones, and the branches' dappled shadow
   through its turns along the path its head swam, never flipped or slid. They drift up and down
   in the water, hazier when deep, slip under the lily pads, and now and then come up to gulp at
   the surface, leaving a ring.
+- A **turtle** (a red-eared slider, the turtle of nearly every park pond in Japan) paddles just
+  under the surface, front left leg with back right and then the other pair, with a small surge
+  on each stroke, turning as one rigid piece in wide slow arcs. Now and then it stops, spreads
+  its legs and floats, pokes its nose up for a breath (one small ring), then paddles off.
 - **Petals** let go of the blossom, sway and tumble down, their shadows sliding in to meet them,
   touch the water with a tiny ring, then float, drifting slowly and gathering against the banks.
 - **Dragonflies** (shiokara tombo, the pale blue dragonfly of Japanese ponds) hover, dart and stop
@@ -89,8 +96,8 @@ lilies, iris leaves, a path of stepping stones, and the branches' dappled shadow
 - Now and then a **snake** (a shimahebi, the four-lined rat snake) comes out of the grass, swims
   across the pond with its body weaving behind its head and a small wake, and slips away.
 
-Settings: petals, number of koi, number of dragonflies, how often the swallows visit, and how
-often the snake crosses.
+Settings: petals, number of koi, number of turtles, number of dragonflies, how often the
+swallows visit, and how often the snake crosses.
 
 On a 4K screen it draws at 2560 wide and Windows enlarges the picture: the scene is soft and
 painterly, so the enlarging loses almost nothing, and it keeps the frame rate.

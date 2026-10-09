@@ -146,7 +146,7 @@ public static class ScreensaverApp
     private static void SaveFrameIfAsked(FrameBuffer frame, double t)
     {
         string? ask = Environment.GetEnvironmentVariable("PECKWORKS_FRAMES");
-        if (ask is null) return;
+        if (string.IsNullOrEmpty(ask)) return;      // unset, or set to "" (PowerShell cannot always unset a variable)
         string[] parts = ask.Split(';');
         double from = double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture);
         int count = int.Parse(parts[2]);

@@ -182,8 +182,9 @@ internal abstract class Body
     /// along "angle", length and width in pixels. Simple enough not to need
     /// the spine: turn each pixel into the oval's own frame and test.
     /// </summary>
+    /// <param name="rays">Faint rays across a long oval (a fin). False for a solid limb.</param>
     protected static void Oval(FrameBuffer fb, bool[]? onlyWhere, PointF c, float angle, float len, float wid,
-        int r, int g, int b, float alpha, float murk, byte[]? sun)
+        int r, int g, int b, float alpha, float murk, byte[]? sun, bool rays = true)
     {
         float ca = MathF.Cos(angle), sa = MathF.Sin(angle);
         int reach = (int)MathF.Ceiling(MathF.Max(len, wid)) + 2;
@@ -199,7 +200,7 @@ internal abstract class Body
                 float u = (dx * ca + dy * sa) / len, v = (-dx * sa + dy * ca) / wid;
                 float q = u * u + v * v;
                 if (q >= 1) continue;
-                float a = alpha * Math.Clamp((1 - q) * 3, 0, 1) * (len > wid * 1.2f ? 0.75f + 0.25f * MathF.Sin(v * 9) : 1f);   // soft edge; fins get faint rays
+                float a = alpha * Math.Clamp((1 - q) * 3, 0, 1) * (rays && len > wid * 1.2f ? 0.75f + 0.25f * MathF.Sin(v * 9) : 1f);   // soft edge; fins get faint rays
                 int rr = r, gg = g, bb = b;
                 if (sun != null) { int k = sun[idx]; rr = rr * k >> 8; gg = gg * k >> 8; bb = bb * k >> 8; }
                 uint bg = px[idx];
