@@ -53,6 +53,16 @@ public sealed class PhotoBackdrop
     public int WaterTop { get; }
     public int WaterBottom { get; }
 
+    /// <summary>
+    /// How NEAR each screen pixel's scenery is, 0 (far: sky, distant trees) to
+    /// 255 (the nearest grass), or null when the saver gave no depth map. Made
+    /// once, outside the saver, by an AI model that guesses distance from a
+    /// single picture (scripts/depthmap.py). It lets a moving thing sit IN
+    /// the photo: "draw this firefly only where the scenery is no nearer
+    /// than it is", so a reed in front of it hides it.
+    /// </summary>
+    public byte[]? Depth { get; }
+
     private readonly float _left, _top, _shownW;
 
     /// <param name="photoFile">The photo's bytes (usually a resource embedded in the saver's .scr).</param>
@@ -71,8 +81,13 @@ public sealed class PhotoBackdrop
     /// right. 0.5 trims both sides evenly; less keeps more of the left.
     /// </param>
     /// <param name="focusY">The same for the top and bottom when the screen is wider than the photo.</param>
+    /// <param name="depthFile">
+    /// Optional: the photo's depth map (a grey picture, white = near), any
+    /// size as long as it is the photo's shape. It is fitted exactly like the
+    /// photo, so its pixels line up with the photo's on screen.
+    /// </param>
     public PhotoBackdrop(int width, int height, Stream photoFile, PointF[] waterOutline, PointF[][] dryInWater,
-        float focusX = 0.5f, float focusY = 0.5f)
+        float focusX = 0.5f, float focusY = 0.5f, Stream? depthFile = null)
     {
         Width = Math.Max(1, width);
         Height = Math.Max(1, height);
@@ -86,9 +101,28 @@ public sealed class PhotoBackdrop
         _shownW = shownW;
         P = shownH;
 
-        // Resize once, with the best (slowest) filter the drawing kit has.
-        // This happens once at startup, so the cost does not matter; a
-        // cheap filter would leave the stone and the leaves jagged.
+        Pixels = Fit(photo);
+        if (depthFile != null)
+        {
+            // The depth map is grey, so red = green = blue: keep any one of them.
+            using var depth = new Bitmap(depthFile);
+            Depth = Fit(depth).Select(c => (byte)(c & 0xFF)).ToArray();
+        }
+
+        Water = PaintWaterMask(waterOutline, dryInWater, out int top, out int bottom);
+        WaterTop = top;
+        WaterBottom = bottom;
+        OpenWater = Water.Select(b => b > 200).ToArray();
+    }
+
+    /// <summary>
+    /// Enlarges a picture of the photo's shape to the screen and trims it,
+    /// with the best (slowest) filter the drawing kit has. This happens once
+    /// at startup, so the cost does not matter; a cheap filter would leave
+    /// the stone and the leaves jagged.
+    /// </summary>
+    private uint[] Fit(Bitmap picture)
+    {
         using var fitted = new Bitmap(Width, Height, PixelFormat.Format32bppRgb);
         using (var g = Graphics.FromImage(fitted))
         {
@@ -96,15 +130,10 @@ public sealed class PhotoBackdrop
             g.PixelOffsetMode = PixelOffsetMode.HighQuality;
             using var edges = new ImageAttributes();
             edges.SetWrapMode(WrapMode.TileFlipXY);              // no dark seam at the borders from the filter reading past the edge
-            g.DrawImage(photo, new Rectangle((int)MathF.Floor(_left), (int)MathF.Floor(_top), (int)MathF.Ceiling(shownW) + 1, (int)MathF.Ceiling(shownH) + 1),
-                0, 0, photo.Width, photo.Height, GraphicsUnit.Pixel, edges);
+            g.DrawImage(picture, new Rectangle((int)MathF.Floor(_left), (int)MathF.Floor(_top), (int)MathF.Ceiling(_shownW) + 1, (int)MathF.Ceiling(P) + 1),
+                0, 0, picture.Width, picture.Height, GraphicsUnit.Pixel, edges);
         }
-        Pixels = ReadPixels(fitted);
-
-        Water = PaintWaterMask(waterOutline, dryInWater, out int top, out int bottom);
-        WaterTop = top;
-        WaterBottom = bottom;
-        OpenWater = Water.Select(b => b > 200).ToArray();
+        return ReadPixels(fitted);
     }
 
     /// <summary>A box on the photo (fractions) as a four-corner outline, for dryInWater.</summary>

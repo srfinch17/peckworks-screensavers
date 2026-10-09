@@ -19,6 +19,15 @@ namespace CotswoldBrook;
 ///     gold drains out of the light and dusk falls; windows light up and
 ///     fireflies come out over the reeds. After a while at dusk the gold
 ///     slowly returns, and around it goes again.
+///   - The MIST: a still sheet lying on the far water, painted into the
+///     backdrop once (PhotoEvening.LayMist), with soft banks drifting
+///     through it (Core/Photo/PhotoMist.cs). It thickens as the evening cools.
+///
+/// THE DEPTH MAP (brook_depth.png, made by scripts/depthmap.py): a grey
+/// copy of the photo where white is near and black is far. It is what puts
+/// the mist and the fireflies IN the picture rather than on the glass: the
+/// near reeds stand in front of the mist, and a firefly deep in the reed
+/// bed slips behind the blades nearer to us than it is.
 ///
 /// What this file holds is the knowledge of THIS photo: where its water,
 /// chimney and windows are, all measured by eye on a grid laid over it.
@@ -31,6 +40,13 @@ internal sealed class CotswoldBrookScene : IScreensaverScene
     private readonly Trout _trout;
     private readonly ChimneySmoke _smoke;
     private readonly PhotoEvening _evening;
+    private readonly PhotoMist _mist;
+
+    // How near the reed tips along the near bank are on the depth map (0 far
+    // to 255 near; read off the map: the far water is about 50, the near
+    // water 70 to 95, the reed tips 100 to 110). Mist shows only on scenery
+    // farther than this, so the near reeds stay crisp in front of it.
+    private const int MistNearest = 98;
 
     // THE WATER'S OUTLINE, as fractions of the photo (x, y), going round it
     // clockwise from the far left bank. It follows the reeds' tips on the near
@@ -81,13 +97,13 @@ internal sealed class CotswoldBrookScene : IScreensaverScene
 
     public CotswoldBrookScene(int width, int height, CotswoldBrookSettings settings)
     {
-        using (Stream file = typeof(CotswoldBrookScene).Assembly.GetManifestResourceStream("CotswoldBrook.brook.jpg")
-            ?? throw new InvalidOperationException("The photo is missing from the program (brook.jpg is not embedded)."))
+        using (Stream file = Resource("brook.jpg"))
+        using (Stream depth = Resource("brook_depth.png"))
         {
             // On a portrait screen the sides are trimmed a little more from
             // the right (focusX 0.45), so the cottages and the brook stay in
             // and what goes is mostly hedge.
-            _photo = new PhotoBackdrop(width, height, file, WaterOutline, Piers, focusX: 0.45f);
+            _photo = new PhotoBackdrop(width, height, file, WaterOutline, Piers, focusX: 0.45f, depthFile: depth);
         }
         float p = _photo.P;
         _water = new WaterRipples(_photo, WaterLook.Brook, settings.RipplePercent / 100f, settings.RisePercent / 100f, _rng);
@@ -102,7 +118,51 @@ internal sealed class CotswoldBrookScene : IScreensaverScene
 
         _evening = new PhotoEvening(_photo, EveningLook.SunlitStone, WindowBoxes, FireflyZones,
             settings.FireflyPercent / 100f, settings.EveningMinutes, _rng);
+
+        // Mist: a cool pale sheet lying on the water, plus four soft banks
+        // drifting through it so it never sits still (the sheet does the main
+        // work, so the banks can be few: at 4K each one is a few hundred
+        // thousand pixels to blend, every frame). Shown only beyond the reeds.
+        float mistAmount = settings.MistPercent / 100f;
+        bool[] beyondReeds = _photo.Depth!.Select(d => d <= MistNearest).ToArray();
+        Color mistColour = Color.FromArgb(222, 228, 236);
+        _evening.LayMist(MistSheet(mistAmount), mistColour, golden: 0.45f, dusk: 0.95f);
+        _mist = new PhotoMist(_photo, new RectangleF(0f, 0.60f, 1f, 0.13f), beyondReeds, 0.7f * mistAmount, _rng,
+            mistColour, size: 2.0f, stretch: 1.8f);
     }
+
+    /// <summary>
+    /// How much mist each screen pixel always has (0 to 255). Mist gathers
+    /// over the far water and thins toward us, so it comes from the depth
+    /// map: thickest at the far water (about 55 on the map), fading to none
+    /// at the reed tips (MistNearest). It lies LOW: none above the foot of the
+    /// cottages (36% from the bottom of the photo), rising over a short band
+    /// so it has no hard top edge.
+    /// </summary>
+    private byte[] MistSheet(float amount)
+    {
+        const int Far = 55;
+        int w = _photo.Width, h = _photo.Height;
+        float top = _photo.ToScreen(0, 0.565f).Y, full = _photo.ToScreen(0, 0.60f).Y;
+        var sheet = new byte[w * h];
+        for (int y = 0; y < h; y++)
+        {
+            float rise = Math.Clamp((y - top) / Math.Max(1f, full - top), 0f, 1f);
+            if (rise <= 0) continue;
+            rise = rise * rise * (3 - 2 * rise);                  // smoothstep: eases in, no crease where it starts
+            for (int x = 0; x < w; x++)
+            {
+                int d = _photo.Depth![y * w + x];
+                float far = Math.Clamp((MistNearest - d) / (float)(MistNearest - Far), 0f, 1f);
+                sheet[y * w + x] = (byte)Math.Min(255f, 70f * amount * far * rise);
+            }
+        }
+        return sheet;
+    }
+
+    private static Stream Resource(string name) =>
+        typeof(CotswoldBrookScene).Assembly.GetManifestResourceStream("CotswoldBrook." + name)
+        ?? throw new InvalidOperationException($"{name} is missing from the program (it is not embedded).");
 
     public void Update(double elapsedSeconds)
     {
@@ -110,6 +170,7 @@ internal sealed class CotswoldBrookScene : IScreensaverScene
         _trout.Update(elapsedSeconds);
         _smoke.Update((float)elapsedSeconds);
         _evening.Update(elapsedSeconds);
+        _mist.Update(elapsedSeconds);
     }
 
     public void Render(FrameBuffer fb)
@@ -126,10 +187,15 @@ internal sealed class CotswoldBrookScene : IScreensaverScene
         //    see into the water, so they fade (but never quite vanish).
         _trout.Draw(fb, 1 - 0.7f * dusk);
 
-        // 4. The smoke. At dusk there is less light to show it, so it fades to a third.
+        // 4. The mist's drifting banks. (Its still sheet is already painted
+        //    into the backdrop by LayMist.) Evening mist gathers as the air
+        //    cools, so it is faint in the golden light and fuller at dusk.
+        _mist.Draw(fb, 0.45f + 0.5f * dusk);
+
+        // 5. The smoke. At dusk there is less light to show it, so it fades to a third.
         _smoke.Draw(fb, 0.5f * (1 - 0.65f * dusk));   // half strength: a summer evening fire, banked low
 
-        // 5. Lamps in the windows, then 6. fireflies.
+        // 6. Lamps in the windows, then 7. fireflies.
         _evening.DrawWindows(fb);
         _evening.DrawFireflies(fb);
     }

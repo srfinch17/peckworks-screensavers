@@ -149,6 +149,8 @@ stars are out overhead; mist lies at the feet of the far forest.
   windows and the door lamp flicker like firelight; the brighter stars twinkle.
 - No happenings yet.
 
+Settings: fireflies, number of fish, number of squirrels, chimney smoke, breeze.
+
 ## Cotswold Brook
 
 A real photograph brought to life: honey-coloured stone cottages beside a brook in the Cotswolds
@@ -169,11 +171,20 @@ Photo by [Martin Fenton](https://unsplash.com/@mhfphotographygb) on
   to blue with a rose afterglow behind the roofs, the windows light up one by one, and fireflies
   come out over the reeds, near ones bigger and quicker than far ones, each a faint dot that
   flashes green every few seconds.
+- The fireflies fly IN the scene, not on the glass: one deep in the reed bed slips behind the
+  blades and flowers nearer to you than it is, and its glow stops at their edges.
+- Mist lies on the far water, thickest by the bridge and thinning toward you, with soft banks
+  drifting through it. It is a faint haze in the golden light and gathers as dusk falls; the
+  near reeds stand in front of it.
 
-Settings: ripples, trout, how often they rise, chimney smoke, fireflies, and how many minutes
-one turn of the evening takes (0 keeps it golden).
+Settings: ripples, trout, how often they rise, chimney smoke, mist on the water, fireflies, and
+how many minutes one turn of the evening takes (0 keeps it golden).
 
-Settings: fireflies, number of fish, number of squirrels, chimney smoke, breeze.
+The fireflies and the mist know how far away each part of the photo is from a **depth map**: a
+grey copy of the photo where white is near and black is far, made once by
+[Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) (the Small model,
+Apache 2.0 licence), an AI model that judges distance from a single picture.
+`scripts\depthmap.py` makes it; the map ships inside the `.scr`, the model does not.
 
 ## All screensavers
 
@@ -242,8 +253,9 @@ src/SakuraDusk/                    the Sakura Dusk screensaver
 src/Halloween/                     the Halloween screensaver
 src/Christmas/                     the Christmas screensaver
 src/CabinByStream/                 the Cabin by Stream screensaver
-src/CotswoldBrook/                 the Cotswold Brook screensaver (and its photo, brook.jpg)
+src/CotswoldBrook/                 the Cotswold Brook screensaver (its photo brook.jpg, and brook_depth.png)
 scripts/                           publish / install / uninstall / verify / happening (render one happening)
+                                   / depthmap.py (a photo's depth map, made once)
 docs/                              the how-it-works guide
 ```
 
@@ -261,6 +273,11 @@ refresh before the next one is drawn, so frames reach the screen evenly, one per
 earlier timer ran slightly faster than the screen and showed a frame twice now and then: a
 small judder you could see in anything moving steadily). Matrix Rain at 4K runs at about 34, above
 the film's own 24.
+
+Cotswold Brook's column predates its mist and depth-aware fireflies. Timed section by section
+inside one run at 4K, the drifting mist banks add about 2.5 to 3 ms per frame and the fireflies'
+depth test about 0.4 ms at dusk; the still sheet of mist costs nothing per frame (it is painted
+into the photo once). The column will be re-measured on an otherwise idle machine.
 
 Halloween's happenings cost almost nothing on average: four minutes of ordinary play at 4K
 averaged 12.5 ms, against 13.0 to 13.2 ms for the same scene with nothing on, measured in the same

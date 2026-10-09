@@ -69,7 +69,7 @@ public sealed class PhotoEvening
         _photo = photo;
         _look = look;
         float p = photo.P;
-        _golden = photo.Pixels;
+        _golden = (uint[])photo.Pixels.Clone();          // our own copy: LayMist may paint on it
         _dusk = MakeDusk(_golden, photo.Width, photo.Height);
         Backdrop = new uint[_golden.Length];
         _cycleSeconds = cycleMinutes * 60f;
@@ -79,6 +79,40 @@ public sealed class PhotoEvening
         _windowGlow = Sprite.Glow(Math.Max(4, (int)(p * 0.03f)), Color.FromArgb(255, 170, 90));
         _fireflies = new PhotoFireflies(photo, fireflyZones, fireflyAmount, rng);
         Refresh();
+    }
+
+    /// <summary>
+    /// Paints a still sheet of mist into both pictures the evening fades
+    /// between: a little of it in the golden light, more at dusk (evening mist
+    /// gathers as the air cools). Painted once here, it costs nothing per
+    /// frame; done every frame at 4K it cost several milliseconds. Like a
+    /// scene painter adding the haze to the backdrop cloth itself instead of
+    /// running a smoke machine all night.
+    /// </summary>
+    /// <param name="sheet">How much mist each screen pixel has at full strength, 0 to 255.</param>
+    /// <param name="golden">The share of it in the golden light (0 to 1).</param>
+    /// <param name="dusk">The share of it at dusk (0 to 1).</param>
+    public void LayMist(byte[] sheet, Color colour, float golden, float dusk)
+    {
+        Lay(_golden, golden);
+        Lay(_dusk, dusk);
+        _mixedAt = -1;                                     // rebuild the whole backdrop from the new pictures
+        _sweepRow = 0;
+        Refresh();
+
+        void Lay(uint[] picture, float strength)
+        {
+            int k = (int)(Math.Clamp(strength, 0f, 1f) * 256);
+            for (int i = 0; i < picture.Length; i++)
+            {
+                int a = sheet[i] * k >> 8;                 // how much mist on this pixel, 0 to 255
+                if (a == 0) continue;
+                uint c = picture[i];
+                int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
+                r += (colour.R - r) * a >> 8; g += (colour.G - g) * a >> 8; b += (colour.B - b) * a >> 8;
+                picture[i] = (uint)((r << 16) | (g << 8) | b);
+            }
+        }
     }
 
     public void Update(double dt)

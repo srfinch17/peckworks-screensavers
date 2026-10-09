@@ -79,6 +79,7 @@ src/
     Photo/FlowingWater.cs          a running river: the fine texture carried downstream, rocks left still
     Photo/PhotoEvening.cs          evening on a daytime photo: dusk, lamplit windows, lamps
     Photo/PhotoFireflies.cs        fireflies that fly their own paths and flash, near and far
+    Photo/PhotoMist.cs             soft banks of mist drifting across part of a photo
 
   MatrixRain/                      a screensaver built on the engine
     Program.cs                     Main(), plus the "definition" handed to the engine
@@ -132,6 +133,7 @@ src/
     Trout.cs                       trout just under the surface, holding and darting
     CotswoldBrookSettings.cs       declares its knobs
     brook.jpg                      the photo, packed inside the .scr
+    brook_depth.png                its depth map (white = near), made once by scripts/depthmap.py
 ```
 
 A screensaver only has to write one class with two methods:
@@ -395,6 +397,28 @@ glass and is blended toward lamplight, keeping its curtains and glazing bars.
 each lives in a place with a depth (the reeds in front, the water, the far bank), flies a curving
 path that turns by two slow waves of its own, shows as a faint dot, and flashes every few
 seconds. Near ones are bigger and cross faster.
+
+*Depth map.* A photo is flat: the code cannot tell the near reeds from the far wall by their
+colour. So a second picture rides along with it, `brook_depth.png`, the same shape, where each
+pixel says how NEAR that bit of the scene is (white near, black far). It is made once, on the
+developer's machine, by an AI model (Depth Anything V2 Small) that judges distance from one
+picture the way you can with one eye shut: by size, overlap, haze and where things meet the
+ground. `scripts/depthmap.py` runs it; the saver only reads the grey picture.
+
+With it, a moving thing can sit IN the photo. Each firefly is given a distance picked from the
+scenery in its own patch (most as near as the nearer part of it, a few deeper in), and
+`Sprite.Draw` skips any pixel where the scenery is nearer than the firefly: hold a cut-out at
+arm's length in a garden and the flowers closer to your eye cover it, the hedge behind does not.
+A box on the screen is not a slab of one distance (the foot of a reed bed is far nearer than its
+top), which is why the distance comes from the map, not the box.
+
+*Mist* uses the map twice. A still sheet lies on the water, thickest where the map says far (by
+the bridge) and fading to nothing at the reed tips, and rising softly from nothing at the foot of
+the cottages so it has no hard top. It never moves, so it is painted once into both the golden
+and the dusk copy of the photo (more into the dusk one: mist gathers as the air cools) and costs
+nothing per frame; blended in every frame at 4K it cost several milliseconds. Soft banks drift
+through it to keep it alive, shown only where the map says the scenery is beyond the reeds.
+Banks alone looked like streaks of light, not mist: mist on water is a sheet, stirred.
 
 A running river (`FlowingWater.cs`, in the engine for any photo with one) works differently from
 the brook. In real rapids the big shapes hold still: the rocks, and the white water piled up

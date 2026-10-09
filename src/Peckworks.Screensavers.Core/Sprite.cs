@@ -120,8 +120,9 @@ public sealed class Sprite
         (int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
 
     /// <summary>Stamps the sprite with its CENTER at (x, y). Handy for glows.</summary>
-    public void DrawCentered(FrameBuffer fb, float x, float y, float opacity = 1f, bool[]? onlyWhere = null, bool mirror = false) =>
-        Draw(fb, (int)(x - Width / 2f), (int)(y - Height / 2f), opacity, onlyWhere, mirror);
+    public void DrawCentered(FrameBuffer fb, float x, float y, float opacity = 1f, bool[]? onlyWhere = null, bool mirror = false,
+        byte[]? depth = null, int nearness = 255) =>
+        Draw(fb, (int)(x - Width / 2f), (int)(y - Height / 2f), opacity, onlyWhere, mirror, depth, nearness);
 
     /// <summary>
     /// Stamps the sprite with its top-left corner at (left, top).
@@ -137,7 +138,17 @@ public sealed class Sprite
     /// squirrel facing right once; the same sticker turned over is the one
     /// facing left, so no second set of sprites is needed.
     /// </param>
-    public void Draw(FrameBuffer fb, int left, int top, float opacity = 1f, bool[]? onlyWhere = null, bool mirror = false)
+    /// <param name="depth">
+    /// An optional depth map of the backdrop (PhotoBackdrop.Depth: how near
+    /// each pixel's scenery is, 0 far to 255 near). With it, the sprite is
+    /// hidden wherever the scenery is NEARER than the sprite's own
+    /// "nearness": a reed between us and a firefly hides the firefly. Like
+    /// holding a cut-out at arm's length in a garden: the flowers closer to
+    /// your eye than your hand cover it, the hedge behind does not.
+    /// </param>
+    /// <param name="nearness">How near the sprite itself is, on the same 0 to 255 scale.</param>
+    public void Draw(FrameBuffer fb, int left, int top, float opacity = 1f, bool[]? onlyWhere = null, bool mirror = false,
+        byte[]? depth = null, int nearness = 255)
     {
         if (opacity <= 0) return;
         // Work out which part of the sprite is actually on screen, so a sprite
@@ -151,6 +162,29 @@ public sealed class Sprite
         // than decimals. The opacity becomes a number from 0 to 256, and
         // ">> 8" (shift right by 8 bits) is a fast "divide by 256".
         int opacity256 = (int)(Math.Min(1f, opacity) * 256);
+
+        // A big sprite (a long bank of mist at 4K is a quarter of a million
+        // pixels) is shared out across the processor's cores, a band of rows
+        // each, like several painters each taking a strip of the same wall.
+        // Rows never overlap, so they cannot get in each other's way. Small
+        // ones (most glows) are quicker done alone than handed out.
+        if ((x1 - x0) * (y1 - y0) > 40_000)
+            DrawShared(fb, left, top, x0, x1, y0, y1, opacity256, onlyWhere, mirror, depth, nearness);
+        else
+            DrawRows(fb, left, top, x0, x1, y0, y1, opacity256, onlyWhere, mirror, depth, nearness);
+    }
+
+    // Its own method, so the hand-out (which needs a lambda, and so a little
+    // garbage) is only paid for by the big sprites, not every small glow.
+    private void DrawShared(FrameBuffer fb, int left, int top, int x0, int x1, int y0, int y1, int opacity256,
+        bool[]? onlyWhere, bool mirror, byte[]? depth, int nearness) =>
+        Parallel.For(0, (y1 - y0 + 31) / 32, band =>
+            DrawRows(fb, left, top, x0, x1, y0 + band * 32, Math.Min(y1, y0 + band * 32 + 32), opacity256, onlyWhere, mirror, depth, nearness));
+
+    /// <summary>Stamps the sprite's rows y0 to y1 (the visible columns x0 to x1).</summary>
+    private void DrawRows(FrameBuffer fb, int left, int top, int x0, int x1, int y0, int y1, int opacity256,
+        bool[]? onlyWhere, bool mirror, byte[]? depth, int nearness)
+    {
         uint[] frame = fb.Pixels;
 
         for (int sy = y0; sy < y1; sy++)
@@ -163,6 +197,7 @@ public sealed class Sprite
                 int a = (int)(c >> 24) * opacity256 >> 8;                // how solid this pixel is, 0 to 255
                 if (a == 0) continue;                                    // clear glass: nothing to do
                 if (onlyWhere != null && !onlyWhere[dst + sx]) continue; // the stencil says hands off
+                if (depth != null && depth[dst + sx] > nearness) continue; // something nearer stands in front
 
                 // result = old + (new - old) * solidness, for red, green and blue.
                 uint bg = frame[dst + sx];

@@ -35,6 +35,8 @@
       scene reads it back with GetManifestResourceStream.
     -->
     <EmbeddedResource Include="brook.jpg" LogicalName="CotswoldBrook.brook.jpg" />
+    <!-- The photo's depth map (white = near), made once by scripts/depthmap.py. -->
+    <EmbeddedResource Include="brook_depth.png" LogicalName="CotswoldBrook.brook_depth.png" />
   </ItemGroup>
 
 </Project>

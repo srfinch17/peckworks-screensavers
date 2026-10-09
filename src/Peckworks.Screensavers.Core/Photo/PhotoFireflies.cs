@@ -28,6 +28,15 @@ public sealed record FireflyZone(RectangleF Box, float Depth, float Share = 1f);
 /// little, by an amount that rises and falls on two slow waves of its own;
 /// so its path curves this way and that and never repeats. If it wanders
 /// out of its place it turns back toward the middle of it.
+///
+/// AMONG THE REEDS: when the photo has a depth map (PhotoBackdrop.Depth),
+/// each firefly also gets a real distance, and is hidden wherever the
+/// scenery is nearer than that. Its distance is picked from the distances
+/// of the scenery in its own place: most are as near as the nearer part of
+/// it (so they fly in front of most of the reeds), a few sit deeper in (so
+/// they slip behind blades as they go). A rectangle on the screen is not a
+/// slab of the same distance (the bottom of a reed bed is much nearer than
+/// its top), which is why the distance comes from the map and not the zone.
 /// </summary>
 public sealed class PhotoFireflies
 {
@@ -36,6 +45,7 @@ public sealed class PhotoFireflies
         public float X, Y, Heading, Speed, Depth;
         public float TurnA, TurnB, PhaseA, PhaseB;     // the two waves that steer it
         public int Zone, Size;
+        public byte Nearness;                          // how near it is, 0 to 255, on the depth map's scale
         public double FlashAt, FlashLength;            // when the next flash starts, and how long it lasts
     }
 
@@ -44,6 +54,8 @@ public sealed class PhotoFireflies
     private readonly RectangleF[] _zones;              // in screen pixels
     private readonly Sprite[] _core = new Sprite[Sizes], _halo = new Sprite[Sizes], _tail = new Sprite[Sizes];
     private readonly Random _rng;
+    private readonly byte[]? _depth;
+    private readonly int _screenW, _screenH;
     private readonly float _u;
     private double _time;
 
@@ -51,6 +63,9 @@ public sealed class PhotoFireflies
     public PhotoFireflies(PhotoBackdrop photo, FireflyZone[] zones, float amount, Random rng)
     {
         _rng = rng;
+        _depth = photo.Depth;
+        _screenW = photo.Width;
+        _screenH = photo.Height;
         // Sized by the SCREEN (u, as in the painted savers), not the photo: a
         // tall photo shown in a band is far taller than the screen.
         _u = Math.Min(photo.Height, photo.Width * 9f / 16f);
@@ -70,6 +85,9 @@ public sealed class PhotoFireflies
             _halo[s] = Sprite.Glow(Math.Max(5, (int)(_u * 0.026f * k)), Color.FromArgb(150, 255, 70));
             _tail[s] = Sprite.Glow(Math.Max(2, (int)(_u * 0.0038f * k)), Color.FromArgb(160, 215, 95));
         }
+
+        // Each zone's scenery distances, nearest last, to pick each firefly's distance from.
+        byte[][] zoneDepths = _zones.Select(DepthsIn).ToArray();
 
         int count = Math.Max(0, (int)Math.Round(18 * amount * photo.Width / (_u * 16f / 9f)));
         float totalShare = zones.Sum(z => z.Share);
@@ -95,8 +113,30 @@ public sealed class PhotoFireflies
                 Size = Math.Clamp((int)(depth * Sizes), 0, Sizes - 1),
                 FlashAt = rng.NextDouble() * 6,
                 FlashLength = 0.8 + 0.5 * rng.NextDouble(),
+                // As near as the scenery at 60% to 97% of its place: in front of
+                // most of it, behind its nearest bits. No depth map: in front of all.
+                Nearness = zoneDepths[zi].Length == 0 ? (byte)255
+                    : zoneDepths[zi][(int)((0.60 + 0.37 * rng.NextDouble()) * (zoneDepths[zi].Length - 1))],
             };
         }
+    }
+
+    /// <summary>
+    /// The depth map's values inside a box on the screen, sorted far to near
+    /// (every fourth pixel each way is plenty). Empty with no depth map, or
+    /// when the box is off the screen.
+    /// </summary>
+    private byte[] DepthsIn(RectangleF box)
+    {
+        if (_depth == null) return [];
+        var found = new List<byte>();
+        int x0 = Math.Max(0, (int)box.Left), x1 = Math.Min(_screenW, (int)box.Right);
+        int y0 = Math.Max(0, (int)box.Top), y1 = Math.Min(_screenH, (int)box.Bottom);
+        for (int y = y0; y < y1; y += 4)
+            for (int x = x0; x < x1; x += 4)
+                found.Add(_depth[y * _screenW + x]);
+        found.Sort();
+        return found.ToArray();
     }
 
     public void Update(double dt)
@@ -139,7 +179,7 @@ public sealed class PhotoFireflies
         {
             float x = MathF.Round(f.X), y = MathF.Round(f.Y);
             // The faint tail glow it keeps between flashes: just enough to follow it.
-            _tail[f.Size].DrawCentered(fb, x, y, 0.6f * light);
+            _tail[f.Size].DrawCentered(fb, x, y, 0.6f * light, depth: _depth, nearness: f.Nearness);
 
             // The flash: a quick swell (a fifth of the flash) and a slower fade.
             double since = _time - f.FlashAt;
@@ -147,8 +187,8 @@ public sealed class PhotoFireflies
             float q = (float)(since / f.FlashLength);
             float b = (q < 0.2f ? q / 0.2f : MathF.Pow(1 - (q - 0.2f) / 0.8f, 1.8f)) * light;
             if (b < 0.02f) continue;
-            _halo[f.Size].DrawCentered(fb, x, y, 0.75f * b);
-            _core[f.Size].DrawCentered(fb, x, y, b);
+            _halo[f.Size].DrawCentered(fb, x, y, 0.75f * b, depth: _depth, nearness: f.Nearness);
+            _core[f.Size].DrawCentered(fb, x, y, b, depth: _depth, nearness: f.Nearness);
         }
     }
 }
