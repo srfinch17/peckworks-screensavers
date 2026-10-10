@@ -31,7 +31,9 @@ internal sealed class Turtles
 ///
 /// WHAT A POND TURTLE DOES (watch one at any pond): it paddles slowly just
 /// under the surface, FRONT LEFT leg together with BACK RIGHT, then the other
-/// pair, like a dog swimming, with a small surge on each stroke. Its shell
+/// pair, like a dog swimming: each leg sweeps BACK quickly with its webbed
+/// foot spread (that is the push, and the body surges forward), then returns
+/// forward slowly with the foot folded. Its shell
 /// is rigid, so it turns as one piece, in wide slow arcs, by paddling harder
 /// on one side; nothing bends. Every so often it stops, spreads its legs and
 /// just floats at the surface for a while, pokes its nose up for a breath
@@ -122,9 +124,12 @@ internal sealed class Turtle : Body
             }
         }
         _stroke += ((_resting ? 0f : 1f) - _stroke) * (1 - MathF.Exp(-dt * 1.5f));
-        _phase = (_phase + MathF.Tau * 1.1f * dt * _stroke) % MathF.Tau;
+        _phase = (_phase + MathF.Tau * 0.9f * dt * _stroke) % MathF.Tau;
         // Each pair of legs pushes as it sweeps back: a small surge twice a cycle.
-        float targetSpeed = _resting ? 0 : _len * 0.5f * (0.75f + 0.5f * MathF.Abs(MathF.Cos(_phase)));
+        // Each pair of legs pushes during its quick sweep back (see Stroke); the push is
+        // eased in and out, so the surge is a swell, not a kick.
+        float push = MathF.Max(Thrust(_phase), Thrust(_phase + MathF.PI));
+        float targetSpeed = _resting ? 0 : _len * 0.5f * (0.65f + 0.7f * push);
         _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (_resting ? 0.8f : 2.5f)));
 
         // ---- Steering: a slow wander, a pull toward its goal, and the bank kept off ----
@@ -195,7 +200,8 @@ internal sealed class Turtle : Body
     private PointF At(float s, float v)
     {
         float dx = MathF.Cos(_heading), dy = MathF.Sin(_heading);
-        float gx = _x + dx * s * _len - dy * v * _wide * Profile(s), gy = _y + dy * s * _len + dx * v * _wide * Profile(s);
+        // The nose is at (_x, _y) and the body lies BEHIND it, against the heading.
+        float gx = _x - dx * s * _len - dy * v * _wide * Profile(s), gy = _y - dy * s * _len + dx * v * _wide * Profile(s);
         return ToScreen(gx, gy);
     }
 
@@ -305,8 +311,8 @@ internal sealed class Turtle : Body
         {
             // Front left with back right, then the other pair: the diagonal pairs share a phase.
             float front = _phase + (side > 0 ? 0 : MathF.PI), rear = _phase + (side > 0 ? MathF.PI : 0);
-            Leg(fb, 0.3f, side, 1.22f + 0.7f * MathF.Sin(front) * _stroke - 0.17f * (1 - _stroke), 0.34f, murk);
-            Leg(fb, 0.74f, side, 2.36f + 0.5f * MathF.Sin(rear) * _stroke + 0.26f * (1 - _stroke), 0.3f, murk);
+            Leg(fb, 0.3f, side, 1.22f - 0.7f * Stroke(front) * _stroke - 0.17f * (1 - _stroke), 0.34f, Thrust(front) * _stroke, murk);
+            Leg(fb, 0.74f, side, 2.36f - 0.5f * Stroke(rear) * _stroke + 0.26f * (1 - _stroke), 0.3f, Thrust(rear) * _stroke, murk);
         }
         Paint(fb, _where, _pond.Sun, murk, soft);
         // The eyes: a dark dot each side of the head, toward the front.
@@ -320,7 +326,26 @@ internal sealed class Turtle : Body
     /// side, swung out at "angle" from straight ahead (0 = forward, pi =
     /// backward), with the webbed foot at its end.
     /// </summary>
-    private void Leg(FrameBuffer fb, float s, int side, float angle, float length, float murk)
+    /// <summary>
+    /// Where a leg is in its stroke, +1 swept forward to -1 swept back: a
+    /// quick sweep back over the first 35% of the cycle (the push), then a
+    /// slow return forward. Both halves are cosine curves that meet with the
+    /// same slope, so the leg never jerks at the turn.
+    /// </summary>
+    private static float Stroke(float phase)
+    {
+        float p = (phase % MathF.Tau + MathF.Tau) % MathF.Tau / MathF.Tau;
+        return p < 0.35f ? MathF.Cos(MathF.PI * p / 0.35f) : -MathF.Cos(MathF.PI * (p - 0.35f) / 0.65f);
+    }
+
+    /// <summary>How hard a leg is pushing right now, 0 to 1: a smooth hump over its sweep back.</summary>
+    private static float Thrust(float phase)
+    {
+        float p = (phase % MathF.Tau + MathF.Tau) % MathF.Tau / MathF.Tau;
+        return p < 0.35f ? MathF.Sin(MathF.PI * p / 0.35f) : 0;
+    }
+
+    private void Leg(FrameBuffer fb, float s, int side, float angle, float length, float spread, float murk)
     {
         float a = _heading + side * angle;
         float dx = MathF.Cos(a), dy = MathF.Sin(a);
@@ -328,9 +353,9 @@ internal sealed class Turtle : Body
         float l = _len * length;
         // The hip, just inside the shell's edge, in ground pixels.
         float hw = _wide * Profile(s) * 0.8f;
-        float hx = _x + hdx * s * _len - hdy * side * hw, hy = _y + hdy * s * _len + hdx * side * hw;
+        float hx = _x - hdx * s * _len - hdy * side * hw, hy = _y - hdy * s * _len + hdx * side * hw;
         PointF thigh = ToScreen(hx + dx * l * 0.4f, hy + dy * l * 0.4f), foot = ToScreen(hx + dx * l * 0.85f, hy + dy * l * 0.85f);
         Oval(fb, _where, thigh, a, l * 0.5f, l * 0.2f, 66, 84, 44, 1f, murk, _pond.Sun, rays: false);
-        Oval(fb, _where, foot, a, l * 0.3f, l * 0.17f, 56, 74, 40, 1f, murk, _pond.Sun, rays: false);
+        Oval(fb, _where, foot, a, l * 0.3f, l * (0.13f + 0.08f * spread), 56, 74, 40, 1f, murk, _pond.Sun, rays: false);   // the webbed foot opens on the push, folds on the return
     }
 }
