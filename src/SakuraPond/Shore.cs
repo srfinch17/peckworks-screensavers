@@ -100,11 +100,11 @@ internal static class ShorePainter
                 double a = rng.NextDouble() * Math.Tau, d = Math.Sqrt(rng.NextDouble()) * u * 0.035;
                 x = c.X + (float)(Math.Cos(a) * d); y = c.Y + (float)(Math.Sin(a) * d * 0.8);
             }
-            float len = u * (0.009f + 0.013f * (float)rng.NextDouble());
+            float len = u * (0.014f + 0.018f * (float)rng.NextDouble());
             float az = ((float)rng.NextDouble() - 0.5f) * 1.8f;                 // its own fan, left or right of straight up
             float lean = 0.1f + 0.35f * (float)rng.NextDouble();                // all of them lean a little downwind (right)
             float tx = x + len * (lean + 0.55f * MathF.Sin(az)), ty = y - len * Light.Lift * MathF.Cos(az) * 0.9f;
-            float wid = u * (0.0015f + 0.0013f * (float)rng.NextDouble());
+            float wid = u * (0.0017f + 0.0015f * (float)rng.NextDouble());
             // The shadow: the blade flattened onto the ground, down and to the right.
             float sx = x + len * (lean * 0.4f + Light.ShadowX * 0.3f), sy = y + len * Light.ShadowY * 0.28f;
             Sliver(carpet, shadow, x, y, sx, sy, wid * 0.9f, polyArr);
@@ -157,8 +157,8 @@ internal static class ShorePainter
         using var strip = Band(bank, inner);
         using var wet = Band(bank, mid);
         using var keepOut = Band(bank, core);
-        using (var sand = new SolidBrush(Color.FromArgb(132, 122, 94))) g.FillPath(sand, strip);
-        using (var damp = new SolidBrush(Color.FromArgb(150, 96, 90, 70))) g.FillPath(damp, wet);
+        using (var sand = new SolidBrush(Color.FromArgb(104, 98, 78))) g.FillPath(sand, strip);
+        using (var damp = new SolidBrush(Color.FromArgb(150, 78, 74, 58))) g.FillPath(damp, wet);
         noGrass.FillPath(Brushes.White, keepOut);
         // Pebbles and specks of soil on the sand, each with a touch of shadow.
         GraphicsState st = g.Save();
@@ -197,7 +197,7 @@ internal static class ShorePainter
     /// fine, as rocks do). One or two more sit out in the shallows. Drawn
     /// far to near, so a nearer rock covers one behind it.
     /// </summary>
-    public static void Rocks(Graphics g, Graphics gb, Graphics noGrass, PointF[] bank, PointF corner, Region water, float u, Random rng)
+    public static void Rocks(Graphics g, Graphics gb, Graphics noGrass, PointF[] bank, PointF corner, float u, Random rng)
     {
         var placed = new List<(PointF C, float R, bool InWater)>();
         for (int tries = 0; tries < 160 && placed.Count < 15; tries++)
@@ -216,20 +216,19 @@ internal static class ShorePainter
             placed.Add((c, r, inWater));
         }
         foreach (var (c, r, _) in placed.OrderBy(q => q.C.Y))
-            Rock(g, gb, noGrass, c.X, c.Y, r, water, u, rng);
+            Rock(g, gb, noGrass, c.X, c.Y, r, u, rng);
     }
 
     private static float Dist(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
 
     /// <summary>
     /// One rock. In paint order: its soft shadow on the ground to the lower
-    /// right; a pale rim on the water round its wet foot (water meeting a
-    /// stone); the body, lit from the upper left; a couple of creases where
+    /// right; the body, lit from the upper left; a couple of creases where
     /// its faces meet; a speckle of grain; moss and a spot of lichen on top;
     /// a light edge where the sun catches its rim and a dark edge on the
-    /// shaded side; and the dark wet band where it stands in the water.
+    /// shaded side. The water is laid back over its submerged part afterwards.
     /// </summary>
-    private static void Rock(Graphics g, Graphics gb, Graphics noGrass, float x, float y, float r, Region water, float u, Random rng)
+    private static void Rock(Graphics g, Graphics gb, Graphics noGrass, float x, float y, float r, float u, Random rng)
     {
         PointF[] pts = RockShape(x, y, r, 0.8f, rng);
         using var path = new GraphicsPath();
@@ -255,12 +254,7 @@ internal static class ShorePainter
             using var sb = new SolidBrush(Color.FromArgb(30, 4, 14, 14));
             g.FillPath(sb, sh);
         }
-        // The pale rim on the water round its foot.
-        GraphicsState st = g.Save();
-        g.SetClip(water, CombineMode.Intersect);
-        using (var rim = new Pen(Color.FromArgb(64, 214, 228, 224), MathF.Max(1.2f, r * 0.06f)))
-            g.DrawPath(rim, path);
-        g.Restore(st);
+        GraphicsState st;
 
         // The body: a gentle rounding toward the sun...
         using (var fill = new PathGradientBrush(path)
@@ -333,16 +327,13 @@ internal static class ShorePainter
             float nx = ey / el, ny = -ex / el;                            // outward (points run anticlockwise on screen)
             float facing = nx * -0.55f + ny * -0.83f;
             if (facing > 0.2f)
-                using (var lit = new Pen(Color.FromArgb((int)(120 * facing), 250, 248, 240), MathF.Max(1f, r * 0.05f))) g.DrawLine(lit, a, b);
+                using (var lit = new Pen(Color.FromArgb((int)(50 * facing), 250, 248, 240), MathF.Max(1f, r * 0.04f))) g.DrawLine(lit, a, b);
             else if (facing < -0.2f)
                 using (var dark = new Pen(Color.FromArgb((int)(-110 * facing), 14, 16, 18), MathF.Max(1f, r * 0.06f))) g.DrawLine(dark, a, b);
         }
-        // The wet band: the part of the rock standing in the water is darker.
-        st = g.Save();
-        g.SetClip(path, CombineMode.Intersect);
-        g.SetClip(water, CombineMode.Intersect);
-        using (var wet = new SolidBrush(Color.FromArgb(95, 8, 26, 30))) g.FillPath(wet, path);
-        g.Restore(st);
+        // The part standing in the water is not painted here: once every rock
+        // is down, the painter lays the water back over it pixel by pixel
+        // (PondPainter.WrapWater), deeper water hiding more of the stone.
 
         gb.FillPath(Brushes.White, path);
         noGrass.FillPath(Brushes.White, path);

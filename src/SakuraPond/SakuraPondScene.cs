@@ -14,7 +14,8 @@ namespace SakuraPond;
 ///   2. Under the water: the KOI (Koi.cs), and just under the surface the
 ///      TURTLES (Turtle.cs).
 ///   3. On the water: RIPPLES (Ripples.cs), floating PETALS (Petals.cs), and
-///      now and then a swimming SNAKE (Snake.cs).
+///      now and then a swimming SNAKE (Snake.cs). Standing in the shallows,
+///      the CATTAILS (Grass.cs), swaying with the lawn's wind.
 ///   4. In the air: the SHADOWS of the dragonflies and swallows on the water,
 ///      then the DRAGONFLIES (Dragonflies.cs) and SWALLOWS (Swallows.cs).
 ///   5. Falling PETALS, nearest of all.
@@ -29,6 +30,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly bool[] _waterInView;     // open water that no branch hides
     private readonly Ripples _ripples;
     private readonly Grass _grass;
+    private readonly Cattails _cattails;
     private readonly KoiSchool _koi;
     private readonly Turtles _turtles;
     private readonly Petals _petals;
@@ -43,6 +45,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
         _ripples = new Ripples(_pond, _waterInView);
         _grass = new Grass(_pond, _rng);
+        _cattails = new Cattails(_pond, _rng);
         _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng);
         _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng);
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _rng);
@@ -55,6 +58,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     {
         float dt = (float)Math.Min(elapsedSeconds, 0.1);
         _grass.Update(dt);
+        _cattails.Update(dt);
         _koi.Update(dt);
         _turtles.Update(dt);
         _petals.Update(dt);
@@ -73,6 +77,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _ripples.Draw(fb);
         _petals.DrawFloating(fb);
         _snake.Draw(fb);
+        _cattails.Draw(fb);
         _dragonflies.DrawShadows(fb);
         _swallows.DrawShadows(fb);
         _dragonflies.Draw(fb);

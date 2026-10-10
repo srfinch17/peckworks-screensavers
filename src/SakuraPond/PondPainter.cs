@@ -45,6 +45,9 @@ internal sealed class Pond
     /// <summary>Spots in the blossom where petals let go.</summary>
     public required IReadOnlyList<PointF> BlossomSpots { get; init; }
 
+    /// <summary>Where the cattails stand, in the shallows near the bank (Cattails in Grass.cs draws them).</summary>
+    public required PointF CattailSpot { get; init; }
+
     /// <summary>The lily pads, for dragonflies to land on.</summary>
     public required IReadOnlyList<LilyPad> Pads { get; init; }
 
@@ -168,8 +171,6 @@ internal static class PondPainter
         using var gn = Graphics.FromImage(noGrassSheet);
         gn.Clear(Color.Black);
         gn.SmoothingMode = SmoothingMode.AntiAlias;
-        using var water = new Region(new RectangleF(-10, -10, w + 20, h + 20));
-        water.Exclude(land);
         using var carpetSheet = new Bitmap(w, h, PixelFormat.Format32bppArgb);
         using var gc = Graphics.FromImage(carpetSheet);
         gc.Clear(Color.Transparent);
@@ -178,11 +179,14 @@ internal static class PondPainter
         ShorePainter.BareEdge(g, gn, bank, corner, u, rng);
         ShorePainter.SteppingStones(g, gb, gn, bank, corner, leftCorner, u, h, rng);
         Irises(g, gb, gn, bank, corner, u, rng);
-        ShorePainter.Rocks(g, gb, gn, bank, corner, water, u, rng);       // after the irises: a clump behind a rock is hidden by it
+        uint[] beforeRocks = Read(bmp);
+        ShorePainter.Rocks(g, gb, gn, bank, corner, u, rng);       // after the irises: a clump behind a rock is hidden by it
+        WrapWater(bmp, beforeRocks, Read(blockers), inPond, dist, DistanceToEdge(inPond.Select(p => !p).ToArray(), w, h, edgeIsBank: false), w, h, u);
 
         // ---- 4: on the water ----
+        PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
         var pads = new List<LilyPad>();
-        LilyPads(g, gp, pads, inPond, dist, w, h, u, rng);
+        LilyPads(g, gp, pads, inPond, dist, cattails, w, h, u, rng);
 
         // ---- 5: branch shadows, then the branches ----
         int seed = rng.Next();
@@ -232,7 +236,7 @@ internal static class PondPainter
         {
             Width = w, Height = h, U = u,
             Pixels = final, Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Sun = sun,
-            BlossomSpots = spots, Pads = pads, Centre = centre, Reach = reach,
+            BlossomSpots = spots, Pads = pads, CattailSpot = cattails, Centre = centre, Reach = reach,
         };
     }
 
@@ -390,7 +394,7 @@ internal static class PondPainter
     /// middle (the notch real lily pads have), seen at our slant, so a little
     /// flatter than round. Veins run out from the middle.
     /// </summary>
-    private static void LilyPads(Graphics g, Graphics gb, List<LilyPad> pads, bool[] inPond, int[] dist, int w, int h, float u, Random rng)
+    private static void LilyPads(Graphics g, Graphics gb, List<LilyPad> pads, bool[] inPond, int[] dist, PointF cattails, int w, int h, float u, Random rng)
     {
         int clusters = 3;
         int tries = 0;
@@ -401,6 +405,7 @@ internal static class PondPainter
             // Calm water: a fair way from the bank, but not out in the open pond.
             if (!inPond[i] || dist[i] < u * 0.07f * 10 || dist[i] > u * 0.3f * 10) continue;
             if (pads.Any(p => Math.Abs(p.Center.X - x) + Math.Abs(p.Center.Y - y) < u * 0.45f)) continue;
+            if (Math.Abs(cattails.X - x) + Math.Abs(cattails.Y - y) < u * 0.22f) continue;        // not among the cattails
             clusters--;
             int n = 8 + rng.Next(8);
             for (int k = 0; k < n; k++)
@@ -614,6 +619,79 @@ internal static class PondPainter
             shade[i] = (byte)Math.Min(255, m * 3 / 2);
         }
         return shade;
+    }
+
+    /// <summary>
+    /// Lays the water back over whatever stands in it (rocks, iris blades).
+    /// A stone in a pond is not pasted on top of the water: the part below
+    /// the surface is SEEN THROUGH the water, more faintly the deeper it
+    /// goes, until a little way out it is gone. So for every pixel of a rock
+    /// that lies on the water side of the bank, the painted stone is mixed
+    /// back toward the water that was there before the rock, by an amount
+    /// that grows with the water's depth there. Just above the waterline the
+    /// stone is damp and a little darker (the splash line).
+    /// </summary>
+    private static void WrapWater(Bitmap bmp, uint[] before, uint[] blocked, bool[] inPond, int[] waterDist, int[] landDist, int w, int h, float u)
+    {
+        uint[] px = Read(bmp);
+        // The waterline runs round the rock's own rim, not straight across it:
+        // a rock's top stays dry while its flanks slope into the water. So on
+        // the water side the stone is mixed back toward the water in a band
+        // just inside its edge ("band" wide), fully at the rim and not at all
+        // further in, and darkened there (a wet flank). A rock standing well
+        // out in the pond sinks further: a floor on the mix that rises with
+        // the water's depth under it.
+        int[] rockDist = DistanceToEdge(blocked.Select(c => (c & 0xFF) >= 128).ToArray(), w, h, edgeIsBank: false);
+        float band = u * 0.012f * 10, deepFrom = u * 0.02f * 10, deepOver = u * 0.045f * 10;
+        int splash = (int)(u * 0.006f * 10);
+        for (int i = 0; i < px.Length; i++)
+        {
+            if ((blocked[i] & 0xFF) < 128) continue;
+            uint c = px[i];
+            int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
+            if (inPond[i])
+            {
+                // Under water a stone looks DARKER and bluer, never paler: the
+                // rim band mixes toward the water darkened by a third (the wet
+                // flank and the dark line where the surface meets it), and a
+                // stone out in the shallows takes on some of the water's own
+                // colour all over, up to about half: its top still breaks the surface.
+                uint o = before[i];
+                int or_ = (int)((o >> 16) & 0xFF), og = (int)((o >> 8) & 0xFF), ob = (int)(o & 0xFF);
+                float edge = Math.Clamp(1 - rockDist[i] / band, 0, 1) * 0.85f;
+                r += (int)((or_ * 0.6f - r) * edge); g += (int)((og * 0.62f - g) * edge); b += (int)((ob * 0.66f - b) * edge);
+                float sunk = Math.Clamp((waterDist[i] - deepFrom) / deepOver, 0, 1) * 0.5f * (1 - edge);
+                r += (int)((or_ * 0.85f - r) * sunk); g += (int)((og * 0.88f - g) * sunk); b += (int)((ob * 0.9f - b) * sunk);
+            }
+            else if (landDist[i] < splash)
+            {
+                float k = 0.82f + 0.18f * landDist[i] / splash;
+                r = (int)(r * k); g = (int)(g * k); b = (int)(b * k);
+            }
+            else continue;
+            px[i] = (uint)(r << 16 | g << 8 | b);
+        }
+        Write(bmp, px);
+    }
+
+    /// <summary>
+    /// Where the cattails stand: a spot in the shallows a little way out from
+    /// the middle part of the bank, on water (not under a rock).
+    /// </summary>
+    private static PointF CattailSpot(PointF[] bank, PointF corner, bool[] inPond, int[] dist, int w, int h, float u, Random rng)
+    {
+        for (int tries = 0; tries < 200; tries++)
+        {
+            PointF p = bank[bank.Length / 4 + rng.Next(bank.Length / 2)];
+            float ox = corner.X - p.X, oy = corner.Y - p.Y, ol = MathF.Max(1, MathF.Sqrt(ox * ox + oy * oy));
+            float out_ = u * (0.05f + 0.04f * (float)rng.NextDouble());
+            var c = new PointF(p.X - ox / ol * out_, p.Y - oy / ol * out_);
+            int ix = (int)c.X, iy = (int)c.Y;
+            if (ix < 0 || iy < 0 || ix >= w || iy >= h || !inPond[iy * w + ix]) continue;
+            if (iy > h - u * 0.05f || ix < u * 0.06f || ix > w - u * 0.06f) continue;         // room for the clump on screen
+            return c;
+        }
+        return new PointF(w * 0.5f, h * 0.5f);
     }
 
     /// <summary>Inside the shape (true) or not, one per pixel.</summary>

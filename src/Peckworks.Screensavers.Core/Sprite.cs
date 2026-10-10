@@ -28,6 +28,11 @@ public sealed class Sprite
 {
     private readonly uint[] _argb;
 
+    // For each row, the first and last column that is not clear glass. A
+    // sparse sprite (a tuft of grass is mostly empty box) is stamped row by
+    // row only between them, instead of reading every clear pixel to skip it.
+    private readonly int[] _rowFirst, _rowLast;
+
     public int Width { get; }
     public int Height { get; }
 
@@ -36,6 +41,16 @@ public sealed class Sprite
         Width = width;
         Height = height;
         _argb = argb;
+        _rowFirst = new int[height];
+        _rowLast = new int[height];
+        for (int y = 0; y < height; y++)
+        {
+            int first = width, last = -1;
+            for (int x = 0; x < width; x++)
+                if ((argb[y * width + x] >> 24) != 0) { if (first == width) first = x; last = x; }
+            _rowFirst[y] = first;
+            _rowLast[y] = last;
+        }
     }
 
     /// <summary>
@@ -197,7 +212,10 @@ public sealed class Sprite
         for (int sy = y0; sy < y1; sy++)
         {
             int src = sy * Width, dst = (top + sy) * fb.Width + left;
-            for (int sx = x0; sx < x1; sx++)
+            // Only the painted stretch of this row (mirrored: the stretch counted from the other edge).
+            int rx0 = mirror ? Width - 1 - _rowLast[sy] : _rowFirst[sy], rx1 = mirror ? Width - _rowFirst[sy] : _rowLast[sy] + 1;
+            int xa = Math.Max(x0, rx0), xb = Math.Min(x1, rx1);
+            for (int sx = xa; sx < xb; sx++)
             {
                 // Mirrored: read the sheet from its right edge inward instead.
                 uint c = _argb[src + (mirror ? Width - 1 - sx : sx)];

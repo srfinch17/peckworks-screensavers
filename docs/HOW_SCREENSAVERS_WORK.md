@@ -107,7 +107,7 @@ src/
     SakuraPondScene.cs             the layers, back to front
     PondPainter.cs                 paints the pond bed and water, lily pads, branches and their shadows; calls the shore painter
     Shore.cs                       paints the corner of land: the lawn, the sand edge, rocks that look like rocks, stepping stones
-    Grass.cs                       the lawn in the wind: the carpet slid and lit by a travelling gust, tufts that lean and spring back
+    Grass.cs                       the wind; plants as flip-books (tufts, cattails); the lawn's carpet slid and lit by a gust
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
     Turtle.cs                      the turtle: paddling, floating, a breath at the surface
@@ -492,8 +492,19 @@ rim on the water round its wet foot, the body with a gentle rounding toward the 
 FACE (the rim points on the sunny side joined by a ragged inner edge, filled three times at three
 sizes so its edge is a soft crease) and a dark face on the far side, short crack lines from the
 rim part of the way in, a fine speckle of grain, moss and a spot of lichen on top, a light edge
-where the rim faces the sun and a dark edge where it faces away, and a dark wet band where it
-stands in the water. Stones are not one grey: warm, cool, greenish, light and dark.
+where the rim faces the sun and a dark edge where it faces away. Stones are not one grey: warm,
+cool, greenish, light and dark. Then the WATER IS LAID BACK OVER the stones: a rock in a pond is
+not pasted on top of the water, its flanks slope into it. For every pixel of a rock on the water
+side of the bank, a band just inside the rock's own rim is mixed toward the water darkened by a
+third (the wet flank, and the dark line where the surface meets it), and a stone standing out in
+the shallows takes on some of the water's colour all over, up to about half, its top still
+breaking the surface. The waterline so runs round each stone, not straight across it.
+
+*Cattails.* One clump stands in the shallows a little way out from the bank: stiff stems with
+velvety brown heads and a pale spike, and long leaves between them that splay and bend over. It is
+the same flip-book as a grass tuft (24 pages of lean, each blade bent in three dimensions and
+projected with height lifting it up the screen and its shadow thrown onto the water), stamped once
+a frame at the lean the wind gives that spot, and only where no branch is in front.
 
 *Rigid animals turn as a whole.* A dragonfly or a swallow does not bend, so it is a picture
 painted once (several, for the wingbeat) and stamped at any angle every frame (`TurningStamp.cs`),
