@@ -1,3 +1,5 @@
+using Peckworks.Screensavers.Core.Sakura;
+
 namespace SakuraPond;
 
 /// <summary>
@@ -15,4 +17,7 @@ internal static class Light
 {
     public const float Lift = 0.75f;
     public const float ShadowX = 0.45f, ShadowY = 0.6f;
+
+    /// <summary>The same numbers, plus the water's squash, for the shared plants (Core/Sakura/Plants.cs).</summary>
+    public static readonly Overhead View = new(Ripples.Squash, Lift, ShadowX, ShadowY);
 }

@@ -45,8 +45,11 @@ internal sealed class Pond
     /// <summary>Spots in the blossom where petals let go.</summary>
     public required IReadOnlyList<PointF> BlossomSpots { get; init; }
 
-    /// <summary>Where the cattails stand, in the shallows near the bank (Cattails in Grass.cs draws them).</summary>
+    /// <summary>Where the cattails stand, in the shallows near the bank (the scene plants a Clumps there).</summary>
     public required PointF CattailSpot { get; init; }
+
+    /// <summary>Where each iris clump roots, on the lawn just behind the rocks, and which way its leaves arch (radians, toward the water).</summary>
+    public required IReadOnlyList<(PointF Root, float Toward)> IrisSpots { get; init; }
 
     /// <summary>The lily pads, for dragonflies to land on.</summary>
     public required IReadOnlyList<LilyPad> Pads { get; init; }
@@ -107,7 +110,8 @@ internal sealed class Pond
 ///      does.
 ///   3. The bank: a corner of moss and grass with a wobbly edge (no gardener
 ///      digs a perfect curve), gravel along the water, rocks half in the
-///      water, iris leaves, and a path of stepping stones down to the edge.
+///      water, and the rocks. The iris clumps and the grass are planted
+///      by the scene, on top, so they can move.
 ///   4. On the water: lily pads near the bank, a few water lilies, and
 ///      petals that have already drifted into the quiet water by the shore.
 ///   5. The cherry branches reaching over the water from the corners, and
@@ -177,11 +181,10 @@ internal static class PondPainter
         gc.SmoothingMode = SmoothingMode.AntiAlias;
         ShorePainter.Lawn(g, gc, land, w, h, u, rng);
         ShorePainter.BareEdge(g, gn, bank, corner, u, rng);
-        ShorePainter.SteppingStones(g, gb, gn, bank, corner, leftCorner, u, h, rng);
-        Irises(g, gb, gn, bank, corner, u, rng);
         uint[] beforeRocks = Read(bmp);
-        ShorePainter.Rocks(g, gb, gn, bank, corner, u, rng);       // after the irises: a clump behind a rock is hidden by it
+        ShorePainter.Rocks(g, gb, gn, bank, corner, u, rng);
         WrapWater(bmp, beforeRocks, Read(blockers), inPond, dist, DistanceToEdge(inPond.Select(p => !p).ToArray(), w, h, edgeIsBank: false), w, h, u);
+        List<(PointF Root, float Toward)> irises = IrisSpots(gn, Read(noGrassSheet), inPond, bank, corner, u, w, h, rng);   // after the rocks and the sand: on the lawn behind them
 
         // ---- 4: on the water ----
         PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
@@ -236,7 +239,7 @@ internal static class PondPainter
         {
             Width = w, Height = h, U = u,
             Pixels = final, Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Sun = sun,
-            BlossomSpots = spots, Pads = pads, CattailSpot = cattails, Centre = centre, Reach = reach,
+            BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
         };
     }
 
@@ -520,37 +523,35 @@ internal static class PondPainter
     }
 
     /// <summary>
-    /// Clumps of iris leaves on the bank near the water: long sword blades
-    /// fanning out from one root, leaning out over the edge.
+    /// Where the iris clumps root: on the lawn a little way behind the rocks
+    /// and the sand, at a few points along the bank, with their leaves to
+    /// arch out over the stones toward the water. A clump on the lawn is
+    /// nearer to us than the rocks in front of it, so its leaves rightly
+    /// show over them. The leaves themselves are planted by the scene (a
+    /// Clumps from Core/Sakura/Plants.cs) so they can sway; here the root
+    /// patch is kept clear of grass, and a spot that is not lawn (sand, a
+    /// rock that reaches far up, water) is passed over.
     /// </summary>
-    private static void Irises(Graphics g, Graphics gb, Graphics gn, PointF[] bank, PointF corner, float u, Random rng)
+    private static List<(PointF Root, float Toward)> IrisSpots(Graphics gn, uint[] noGrass, bool[] inPond, PointF[] bank, PointF corner, float u, int w, int h, Random rng)
     {
-        for (int i = 0; i < bank.Length; i += 1)
+        var spots = new List<(PointF, float)>();
+        float r = u * 0.012f;
+        bool Lawn(float x, float y)
         {
-            if (rng.NextDouble() < 0.86) continue;
-            PointF p = bank[i];
-            float ox = corner.X - p.X, oy = corner.Y - p.Y, ol = MathF.Max(1, MathF.Sqrt(ox * ox + oy * oy));
-            float rootX = p.X + ox / ol * u * 0.03f, rootY = p.Y + oy / ol * u * 0.03f;
-            float lean = MathF.Atan2(-oy, -ox);               // toward the water
-            int blades = 7 + rng.Next(6);
-            for (int b = 0; b < blades; b++)
-            {
-                float a = lean + ((float)rng.NextDouble() - 0.5f) * 1.6f;
-                float len = u * (0.05f + 0.05f * (float)rng.NextDouble());
-                float wid = u * 0.006f;
-                PointF tipP = new(rootX + MathF.Cos(a) * len, rootY + MathF.Sin(a) * len * 0.85f);
-                float nx = -MathF.Sin(a) * wid, ny = MathF.Cos(a) * wid;
-                PointF[] blade = [new(rootX + nx, rootY + ny), new((rootX + tipP.X) / 2 + nx * 0.8f, (rootY + tipP.Y) / 2 + ny * 0.8f), tipP,
-                    new((rootX + tipP.X) / 2 - nx * 0.8f, (rootY + tipP.Y) / 2 - ny * 0.8f), new(rootX - nx, rootY - ny)];
-                Color leaf = Color.FromArgb(54 + rng.Next(40), 104 + rng.Next(40), 50 + rng.Next(20));
-                using var shadowB = new SolidBrush(Color.FromArgb(40, 0, 20, 20));
-                g.FillPolygon(shadowB, blade.Select(q => new PointF(q.X + u * 0.006f, q.Y + u * 0.008f)).ToArray());
-                using var lb = new LinearGradientBrush(blade[0], tipP, Brushwork.Mix(leaf, Color.Black, 0.25f), Brushwork.Mix(leaf, Color.FromArgb(190, 210, 130), 0.25f));
-                g.FillPolygon(lb, blade);
-                gb.FillPolygon(Brushes.White, blade);
-                gn.FillPolygon(Brushes.White, blade);
-            }
+            int ix = (int)x, iy = (int)y;
+            return ix >= 0 && iy >= 0 && ix < w && iy < h && !inPond[iy * w + ix] && (noGrass[iy * w + ix] & 0xFF) < 128;
         }
+        foreach (PointF p in bank)
+        {
+            if (rng.NextDouble() < 0.8) continue;
+            float ox = corner.X - p.X, oy = corner.Y - p.Y, ol = MathF.Max(1, MathF.Sqrt(ox * ox + oy * oy));
+            float back = u * (0.075f + 0.03f * (float)rng.NextDouble());
+            var root = new PointF(p.X + ox / ol * back, p.Y + oy / ol * back);
+            if (!Lawn(root.X, root.Y) || !Lawn(root.X - r, root.Y) || !Lawn(root.X + r, root.Y) || !Lawn(root.X, root.Y - r) || !Lawn(root.X, root.Y + r)) continue;
+            gn.FillEllipse(Brushes.White, root.X - r, root.Y - r * 0.8f, r * 2, r * 1.6f);
+            spots.Add((root, MathF.Atan2(-oy, -ox)));          // toward the water
+        }
+        return spots;
     }
 
     /// <summary>

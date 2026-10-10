@@ -5,8 +5,8 @@ namespace SakuraPond;
 
 /// <summary>
 /// Paints the corner of land: the lawn, the bare damp edge where it meets the
-/// water, the rocks, and the stepping stones. Everything here is painted
-/// once, into the backdrop. The grass that MOVES is Grass.cs.
+/// water, and the rocks. Everything here is painted once, into the backdrop.
+/// The grass that MOVES is the shared Lawn (Core/Sakura/Plants.cs).
 ///
 /// FEYNMAN VERSION, how a real pond edge is put together, nearest the water
 /// first: the water laps a strip of damp sand and pebbles (grass does not
@@ -362,53 +362,5 @@ internal static class ShorePainter
         using var brush = new SolidBrush(c);
         foreach (float k in (ReadOnlySpan<float>)[0.94f, 1f, 1.06f])
             g.FillPolygon(brush, side.Select(p => new PointF(x + (p.X - x) * k, y + (p.Y - y) * k)).ToArray());
-    }
-
-    /// <summary>
-    /// Flat stepping stones from the land's corner to the middle of the
-    /// water's edge, a stride apart, left foot, right foot: pale lumpy slabs
-    /// (the rock outline, flatter) with a soft shadow and a lit edge.
-    /// </summary>
-    public static void SteppingStones(Graphics g, Graphics gb, Graphics noGrass, PointF[] bank, PointF corner, bool left, float u, int h, Random rng)
-    {
-        var start = new PointF(corner.X + (left ? -u * 0.02f : u * 0.02f), h + u * 0.03f);
-        PointF end = bank[bank.Length / 2 + rng.Next(-4, 5)];
-        float dx = end.X - start.X, dy = end.Y - start.Y, d = MathF.Sqrt(dx * dx + dy * dy);
-        float stride = u * 0.075f;
-        int n = Math.Max(2, (int)(d / stride));
-        for (int i = 0; i < n; i++)
-        {
-            float t = (i + 0.3f) / n;
-            float side = (i % 2 == 0 ? 1 : -1) * u * 0.012f;
-            float x = start.X + dx * t - dy / d * side, y = start.Y + dy * t + dx / d * side;
-            float r = u * (0.026f + 0.008f * (float)rng.NextDouble());
-            PointF[] pts = RockShape(x, y, r, 0.72f, rng);
-            using var path = new GraphicsPath();
-            path.AddClosedCurve(pts, 0.4f);
-            using var sh = (GraphicsPath)path.Clone();
-            using (var m = new Matrix(1, 0, 0, 1, u * 0.004f, u * 0.006f)) sh.Transform(m);
-            using (var sb = new SolidBrush(Color.FromArgb(70, 8, 22, 12))) g.FillPath(sb, sh);
-            int k = 148 + rng.Next(25);
-            using (var fill = new PathGradientBrush(path)
-            {
-                CenterPoint = new PointF(x - r * 0.3f, y - r * 0.3f),
-                CenterColor = Color.FromArgb(k + 36, k + 32, k + 22),
-                SurroundColors = [Color.FromArgb(k - 34, k - 36, k - 40)],
-            })
-                g.FillPath(fill, path);
-            GraphicsState st = g.Save();
-            g.SetClip(path, CombineMode.Intersect);
-            for (int s = 0; s < 60; s++)
-            {
-                float sx = x + ((float)rng.NextDouble() * 2 - 1) * r * 1.2f, sy = y + ((float)rng.NextDouble() * 2 - 1) * r * 0.8f;
-                float sr = u * (0.0005f + 0.0011f * (float)rng.NextDouble());
-                using var sb = new SolidBrush(rng.Next(2) == 0 ? Color.FromArgb(32, 255, 255, 250) : Color.FromArgb(34, 20, 20, 24));
-                g.FillEllipse(sb, sx - sr, sy - sr, sr * 2, sr * 2);
-            }
-            g.Restore(st);
-            using (var edge = new Pen(Color.FromArgb(70, 30, 30, 30), MathF.Max(1f, r * 0.04f))) g.DrawPath(edge, path);
-            gb.FillPath(Brushes.White, path);
-            noGrass.FillPath(Brushes.White, path);
-        }
     }
 }

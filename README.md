@@ -74,12 +74,14 @@ bigger than the view: still water fills the screen under cherry branches in full
 only shore in sight is a corner of lawn at the bottom (left or right, the seed decides). Rocks
 of every size sit along the water's edge, each with a sunny face, a shaded face, moss and lichen,
 their lower flanks darkening under the water as it wraps round them; a strip of damp sand and
-pebbles runs between them and the grass; iris clumps stand among the stones; a path of stepping
-stones leads down to the water; a clump of cattails stands in the shallows, brown heads nodding;
-lily pads and water lilies float in the calm water nearby; and the branches throw dappled shadows
-on the water. The lawn is long grass in a breeze: a band of bent, lightened blades rolls across it
-as each gust passes, and tufts of taller grass lean over and spring back as the wave reaches
-them. The cattails sway with the same wind, stiffly.
+pebbles runs between them and the grass; clumps of iris leaves stand on the lawn behind the
+stones, arching out over them toward the water; a clump of cattails stands in the shallows, brown
+heads nodding; lily pads and water lilies float in the calm water nearby; and the branches throw
+dappled shadows on the water. The lawn is long grass in a breeze: a band of bent, lightened blades
+rolls across it as each gust passes, and tufts of taller grass lean over and spring back as the
+wave reaches them. There is ONE wind: the lawn, the tufts, the cattails, the irises and the
+falling petals all read the same gust at the same moment, so a gust crosses the scene as one
+travelling wave (the cattails and irises sway with it stiffly).
 
 ![Sakura Pond](docs/images/sakura-pond.png)
 
@@ -292,11 +294,15 @@ earlier timer ran slightly faster than the screen and showed a frame twice now a
 small judder you could see in anything moving steadily). Matrix Rain at 4K runs at about 34, above
 the film's own 24.
 
-Sakura Pond: about 10 ms at 1920x1080 and about 16 ms at 4K, where it draws at 2560x1440 and
-Windows enlarges the picture (measured on a quiet machine, worst second 16.6 ms). The lawn in the
-wind is a good part of that: the carpet of blades is slid and lit by the wind on alternate rows
-each frame (the other rows kept from the frame before), and the tufts and cattails are stamped
-from trimmed pages in parallel bands, each row of a page only over its painted stretch.
+Sakura Pond: about 10 ms at 1920x1080 and about 12.6 ms at 4K, where it draws at 2560x1440 and
+Windows enlarges the picture (measured on a quiet machine, worst second 12.9 ms, slowest frame
+15.6 ms). Where it goes, measured inside one run with the engine's section timer (set
+`PECKWORKS_SECTIONS` to a file and run `/snapshot`): the koi 2.9 ms, the tufts 1.8, the carpet of
+blades 1.5 (slid and lit by the wind on alternate rows each frame, the other rows kept from the
+frame before, in whole-number arithmetic with two colour channels blended per multiply), the
+flyers 1.4, the backdrop copy 1.2 (the memory's speed, not the processor's: splitting it across
+cores gained nothing and added a hitch), the ripples 0.9 (a lookup table in place of two
+exponentials per pixel), everything else under 0.7.
 
 Halloween's happenings cost almost nothing on average: four minutes of ordinary play at 4K
 averaged 12.5 ms, against 13.0 to 13.2 ms for the same scene with nothing on, measured in the same

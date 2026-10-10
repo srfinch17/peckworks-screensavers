@@ -59,6 +59,18 @@ public sealed class FrameBuffer
         };
     }
 
+    /// <summary>
+    /// Lays a finished backdrop over the whole frame: what every painted
+    /// scene does first each frame, before drawing the things that move on
+    /// top of it. One plain copy. It costs 1 to 2 ms of a 12 ms frame at
+    /// 1440p, and that is the memory's speed, not the processor's: splitting
+    /// it across the cores measured no faster (they share the one memory
+    /// bus) and added a slow frame now and then while the threads met up.
+    /// The way to make it cheaper is to copy LESS (only what moved last
+    /// frame), and this is the one place that change would go.
+    /// </summary>
+    public void Restore(uint[] backdrop) => Array.Copy(backdrop, Pixels, Pixels.Length);
+
     /// <summary>Paints every pixel black (all zeros). Called at the start of each frame.</summary>
     public void Clear() => Array.Clear(Pixels);
 

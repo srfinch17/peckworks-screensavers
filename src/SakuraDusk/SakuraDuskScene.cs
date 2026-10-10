@@ -104,7 +104,7 @@ internal sealed class SakuraDuskScene : IScreensaverScene
     public void Render(FrameBuffer fb)
     {
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
-        Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
+        fb.Restore(_scenery.Pixels);
 
         // 1b. The FAR happenings (layer 0): the sky, the sun, the hills, the far
         //     water. Before the birds and the boat, which pass in front.

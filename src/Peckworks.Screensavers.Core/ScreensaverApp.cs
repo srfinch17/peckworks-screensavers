@@ -92,7 +92,9 @@ public static class ScreensaverApp
     /// catches what the one before hides: a firework that is slow for half a
     /// second vanishes in a 15 second average and shows in the worst second;
     /// one frozen frame (a stutter) vanishes in both and shows in the slowest
-    /// frame.
+    /// frame. Last, how many times the garbage collector ran (gen 0, 1, 2):
+    /// a scene that makes garbage every frame pays for it in exactly those
+    /// slowest frames, and a gen 2 collection can freeze a frame outright.
     /// </summary>
     private static void RunSnapshot(ScreensaverDefinition definition, string[] extra)
     {
@@ -105,6 +107,7 @@ public static class ScreensaverApp
         var frame = new FrameBuffer(width, height);
 
         const double step = 1.0 / 60;
+        int gc0 = GC.CollectionCount(0), gc1 = GC.CollectionCount(1), gc2 = GC.CollectionCount(2);
         var timer = new Stopwatch();
         int frames = 0;
         var lastSixty = new Queue<double>();   // the last 60 frame times, oldest first: a one-second window that slides along
@@ -132,7 +135,8 @@ public static class ScreensaverApp
         bmp.Save(path, ImageFormat.Png);
         File.WriteAllText(path + ".txt",
             $"{width}x{height}, {frames} frames, average {timer.Elapsed.TotalMilliseconds / frames:F2} ms per frame (update + render)"
-            + (worstSecond > 0 ? $", worst second {worstSecond:F2} ms per frame, slowest frame {slowestFrame:F1} ms" : "") + "\n");
+            + (worstSecond > 0 ? $", worst second {worstSecond:F2} ms per frame, slowest frame {slowestFrame:F1} ms" : "")
+            + $", garbage collections {GC.CollectionCount(0) - gc0}/{GC.CollectionCount(1) - gc1}/{GC.CollectionCount(2) - gc2} (gen 0/1/2)\n");
     }
 
     /// <summary>

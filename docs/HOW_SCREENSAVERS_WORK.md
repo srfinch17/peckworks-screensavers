@@ -33,7 +33,7 @@ Two extra notes exist only for development:
 | Note                                  | What it does                                                      |
 |---------------------------------------|-------------------------------------------------------------------|
 | `/window`                             | Plays in a normal resizable window that ignores the mouse. Esc closes it. |
-| `/snapshot out.png [w h seconds]`     | Renders with no window at all, saves a PNG, and writes the time per frame to `out.png.txt` |
+| `/snapshot out.png [w h seconds]`     | Renders with no window at all, saves a PNG, and writes the time per frame to `out.png.txt` (average, worst second, slowest frame, garbage collections); with `PECKWORKS_SECTIONS` set to a file, also what each part of the frame cost |
 
 > **Gotcha found while building this:** if you launch a `.scr` by double-clicking it, or with
 > PowerShell's `Start-Process`, Windows' file association **replaces your arguments with `/S`**.
@@ -69,10 +69,12 @@ src/
     ScreensaverSettings.cs         a list of knobs, saved in the registry
     SettingsDialog.cs              the Settings dialog: live preview + one slider per knob
     Sprite.cs                      a small picture painted once and stamped each frame (bats, Santa, glows)
+    FrameSections.cs               a lap timer for a frame: which part costs what (off unless PECKWORKS_SECTIONS is set)
     Happenings.cs                  small random events: the base class, and the director that deals them out
     Sakura/PetalField.cs           the falling petals (or leaves, or snow), shared by every painted scene
     Sakura/Brushwork.cs            banks, hills, trunks, blossoms, a pine, and self-growing branches
     Sakura/Boat.cs                 the little boat that crosses the water in both sakura scenes
+    Sakura/Plants.cs               one Wind for a whole scene; plants as flip-books (tufts, cattails, irises); a Lawn whose carpet slides in the gusts
     ChimneySmoke.cs                puffs that rise, cool, spread and thin (Cabin by Stream)
     Photo/PhotoBackdrop.cs         a photo fitted to the screen, plus where its water is
     Photo/WaterRipples.cs          a still brook's reflections, rippling; trout rising
@@ -106,8 +108,7 @@ src/
     Program.cs                     Main(), plus the definition (draws at most 2560 wide)
     SakuraPondScene.cs             the layers, back to front
     PondPainter.cs                 paints the pond bed and water, lily pads, branches and their shadows; calls the shore painter
-    Shore.cs                       paints the corner of land: the lawn, the sand edge, rocks that look like rocks, stepping stones
-    Grass.cs                       the wind; plants as flip-books (tufts, cattails); the lawn's carpet slid and lit by a gust
+    Shore.cs                       paints the corner of land: the lawn's ground and carpet, the sand edge, rocks that look like rocks
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
     Turtle.cs                      the turtle: paddling, floating, a breath at the surface
@@ -473,17 +474,24 @@ picture frame, so no pixel is painted twice.
 thousands of short blades onto a clear sheet of their own, the "carpet" (`Shore.cs`). Every frame
 the carpet is laid back over the ground SHIFTED a few pixels downwind by how hard the wind leans
 the grass at that spot, and brightened where it leans hardest, because bent blades show their pale
-tips (`Grass.cs`). The wind at any spot is one number, the lean: a slow swell that comes and goes
-over half a minute (the same rhythm as the petals' breeze), times two waves travelling downwind,
-with the long wave's crests sharpened so the lawn is mostly calm with a band of bent grass rolling
-through it. Taller tufts stand in the carpet, each a flip-book of 24 pages from "springing back a
-little upwind" to "flat downwind"; the blades of a page are worked out in three dimensions (the
-bend angle grows from root to tip, each short step going a little less up and a little more along
-the ground) and projected like everything else here: height lifts a point up the screen, and
-throws its shadow down and to the right. A tuft stamps the page nearest its lean. The lean itself
-comes from a coarse grid worked out once a frame (a sine per pixel would cost more than the
-drawing), and the tufts are drawn in horizontal bands on several cores, even bands then odd, since
-a tuft can only ever touch tufts in its own band or the next.
+tips (the shared `Lawn` in `Core/Sakura/Plants.cs`). The wind (`Wind`, the same file) is ONE object
+the scene updates once a frame, and everything that sways asks it: the carpet, the tufts, the
+cattails, the irises, and the falling petals for their breeze. Nothing keeps a clock or a random
+offset of its own, so a gust reaches the whole scene as one travelling wave. The wind at any spot
+is one number, the lean: a slow swell that comes and goes over half a minute, times two waves
+travelling downwind, with the long wave's crests sharpened so the lawn is mostly calm with a band
+of bent grass rolling through it. Taller tufts stand in the carpet, each a flip-book (`Flipbook`)
+of 24 pages from "springing back a little upwind" to "flat downwind"; the blades of a page are
+worked out in three dimensions (the bend angle grows from root to tip, each short step going a
+little less up and a little more along the ground) and projected like everything else in an
+overhead scene (`Overhead`: squash, lift, and where a shadow falls): height lifts a point up the
+screen, and throws its shadow down and to the right. A tuft stamps the page nearest its lean. The
+cattails and the iris clumps are the same machinery (`Clumps`): a few plants that each stand in
+one place, one flip-book each, stiffer than grass. The lean itself comes from a coarse grid worked
+out once a frame (a sine per pixel would cost more than the drawing), and the tufts are drawn in
+horizontal bands on several cores, even bands then odd, since a tuft can only ever touch tufts in
+its own band or the next. All of this lives in the engine, so the next scene with a meadow or a
+reed bed makes a `Wind`, a `Lawn` and a `Clumps` and paints nothing of its own that moves.
 
 *Rocks that look like rocks.* A rock is a lumpy ring of 9 to 13 points (two slow waves of radius
 plus jitter), a touch wider than tall because we look down on a rounded lump at a slant. It is

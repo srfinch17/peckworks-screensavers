@@ -109,7 +109,7 @@ internal sealed class CabinByStreamScene : IScreensaverScene
     public void Render(FrameBuffer fb)
     {
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
-        Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
+        fb.Restore(_scenery.Pixels);
 
         // 2. The stars twinkle: a tiny glow over each bright one, brighter and dimmer on its own rhythm.
         foreach (ref readonly Star st in _stars.AsSpan())

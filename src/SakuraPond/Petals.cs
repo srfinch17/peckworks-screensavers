@@ -46,18 +46,19 @@ internal sealed class Petals
     private readonly List<Floating> _floating = new();
     private readonly int _fallingCount, _floatingMost;
     private readonly (Color Pale, Color Deep) _colors = (Color.FromArgb(255, 246, 249), Color.FromArgb(255, 176, 199));
-    private double _time;
+    private readonly Wind _wind;
 
     private const float Lift = Light.Lift;
     private const float ShadowX = Light.ShadowX, ShadowY = Light.ShadowY;
     private const float BranchHeight = 0.38f;   // u: below this a falling petal is under the branches, which hide it
 
-    public Petals(Pond pond, Ripples ripples, bool[] waterInView, float amount, Random rng)
+    public Petals(Pond pond, Ripples ripples, bool[] waterInView, float amount, Wind wind, Random rng)
     {
         _pond = pond;
         _ripples = ripples;
         _waterInView = waterInView;
         _rng = rng;
+        _wind = wind;
         _u = pond.U;
         // 1 on a 16:9 screen, more on a wider one. Capped: a tall screen has a
         // lot of area for its size unit, and uncapped its pond looked snowed on.
@@ -158,14 +159,12 @@ internal sealed class Petals
         };
     }
 
-    /// <summary>The breeze: a gentle push to the right that rises and dies away over half a minute or so.</summary>
-    private float Breeze(float t) => _u * (0.006f + 0.008f * (0.5f + 0.5f * MathF.Sin(t * 0.21f)) * (0.6f + 0.4f * MathF.Sin(t * 0.073f + 1)));
+    /// <summary>The breeze: a gentle push to the right that rises and dies away with the shared wind's swell, so petals gust when the grass does.</summary>
+    private float Breeze() => _u * (0.006f + 0.008f * _wind.Swell);
 
     public void Update(float dt)
     {
-        _time += dt;
-        float t = (float)(_time % 100000.0);
-        float breeze = Breeze(t);
+        float breeze = Breeze();
         var c = _pond.Centre;
 
         for (int i = 0; i < _falling.Count; i++)

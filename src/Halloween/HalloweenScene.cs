@@ -249,7 +249,7 @@ internal sealed class HalloweenScene : IScreensaverScene
     public void Render(FrameBuffer fb)
     {
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
-        Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
+        fb.Restore(_scenery.Pixels);
 
         // 1b. The happenings, straight onto the backdrop, so the candles,
         //     the bats and the leaves all pass in front of them. One that

@@ -84,7 +84,7 @@ internal sealed class SakuraScene : IScreensaverScene
     public void Render(FrameBuffer fb)
     {
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
-        Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
+        fb.Restore(_scenery.Pixels);
 
         // 1b. The FAR happenings (layer 0): the sky, Fuji, the far shore. Before
         //     the boat, so a shinkansen on the shore is behind it.

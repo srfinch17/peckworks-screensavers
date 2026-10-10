@@ -33,6 +33,19 @@ internal sealed class Ripples
 
     public const float Squash = 0.86f;   // how much flatter than round a circle on the water looks from here
 
+    // The ring's profile across its crest, worked out once: at distance d
+    // from the crest (in band widths, negative inside) the light lift is
+    // exp(-d^2) - 0.8 * exp(-(d + 1.6)^2), a bright crest with a dark trough
+    // just inside it. Two exponentials per pixel for up to 48 rings was a
+    // tenth of the frame; a table over d = -5 to 5 in steps of a hundredth
+    // is the same curve for the cost of a lookup.
+    private const float ProfileFrom = -5f, ProfileStep = 0.01f;
+    private static readonly float[] Profile = Enumerable.Range(0, 1001).Select(i =>
+    {
+        float d = ProfileFrom + i * ProfileStep;
+        return MathF.Exp(-d * d) - 0.8f * MathF.Exp(-(d + 1.6f) * (d + 1.6f));
+    }).ToArray();
+
     public Ripples(Pond pond, bool[] where)
     {
         _pond = pond;
@@ -109,9 +122,9 @@ internal sealed class Ripples
             if (!_where[i]) continue;
             float dx = x + 0.5f - r.X;
             float d = (MathF.Sqrt(dx * dx + dy * dy) - radius) / band;     // 0 on the crest, negative inside
-            // Crest (light) on the outside, trough (dark) just inside it.
-            float crest = MathF.Exp(-d * d), trough = MathF.Exp(-(d + 1.6f) * (d + 1.6f));
-            float lift = (crest - 0.8f * trough) * a;
+            int k = (int)((d - ProfileFrom) / ProfileStep);
+            if (k < 0 || k >= Profile.Length) continue;                  // too far from the crest to show
+            float lift = Profile[k] * a;                                 // crest (light) outside, trough (dark) just inside
             if (lift > 0.003f) px[i] = FrameBuffer.Blend(px[i], 226, 238, 240, lift);
             else if (lift < -0.003f) px[i] = FrameBuffer.Blend(px[i], 6, 26, 30, -lift);
         }

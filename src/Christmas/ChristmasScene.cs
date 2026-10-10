@@ -258,7 +258,7 @@ internal sealed class ChristmasScene : IScreensaverScene
     public void Render(FrameBuffer fb)
     {
         // 1. The backdrop. Array.Copy is one fast block copy of every pixel.
-        Array.Copy(_scenery.Pixels, fb.Pixels, fb.Pixels.Length);
+        fb.Restore(_scenery.Pixels);
 
         // 2. The FAR happenings (layer 0): the ones in the sky and on the
         //    mountains, before Santa so a firework or the northern lights
