@@ -111,10 +111,11 @@ src/
     Shore.cs                       paints the corner of land: the lawn's ground and carpet, the sand edge, rocks that look like rocks
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
+    Minnows.cs                     schools of tiny fish that move as one, and rush to the dragonfly's rings
     Turtle.cs                      the turtle: paddling, floating, a breath at the surface
     Petals.cs                      petals falling from the blossom, landing, floating
     Ripples.cs                     rings spreading on the water
-    Dragonflies.cs                 hover, dart, perch, dip
+    Dragonflies.cs                 hover, dart, perch, dip, and the game with the minnows
     Swallows.cs                    swooping visits to drink
     Snake.cs                       a snake swimming across, now and then
     TurningStamp.cs                a picture stamped at any angle (dragonflies, swallows, their shadows)
@@ -527,6 +528,21 @@ turtle is rigid too, but it lives in the water with the koi, so it uses the same
 as the koi with a STRAIGHT spine that turns as one piece: that way it gets the same haze with
 depth, the same branch shadows and the same squash for free. Its legs are four small ovals
 swinging from under the shell's rim, the diagonal pairs in step, as a pond turtle paddles.
+
+*A school moves as one with three rules.* The minnows (`Minnows.cs`) have no leader and no
+choreography. Every frame each fish adds up a few pulls: keep going the way I am going, head for
+the school's shared target, face the way my neighbours face, keep a little room from the fish
+beside me, get away from a koi, turn from the bank. The sum is the way it wants to go, and it
+turns toward that on a circle no tighter than about its own length (tighter, and the body curls
+into a C with its nose off the line it is moving along). Those few rules, the classic "flocking"
+rules, are enough for a dozen fish to behave like one creature. The school itself has one shared
+mood: drifting toward a spot it picked in open view, rushing to a lure, or milling round it, each
+fish on its own place in a slow ring. Each minnow is a tiny bending body on a short trail, like a
+koi; its body stays nearly straight and only the tail flicks (a wave down the whole body made them
+wriggle like worms, which the close-up strip showed and a still never would). The dragonfly's game
+is the two halves meeting: a dragonfly asks where the nearest school is, flies over, hovers, skims
+low tapping the water three times (three small rings), and the taps call the school; then it darts
+off far and its timer runs before it plays again, taking the schools in turn.
 
 *Behaviour from watching the real thing.* Koi beat and glide, steer toward a spot they have
 picked anywhere in the pond (a few headings tried either side when the bank comes close, taking

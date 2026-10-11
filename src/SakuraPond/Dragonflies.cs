@@ -21,10 +21,19 @@ namespace SakuraPond;
 /// The body is rigid, so a dragonfly is a picture (TurningStamp) turned to
 /// face its way, never flipped. Three pictures: wings still (perched), and
 /// two blur positions swapped every frame for the shimmer.
+///
+/// THE GAME (Minnows.cs has the other half): every so often a dragonfly
+/// flies over to the nearest school of minnows, hovers a moment, then skims
+/// low and TAPS the water three times in a short line, each tap a small
+/// ring. The minnows rush to the rings and swirl under them. The dragonfly
+/// darts off far across the pond, wanders, and comes back a little later to
+/// do it again. Dragonflies really do tap the surface this way (a female
+/// laying eggs taps several times in a row), and minnows really do rush at
+/// anything that touches the water; putting the two together is the game.
 /// </summary>
 internal sealed class Dragonflies
 {
-    private enum Doing { Hover, Dart, Perch, Dip }
+    private enum Doing { Hover, Dart, Perch, Dip, Tease }
 
     private struct Fly
     {
@@ -35,10 +44,14 @@ internal sealed class Dragonflies
         public float FromX, FromY, FromH, ToX, ToY, ToH, Progress, Duration;
         public float Phase;                 // its own jitter rhythm
         public int Kind;                    // 0 = blue male, 1 = golden female
+        public float PlayTimer;             // until it next feels like teasing the minnows
+        public bool Approaching;            // on its way over to the school; the taps come after the next hover
+        public int Taps;                    // taps made so far in this tease
     }
 
     private readonly Pond _pond;
     private readonly Ripples _ripples;
+    private readonly Minnows? _minnows;
     private readonly Random _rng;
     private readonly Fly[] _flies;
     private readonly TurningStamp[][] _looks;    // [kind][0 still, 1 blur A, 2 blur B]
@@ -46,10 +59,11 @@ internal sealed class Dragonflies
     private int _frame;
     private double _time;
 
-    public Dragonflies(Pond pond, Ripples ripples, int count, Random rng)
+    public Dragonflies(Pond pond, Ripples ripples, int count, Random rng, Minnows? minnows = null)
     {
         _pond = pond;
         _ripples = ripples;
+        _minnows = minnows;
         _rng = rng;
         _u = pond.U;
         _looks = [Looks(Color.FromArgb(120, 172, 214), Color.FromArgb(30, 34, 40)), Looks(Color.FromArgb(214, 168, 70), Color.FromArgb(70, 50, 24))];
@@ -62,6 +76,7 @@ internal sealed class Dragonflies
                 X = p.X, Y = p.Y, Height = 0.06f + 0.05f * (float)rng.NextDouble(),
                 Heading = (float)(rng.NextDouble() * MathF.Tau), Doing = Doing.Hover,
                 Timer = (float)rng.NextDouble() * 2, Phase = (float)(rng.NextDouble() * 10), Kind = i % 2,
+                PlayTimer = 6 + 10 * i + 8 * (float)rng.NextDouble(),      // the first game comes soon; the flies take turns
             };
             _flies[i].WantHeading = _flies[i].Heading;
         }
@@ -148,10 +163,36 @@ internal sealed class Dragonflies
             float dh = MathF.IEEERemainder(f.WantHeading - f.Heading, MathF.Tau);
             f.Heading += Math.Clamp(dh, -9 * dt, 9 * dt);
             f.Timer -= dt;
+            f.PlayTimer -= dt;
             switch (f.Doing)
             {
                 case Doing.Hover:
                     if (f.Timer <= 0) Next(ref f);
+                    break;
+                case Doing.Tease:
+                    // Skimming along low and steady, bobbing down to tap the water three times on the way.
+                    if (MathF.Abs(dh) > 0.25f && f.Progress == 0) break;
+                    f.Progress = MathF.Min(1, f.Progress + dt / f.Duration);
+                    float te = f.Progress < 0.5f ? 2 * f.Progress * f.Progress : 1 - MathF.Pow(-2 * f.Progress + 2, 2) / 2;   // eased both ends
+                    f.X = f.FromX + (f.ToX - f.FromX) * te;
+                    f.Y = f.FromY + (f.ToY - f.FromY) * te;
+                    float bob = MathF.Abs(MathF.Sin(f.Progress * 3 * MathF.PI));              // three dips: at a sixth, a half and five sixths of the way
+                    f.Height = f.FromH * (1 - bob);
+                    int tap = (int)(f.Progress * 3);                                           // which of the three dips we are in
+                    if (tap > f.Taps - 1 && bob > 0.97f && f.Taps < 3)
+                    {
+                        // The tail tip touches, just behind the body: a small ring, and the minnows notice.
+                        float tx = f.X - MathF.Cos(f.Heading) * _u * 0.016f, ty = f.Y - MathF.Sin(f.Heading) * _u * 0.016f * Ripples.Squash;
+                        _ripples.Add(tx, ty, 0.45f);
+                        _minnows?.Lure(tx, ty);
+                        f.Taps++;
+                    }
+                    if (f.Progress >= 1)
+                    {
+                        // Game over for now: off it goes, far across the pond, higher, to wander and come back later.
+                        f.PlayTimer = 14 + 16 * (float)_rng.NextDouble();
+                        Go(ref f, RandomNear(f.X, f.Y, 0.3f, 0.5f), 0.08f + 0.05f * (float)_rng.NextDouble(), Doing.Dart);
+                    }
                     break;
                 case Doing.Dart:
                 case Doing.Dip:
@@ -170,7 +211,11 @@ internal sealed class Dragonflies
                         if (was > 0.004f && f.Height <= 0.004f) _ripples.Add(f.X - MathF.Cos(f.Heading) * _u * 0.016f, f.Y - MathF.Sin(f.Heading) * _u * 0.016f, 0.6f);
                     }
                     else f.Height = f.FromH + (f.ToH - f.FromH) * e;
-                    if (f.Progress >= 1) { f.Doing = f.ToH < 0.01f && f.Doing == Doing.Dart ? Doing.Perch : Doing.Hover; f.Timer = f.Doing == Doing.Perch ? 3 + 5 * (float)_rng.NextDouble() : 0.6f + 1.9f * (float)_rng.NextDouble(); }
+                    if (f.Progress >= 1)
+                    {
+                        f.Doing = f.ToH < 0.01f && f.Doing == Doing.Dart ? Doing.Perch : Doing.Hover;
+                        f.Timer = f.Doing == Doing.Perch ? 3 + 5 * (float)_rng.NextDouble() : f.Approaching ? 0.7f + 0.6f * (float)_rng.NextDouble() : 0.6f + 1.9f * (float)_rng.NextDouble();
+                    }
                     break;
                 case Doing.Perch:
                     if (f.Timer <= 0) { Go(ref f, RandomNear(f.X, f.Y, 0.08f, 0.2f), 0.06f + 0.05f * (float)_rng.NextDouble(), Doing.Dart); }
@@ -179,9 +224,35 @@ internal sealed class Dragonflies
         }
     }
 
-    /// <summary>What next, after a hover: usually another dart; sometimes a perch on a lily pad, or (a female) a dip.</summary>
+    /// <summary>What next, after a hover: the minnow game when it is time; else usually another dart, sometimes a perch on a lily pad, or (a female) a dip.</summary>
     private void Next(ref Fly f)
     {
+        if (f.Approaching)
+        {
+            // It has arrived over the school and hovered: now the taps, skimming low along a short line toward the fish.
+            f.Approaching = false;
+            PointF? sc = _minnows?.NearestSchool(f.X, f.Y);
+            if (sc is PointF school && Dist(f.X, f.Y, school.X, school.Y) > _u * 0.02f)
+            {
+                float dx = school.X - f.X, dy = (school.Y - f.Y) / Ripples.Squash, d = MathF.Sqrt(dx * dx + dy * dy);
+                float run = MathF.Min(d * 0.8f, _u * 0.1f);                                         // the taps land between it and the school
+                var to = new PointF(f.X + dx / d * run, f.Y + dy / d * run * Ripples.Squash);
+                f.Height = MathF.Min(f.Height, 0.035f);                                              // already low; the bobs are small
+                Go(ref f, to, f.Height, Doing.Tease);
+                f.Duration = 1.4f + run / (_u * 0.25f);                                              // slow and deliberate, not a dart
+                f.Taps = 0;
+                return;
+            }
+        }
+        if (f.PlayTimer <= 0 && _minnows?.NearestSchool(f.X, f.Y) is PointF target)
+        {
+            // Time for the game: fly over and stop low, a little way from the school.
+            PointF spot = RandomNear(target.X, target.Y, 0.1f, 0.16f);
+            f.Approaching = true;
+            f.PlayTimer = 8;                                                                          // in case the approach is abandoned
+            Go(ref f, spot, 0.035f, Doing.Dart);
+            return;
+        }
         double roll = _rng.NextDouble();
         if (roll < 0.12 && _pond.Pads.Count > 0)
         {
@@ -195,6 +266,8 @@ internal sealed class Dragonflies
         else
             Go(ref f, RandomNear(f.X, f.Y, 0.06f, 0.26f), 0.05f + 0.07f * (float)_rng.NextDouble(), Doing.Dart);
     }
+
+    private static float Dist(float x0, float y0, float x1, float y1) => MathF.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
 
     private void Go(ref Fly f, PointF to, float height, Doing doing)
     {

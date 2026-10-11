@@ -14,13 +14,15 @@ namespace SakuraPond;
 ///      the LAWN in the wind (the shared Lawn in Core/Sakura/Plants.cs): the
 ///      carpet of blades slid by each gust, and the tufts swaying in it.
 ///   2. Under the water: the KOI (Koi.cs), and just under the surface the
-///      TURTLES (Turtle.cs).
+///      TURTLES (Turtle.cs) and the schools of MINNOWS (Minnows.cs).
 ///   3. On the water: RIPPLES (Ripples.cs), floating PETALS (Petals.cs), and
 ///      now and then a swimming SNAKE (Snake.cs). Standing in the shallows,
 ///      the CATTAILS, and on the bank the IRIS clumps (both the shared
 ///      Clumps), swaying with the lawn's wind.
 ///   4. In the air: the SHADOWS of the dragonflies and swallows on the water,
-///      then the DRAGONFLIES (Dragonflies.cs) and SWALLOWS (Swallows.cs).
+///      then the DRAGONFLIES (Dragonflies.cs) and SWALLOWS (Swallows.cs). The
+///      dragonflies play a game with the minnows: tap the water near a
+///      school, watch it rush to the rings, fly off, come back later.
 ///   5. Falling PETALS, nearest of all.
 ///
 /// Everything below the branches is drawn only where no branch is in the
@@ -40,6 +42,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Lawn _lawn;
     private readonly Clumps _cattails, _irises;
     private readonly KoiSchool _koi;
+    private readonly Minnows _minnows;
     private readonly Turtles _turtles;
     private readonly Petals _petals;
     private readonly Snake _snake;
@@ -66,10 +69,11 @@ internal sealed class SakuraPondScene : IScreensaverScene
             _irises.Add(root, Flipbook.IrisClump(u * 0.11f, toward, _rng), 0.45f, 40);
 
         _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng);
+        _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _rng);
         _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng);
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _wind, _rng);
         _snake = new Snake(_pond, _ripples, settings.SnakePercent / 100f, _rng);
-        _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng);
+        _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng, settings.MinnowSchools > 0 ? _minnows : null);
         _swallows = new Swallows(_pond, _ripples, settings.BirdPercent / 100f, _rng);
     }
 
@@ -78,6 +82,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         float dt = (float)Math.Min(elapsedSeconds, 0.1);
         _wind.Update(dt);                 // first: everything below reads it
         _koi.Update(dt);
+        _minnows.Update(dt, _koi.Heads);
         _turtles.Update(dt);
         _petals.Update(dt);
         _snake.Update(dt);
@@ -99,6 +104,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("koi");
         _turtles.Draw(fb);
         Sections.Mark("turtles");
+        _minnows.Draw(fb);
+        Sections.Mark("minnows");
         _ripples.Draw(fb);
         Sections.Mark("ripples");
         _petals.DrawFloating(fb);

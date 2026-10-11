@@ -90,6 +90,14 @@ travelling wave (the cattails and irises sway with it stiffly).
   through its turns along the path its head swam, never flipped or slid. They drift up and down
   in the water, hazier when deep, slip under the lily pads, and now and then come up to gulp at
   the surface, leaving a ring.
+- Two **schools of minnows**, a dozen or so tiny fish each, hang just under the surface and move
+  as one: all facing the same way, fidgeting in little darts, flashing silver when the whole
+  school turns, and scattering like thrown rice when a koi cruises underneath. Each minnow is a
+  bending body on its own trail, like the koi in miniature.
+- **The dragonfly's game**: every so often a dragonfly flies over to a school, hovers, then skims
+  low and taps the water three times in a short line, each tap a small ring. The minnows rush to
+  the rings in a body and swirl under the spot. The dragonfly darts off across the pond, wanders,
+  and comes back a little later to do it again, taking the schools in turn.
 - A **turtle** (a red-eared slider, the turtle of nearly every park pond in Japan) paddles just
   under the surface, front left leg with back right and then the other pair, with a small surge
   on each stroke, turning as one rigid piece in wide slow arcs. Now and then it stops, spreads
@@ -103,8 +111,8 @@ travelling wave (the cattails and irises sway with it stiffly).
 - Now and then a **snake** (a shimahebi, the four-lined rat snake) comes out of the grass, swims
   across the pond with its body weaving behind its head and a small wake, and slips away.
 
-Settings: petals, number of koi, number of turtles, number of dragonflies, how often the
-swallows visit, and how often the snake crosses.
+Settings: petals, number of koi, number of minnow schools (0 means no game), number of turtles,
+number of dragonflies, how often the swallows visit, and how often the snake crosses.
 
 On a 4K screen it draws at 2560 wide and Windows enlarges the picture: the scene is soft and
 painterly, so the enlarging loses almost nothing, and it keeps the frame rate.

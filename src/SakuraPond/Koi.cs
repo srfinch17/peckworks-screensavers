@@ -23,6 +23,9 @@ internal sealed class KoiSchool
         foreach (Koi k in _fish) k.Update(dt, _fish);
     }
 
+    /// <summary>Two points along each koi this frame, its head and its middle, screen pixels (the minnows keep clear of them).</summary>
+    public PointF[] Heads => _fish.SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
+
     /// <summary>
     /// Draws the fish deepest first, so a fish nearer the surface covers one
     /// below it. Fish that do not touch cannot paint over each other, so they
@@ -119,6 +122,9 @@ internal sealed class Koi : Body
     public float Z { get; private set; }
 
     public PointF Head => ToScreen(_x, _y);
+
+    /// <summary>The middle of its body, screen pixels.</summary>
+    public PointF Middle => Spine[8];
 
     /// <summary>The screen box the fish (fins and all) can paint in this frame.</summary>
     public RectangleF Box
