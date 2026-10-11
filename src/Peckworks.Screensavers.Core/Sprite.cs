@@ -169,8 +169,10 @@ public sealed class Sprite
     /// your eye than your hand cover it, the hedge behind does not.
     /// </param>
     /// <param name="nearness">How near the sprite itself is, on the same 0 to 255 scale.</param>
+    /// <param name="shade">How much light falls on the sprite, 0 (black) to 256 (as painted): a tuft
+    /// standing in a branch's shadow is stamped darker, so the dappled shade on the ground reaches it too.</param>
     public void Draw(FrameBuffer fb, int left, int top, float opacity = 1f, bool[]? onlyWhere = null, bool mirror = false,
-        byte[]? depth = null, int nearness = 255)
+        byte[]? depth = null, int nearness = 255, int shade = 256)
     {
         if (opacity <= 0) return;
         // Work out which part of the sprite is actually on screen, so a sprite
@@ -191,21 +193,21 @@ public sealed class Sprite
         // Rows never overlap, so they cannot get in each other's way. Small
         // ones (most glows) are quicker done alone than handed out.
         if ((x1 - x0) * (y1 - y0) > 40_000)
-            DrawShared(fb, left, top, x0, x1, y0, y1, opacity256, onlyWhere, mirror, depth, nearness);
+            DrawShared(fb, left, top, x0, x1, y0, y1, opacity256, onlyWhere, mirror, depth, nearness, shade);
         else
-            DrawRows(fb, left, top, x0, x1, y0, y1, opacity256, onlyWhere, mirror, depth, nearness);
+            DrawRows(fb, left, top, x0, x1, y0, y1, opacity256, onlyWhere, mirror, depth, nearness, shade);
     }
 
     // Its own method, so the hand-out (which needs a lambda, and so a little
     // garbage) is only paid for by the big sprites, not every small glow.
     private void DrawShared(FrameBuffer fb, int left, int top, int x0, int x1, int y0, int y1, int opacity256,
-        bool[]? onlyWhere, bool mirror, byte[]? depth, int nearness) =>
+        bool[]? onlyWhere, bool mirror, byte[]? depth, int nearness, int shade) =>
         Parallel.For(0, (y1 - y0 + 31) / 32, band =>
-            DrawRows(fb, left, top, x0, x1, y0 + band * 32, Math.Min(y1, y0 + band * 32 + 32), opacity256, onlyWhere, mirror, depth, nearness));
+            DrawRows(fb, left, top, x0, x1, y0 + band * 32, Math.Min(y1, y0 + band * 32 + 32), opacity256, onlyWhere, mirror, depth, nearness, shade));
 
     /// <summary>Stamps the sprite's rows y0 to y1 (the visible columns x0 to x1).</summary>
     private void DrawRows(FrameBuffer fb, int left, int top, int x0, int x1, int y0, int y1, int opacity256,
-        bool[]? onlyWhere, bool mirror, byte[]? depth, int nearness)
+        bool[]? onlyWhere, bool mirror, byte[]? depth, int nearness, int shade)
     {
         uint[] frame = fb.Pixels;
 
@@ -227,9 +229,11 @@ public sealed class Sprite
                 // result = old + (new - old) * solidness, for red, green and blue.
                 uint bg = frame[dst + sx];
                 int br = (int)((bg >> 16) & 0xFF), bgn = (int)((bg >> 8) & 0xFF), bb = (int)(bg & 0xFF);
-                int r = br + (((int)((c >> 16) & 0xFF) - br) * a >> 8);
-                int g = bgn + (((int)((c >> 8) & 0xFF) - bgn) * a >> 8);
-                int b = bb + (((int)(c & 0xFF) - bb) * a >> 8);
+                int cr = (int)((c >> 16) & 0xFF), cg = (int)((c >> 8) & 0xFF), cb = (int)(c & 0xFF);
+                if (shade != 256) { cr = cr * shade >> 8; cg = cg * shade >> 8; cb = cb * shade >> 8; }   // in shadow: darker
+                int r = br + ((cr - br) * a >> 8);
+                int g = bgn + ((cg - bgn) * a >> 8);
+                int b = bb + ((cb - bb) * a >> 8);
                 frame[dst + sx] = (uint)((r << 16) | (g << 8) | b);
             }
         }

@@ -29,7 +29,7 @@ internal sealed class Ripples
     private readonly List<Ring> _rings = new();
     private readonly Pond _pond;
     private readonly bool[] _where;      // open water and not under a branch
-    private const int Most = 48;         // a cap, so a flurry of landings cannot pile up cost
+    private const int Most = 32;         // a cap, so a flurry of landings cannot pile up cost (48 rings cost 7 ms in one second at 1440p)
 
     public const float Squash = 0.86f;   // how much flatter than round a circle on the water looks from here
 

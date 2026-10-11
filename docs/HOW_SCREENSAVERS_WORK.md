@@ -476,12 +476,15 @@ the carpet is laid back over the ground SHIFTED a few pixels downwind by how har
 the grass at that spot, and brightened where it leans hardest, because bent blades show their pale
 tips (the shared `Lawn` in `Core/Sakura/Plants.cs`). The wind (`Wind`, the same file) is ONE object
 the scene updates once a frame, and everything that sways asks it: the carpet, the tufts, the
-cattails, the irises, and the falling petals for their breeze. Nothing keeps a clock or a random
-offset of its own, so a gust reaches the whole scene as one travelling wave. The wind at any spot
+cattails and the irises, each at its own spot, so a gust reaches them as one travelling wave
+(a plant further downwind leans a moment later). Nothing keeps a clock or a random offset of its
+own. The falling petals read the same wind's SWELL (how strong the breeze is right now), so they
+gust when the grass does, though they do not ride the wave across the screen. The wind at any spot
 is one number, the lean: a slow swell that comes and goes over half a minute, times two waves
 travelling downwind, with the long wave's crests sharpened so the lawn is mostly calm with a band
-of bent grass rolling through it. Taller tufts stand in the carpet, each a flip-book (`Flipbook`)
-of 24 pages from "springing back a little upwind" to "flat downwind"; the blades of a page are
+of bent grass rolling through it. The lawn shows only where no branch is in front of it, and the
+branches' dappled shadow darkens the moving grass as it darkens the ground. Taller tufts stand in
+the carpet, each a flip-book (`Flipbook`) of 24 pages from upright to "flat downwind"; the blades of a page are
 worked out in three dimensions (the bend angle grows from root to tip, each short step going a
 little less up and a little more along the ground) and projected like everything else in an
 overhead scene (`Overhead`: squash, lift, and where a shadow falls): height lifts a point up the
@@ -490,8 +493,11 @@ cattails and the iris clumps are the same machinery (`Clumps`): a few plants tha
 one place, one flip-book each, stiffer than grass. The lean itself comes from a coarse grid worked
 out once a frame (a sine per pixel would cost more than the drawing), and the tufts are drawn in
 horizontal bands on several cores, even bands then odd, since a tuft can only ever touch tufts in
-its own band or the next. All of this lives in the engine, so the next scene with a meadow or a
-reed bed makes a `Wind`, a `Lawn` and a `Clumps` and paints nothing of its own that moves.
+its own band or the next. All of this lives in the engine for the next scene seen from above with
+a meadow or a reed bed: it paints its carpet and its ground once, then makes a `Wind`, a `Lawn`
+and a `Clumps`, and nothing of its own that moves. Two rules travel with them: the lawn is drawn
+first each frame (half its rows are kept from the frame before), and the projection is overhead
+(a side-on scene needs a different one).
 
 *Rocks that look like rocks.* A rock is a lumpy ring of 9 to 13 points (two slow waves of radius
 plus jitter), a touch wider than tall because we look down on a rounded lump at a slant. It is

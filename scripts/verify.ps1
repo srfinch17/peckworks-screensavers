@@ -183,6 +183,7 @@ foreach ($scr in $files) {
             if ($had) { Set-ItemProperty $desk -Name 'SCRNSAVE.EXE' -Value $orig }
             else { Remove-ItemProperty $desk -Name 'SCRNSAVE.EXE' -ErrorAction SilentlyContinue }
             if ($null -ne $active) { Set-ItemProperty $desk -Name 'ScreenSaveActive' -Value $active }
+            else { Remove-ItemProperty $desk -Name 'ScreenSaveActive' -ErrorAction SilentlyContinue }
         }
     }
 }

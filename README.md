@@ -294,15 +294,17 @@ earlier timer ran slightly faster than the screen and showed a frame twice now a
 small judder you could see in anything moving steadily). Matrix Rain at 4K runs at about 34, above
 the film's own 24.
 
-Sakura Pond: about 10 ms at 1920x1080 and about 12.6 ms at 4K, where it draws at 2560x1440 and
-Windows enlarges the picture (measured on a quiet machine, worst second 12.9 ms, slowest frame
-15.6 ms). Where it goes, measured inside one run with the engine's section timer (set
-`PECKWORKS_SECTIONS` to a file and run `/snapshot`): the koi 2.9 ms, the tufts 1.8, the carpet of
-blades 1.5 (slid and lit by the wind on alternate rows each frame, the other rows kept from the
-frame before, in whole-number arithmetic with two colour channels blended per multiply), the
-flyers 1.4, the backdrop copy 1.2 (the memory's speed, not the processor's: splitting it across
-cores gained nothing and added a hitch), the ripples 0.9 (a lookup table in place of two
-exponentials per pixel), everything else under 0.7.
+Sakura Pond: about 10 ms at 1920x1080. At 4K it draws at 2560x1440 and Windows enlarges the
+picture; over 60-second runs on three seeds it averaged 13.8 to 16.0 ms per frame (the machine's
+own state moves that by 2 ms between runs), with a worst second of 17.6 to 20.9 ms and a slowest
+frame of 30 to 37 ms. The worst seconds are bursts: a flurry of ripples from landing petals, or a
+swallow stamped large as it comes close. Where an ordinary frame goes, measured inside one run
+with the engine's section timer (set `PECKWORKS_SECTIONS` to a file and run `/snapshot`): the koi
+2.9 ms, the tufts 1.8, the carpet of blades 1.5 (slid and lit by the wind on alternate rows each
+frame, the other rows kept from the frame before, in whole-number arithmetic with two colour
+channels blended per multiply), the flyers 1.4, the backdrop copy 1.2 (the memory's speed, not
+the processor's: splitting it across cores gained nothing and added a hitch), the ripples 0.9 (a
+lookup table in place of two exponentials per pixel), everything else under 0.7.
 
 Halloween's happenings cost almost nothing on average: four minutes of ordinary play at 4K
 averaged 12.5 ms, against 13.0 to 13.2 ms for the same scene with nothing on, measured in the same

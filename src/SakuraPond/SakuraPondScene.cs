@@ -52,21 +52,18 @@ internal sealed class SakuraPondScene : IScreensaverScene
         float u = _pond.U;
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
-        _wind = new Wind(0.26f, u, Ripples.Squash);              // to the right and a little toward us
+        _wind = new Wind(0.26f, u, Light.View);                   // to the right and a little toward us
         _ripples = new Ripples(_pond, _waterInView);
-        _lawn = new Lawn(width, height, _pond.Carpet, _pond.Grassy, u, _wind, Light.View, _rng);
+        _lawn = new Lawn(width, height, _pond.Carpet, _pond.Grassy, u, _wind, Light.View, _rng, _pond.Open, _pond.Sun);   // never over a branch; shaded by its shadow
 
         // The cattails: one clump in the shallows, 0.24u tall before foreshortening, stiff (0.7 of the grass's lean).
-        _cattails = new Clumps(_wind, Light.View, _pond.Open);
-        float ch = u * 0.24f;
-        int cw = (int)(ch * 1.6f);
-        _cattails.Add(_pond.CattailSpot, Flipbook.CattailClump(ch, u * 0.036f, Ripples.Squash, _rng), 0.7f, cw, cw, cw / 2, (int)ch, 30);
+        _cattails = new Clumps(_wind, Light.View, width, _pond.Open, _pond.Sun);
+        _cattails.Add(_pond.CattailSpot, Flipbook.CattailClump(u * 0.24f, u * 0.036f, Ripples.Squash, _rng), 0.7f, 30);
 
         // The irises: a fan of sword leaves at each spot the painter chose on the lawn behind the rocks, stiffer still.
-        _irises = new Clumps(_wind, Light.View, _pond.Open);
-        float ih = u * 0.11f;
+        _irises = new Clumps(_wind, Light.View, width, _pond.Open, _pond.Sun);
         foreach ((PointF root, float toward) in _pond.IrisSpots)
-            _irises.Add(root, Flipbook.IrisClump(ih, toward, _rng), 0.45f, (int)(ih * 2.6f), (int)(ih * 2f), (int)(ih * 1.3f), (int)ih, 40);
+            _irises.Add(root, Flipbook.IrisClump(u * 0.11f, toward, _rng), 0.45f, 40);
 
         _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng);
         _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng);
@@ -97,7 +94,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         fb.Restore(_pond.Pixels);
         Sections.Mark("backdrop copy");
         _lawn.Draw(fb);
-        Sections.Mark("lawn: tufts");
+        Sections.Mark("lawn");
         _koi.Draw(fb);
         Sections.Mark("koi");
         _turtles.Draw(fb);

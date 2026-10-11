@@ -184,10 +184,10 @@ internal static class PondPainter
         uint[] beforeRocks = Read(bmp);
         ShorePainter.Rocks(g, gb, gn, bank, corner, u, rng);
         WrapWater(bmp, beforeRocks, Read(blockers), inPond, dist, DistanceToEdge(inPond.Select(p => !p).ToArray(), w, h, edgeIsBank: false), w, h, u);
-        List<(PointF Root, float Toward)> irises = IrisSpots(gn, Read(noGrassSheet), inPond, bank, corner, u, w, h, rng);   // after the rocks and the sand: on the lawn behind them
+        PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
+        List<(PointF Root, float Toward)> irises = IrisSpots(gn, Read(noGrassSheet), inPond, bank, corner, cattails, u, w, h, rng);   // after the rocks and the sand: on the lawn behind them
 
         // ---- 4: on the water ----
-        PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
         var pads = new List<LilyPad>();
         LilyPads(g, gp, pads, inPond, dist, cattails, w, h, u, rng);
 
@@ -530,24 +530,29 @@ internal static class PondPainter
     /// show over them. The leaves themselves are planted by the scene (a
     /// Clumps from Core/Sakura/Plants.cs) so they can sway; here the root
     /// patch is kept clear of grass, and a spot that is not lawn (sand, a
-    /// rock that reaches far up, water) is passed over.
+    /// rock that reaches far up, water) is passed over. Two to six clumps,
+    /// each a clear stride from the others and from the cattails (the repo
+    /// rule: things scattered at random need a clearance test, or some pair
+    /// overlaps on half of seeds). The bank points are visited in a shuffled
+    /// order, so the clumps do not favour one end of the bank.
     /// </summary>
-    private static List<(PointF Root, float Toward)> IrisSpots(Graphics gn, uint[] noGrass, bool[] inPond, PointF[] bank, PointF corner, float u, int w, int h, Random rng)
+    private static List<(PointF Root, float Toward)> IrisSpots(Graphics gn, uint[] noGrass, bool[] inPond, PointF[] bank, PointF corner, PointF cattails, float u, int w, int h, Random rng)
     {
         var spots = new List<(PointF, float)>();
-        float r = u * 0.012f;
+        float r = u * 0.012f, apart = u * 0.12f, want = 2 + rng.Next(5);
         bool Lawn(float x, float y)
         {
             int ix = (int)x, iy = (int)y;
             return ix >= 0 && iy >= 0 && ix < w && iy < h && !inPond[iy * w + ix] && (noGrass[iy * w + ix] & 0xFF) < 128;
         }
-        foreach (PointF p in bank)
+        foreach (PointF p in bank.OrderBy(_ => rng.Next()))
         {
-            if (rng.NextDouble() < 0.8) continue;
+            if (spots.Count >= want) break;
             float ox = corner.X - p.X, oy = corner.Y - p.Y, ol = MathF.Max(1, MathF.Sqrt(ox * ox + oy * oy));
             float back = u * (0.075f + 0.03f * (float)rng.NextDouble());
             var root = new PointF(p.X + ox / ol * back, p.Y + oy / ol * back);
             if (!Lawn(root.X, root.Y) || !Lawn(root.X - r, root.Y) || !Lawn(root.X + r, root.Y) || !Lawn(root.X, root.Y - r) || !Lawn(root.X, root.Y + r)) continue;
+            if (Dist(root, cattails) < u * 0.2f || spots.Any(q => Dist(q.Item1, root) < apart)) continue;
             gn.FillEllipse(Brushes.White, root.X - r, root.Y - r * 0.8f, r * 2, r * 1.6f);
             spots.Add((root, MathF.Atan2(-oy, -ox)));          // toward the water
         }

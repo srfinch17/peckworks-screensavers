@@ -43,23 +43,26 @@ public sealed class Wind
     public readonly float X, Y;
 
     private readonly float _u, _squash;
-    private double _time;                   // a screensaver runs for days: double, wrapped only when read
-    private float _t, _swell, _gust;
+    // A screensaver runs for days. Each of the four rhythms keeps its own
+    // PHASE (an angle, in radians) as a double, wrapped at a full turn every
+    // frame, so no number ever grows large and no sine ever loses precision.
+    // (One shared clock wrapped at 100000 s went coarse after 14 hours and
+    // snapped every plant on the wrap, once a day.)
+    private double _swellA, _swellB;        // the two slow swell sines
+    private double _long, _short;           // how far the long and the short travelling waves have run, in turns
+    private float _swell, _gust, _longF, _shortF;
 
     /// <param name="angle">Direction in radians, 0 = to the right, positive = down the screen (toward us).</param>
     /// <param name="u">The scene's size unit (see the repo rules): wave lengths scale with it.</param>
-    /// <param name="squash">The overhead view's Squash: the screen's y is flatter than the ground's.</param>
-    public Wind(float angle, float u, float squash)
+    /// <param name="view">The overhead view: its Squash says how much flatter the screen's y is than the ground's.</param>
+    public Wind(float angle, float u, Overhead view)
     {
         X = MathF.Cos(angle);
         Y = MathF.Sin(angle);
         _u = u;
-        _squash = squash;
+        _squash = view.Squash;
         Update(0);
     }
-
-    /// <summary>Seconds on the wind's clock, wrapped so the sines stay precise.</summary>
-    public float Time => _t;
 
     /// <summary>How strong the breeze is right now, 0 (a lull) to 1 (a gust), rising and dying over half a minute or so.</summary>
     public float Swell => _swell;
@@ -70,9 +73,12 @@ public sealed class Wind
     /// <summary>Once a frame, before anything asks the wind.</summary>
     public void Update(float dt)
     {
-        _time += dt;
-        _t = (float)(_time % 100000.0);
-        _swell = (0.5f + 0.5f * MathF.Sin(_t * 0.21f)) * (0.6f + 0.4f * MathF.Sin(_t * 0.073f + 1));
+        _swellA = (_swellA + dt * 0.21) % Math.Tau;
+        _swellB = (_swellB + dt * 0.073) % Math.Tau;
+        _long = (_long + dt * 0.6) % 1.0;
+        _short = (_short + dt * 1.5) % 1.0;
+        _longF = (float)_long; _shortF = (float)_short;
+        _swell = (float)((0.5 + 0.5 * Math.Sin(_swellA)) * (0.6 + 0.4 * Math.Sin(_swellB + 1)));
         _gust = 0.25f + 0.75f * _swell;
     }
 
@@ -81,9 +87,9 @@ public sealed class Wind
     {
         // How far along the wind this spot lies, in u, on the ground (the screen's y is squashed).
         float along = (x * X + y / _squash * Y) / _u;
-        float w1 = MathF.Sin(MathF.Tau * (along / 0.7f - _t * 0.6f));
+        float w1 = MathF.Sin(MathF.Tau * (along / 0.7f - _longF));
         float crest = 0.5f + 0.5f * w1; crest *= crest;                   // sharpened: calm troughs, a narrow band of bent grass
-        float w2 = MathF.Sin(MathF.Tau * (along / 0.3f - _t * 1.5f) + 2.1f);
+        float w2 = MathF.Sin(MathF.Tau * (along / 0.3f - _shortF) + 2.1f);
         return 0.08f + _gust * (0.15f + 0.75f * crest + 0.12f * w2);
     }
 }
@@ -104,7 +110,7 @@ public sealed class Wind
 public static class Flipbook
 {
     public const int Poses = 24;                             // 6 pages snapped; 24 read as fluid
-    public const float LeanMin = -0.2f, LeanMax = 1.1f;      // the flip-book's range
+    public const float LeanMin = 0f, LeanMax = 1.1f;         // the flip-book's range: upright to flat downwind (the wind never pushes a plant upwind)
 
     /// <summary>Which page shows a given lean.</summary>
     public static int PageOf(float lean) => Math.Clamp((int)MathF.Round((lean - LeanMin) / (LeanMax - LeanMin) * (Poses - 1)), 0, Poses - 1);
@@ -273,11 +279,28 @@ public static class Flipbook
     }
 
     /// <summary>
-    /// All 24 pages of one clump: each painted into a sheet "pw" by "ph"
-    /// with the root at (ax, ay), then trimmed to the pixels it uses.
+    /// All 24 pages of one clump, each trimmed to the pixels it uses. The
+    /// sheet each is painted on is sized from the clump itself: the tallest
+    /// blade lifted up the screen, or laid flat along the ground any way,
+    /// with its shadow thrown down and to the right, plus the spread of the
+    /// roots and a margin for a cattail's wide head. (Sizes guessed by the
+    /// caller once cut the cattails' long shadows off with a straight line.)
     /// </summary>
-    public static Page[] Pages((Blade Blade, PointF Root)[] clump, int pw, int ph, int ax, int ay, int shadowAlpha, Wind wind, Overhead view)
+    public static Page[] Pages((Blade Blade, PointF Root)[] clump, int shadowAlpha, Wind wind, Overhead view)
     {
+        float tallest = 0, widest = 0, spreadX = 0, spreadY = 0;
+        foreach (var (b, root) in clump)
+        {
+            tallest = MathF.Max(tallest, b.H);
+            widest = MathF.Max(widest, b.Cattail ? b.Wid * 3.2f : b.Wid);
+            spreadX = MathF.Max(spreadX, MathF.Abs(root.X)); spreadY = MathF.Max(spreadY, MathF.Abs(root.Y));
+        }
+        float margin = widest + 4;
+        int left = (int)MathF.Ceiling(tallest + spreadX + margin), right = (int)MathF.Ceiling(tallest * (1 + view.ShadowX) + spreadX + margin);
+        // Up the screen a blade can reach its height lifted PLUS its ground travel away from the viewer (arching up-screen), at right angles to each other.
+        float reachUp = tallest * MathF.Sqrt(view.Lift * view.Lift + view.Squash * view.Squash);
+        int top = (int)MathF.Ceiling(reachUp + spreadY + margin), bottom = (int)MathF.Ceiling(tallest * (1 + view.ShadowY) * view.Squash + spreadY + margin);
+        int pw = left + right, ph = top + bottom, ax = left, ay = top;
         var pages = new Page[Poses];
         for (int p = 0; p < Poses; p++)
         {
@@ -324,7 +347,12 @@ public static class Flipbook
 /// clump of cattails in the shallows, the iris fans along a bank. Each is
 /// a flip-book (Flipbook) stamped once a frame at the page nearest its
 /// lean, drawn only "where" the stencil allows (so a branch or a rock in
-/// front of it stays in front).
+/// front of it stays in front), and darkened by the scene's "sun" at its
+/// root (0 to 255 per pixel), so a clump under a branch's shadow stands in
+/// that shadow instead of glowing through it.
+///
+/// Built for a scene seen from ABOVE (the Overhead projection); a side-on
+/// scene wants a different projection, not this class.
 /// </summary>
 public sealed class Clumps
 {
@@ -334,29 +362,35 @@ public sealed class Clumps
     private readonly Wind _wind;
     private readonly Overhead _view;
     private readonly bool[]? _where;
+    private readonly byte[]? _sun;
+    private readonly int _w;
 
-    public Clumps(Wind wind, Overhead view, bool[]? where)
+    /// <param name="where">Stencil: draw only where true (null = everywhere).</param>
+    /// <param name="sun">Light per pixel, 0 to 255 (null = full sun everywhere); a clump takes the value at its root.</param>
+    public Clumps(Wind wind, Overhead view, int width, bool[]? where, byte[]? sun)
     {
         _wind = wind;
         _view = view;
+        _w = width;
         _where = where;
+        _sun = sun;
     }
 
     /// <summary>
     /// Plants a clump with its root at "root". "Stiff" scales the wind's lean
-    /// for it (1 = grass, 0.7 = cattails, 0.45 = iris). The page is "pw" by
-    /// "ph" with the root at (ax, ay) inside it: big enough for the tallest
-    /// blade lifted up the screen, bent flat along the ground, and its shadow.
+    /// for it (1 = grass, 0.7 = cattails, 0.45 = iris). The pages are sized
+    /// from the clump (see Flipbook.Pages).
     /// </summary>
-    public void Add(PointF root, (Flipbook.Blade Blade, PointF Root)[] clump, float stiff, int pw, int ph, int ax, int ay, int shadowAlpha)
-        => _clumps.Add(new Clump((int)root.X, (int)root.Y, stiff, Flipbook.Pages(clump, pw, ph, ax, ay, shadowAlpha, _wind, _view)));
+    public void Add(PointF root, (Flipbook.Blade Blade, PointF Root)[] clump, float stiff, int shadowAlpha)
+        => _clumps.Add(new Clump((int)root.X, (int)root.Y, stiff, Flipbook.Pages(clump, shadowAlpha, _wind, _view)));
 
     public void Draw(FrameBuffer fb)
     {
         foreach (Clump c in _clumps)
         {
             Flipbook.Page pg = c.Pages[Flipbook.PageOf(_wind.LeanAt(c.X, c.Y) * c.Stiff)];
-            pg.Sprite.Draw(fb, c.X - pg.Ax, c.Y - pg.Ay, 1f, _where);
+            int shade = _sun == null ? 256 : _sun[Math.Clamp(c.Y, 0, fb.Height - 1) * _w + Math.Clamp(c.X, 0, _w - 1)] + 1;
+            pg.Sprite.Draw(fb, c.X - pg.Ax, c.Y - pg.Ay, 1f, _where, shade: shade);
         }
     }
 }
@@ -380,7 +414,18 @@ public sealed class Clumps
 ///
 /// The painter supplies the carpet (0xAARRGGBB per pixel, clear where no
 /// blade is) and the "grassy" mask (where the lawn is: not sand, stones or
-/// rocks); this class owns everything that moves.
+/// rocks); this class owns everything that moves. Two more inputs keep the
+/// lawn honest about what is in front of it and above it: a stencil
+/// ("where": false under a branch, so the grass never paints over it) and
+/// the light per pixel ("sun": the branch's dappled shadow falls on the
+/// moving grass as it does on the ground).
+///
+/// RULE FOR THE CALLER: draw the lawn FIRST each frame, straight after the
+/// backdrop is restored and before anything else is painted inside the
+/// lawn's box. Half the box's rows are kept from the frame before (see
+/// SlideCarpet), so anything drawn there earlier in the frame would freeze
+/// on alternate rows. Built for a scene seen from ABOVE (the Overhead
+/// projection), with the carpet's blades painted leaning downwind.
 /// </summary>
 public sealed class Lawn
 {
@@ -412,12 +457,19 @@ public sealed class Lawn
     private readonly uint[] _slid;                              // the lawn box as last laid: half its rows are redone each frame
     private int _frame;
 
-    public Lawn(int width, int height, uint[] carpet, bool[] grassy, float u, Wind wind, Overhead view, Random rng)
+    private readonly bool[]? _where;
+    private readonly byte[]? _sun;
+
+    /// <param name="where">Stencil: the lawn shows only where true (null = everywhere).</param>
+    /// <param name="sun">Light per pixel, 0 to 255 (null = full sun everywhere).</param>
+    public Lawn(int width, int height, uint[] carpet, bool[] grassy, float u, Wind wind, Overhead view, Random rng, bool[]? where = null, byte[]? sun = null)
     {
         _w = width; _h = height;
         _grassy = grassy;
         _wind = wind;
         _view = view;
+        _where = where;
+        _sun = sun;
         float h = u * 0.05f;                                    // a tall blade, screen pixels
         _shift = u * 0.012f;
 
@@ -443,12 +495,11 @@ public sealed class Lawn
 
         // The tufts' pages, each trimmed to the pixels it actually uses. Half the designs are shorter tufts.
         _pages = new Flipbook.Page[Designs, Flipbook.Poses];
-        int pw = (int)MathF.Ceiling(h * 2.2f), ph = (int)MathF.Ceiling(h * 1.7f);
-        int ax = (int)(h * 0.85f), ay = (int)(h * 0.95f);
+        int ph = 1;                                             // the tallest page, for the bands below
         for (int d = 0; d < Designs; d++)
         {
-            Flipbook.Page[] pages = Flipbook.Pages(Flipbook.Tuft(h * (d < Designs / 2 ? 0.72f : 1f), rng), pw, ph, ax, ay, 48, wind, view);
-            for (int p = 0; p < Flipbook.Poses; p++) _pages[d, p] = pages[p];
+            Flipbook.Page[] pages = Flipbook.Pages(Flipbook.Tuft(h * (d < Designs / 2 ? 0.72f : 1f), rng), 48, wind, view);
+            for (int p = 0; p < Flipbook.Poses; p++) { _pages[d, p] = pages[p]; ph = Math.Max(ph, pages[p].Sprite.Height); }
         }
 
         // Plant the tufts: random spots on the lawn (not sand, stones or
@@ -500,10 +551,8 @@ public sealed class Lawn
         for (int gy = 0; gy < _gh; gy++)
             for (int gx = 0; gx < _gw; gx++)
                 _lean[gy * _gw + gx] = _wind.LeanAt(_x0 + gx * _cell, _y0 + gy * _cell);
-        Sections.Mark("lawn: wind grid");
 
         SlideCarpet(fb);
-        Sections.Mark("lawn: carpet");
         // The tufts, far to near within each band; even bands together, then
         // odd bands together (a tuft only ever touches tufts in its own band
         // or the next, never two bands away). Where a band's last tuft meets
@@ -515,7 +564,8 @@ public sealed class Lawn
                 foreach (Tuft tuft in _bands[k * 2 + parity])
                 {
                     Flipbook.Page pg = _pages[tuft.Design, Flipbook.PageOf(_wind.LeanAt(tuft.X, tuft.Y) * tuft.Stiff)];
-                    pg.Sprite.Draw(fb, tuft.X - pg.Ax, tuft.Y - pg.Ay);
+                    int shade = _sun == null ? 256 : _sun[tuft.Y * _w + tuft.X] + 1;
+                    pg.Sprite.Draw(fb, tuft.X - pg.Ax, tuft.Y - pg.Ay, 1f, _where, shade: shade);
                 }
             });
     }
@@ -571,7 +621,7 @@ public sealed class Lawn
                     lean = rowLean[ix]; dl = (rowLean[Math.Min(ix + 1, _gw - 1)] - lean) / _cell;
                 }
                 int i = y * w + x;
-                if (!_grassy[i]) continue;
+                if (!_grassy[i] || (_where != null && !_where[i])) continue;   // not lawn, or under a branch
                 // Where this pixel's grass came from: upwind by the lean.
                 float sx = x - lean * shiftX, sy = y - lean * shiftY;
                 int sx0 = (int)MathF.Floor(sx), sy0 = (int)MathF.Floor(sy);
@@ -583,8 +633,9 @@ public sealed class Lawn
                 int a = (int)(ag >> 16);
                 if (a < 2) continue;
                 uint rb = ((_rb[j] * w00 + _rb[j + 1] * w10 + _rb[j + w] * w01 + _rb[j + w + 1] * w11) >> 8) & 0x00FF00FF;
-                // Brighter where it leans: bent blades show their pale tips. In 128ths.
+                // Brighter where it leans: bent blades show their pale tips. In 128ths. Darker in a branch's shadow.
                 int bright = (int)((1 + 0.35f * (lean - 0.25f)) * 128);
+                if (_sun != null) bright = bright * (_sun[i] + 1) >> 8;
                 int r = (int)(rb >> 16) * bright >> 7, g = (int)(ag & 0xFF) * bright >> 7, b = (int)(rb & 0xFF) * bright >> 7;
                 uint bg = px[i];
                 int keep = 256 - a;
