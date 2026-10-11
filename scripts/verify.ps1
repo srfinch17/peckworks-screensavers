@@ -150,6 +150,13 @@ foreach ($scr in $files) {
         $desk = 'HKCU:\Control Panel\Desktop'
         $had = (Get-ItemProperty $desk).PSObject.Properties.Name -contains 'SCRNSAVE.EXE'
         $orig = (Get-ItemProperty $desk).'SCRNSAVE.EXE'
+        # Windows ignores "start the screensaver now" while the screensaver is
+        # switched OFF (ScreenSaveActive = 0), which is how the owner keeps it
+        # during a work session (scripts\saver.ps1 -Off). Without this, every
+        # saver fails this check for the wrong reason (2026-10-10: eight FAILs
+        # in a row on builds that were fine). Switch it on for the check only.
+        $active = (Get-ItemProperty $desk -ErrorAction SilentlyContinue).ScreenSaveActive
+        Set-ItemProperty $desk -Name 'ScreenSaveActive' -Value '1'
         try {
             # If a screensaver is ALREADY running, Windows ignores "start the
             # screensaver now" and this check fails for the wrong reason. That
@@ -175,6 +182,7 @@ foreach ($scr in $files) {
         } finally {
             if ($had) { Set-ItemProperty $desk -Name 'SCRNSAVE.EXE' -Value $orig }
             else { Remove-ItemProperty $desk -Name 'SCRNSAVE.EXE' -ErrorAction SilentlyContinue }
+            if ($null -ne $active) { Set-ItemProperty $desk -Name 'ScreenSaveActive' -Value $active }
         }
     }
 }
