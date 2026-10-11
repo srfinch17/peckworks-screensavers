@@ -111,7 +111,11 @@ travelling wave (the cattails and irises sway with it stiffly).
 - **Swallows** visit to drink: low, fast, sweeping curves with bursts of wingbeats and swept-back
   glides, skimming the surface with a line of rings, their shadows racing below them.
 - Now and then a **snake** (a shimahebi, the four-lined rat snake) comes out of the grass, swims
-  across the pond with its body weaving behind its head and a small wake, and slips away.
+  across the pond with its body weaving behind its head and a small wake, and slips away. It is
+  not on rails: it feels its way, goes round the lily pads, the rocks, the log, the cattails and
+  the iris clumps rather than over them, and if a koi, a turtle or the lizard touches it, it
+  startles: a burst of speed, a swing away, rings off its head, then it calms. The minnows keep
+  clear of it as they do of the koi.
 - A **lizard** (a kanahebi, the Japanese grass lizard with the very long tail) comes out on the
   bank every couple of minutes: a dash, dead still, another dash, over the grass and up onto a
   rock to bask, its body and tail throwing an S-wave as it runs and its legs stepping on opposite

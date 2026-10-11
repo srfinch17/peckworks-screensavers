@@ -18,6 +18,9 @@ internal sealed class Turtles
         foreach (Turtle t in _all) t.Update(dt);
     }
 
+    /// <summary>A point at each turtle's nose and under its shell this frame, screen pixels (the snake keeps clear of them).</summary>
+    public PointF[] Spots => _all.SelectMany(t => new[] { t.Nose, t.Middle }).ToArray();
+
     public void Draw(FrameBuffer fb)
     {
         foreach (Turtle t in _all) t.Draw(fb);
@@ -65,6 +68,8 @@ internal sealed class Turtle : Body
 
     /// <summary>How deep it is: 0 at the surface, 1 as deep as a koi goes. A turtle stays near the top.</summary>
     public float Z { get; private set; }
+    public PointF Nose => Spine[0];
+    public PointF Middle => Spine[Points / 2];
 
     public Turtle(Pond pond, Ripples ripples, bool[] where, Random rng) : base(Points)
     {

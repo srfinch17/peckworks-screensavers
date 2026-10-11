@@ -117,7 +117,7 @@ src/
     Ripples.cs                     rings spreading on the water
     Dragonflies.cs                 hover, dart, perch, dip, and the game with the minnows
     Swallows.cs                    swooping visits to drink
-    Snake.cs                       a snake swimming across, now and then
+    Snake.cs                       a snake swimming across, now and then, feeling its way round things
     Lizard.cs                      a lizard dashing about the bank and basking on the rocks, now and then
     TurningStamp.cs                a picture stamped at any angle (dragonflies, swallows, their shadows)
     Light.cs                       where the sun is and how we look at the pond
@@ -557,6 +557,25 @@ allows, because a pivot on the spot folded its tail into a hairpin on the close-
 shadow is the same body painted dark and faint a little down and to the right, so it lies ON the
 grass. It is drawn after the lawn and before the irises, so it runs over the grass and the rocks
 and can pass under the iris leaves.
+
+*The snake feels its way.* The snake (`Snake.cs`) used to run on rails: a curve planned when it
+set out, so it swam straight over a lily pad as if the pad were a shadow. Now it is steered like
+the koi. It has a goal (a point well beyond the far edge of the screen) and a heading, and each
+frame it feels along its heading with six points from just past its snout to a body length ahead,
+asking how much room there is to the nearest lily pad, rock, the log, the cattails or an iris
+clump (all held as circles, the log as a thick line). When the room ahead drops under a margin a
+little wider than its own weave, it tries headings either side and takes the smallest turn that
+clears the thing; "enough room" counts the same as "lots", so it skirts a pad rather than swinging
+out for the middle of the pond. The body follows the head's trail, so the whole snake flows round
+the pad. Two lessons the log taught: the feelers must start close (the first build's nearest
+feeler was a third of a body length out, further than a pad is wide, so it sat jammed against a
+pad for two minutes with every feeler in clear water beyond it), and a step that is refused
+(the next spot would be inside something) must itself force an avoidance turn, or the goal's pull
+holds the nose against the obstacle for ever. It is also nervous: every frame it checks a point on
+each koi, turtle and the lizard against points along its whole body, and a touch startles it, a
+burst to three times its speed, a hard swing away from what touched it (the weave quickens by
+itself because distance drives it), a ring thrown off, and then a few seconds of calming down. It
+cannot startle again for ten seconds or so, so a koi keeping pace does not set it off every frame.
 
 *The fallen log* (`ShorePainter.Log`) is painted once, like a rock, with the same lighting rules:
 a soft shadow down and right, the body shaded across its width so it reads as round, long wavy

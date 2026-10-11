@@ -84,10 +84,15 @@ internal sealed class SakuraPondScene : IScreensaverScene
         float dt = (float)Math.Min(elapsedSeconds, 0.1);
         _wind.Update(dt);                 // first: everything below reads it
         _koi.Update(dt);
-        _minnows.Update(dt, _koi.Heads);
+        PointF[] koiHeads = _koi.Heads;
+        _minnows.Update(dt, _snake.Live ? [.. koiHeads, _snake.Head] : koiHeads);   // the minnows keep clear of the snake as of a koi
         _turtles.Update(dt);
         _petals.Update(dt);
-        _snake.Update(dt);
+        // The snake is told where everything that could touch it is: koi heads and
+        // middles, turtle noses and shells, the lizard when it is out (its spot from
+        // last frame; it is updated after, which is close enough for a touch).
+        PointF[] bumpers = _lizard.Visible ? [.. koiHeads, .. _turtles.Spots, _lizard.Nose] : [.. koiHeads, .. _turtles.Spots];
+        _snake.Update(dt, bumpers);
         _lizard.Update(dt);
         _dragonflies.Update(dt);
         _swallows.Update(dt);
