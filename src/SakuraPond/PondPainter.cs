@@ -8,6 +8,20 @@ namespace SakuraPond;
 /// <summary>A lily pad on the water: where it is and how big (its radius across, in pixels).</summary>
 internal readonly record struct LilyPad(PointF Center, float Radius);
 
+/// <summary>A rock: where, how big (radius, pixels), and whether it stands out in the water.</summary>
+internal readonly record struct BankRock(PointF Centre, float Radius, bool InWater);
+
+/// <summary>
+/// The fallen log at the lower left: its middle, the way it lies (radians), its length and
+/// thickness in pixels, and whether it floats (the land is in the other corner) or lies
+/// beached across the water's edge.
+/// </summary>
+internal readonly record struct Log(PointF Centre, float Angle, float Length, float Width, bool Afloat)
+{
+    /// <summary>The point a fraction t (0 = one end, 1 = the other) along the log's middle line.</summary>
+    public PointF At(float t) => new(Centre.X + MathF.Cos(Angle) * Length * (t - 0.5f), Centre.Y + MathF.Sin(Angle) * Length * (t - 0.5f));
+}
+
 /// <summary>
 /// Everything the moving things need to know about the painted pond. The
 /// painter works it out once; the koi, the petals, the dragonflies and the
@@ -53,6 +67,15 @@ internal sealed class Pond
 
     /// <summary>The lily pads, for dragonflies to land on.</summary>
     public required IReadOnlyList<LilyPad> Pads { get; init; }
+
+    /// <summary>The land: the corner of ground, everything on it included (grass, sand, rocks, the log). The lizard runs only here.</summary>
+    public required bool[] Land { get; init; }
+
+    /// <summary>The rocks on the bank, for the lizard to climb and bask on.</summary>
+    public required IReadOnlyList<BankRock> Rocks { get; init; }
+
+    /// <summary>The fallen log, if the seed placed one (nearly always).</summary>
+    public required Log? Log { get; init; }
 
     /// <summary>The pond's middle, and roughly how far it reaches each way (for choosing paths across it).</summary>
     public required PointF Centre { get; init; }
@@ -182,8 +205,14 @@ internal static class PondPainter
         ShorePainter.Lawn(g, gc, land, w, h, u, rng);
         ShorePainter.BareEdge(g, gn, bank, corner, u, rng);
         uint[] beforeRocks = Read(bmp);
-        ShorePainter.Rocks(g, gb, gn, bank, corner, u, rng);
+        List<BankRock> rocks = ShorePainter.Rocks(g, gb, gn, bank, corner, u, rng);
+        // The log at the lower left: beached across the water's edge when the land is there
+        // (painted now, so the water wraps its wet end like a rock's), or floating out on the
+        // water when the land is in the other corner (painted after the wrap: it floats, it does not sink).
+        Log? log = ShorePainter.PlaceLog(bank, corner, leftCorner, inPond, rocks, cattailsSpotHint: null, w, h, u, rng);
+        if (log is Log beached && !beached.Afloat) ShorePainter.Log(g, gb, gn, beached, u, rng);
         WrapWater(bmp, beforeRocks, Read(blockers), inPond, dist, DistanceToEdge(inPond.Select(p => !p).ToArray(), w, h, edgeIsBank: false), w, h, u);
+        if (log is Log afloat && afloat.Afloat) ShorePainter.Log(g, gb, gn, afloat, u, rng);
         PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
         List<(PointF Root, float Toward)> irises = IrisSpots(gn, Read(noGrassSheet), inPond, bank, corner, cattails, u, w, h, rng);   // after the rocks and the sand: on the lawn behind them
 
@@ -240,6 +269,8 @@ internal static class PondPainter
             Width = w, Height = h, U = u,
             Pixels = final, Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Sun = sun,
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
+            Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
+            Rocks = rocks, Log = log,
         };
     }
 

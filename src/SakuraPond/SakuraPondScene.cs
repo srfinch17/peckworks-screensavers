@@ -46,6 +46,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Turtles _turtles;
     private readonly Petals _petals;
     private readonly Snake _snake;
+    private readonly Lizard _lizard;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
 
@@ -73,6 +74,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng);
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _wind, _rng);
         _snake = new Snake(_pond, _ripples, settings.SnakePercent / 100f, _rng);
+        _lizard = new Lizard(_pond, settings.LizardPercent / 100f, _rng);
         _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng, settings.MinnowSchools > 0 ? _minnows : null);
         _swallows = new Swallows(_pond, _ripples, settings.BirdPercent / 100f, _rng);
     }
@@ -86,6 +88,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _turtles.Update(dt);
         _petals.Update(dt);
         _snake.Update(dt);
+        _lizard.Update(dt);
         _dragonflies.Update(dt);
         _swallows.Update(dt);
         _ripples.Update(dt);
@@ -100,6 +103,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("backdrop copy");
         _lawn.Draw(fb);
         Sections.Mark("lawn");
+        _lizard.Draw(fb);
+        Sections.Mark("lizard");
         _koi.Draw(fb);
         Sections.Mark("koi");
         _turtles.Draw(fb);

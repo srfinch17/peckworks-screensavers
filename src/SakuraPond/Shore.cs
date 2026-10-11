@@ -197,7 +197,7 @@ internal static class ShorePainter
     /// fine, as rocks do). One or two more sit out in the shallows. Drawn
     /// far to near, so a nearer rock covers one behind it.
     /// </summary>
-    public static void Rocks(Graphics g, Graphics gb, Graphics noGrass, PointF[] bank, PointF corner, float u, Random rng)
+    public static List<BankRock> Rocks(Graphics g, Graphics gb, Graphics noGrass, PointF[] bank, PointF corner, float u, Random rng)
     {
         var placed = new List<(PointF C, float R, bool InWater)>();
         for (int tries = 0; tries < 160 && placed.Count < 15; tries++)
@@ -217,9 +217,241 @@ internal static class ShorePainter
         }
         foreach (var (c, r, _) in placed.OrderBy(q => q.C.Y))
             Rock(g, gb, noGrass, c.X, c.Y, r, u, rng);
+        return placed.Select(q => new BankRock(q.C, q.R, q.InWater)).ToList();
     }
 
     private static float Dist(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
+
+    /// <summary>
+    /// Chooses where the fallen log lies. He asked for "a log randomly on the
+    /// lower left", so it is always at the lower left of the screen. When the
+    /// land is in that corner, the log lies BEACHED across the water's edge,
+    /// one end in the grass and the other in the shallows, at an angle to
+    /// the bank (a trunk that fell toward the water). When the land is in the
+    /// other corner, a log FLOATS out on the water at the lower left instead.
+    /// Length, thickness and angle are rolled fresh each time. Null if no
+    /// spot clear of the rocks and the cattails is found (rare).
+    /// </summary>
+    public static Log? PlaceLog(PointF[] bank, PointF corner, bool leftCorner, bool[] inPond, List<BankRock> rocks, PointF? cattailsSpotHint, int w, int h, float u, Random rng)
+    {
+        float len = u * (0.2f + 0.1f * (float)rng.NextDouble()), wid = u * (0.04f + 0.015f * (float)rng.NextDouble());
+        for (int tries = 0; tries < 240; tries++)
+        {
+            Log log;
+            // The bank is lined with rocks, so a beached log is only asked to clear the BIG ones (it lies
+            // over the small stones, as a fallen trunk would); after many tries it floats just off the bank instead.
+            bool beachedTry = leftCorner && tries < 160;
+            if (beachedTry)
+            {
+                // A point along the middle part of the bank, and the bank's direction there.
+                float t = 0.3f + 0.45f * (float)rng.NextDouble();
+                int i = Math.Min(bank.Length - 2, (int)(t * (bank.Length - 1)));
+                PointF p = bank[i], q = bank[i + 1];
+                float along = MathF.Atan2(q.Y - p.Y, q.X - p.X);
+                // Across the bank at 40 to 75 degrees, either way; the log's middle sits a little on the water side.
+                float a = along + (rng.Next(2) == 0 ? 1 : -1) * (0.7f + 0.6f * (float)rng.NextDouble());
+                float ox = corner.X - p.X, oy = corner.Y - p.Y, ol = MathF.Max(1, MathF.Sqrt(ox * ox + oy * oy));
+                var c = new PointF(p.X - ox / ol * len * 0.12f, p.Y - oy / ol * len * 0.12f);
+                log = new Log(c, a, len, wid, Afloat: false);
+            }
+            else if (leftCorner)
+            {
+                // Afloat just off the bank, lying roughly along it, a little way out.
+                float t = 0.3f + 0.45f * (float)rng.NextDouble();
+                int i = Math.Min(bank.Length - 2, (int)(t * (bank.Length - 1)));
+                PointF p = bank[i], q = bank[i + 1];
+                float along = MathF.Atan2(q.Y - p.Y, q.X - p.X) + 0.4f * ((float)rng.NextDouble() - 0.5f);
+                float ox = corner.X - p.X, oy = corner.Y - p.Y, ol = MathF.Max(1, MathF.Sqrt(ox * ox + oy * oy));
+                var c = new PointF(p.X - ox / ol * u * 0.09f, p.Y - oy / ol * u * 0.09f);
+                log = new Log(c, along, len, wid, Afloat: true);
+            }
+            else
+            {
+                var c = new PointF(w * (0.1f + 0.14f * (float)rng.NextDouble()), h * (0.78f + 0.12f * (float)rng.NextDouble()));
+                log = new Log(c, (float)(rng.NextDouble() * MathF.PI), len, wid, Afloat: true);
+            }
+            // Both ends on screen, the floating log wholly on water, and the middle line clear of the rocks
+            // (all of them for a floating log, only the big ones for a beached one).
+            PointF e0 = log.At(0.05f), e1 = log.At(0.95f);
+            if (e0.X < wid || e1.X < wid || e0.Y < 0 || e1.Y < 0 || e0.X >= w - wid || e1.X >= w - wid || e0.Y >= h - wid * 0.5f || e1.Y >= h - wid * 0.5f) continue;
+            if (log.Afloat && !(inPond[(int)e0.Y * w + (int)e0.X] && inPond[(int)e1.Y * w + (int)e1.X])) continue;
+            bool clear = true;
+            for (int k = 0; k <= 10 && clear; k++)
+            {
+                PointF s = log.At(k / 10f);
+                foreach (BankRock r in rocks)
+                {
+                    if (!log.Afloat && r.Radius < u * 0.03f) continue;
+                    if (Dist(r.Centre, s) < r.Radius * 0.8f + wid * 0.5f) { clear = false; break; }
+                }
+            }
+            if (clear) return log;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Paints the fallen log. Seen from above, a log is a long rounded shape
+    /// with bark running along it, and we see a little of the near end's cut
+    /// face (a disc of rings) because we look from slightly in front.
+    /// Paint order, the way light builds it: soft shadow down and right, the
+    /// bark body shaded across its width (lit along the upper-left side,
+    /// darkest along the lower-right flank), long wavy streaks of bark, a
+    /// few cracks across, a knot or two, moss on top, the cut end, then a
+    /// faint light edge where the rim faces the sun and a dark edge where it
+    /// faces away (50 alpha at most: no outlines). A floating log gets a dark
+    /// waterline along its lower side instead of the rocks' water wrap.
+    /// </summary>
+    public static void Log(Graphics g, Graphics gb, Graphics noGrass, Log log, float u, Random rng)
+    {
+        float ca = MathF.Cos(log.Angle), sa = MathF.Sin(log.Angle), nx = -sa, ny = ca;   // along, and across
+        float half = log.Width * 0.5f, len = log.Length;
+        // The outline: 14 points down each long side, each a little in or out (bark is not a ruled line), round ends.
+        var pts = new List<PointF>();
+        int n = 14;
+        float[] wob = new float[n + 1];
+        for (int i = 0; i <= n; i++) wob[i] = 1 + 0.06f * MathF.Sin(i * 1.7f + (float)rng.NextDouble() * 0.6f) + 0.03f * ((float)rng.NextDouble() - 0.5f);
+        for (int i = 0; i <= n; i++) { PointF p = log.At(i / (float)n); float hw = half * wob[i]; pts.Add(new PointF(p.X + nx * hw, p.Y + ny * hw)); }
+        for (int i = n; i >= 0; i--) { PointF p = log.At(i / (float)n); float hw = half * (2 - wob[i]); pts.Add(new PointF(p.X - nx * hw, p.Y - ny * hw)); }
+        using var path = new GraphicsPath();
+        path.AddClosedCurve(pts.ToArray(), 0.4f);
+
+        // Shadow: three soft layers down and right, like a rock's.
+        for (int k = 3; k >= 1; k--)
+        {
+            using var sh = (GraphicsPath)path.Clone();
+            using var m = new Matrix();
+            m.Translate(half * 0.35f + k * u * 0.002f, half * 0.5f + k * u * 0.002f);
+            sh.Transform(m);
+            using var sb = new SolidBrush(Color.FromArgb(28, 4, 14, 14));
+            g.FillPath(sb, sh);
+        }
+
+        // The body: bark brown, shaded across the width so it reads as round. Which side is "up-left"?
+        Color bark = Color.FromArgb(96 + rng.Next(20), 70 + rng.Next(14), 46 + rng.Next(10));
+        float sunSide = nx * -0.55f + ny * -0.83f;                        // positive: the +n side faces the sun
+        PointF c0 = new(log.Centre.X + nx * half * 1.1f, log.Centre.Y + ny * half * 1.1f), c1 = new(log.Centre.X - nx * half * 1.1f, log.Centre.Y - ny * half * 1.1f);
+        if (sunSide < 0) (c0, c1) = (c1, c0);
+        using (var body = new LinearGradientBrush(c0, c1, Shade(bark, 1.25f), Shade(bark, 0.62f)))
+        {
+            body.SetSigmaBellShape(0.35f, 1f);
+            g.FillPath(body, path);
+        }
+        GraphicsState st = g.Save();
+        g.SetClip(path, CombineMode.Intersect);
+        // Bark: many long streaks along the log, each its own wavering line, darker or lighter than the body.
+        int streaks = 18 + rng.Next(10);
+        for (int s = 0; s < streaks; s++)
+        {
+            float off = ((float)rng.NextDouble() * 2 - 1) * half * 0.95f;
+            float t0 = (float)rng.NextDouble() * 0.5f, t1 = t0 + 0.25f + (float)rng.NextDouble() * 0.6f;
+            bool dark = rng.NextDouble() < 0.65;
+            Color sc = dark ? Shade(bark, 0.55f + 0.2f * (float)rng.NextDouble()) : Shade(bark, 1.2f + 0.2f * (float)rng.NextDouble());
+            using var pen = new Pen(Color.FromArgb(50 + rng.Next(70), sc), MathF.Max(0.8f, half * (0.05f + 0.08f * (float)rng.NextDouble())));
+            var line = new PointF[6];
+            for (int k = 0; k < 6; k++)
+            {
+                PointF p = log.At(t0 + (t1 - t0) * k / 5f);
+                float o = off + half * 0.08f * MathF.Sin(k * 1.9f + s);
+                line[k] = new PointF(p.X + nx * o, p.Y + ny * o);
+            }
+            g.DrawCurve(pen, line, 0.5f);
+        }
+        // A few cracks across the bark, short, from one side part way over.
+        for (int k = 0; k < 2 + rng.Next(3); k++)
+        {
+            float t = 0.1f + 0.8f * (float)rng.NextDouble();
+            PointF p = log.At(t);
+            float side = rng.Next(2) == 0 ? 1 : -1, reach = half * (0.3f + 0.5f * (float)rng.NextDouble());
+            using var pen = new Pen(Color.FromArgb(110, Shade(bark, 0.45f)), MathF.Max(0.8f, half * 0.06f));
+            g.DrawLine(pen, p.X + nx * half * side, p.Y + ny * half * side, p.X + nx * (half - reach) * side + ca * reach * 0.3f, p.Y + ny * (half - reach) * side + sa * reach * 0.3f);
+        }
+        // A knot or two: a dark oval with a ring round it, where a branch once grew.
+        for (int k = 0; k < 1 + rng.Next(2); k++)
+        {
+            PointF p = log.At(0.2f + 0.6f * (float)rng.NextDouble());
+            float o = ((float)rng.NextDouble() * 2 - 1) * half * 0.5f, kr = half * (0.18f + 0.14f * (float)rng.NextDouble());
+            var kc = new PointF(p.X + nx * o, p.Y + ny * o);
+            using var ring = new Pen(Color.FromArgb(120, Shade(bark, 0.5f)), MathF.Max(0.8f, kr * 0.25f));
+            g.DrawEllipse(ring, kc.X - kr * 1.3f, kc.Y - kr, kr * 2.6f, kr * 2);
+            using var knot = new SolidBrush(Shade(bark, 0.42f));
+            g.FillEllipse(knot, kc.X - kr * 0.8f, kc.Y - kr * 0.6f, kr * 1.6f, kr * 1.2f);
+        }
+        // Moss on the top, toward the sunny side, in soft patches.
+        for (int k = 0; k < 2 + rng.Next(3); k++)
+        {
+            PointF p = log.At(0.1f + 0.8f * (float)rng.NextDouble());
+            float o = (sunSide >= 0 ? 1 : -1) * half * (0.1f + 0.5f * (float)rng.NextDouble()), mr = half * (0.3f + 0.4f * (float)rng.NextDouble());
+            using var mp = new GraphicsPath();
+            mp.AddClosedCurve(RockShape(p.X + nx * o, p.Y + ny * o, mr, 0.7f, rng), 0.5f);
+            Color moss = Color.FromArgb(66 + rng.Next(30), 100 + rng.Next(30), 40 + rng.Next(16));
+            using var mb = new PathGradientBrush(mp) { CenterColor = Color.FromArgb(190, moss), SurroundColors = [Color.FromArgb(0, moss)] };
+            g.FillPath(mb, mp);
+        }
+        g.Restore(st);
+
+        // The cut end we can see: the end whose direction points down the screen (toward us).
+        // A disc of pale wood with growth rings, flattened by the slant (the more the log points
+        // at us, the rounder it looks).
+        float endDir = sa >= 0 ? 1 : -1;
+        PointF end = log.At(endDir > 0 ? 1f : 0f);
+        float squash = MathF.Abs(sa) * 0.5f + 0.08f;
+        if (squash > 0.14f)
+        {
+            using var face = new GraphicsPath();
+            using var fm = new Matrix();
+            face.AddEllipse(-half, -half * squash, half * 2, half * squash * 2);
+            fm.Translate(end.X - ca * endDir * half * squash * 0.3f, end.Y - sa * endDir * half * squash * 0.3f);
+            fm.Rotate(log.Angle * 180 / MathF.PI);
+            face.Transform(fm);
+            Color wood = Color.FromArgb(170 + rng.Next(20), 140 + rng.Next(16), 96 + rng.Next(12));
+            using (var wb = new SolidBrush(wood)) g.FillPath(wb, face);
+            GraphicsState st2 = g.Save();
+            g.SetClip(face, CombineMode.Intersect);
+            for (int k = 1; k <= 5; k++)
+            {
+                float f = k / 6f;
+                using var rp = new Pen(Color.FromArgb(70, Shade(wood, 0.72f)), MathF.Max(0.7f, half * 0.04f));
+                using var rpath = new GraphicsPath();
+                using var rm = new Matrix();
+                rpath.AddEllipse(-half * f, -half * squash * f, half * 2 * f, half * squash * 2 * f);
+                rm.Translate(end.X - ca * endDir * half * squash * 0.3f, end.Y - sa * endDir * half * squash * 0.3f);
+                rm.Rotate(log.Angle * 180 / MathF.PI);
+                rpath.Transform(rm);
+                g.DrawPath(rp, rpath);
+            }
+            g.Restore(st2);
+            using var endEdge = new Pen(Color.FromArgb(90, Shade(bark, 0.5f)), MathF.Max(0.8f, half * 0.05f));
+            g.DrawPath(endEdge, face);
+        }
+
+        // Rim light and shade by which way each edge faces, never more than 50 alpha of light.
+        PointF[] rim = path.PathPoints;
+        for (int i = 0; i < rim.Length; i += 2)
+        {
+            PointF a = rim[i], b = rim[(i + 2) % rim.Length];
+            float ex = b.X - a.X, ey = b.Y - a.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));
+            float onx = ey / el, ony = -ex / el;
+            float facing = onx * -0.55f + ony * -0.83f;
+            if (facing > 0.2f) using (var lit = new Pen(Color.FromArgb((int)(50 * facing), 250, 240, 220), MathF.Max(1f, half * 0.06f))) g.DrawLine(lit, a, b);
+            else if (facing < -0.2f) using (var dark = new Pen(Color.FromArgb((int)(-100 * facing), 14, 12, 10), MathF.Max(1f, half * 0.08f))) g.DrawLine(dark, a, b);
+        }
+        if (log.Afloat)
+        {
+            // Floating: a dark waterline hugging the lower side, where the surface meets the wood.
+            for (int i = 0; i <= n; i++)
+            {
+                PointF p = log.At(i / (float)n), q = log.At(Math.Min(n, i + 1) / (float)n);
+                float side = ny >= 0 ? 1 : -1;
+                using var wl = new Pen(Color.FromArgb(90, 8, 30, 34), MathF.Max(1.2f, half * 0.12f));
+                g.DrawLine(wl, p.X + nx * half * side * 1.02f, p.Y + ny * half * side * 1.02f, q.X + nx * half * side * 1.02f, q.Y + ny * half * side * 1.02f);
+            }
+        }
+        gb.FillPath(Brushes.White, path);
+        noGrass.FillPath(Brushes.White, path);
+    }
+
+    private static Color Shade(Color c, float k) => Color.FromArgb(Math.Min(255, (int)(c.R * k)), Math.Min(255, (int)(c.G * k)), Math.Min(255, (int)(c.B * k)));
 
     /// <summary>
     /// One rock. In paint order: its soft shadow on the ground to the lower

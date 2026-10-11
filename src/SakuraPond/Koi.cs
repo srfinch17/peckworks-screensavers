@@ -109,6 +109,9 @@ internal sealed class Koi : Body
     private bool _beating;
     private float _beatTimer, _depthTimer, _gulpTimer, _zTarget;
     private bool _gulping;
+    private float _bumpTimer, _bumpGap;                    // the back-bump: when next, and the gap between its rings
+    private bool _bumping;
+    private int _bumpRings;
     private float _goalX, _goalY, _goalTimer;            // where it is idly heading, ground pixels, and until when
     private double _time;
 
@@ -173,6 +176,7 @@ internal sealed class Koi : Body
         _zTarget = Z;
         _depthTimer = 3 + (float)rng.NextDouble() * 8;
         _gulpTimer = 10 + (float)rng.NextDouble() * 60;
+        _bumpTimer = 40 + (float)rng.NextDouble() * 200;
         NewGoal();
         // A straight trail behind it to start.
         for (int i = 40; i >= 0; i--)
@@ -271,13 +275,39 @@ internal sealed class Koi : Body
 
         // ---- Up and down in the water, and the occasional gulp ----
         _depthTimer -= dt;
-        if (_depthTimer <= 0 && !_gulping)
+        if (_depthTimer <= 0 && !_gulping && !_bumping)
         {
             _zTarget = 0.12f + 0.6f * (float)_rng.NextDouble();
             _depthTimer = 6 + 10 * (float)_rng.NextDouble();
         }
         _gulpTimer -= dt;
-        if (_gulpTimer <= 0 && !_gulping) { _gulping = true; _zTarget = 0; }
+        if (_gulpTimer <= 0 && !_gulping && !_bumping) { _gulping = true; _zTarget = 0; }
+
+        // ---- The back-bump: now and then a cruising koi rises slowly until its back
+        // brushes the surface from below, and three thin rings slip off its back as it
+        // glides on; then it sinks back. Rare, slow and quiet: the rise takes ten seconds
+        // or so at the ordinary drift rate, and the rings are the thin kind. ----
+        _bumpTimer -= dt;
+        if (_bumpTimer <= 0 && !_gulping && !_bumping) { _bumping = true; _zTarget = 0; _depthTimer = 40; }
+        if (_bumping && Z < 0.06f)
+        {
+            _bumpGap -= dt;
+            if (_bumpGap <= 0)
+            {
+                PointF back = Spine[7];                                   // the highest point of the back, behind the shoulders
+                _ripples.Add(back.X, back.Y, 0.5f, thin: true);
+                _bumpRings++;
+                _bumpGap = 0.4f;
+            }
+            if (_bumpRings >= 3)
+            {
+                _bumping = false;
+                _bumpRings = 0;
+                _bumpTimer = 120 + 240 * (float)_rng.NextDouble();
+                _zTarget = 0.15f + 0.3f * (float)_rng.NextDouble();
+                _depthTimer = 6 + 10 * (float)_rng.NextDouble();
+            }
+        }
         int ix = Math.Clamp((int)here.X, 0, _pond.Width - 1), iy = Math.Clamp((int)here.Y, 0, _pond.Height - 1);
         float bottom = 0.05f + 0.9f * _pond.Depth[iy * _pond.Width + ix] / 255f;   // shallow water: it cannot be deep
         float zWant = MathF.Min(_zTarget, bottom);

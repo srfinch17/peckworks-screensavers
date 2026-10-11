@@ -24,6 +24,7 @@ internal sealed class Ripples
     private struct Ring
     {
         public float X, Y, Age, Life, Speed, Strength, Start;
+        public float Width;                  // 1 = a normal ring; less = a thin one (a koi's back brushing the surface)
     }
 
     private readonly List<Ring> _rings = new();
@@ -53,7 +54,8 @@ internal sealed class Ripples
     }
 
     /// <param name="strength">1 = a koi's gulp; 0.4 = a petal; 1.6 = a swallow hitting the water.</param>
-    public void Add(float x, float y, float strength)
+    /// <param name="thin">A finer, slower, longer-lived ring: the surface barely disturbed (a koi's back brushing it from below).</param>
+    public void Add(float x, float y, float strength, bool thin = false)
     {
         if (_rings.Count >= Most) return;
         int ix = (int)x, iy = (int)y;
@@ -61,10 +63,11 @@ internal sealed class Ripples
         float u = _pond.U;
         _rings.Add(new Ring
         {
-            X = x, Y = y, Strength = strength,
-            Life = 1.6f + 1.4f * MathF.Min(1.5f, strength),
-            Speed = u * (0.03f + 0.025f * MathF.Min(1.5f, strength)),
+            X = x, Y = y, Strength = thin ? strength * 0.7f : strength,
+            Life = thin ? 2.4f + 1.2f * strength : 1.6f + 1.4f * MathF.Min(1.5f, strength),
+            Speed = thin ? u * (0.018f + 0.012f * strength) : u * (0.03f + 0.025f * MathF.Min(1.5f, strength)),
             Start = u * 0.003f,
+            Width = thin ? 0.55f : 1f,
         });
     }
 
@@ -88,7 +91,7 @@ internal sealed class Ripples
     {
         float life = r.Age / r.Life;
         float radius = r.Start + r.Speed * r.Age;
-        float band = MathF.Max(1.2f, _pond.U * 0.0025f * (1 + 2 * life));    // the ring gets wider as it spreads
+        float band = MathF.Max(1.2f, _pond.U * 0.0025f * (1 + 2 * life) * r.Width);    // the ring gets wider as it spreads
         // Strong at the start, fading out; a gentle fade-in over the first moment so it does not pop.
         float a = r.Strength * 0.22f * (1 - life) * (1 - life) * MathF.Min(1, r.Age * 8);
         if (a < 0.005f) return;

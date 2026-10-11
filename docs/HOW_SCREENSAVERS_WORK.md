@@ -108,7 +108,7 @@ src/
     Program.cs                     Main(), plus the definition (draws at most 2560 wide)
     SakuraPondScene.cs             the layers, back to front
     PondPainter.cs                 paints the pond bed and water, lily pads, branches and their shadows; calls the shore painter
-    Shore.cs                       paints the corner of land: the lawn's ground and carpet, the sand edge, rocks that look like rocks
+    Shore.cs                       paints the corner of land: the lawn's ground and carpet, the sand edge, rocks that look like rocks, the fallen log
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
     Minnows.cs                     schools of tiny fish that move as one, and rush to the dragonfly's rings
@@ -118,6 +118,7 @@ src/
     Dragonflies.cs                 hover, dart, perch, dip, and the game with the minnows
     Swallows.cs                    swooping visits to drink
     Snake.cs                       a snake swimming across, now and then
+    Lizard.cs                      a lizard dashing about the bank and basking on the rocks, now and then
     TurningStamp.cs                a picture stamped at any angle (dragonflies, swallows, their shadows)
     Light.cs                       where the sun is and how we look at the pond
     SakuraPondSettings.cs          declares its knobs
@@ -543,6 +544,29 @@ wriggle like worms, which the close-up strip showed and a still never would). Th
 is the two halves meeting: a dragonfly asks where the nearest school is, flies over, hovers, skims
 low tapping the water three times (three small rings), and the taps call the school; then it darts
 off far and its timer runs before it plays again, taking the schools in turn.
+
+*A lizard on land is the koi's method on the ground.* The lizard (`Lizard.cs`) is the same
+bending spine, its head leading and its body and long tail laid along the trail behind it, with
+a running S-wave that grows down the tail and dies away when it stops, and four legs as small
+ovals swinging on opposite corners in step. What makes it a lizard rather than a small snake with
+legs is the RHYTHM: a dash of under a second, then dead still for one to three, then another; a
+climb onto a dry rock and a long bask; and it comes in from the screen's edge and leaves the same
+way, so it never pops into being. It asks the land mask (the ground plus whatever stands in the
+water, a rock's wet side, the log) before every step, and it turns no faster than its speed
+allows, because a pivot on the spot folded its tail into a hairpin on the close-up strip. Its
+shadow is the same body painted dark and faint a little down and to the right, so it lies ON the
+grass. It is drawn after the lawn and before the irises, so it runs over the grass and the rocks
+and can pass under the iris leaves.
+
+*The fallen log* (`ShorePainter.Log`) is painted once, like a rock, with the same lighting rules:
+a soft shadow down and right, the body shaded across its width so it reads as round, long wavy
+bark streaks, a few short cracks, a knot or two, moss toward the sun, and the cut end as a disc of
+growth rings flattened by the slant, which shows only when that end points down the screen toward
+us. Rim light stays under 50 alpha. A log beached across the water's edge is painted before the
+water is laid back over the stones, so its wet end darkens under the water like a rock's flank; a
+floating log is painted after, with a dark waterline along its lower side, because a floating
+thing does not sink into the water the way a standing stone does. Where it lies, how long and
+thick, which way, and every streak and knot are rolled fresh each time.
 
 *Behaviour from watching the real thing.* Koi beat and glide, steer toward a spot they have
 picked anywhere in the pond (a few headings tried either side when the bank comes close, taking

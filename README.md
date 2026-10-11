@@ -89,7 +89,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   plain red-orange) cruise the whole pond: a few tail beats, then a long glide. Each body bends
   through its turns along the path its head swam, never flipped or slid. They drift up and down
   in the water, hazier when deep, slip under the lily pads, and now and then come up to gulp at
-  the surface, leaving a ring.
+  the surface, leaving a ring. Once in a while one rises slowly until its back brushes the
+  surface from below, and three thin, slow rings slip off it as it glides on.
 - Two **schools of minnows**, a dozen or so tiny fish each, hang just under the surface and move
   as one: all facing the same way, fidgeting in little darts, flashing silver when the whole
   school turns, and scattering like thrown rice when a koi cruises underneath. Each minnow is a
@@ -111,9 +112,18 @@ travelling wave (the cattails and irises sway with it stiffly).
   glides, skimming the surface with a line of rings, their shadows racing below them.
 - Now and then a **snake** (a shimahebi, the four-lined rat snake) comes out of the grass, swims
   across the pond with its body weaving behind its head and a small wake, and slips away.
+- A **lizard** (a kanahebi, the Japanese grass lizard with the very long tail) comes out on the
+  bank every couple of minutes: a dash, dead still, another dash, over the grass and up onto a
+  rock to bask, its body and tail throwing an S-wave as it runs and its legs stepping on opposite
+  corners, then it is gone into the grass again.
+- A fallen **log** lies at the lower left, different every time: beached across the water's edge
+  with one end in the grass and the other in the shallows when the land is in that corner, or
+  drifting out on the water when it is not. Bark streaks, cracks, a knot or two, moss on top, and
+  the cut end's rings where it faces us.
 
 Settings: petals, number of koi, number of minnow schools (0 means no game), number of turtles,
-number of dragonflies, how often the swallows visit, and how often the snake crosses.
+number of dragonflies, how often the swallows visit, how often the snake crosses, and how often
+the lizard comes out.
 
 On a 4K screen it draws at 2560 wide and Windows enlarges the picture: the scene is soft and
 painterly, so the enlarging loses almost nothing, and it keeps the frame rate.
