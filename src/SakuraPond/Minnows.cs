@@ -34,11 +34,11 @@ internal sealed class Minnows
     private readonly School[] _schools;
     private readonly float _u;
 
-    public Minnows(Pond pond, int schools, bool[] where, Random rng)
+    public Minnows(Pond pond, int schools, bool[] where, Ripples ripples, Random rng)
     {
         _u = pond.U;
         _schools = new School[Math.Max(0, schools)];
-        for (int i = 0; i < _schools.Length; i++) _schools[i] = new School(pond, where, rng, 12 + rng.Next(8));
+        for (int i = 0; i < _schools.Length; i++) _schools[i] = new School(pond, where, ripples, rng, 12 + rng.Next(8));
     }
 
     /// <param name="koiHeads">Points along each koi this frame (head and middle), in screen pixels: the minnows keep clear of them.</param>
@@ -94,9 +94,11 @@ internal sealed class School
 
     private readonly Pond _pond;
     private readonly Random _rng;
+    private readonly Ripples _ripples;
     private readonly Minnow[] _fish;
     private readonly float _u;
     private Mood _mood = Mood.Drift;
+    private float _nipTimer;             // milling fish nip at the surface now and then: a fizz of tiny rings
     private float _tx, _ty;              // where the school is heading, ground pixels
     private float _lx, _ly;              // the lure: where the water was touched, ground pixels
     private float _timer, _orbit;
@@ -105,10 +107,11 @@ internal sealed class School
     /// <summary>The middle of the school, screen pixels.</summary>
     public PointF Centre { get; private set; }
 
-    public School(Pond pond, bool[] where, Random rng, int count)
+    public School(Pond pond, bool[] where, Ripples ripples, Random rng, int count)
     {
         _pond = pond;
         _rng = rng;
+        _ripples = ripples;
         _u = pond.U;
         // A home in open water with room around it, and the fish gathered close round it, all facing much the same way.
         PointF home = pond.Centre;
@@ -186,8 +189,17 @@ internal sealed class School
             case Mood.Mill:
                 // Round and round the spot where the rings were: a swirl, each fish on its own place
                 // in a ring that turns about the spot (the ring is handed out below), then it loses interest.
-                _orbit = (_orbit + 1.5f * dt) % MathF.Tau;
+                // Now and then one nips at the surface where the dragonfly touched (they take anything
+                // that lands for food), leaving a ring far smaller than the dragonfly's.
+                _orbit = (_orbit + 1.6f * dt) % MathF.Tau;
                 pace = 3f;
+                _nipTimer -= dt;
+                if (_nipTimer <= 0)
+                {
+                    PointF nose = _fish[_rng.Next(_fish.Length)].Nose;
+                    _ripples.Add(nose.X, nose.Y, 0.12f);
+                    _nipTimer = 0.3f + 0.6f * (float)_rng.NextDouble();
+                }
                 if (_timer <= 0) { _mood = Mood.Drift; NewTarget(); }
                 break;
             default:
@@ -201,7 +213,7 @@ internal sealed class School
             float tx = _tx, ty = _ty;
             if (_mood == Mood.Mill)
             {
-                float a = _orbit + f.RingPlace, r = _u * 0.035f * f.RingRadius;
+                float a = _orbit + f.RingPlace, r = _u * 0.045f * f.RingRadius;
                 tx = _lx + MathF.Cos(a) * r; ty = _ly + MathF.Sin(a) * r;
             }
             f.Update(dt, _fish, tx, ty, pace, koiHeads);
@@ -242,6 +254,9 @@ internal sealed class Minnow : Body
     public float X { get; private set; }
     public float Y { get; private set; }
 
+    /// <summary>Where its nose is on the screen.</summary>
+    public PointF Nose => Spine[0];
+
     public Minnow(Pond pond, bool[] where, Random rng, float x, float y, float heading) : base(Points)
     {
         _pond = pond;
@@ -252,7 +267,7 @@ internal sealed class Minnow : Body
         _wide = _len * 0.1f;
         _jitter = 0.85f + 0.3f * (float)rng.NextDouble();
         RingPlace = (float)(rng.NextDouble() * MathF.Tau);
-        RingRadius = 0.5f + 0.5f * (float)rng.NextDouble();
+        RingRadius = 0.75f + 0.25f * (float)rng.NextDouble();    // a narrow band, so the swirl reads as a ring and not a cloud
         X = x; Y = y;
         _heading = heading;
         _speed = _len * 1.3f;

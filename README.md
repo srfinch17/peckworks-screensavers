@@ -96,8 +96,9 @@ travelling wave (the cattails and irises sway with it stiffly).
   bending body on its own trail, like the koi in miniature.
 - **The dragonfly's game**: every so often a dragonfly flies over to a school, hovers, then skims
   low and taps the water three times in a short line, each tap a small ring. The minnows rush to
-  the rings in a body and swirl under the spot. The dragonfly darts off across the pond, wanders,
-  and comes back a little later to do it again, taking the schools in turn.
+  the rings in a body and circle under the spot, nipping at the surface where the dragonfly
+  touched (a fizz of tiny rings). The dragonfly darts off across the pond, wanders, and comes back
+  a little later to do it again, taking the schools in turn.
 - A **turtle** (a red-eared slider, the turtle of nearly every park pond in Japan) paddles just
   under the surface, front left leg with back right and then the other pair, with a small surge
   on each stroke, turning as one rigid piece in wide slow arcs. Now and then it stops, spreads

@@ -69,7 +69,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
             _irises.Add(root, Flipbook.IrisClump(u * 0.11f, toward, _rng), 0.45f, 40);
 
         _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng);
-        _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _rng);
+        _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _ripples, _rng);
         _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng);
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _wind, _rng);
         _snake = new Snake(_pond, _ripples, settings.SnakePercent / 100f, _rng);
