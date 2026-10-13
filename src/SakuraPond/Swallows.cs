@@ -44,8 +44,12 @@ internal sealed class Swallows
     private readonly PointF[][] _routes = new PointF[2][];
     private float _nextVisit;
 
-    public Swallows(Pond pond, Ripples ripples, float often, Random rng)
+    private readonly KoiSchool? _koi;
+
+    /// <param name="koi">The koi, told when a bird skims low: a shadow over a fish makes it dart and dive.</param>
+    public Swallows(Pond pond, Ripples ripples, float often, Random rng, KoiSchool? koi = null)
     {
+        _koi = koi;
         _pond = pond;
         _ripples = ripples;
         _rng = rng;
@@ -186,6 +190,7 @@ internal sealed class Swallows
             bool overWater = _pond.Water[iy * _pond.Width + ix];
             float wantH = b.Skimming && overWater ? 0.004f : 0.1f + 0.04f * i;
             b.Height += (wantH - b.Height) * (1 - MathF.Exp(-dt * 2.2f));
+            if (overWater && b.Height < 0.04f) _koi?.Startle(b.X + b.Height * _u * Light.ShadowX, b.Y + b.Height * _u * Light.ShadowY);   // low enough that its shadow is sharp on the water
             if (b.Skimming && overWater && b.Height < 0.012f)
             {
                 b.RingTimer -= dt;

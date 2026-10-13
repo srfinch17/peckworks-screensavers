@@ -222,14 +222,42 @@ internal static class FramePump
         if (Views.Count == 0) Application.Idle -= Run;
     }
 
+    // STEADY BEATS. A frame that takes longer than one page of the flip-book
+    // (about 16.7 ms on a 60 Hz screen) misses its page and lands on the
+    // next: 33 ms. A scene that takes 15 ms one frame and 18 the next then
+    // shows at 16, 33, 16, 33: the eye reads that unevenness as a stutter,
+    // worse than an even 30 frames a second. So the pump watches how long
+    // recent frames took (drawing plus showing), and when they are too close
+    // to the page time to make it reliably, it waits for TWO pages per frame,
+    // on purpose, every frame: an even 30. When frames get quick again it
+    // goes back to one page per frame. The scene is told the real time that
+    // passed either way, so nothing moves slower, it only moves in bigger steps.
+    private const double PageMs = 1000.0 / 60;
+    private static double _costAvg;       // a running average of recent frame costs, ms
+    private static bool _halfRate;        // waiting two pages per frame now?
+    private static int _since;            // frames since the rate last changed (no flip-flopping)
+
+    /// <summary>Two pages per frame right now? (For the frame log and tests.)</summary>
+    public static bool HalfRate => _halfRate;
+
     private static void Run(object? sender, EventArgs e)
     {
         // Keep making frames for as long as no message is waiting.
         while (Views.Count > 0 && !NativeMethods.PeekMessage(out _, IntPtr.Zero, 0, 0, 0))
         {
+            double start = Clock.Elapsed.TotalMilliseconds;
             foreach (SceneView view in Views.ToArray())
                 if (!view.IsDisposed && view.IsHandleCreated && view.Visible) view.Step();
+            double cost = Clock.Elapsed.TotalMilliseconds - start;
+            _costAvg += (Math.Min(cost, 100) - _costAvg) * 0.1;      // the last ten frames or so count most
+            _since++;
+            // Go to two pages a frame when frames cannot make one page with a
+            // little to spare; come back only once they are clearly quick
+            // again, and never flip within half a second of the last change.
+            if (!_halfRate && _costAvg > PageMs * 0.88 && _since > 30) { _halfRate = true; _since = 0; }
+            else if (_halfRate && _costAvg < PageMs * 0.62 && _since > 120) { _halfRate = false; _since = 0; }
             WaitForNextRefresh();
+            if (_halfRate) WaitForNextRefresh();
         }
     }
 
@@ -246,7 +274,7 @@ internal static class FramePump
             if (ok && waited > 1.0) { _lastFrame = Clock.Elapsed.TotalMilliseconds; return; }
         }
         // The fallback: wait until a sixtieth of a second since the last frame.
-        while (Clock.Elapsed.TotalMilliseconds - _lastFrame < 1000.0 / 60 - 0.5)
+        while (Clock.Elapsed.TotalMilliseconds - _lastFrame < PageMs - 0.5)
             Thread.Sleep(1);
         _lastFrame = Clock.Elapsed.TotalMilliseconds;
     }

@@ -91,6 +91,20 @@ public sealed class FrameBuffer
     }
 
     /// <summary>
+    /// The same mix with the solidness as a whole number, 0 to 256 (256 =
+    /// fully solid), for the hot loops that paint tens of thousands of pixels
+    /// a frame (a koi's body). The colour must already be 0 to 255 on each
+    /// channel; then the result cannot leave that range, so there is nothing
+    /// to clamp, and a multiply and a shift replace a float multiply and a
+    /// conversion on every channel.
+    /// </summary>
+    public static uint Blend256(uint bg, int r, int g, int b, int alpha256)
+    {
+        int br = (int)((bg >> 16) & 0xFF), bgc = (int)((bg >> 8) & 0xFF), bb = (int)(bg & 0xFF);
+        return (uint)(((br + ((r - br) * alpha256 >> 8)) << 16) | ((bgc + ((g - bgc) * alpha256 >> 8)) << 8) | (bb + ((b - bb) * alpha256 >> 8)));
+    }
+
+    /// <summary>
     /// Draws a straight line from a to b, straight into the pixels. For thin
     /// things that change every frame and so cannot be a sprite: a strand of
     /// spider silk being spun, a shooting star's tail.

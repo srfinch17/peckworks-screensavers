@@ -48,7 +48,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Turtles _turtles;
     private readonly Petals _petals;
     private readonly Snake _snake;
-    private readonly Lizard _lizard;
+    private readonly Lizards _lizards;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
 
@@ -75,10 +75,10 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng, settings.KoiPlayPercent / 100f, _petals);   // the koi nose at and eat the floating petals
         _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _ripples, _rng);
         _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng);
-        _snake = new Snake(_pond, _ripples, settings.SnakePercent / 100f, _rng);
-        _lizard = new Lizard(_pond, settings.LizardPercent / 100f, _rng);
+        _snake = new Snake(_pond, _ripples, settings.MinnowSchools > 0 ? _minnows : null, settings.SnakePercent / 100f, _rng);
+        _lizards = new Lizards(_pond, settings.LizardCount, _ripples, settings.LizardPercent / 100f, _rng);
         _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng, settings.MinnowSchools > 0 ? _minnows : null, _koi);
-        _swallows = new Swallows(_pond, _ripples, settings.BirdPercent / 100f, _rng);
+        _swallows = new Swallows(_pond, _ripples, settings.BirdPercent / 100f, _rng, _koi);   // a skimming swallow's shadow makes the koi flinch
     }
 
     public void Update(double elapsedSeconds)
@@ -91,11 +91,11 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _turtles.Update(dt);
         _petals.Update(dt);
         // The snake is told where everything that could touch it is: koi heads and
-        // middles, turtle noses and shells, the lizard when it is out (its spot from
-        // last frame; it is updated after, which is close enough for a touch).
-        PointF[] bumpers = _lizard.Visible ? [.. koiHeads, .. _turtles.Spots, _lizard.Nose] : [.. koiHeads, .. _turtles.Spots];
+        // middles, turtle noses and shells, the nose of every lizard that is out (its spot
+        // from last frame; they are updated after, which is close enough for a touch).
+        PointF[] bumpers = [.. koiHeads, .. _turtles.Spots, .. _lizards.Noses];
         _snake.Update(dt, bumpers);
-        _lizard.Update(dt);
+        _lizards.Update(dt, _snake.Live ? _snake.Head : null);   // the lizards run from the snake too
         _dragonflies.Update(dt);
         _swallows.Update(dt);
         _ripples.Update(dt);
@@ -110,7 +110,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("backdrop copy");
         _lawn.Draw(fb);
         Sections.Mark("lawn");
-        _lizard.Draw(fb);
+        _lizards.Draw(fb);
         Sections.Mark("lizard");
         _koi.Draw(fb);
         Sections.Mark("koi");

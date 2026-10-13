@@ -450,15 +450,29 @@ public sealed class Lawn
     // green. Blending four neighbours then costs one multiply per PAIR of
     // channels instead of one per channel (see SlideCarpet).
     private readonly uint[] _rb, _ag;
-    private readonly int _x0, _y0, _x1, _y1;                    // the lawn's box on screen
+    private readonly int _x0, _y0, _x1, _y1;                    // the grass's box on screen (where grassy pixels are)
+    private readonly int _sx0, _sy0, _sw, _sh;                  // the sheet's box: the grass's box widened by a page, so edge tufts keep their blades
     private readonly float _shift;                              // how far (pixels) the carpet slides downwind at lean 1
     private readonly int _cell, _gw, _gh;                       // the wind grid: lean worked out every "cell" pixels, blended between
     private readonly float[] _lean;
-    private readonly uint[] _slid;                              // the lawn box as last laid: half its rows are redone each frame
+    private readonly uint[] _slid;                              // the lawn box with the carpet laid: half its rows are redone each carpet frame
     private int _frame;
 
     private readonly bool[]? _where;
     private readonly byte[]? _sun;
+
+    // THE LAWN IS FINISHED EVERY OTHER FRAME. The carpet and the tufts are the
+    // two dearest things in the whole pond, and they move slowly (a gust
+    // takes seconds to cross). So the carpet is laid on even frames (into
+    // _slid) and the tufts are stamped on odd frames (onto a copy of the
+    // carpet, _sheet, a little picture the size of the lawn's box), and every
+    // frame the finished sheet is copied onto the screen. Each frame pays
+    // for one of the two jobs plus a copy, instead of both: the slowest frame
+    // is what the eye reads as a stutter, and this halves the lawn's share of
+    // it. Thirty frames a second is more than enough for grass.
+    private readonly FrameBuffer _sheet;                        // the finished lawn, carpet and tufts, box-sized
+    private readonly bool[]? _whereBox;                         // the stencil cut to the box, for stamping into the sheet
+    private int _tick;
 
     /// <param name="where">Stencil: the lawn shows only where true (null = everywhere).</param>
     /// <param name="sun">Light per pixel, 0 to 255 (null = full sun everywhere).</param>
@@ -482,7 +496,16 @@ public sealed class Lawn
             _rb[i] = r << 16 | b;
             _ag[i] = a << 16 | g;
         }
-        // The lawn's box: where any grassy pixel is.
+        // The tufts' pages, each trimmed to the pixels it actually uses. Half the designs are shorter tufts.
+        _pages = new Flipbook.Page[Designs, Flipbook.Poses];
+        int ph = 1, pw = 1;                                     // the tallest and widest page, for the bands and the box below
+        for (int d = 0; d < Designs; d++)
+        {
+            Flipbook.Page[] pages = Flipbook.Pages(Flipbook.Tuft(h * (d < Designs / 2 ? 0.72f : 1f), rng), 48, wind, view);
+            for (int p = 0; p < Flipbook.Poses; p++) { _pages[d, p] = pages[p]; ph = Math.Max(ph, pages[p].Sprite.Height); pw = Math.Max(pw, pages[p].Sprite.Width); }
+        }
+
+        // The grass's box: where any grassy pixel is.
         _x0 = width; _y0 = height; _x1 = 0; _y1 = 0;
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
@@ -491,15 +514,17 @@ public sealed class Lawn
         _cell = Math.Max(4, (int)(u / 120));
         _gw = (_x1 - _x0) / _cell + 2; _gh = (_y1 - _y0) / _cell + 2;
         _lean = new float[Math.Max(1, _gw * _gh)];
-        _slid = new uint[Math.Max(1, (_x1 - _x0 + 1) * (_y1 - _y0 + 1))];
-
-        // The tufts' pages, each trimmed to the pixels it actually uses. Half the designs are shorter tufts.
-        _pages = new Flipbook.Page[Designs, Flipbook.Poses];
-        int ph = 1;                                             // the tallest page, for the bands below
-        for (int d = 0; d < Designs; d++)
+        // The sheet's box: the grass's box widened by a page, so a tuft rooted
+        // at the edge of the grass has room for its blades (a blade past the
+        // sheet's edge would be cut off).
+        _sx0 = Math.Max(0, _x0 - pw - 2); _sy0 = Math.Max(0, _y0 - ph - 2);
+        _sw = Math.Max(1, Math.Min(width - 1, _x1 + pw + 2) - _sx0 + 1); _sh = Math.Max(1, Math.Min(height - 1, _y1 + ph + 2) - _sy0 + 1);
+        _slid = new uint[_sw * _sh];
+        _sheet = new FrameBuffer(_sw, _sh);
+        if (where != null && _x1 >= _x0)
         {
-            Flipbook.Page[] pages = Flipbook.Pages(Flipbook.Tuft(h * (d < Designs / 2 ? 0.72f : 1f), rng), 48, wind, view);
-            for (int p = 0; p < Flipbook.Poses; p++) { _pages[d, p] = pages[p]; ph = Math.Max(ph, pages[p].Sprite.Height); }
+            _whereBox = new bool[_sw * _sh];
+            for (int y = 0; y < _sh; y++) Array.Copy(where, (_sy0 + y) * width + _sx0, _whereBox, y * _sw, _sw);
         }
 
         // Plant the tufts: random spots on the lawn (not sand, stones or
@@ -546,28 +571,41 @@ public sealed class Lawn
     public void Draw(FrameBuffer fb)
     {
         if (_x1 < _x0) return;
+        _tick++;
+        bool carpetFrame = _tick <= 2 || (_tick & 1) == 0, tuftFrame = _tick <= 2 || (_tick & 1) == 1;   // the first two frames do both, so the lawn is whole from the start
 
-        // The wind on a coarse grid (a sine per pixel would cost more than the drawing).
-        for (int gy = 0; gy < _gh; gy++)
-            for (int gx = 0; gx < _gw; gx++)
-                _lean[gy * _gw + gx] = _wind.LeanAt(_x0 + gx * _cell, _y0 + gy * _cell);
-
-        SlideCarpet(fb);
-        // The tufts, far to near within each band; even bands together, then
-        // odd bands together (a tuft only ever touches tufts in its own band
-        // or the next, never two bands away). Where a band's last tuft meets
-        // the next band's first the order is off by one band: that is a
-        // blade's edge in front of a neighbour's, which the eye cannot tell.
-        foreach (int parity in (ReadOnlySpan<int>)[0, 1])
-            Parallel.For(0, (_bands.Length + 1 - parity) / 2, k =>
-            {
-                foreach (Tuft tuft in _bands[k * 2 + parity])
+        if (carpetFrame)
+        {
+            // The wind on a coarse grid (a sine per pixel would cost more than the drawing).
+            for (int gy = 0; gy < _gh; gy++)
+                for (int gx = 0; gx < _gw; gx++)
+                    _lean[gy * _gw + gx] = _wind.LeanAt(_x0 + gx * _cell, _y0 + gy * _cell);
+            SlideCarpet(fb);
+        }
+        if (tuftFrame)
+        {
+            // The sheet starts as the carpet as last laid, and the tufts are
+            // stamped onto it: far to near within each band; even bands
+            // together, then odd bands together (a tuft only ever touches
+            // tufts in its own band or the next, never two bands away). Where
+            // a band's last tuft meets the next band's first the order is off
+            // by one band: that is a blade's edge in front of a neighbour's,
+            // which the eye cannot tell.
+            Array.Copy(_slid, _sheet.Pixels, _slid.Length);
+            foreach (int parity in (ReadOnlySpan<int>)[0, 1])
+                Parallel.For(0, (_bands.Length + 1 - parity) / 2, k =>
                 {
-                    Flipbook.Page pg = _pages[tuft.Design, Flipbook.PageOf(_wind.LeanAt(tuft.X, tuft.Y) * tuft.Stiff)];
-                    int shade = _sun == null ? 256 : _sun[tuft.Y * _w + tuft.X] + 1;
-                    pg.Sprite.Draw(fb, tuft.X - pg.Ax, tuft.Y - pg.Ay, 1f, _where, shade: shade);
-                }
-            });
+                    foreach (Tuft tuft in _bands[k * 2 + parity])
+                    {
+                        Flipbook.Page pg = _pages[tuft.Design, Flipbook.PageOf(_wind.LeanAt(tuft.X, tuft.Y) * tuft.Stiff)];
+                        int shade = _sun == null ? 256 : _sun[tuft.Y * _w + tuft.X] + 1;
+                        pg.Sprite.Draw(_sheet, tuft.X - _sx0 - pg.Ax, tuft.Y - _sy0 - pg.Ay, 1f, _whereBox, shade: shade);
+                    }
+                });
+        }
+        // The finished lawn onto the screen, row by row.
+        uint[] px = fb.Pixels, sheet = _sheet.Pixels;
+        for (int y = 0; y < _sh; y++) Array.Copy(sheet, y * _sw, px, (_sy0 + y) * fb.Width + _sx0, _sw);
     }
 
     /// <summary>
@@ -591,21 +629,18 @@ public sealed class Lawn
     /// </summary>
     private void SlideCarpet(FrameBuffer fb)
     {
-        int w = fb.Width, boxW = _x1 - _x0 + 1;
+        int w = fb.Width;
         uint[] px = fb.Pixels;
         int parity = _frame & 1;
         bool first = _frame < 2;
         _frame++;
         float shiftX = _shift * _wind.X, shiftY = _shift * _wind.Y * _view.Squash;
-        Parallel.For(_y0, _y1 + 1, y =>
+        Parallel.For(_sy0, _sy0 + _sh, y =>
         {
-            int keepRow = (y - _y0) * boxW;
-            if (!first && (y & 1) != parity)
-            {
-                Array.Copy(_slid, keepRow, px, y * w + _x0, boxW);
-                return;
-            }
-            Array.Copy(px, y * w + _x0, _slid, keepRow, boxW);        // the row as it is (ground, sand, stones): overwritten where grass lands
+            int keepRow = (y - _sy0) * _sw;
+            if (!first && (y & 1) != parity) return;                  // this row's turn is next time; _slid still holds it as last laid
+            Array.Copy(px, y * w + _sx0, _slid, keepRow, _sw);        // the row as it is (ground, sand, stones, and the branches over them): overwritten where grass lands
+            if (y < _y0 || y > _y1) return;                           // the sheet's margin above or below the grass: ground only
             // This row's lean at each grid column: blended between the grid rows above and below.
             float gy = (y - _y0) / (float)_cell;
             int iy = Math.Min(_gh - 2, (int)gy); float fy = gy - iy;
@@ -640,7 +675,7 @@ public sealed class Lawn
                 uint bg = px[i];
                 int keep = 256 - a;
                 int rr = ((int)((bg >> 16) & 0xFF) * keep >> 8) + r, gg = ((int)((bg >> 8) & 0xFF) * keep >> 8) + g, bb = ((int)(bg & 0xFF) * keep >> 8) + b;
-                px[i] = _slid[keepRow + x - _x0] = (uint)(Math.Min(255, rr) << 16 | Math.Min(255, gg) << 8 | Math.Min(255, bb));
+                _slid[keepRow + x - _sx0] = (uint)(Math.Min(255, rr) << 16 | Math.Min(255, gg) << 8 | Math.Min(255, bb));
             }
             ArrayPool<float>.Shared.Return(rowLean);
         });

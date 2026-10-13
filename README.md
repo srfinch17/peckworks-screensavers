@@ -99,6 +99,9 @@ travelling wave (the cattails and irises sway with it stiffly).
   tapped the water), swim along behind and beside a friend, or now and then burst after another
   fish, which speeds up and swerves away until the chaser loses interest. Only one chase runs in
   the pond at a time, and a curious fish answers a dragonfly's tap far more often than a dull one.
+  When a swallow skims low over a fish, its shadow makes the fish dart away and dive, and it sulks
+  deep for a while; a bold fish (energetic and sociable) barely notices, a timid one flinches at a
+  shadow some way off.
 - Two **schools of minnows**, a dozen or so tiny fish each, hang just under the surface and move
   as one: all facing the same way, fidgeting in little darts, flashing silver when the whole
   school turns, and scattering like thrown rice when a koi cruises underneath. Each minnow is a
@@ -123,23 +126,37 @@ travelling wave (the cattails and irises sway with it stiffly).
   not on rails: it feels its way, goes round the lily pads, the rocks, the log, the cattails and
   the iris clumps rather than over them, and if a koi, a turtle or the lizard touches it, it
   startles: a burst of speed, a swing away, rings off its head, then it calms. The minnows keep
-  clear of it as they do of the koi.
-- A **lizard** (a kanahebi, the Japanese grass lizard with the very long tail) comes out on the
-  bank every couple of minutes: a dash, dead still, another dash, over the grass and up onto a
+  clear of it as they do of the koi. Each visit is a different snake: it rolls a boldness and a
+  nerve, and then chooses what to do by weighted dice, a few things per visit. It may swim out
+  to a spot in open water and then another (explore), creep up on a school of minnows and
+  lunge at it with a ring off its head while the minnows scatter (hunt), or, when the log is
+  afloat, swim to the log's end, climb on, lie along it for 10 to 30 seconds in a gentle S and
+  slip off the far end (bask). A bold snake hunts and basks more and calms sooner; a nervous one
+  just crosses, startles at a longer reach and stays frightened longer. It always ends by
+  leaving across the far side.
+- Two **lizards** (kanahebi, the Japanese grass lizard with the very long tail) each come out on
+  the bank every couple of minutes: a dash, dead still, another dash, over the grass and up onto a
   rock to bask, its body and tail throwing an S-wave as it runs and its legs stepping on opposite
-  corners, then it is gone into the grass again.
+  corners, then gone into the grass again. Each has its own temper, rolled once: a BOLD one stays
+  out longer, basks longer and wins a standoff, an ENERGETIC one makes longer dashes with shorter
+  rests. They also run to the water's edge and drink (one tiny ring in front of the nose), and if
+  both are out and meet, they square up nose to nose, then the bolder one charges and the other
+  bolts away and leaves. Both run for the nearest edge if the snake comes close.
 - A fallen **log** lies at the lower left, different every time: beached across the water's edge
   with one end in the grass and the other in the shallows when the land is in that corner, or
   drifting out on the water when it is not. Bark streaks, cracks, a knot or two, moss on top, and
   the cut end's rings where it faces us.
 
-Settings: petals, number of koi, how playful the koi are (0 means they only cruise and rest),
+Settings: draw width (sharpness against smoothness), petals, number of koi (eight by default), how playful the koi are (0 means they only cruise and rest),
 number of minnow schools (0 means no game), number of turtles,
-number of dragonflies, how often the swallows visit, how often the snake crosses, and how often
-the lizard comes out.
+number of dragonflies, how often the swallows visit, how often the snake crosses, how many
+lizards there are (0 to 3), and how often the lizards come out (Lizard visits).
 
-On a 4K screen it draws at 2560 wide and Windows enlarges the picture: the scene is soft and
-painterly, so the enlarging loses almost nothing, and it keeps the frame rate.
+On a screen wider than the "Draw width" setting (2048 pixels by default) it draws at that width
+and Windows enlarges the picture: the scene is soft and painterly, so the enlarging loses little,
+and fewer pixels is what keeps a steady 60 frames a second on a 4K laptop (2560 is sharper and
+runs at an even 30 there). If a frame cannot be drawn and shown inside one screen refresh, the
+engine now holds an even 30 frames a second instead of juddering between 16 and 33 ms gaps.
 
 ## Halloween
 

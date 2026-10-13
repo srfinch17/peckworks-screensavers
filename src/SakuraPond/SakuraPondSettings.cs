@@ -8,22 +8,27 @@ namespace SakuraPond;
 /// </summary>
 public sealed class SakuraPondSettings : ScreensaverSettings
 {
-    private readonly IntSetting _petals, _koi, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard;
+    private readonly IntSetting _petals, _koi, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _drawWidth;
 
     public SakuraPondSettings() : base("SakuraPond")
     {
         _petals = Add(nameof(PetalPercent), "Petals", 0, 300, 100, "%");
-        _koi = Add(nameof(KoiCount), "Koi", 0, 12, 7);
+        _koi = Add(nameof(KoiCount), "Koi", 0, 12, 8);
         _koiPlay = Add(nameof(KoiPlayPercent), "Koi play", 0, 300, 100, "%");
         _minnows = Add(nameof(MinnowSchools), "Minnow schools", 0, 4, 2);
         _turtles = Add(nameof(TurtleCount), "Turtles", 0, 3, 1);
         _dragonflies = Add(nameof(DragonflyCount), "Dragonflies", 0, 6, 2);
         _birds = Add(nameof(BirdPercent), "Swallows", 0, 300, 100, "%");
         _snake = Add(nameof(SnakePercent), "Snake", 0, 300, 100, "%");
-        _lizard = Add(nameof(LizardPercent), "Lizard", 0, 300, 100, "%");
+        _lizards = Add(nameof(LizardCount), "Lizards", 0, 3, 2);
+        _lizard = Add(nameof(LizardPercent), "Lizard visits", 0, 300, 100, "%");
+        _drawWidth = Add(nameof(DrawWidth), "Draw width", 1600, 3840, 2048, "px");
     }
 
-    /// <summary>How often the lizard comes out on the bank. 100 = every couple of minutes, 0 = never.</summary>
+    /// <summary>How many lizards live on the bank (each with its own temper). 0 = none.</summary>
+    public int LizardCount => _lizards.Value;
+
+    /// <summary>How often each lizard comes out on the bank. 100 = every couple of minutes, 0 = never.</summary>
     public int LizardPercent => _lizard.Value;
 
     /// <summary>How many petals fall. 0 = none (the ones already floating stay).</summary>
@@ -49,6 +54,15 @@ public sealed class SakuraPondSettings : ScreensaverSettings
 
     /// <summary>How often a snake swims across. 100 = every few minutes, 0 = never.</summary>
     public int SnakePercent => _snake.Value;
+
+    /// <summary>
+    /// How wide a picture to draw, in pixels, on a screen wider than this
+    /// (Windows enlarges it to fill the screen). Fewer pixels = smoother. On a
+    /// 4K screen 2048 wide keeps a steady 60 frames a second on the owner's
+    /// laptop; 2560 is sharper and runs at an even 30. Narrower screens are
+    /// drawn at their own size whatever this says.
+    /// </summary>
+    public int DrawWidth => _drawWidth.Value;
 
     public static SakuraPondSettings LoadSaved()
     {

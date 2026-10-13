@@ -69,44 +69,75 @@ internal sealed class TurningStamp
     {
         if (opacity <= 0.003f) return;
         float ca = MathF.Cos(angle), sa = MathF.Sin(angle);
-        float half = MathF.Sqrt(_w * _w + _h * _h) * 0.5f * scale + 2;
-        int x0 = Math.Max(0, (int)(cx - half)), x1 = Math.Min(fb.Width - 1, (int)(cx + half));
-        int y0 = Math.Max(0, (int)(cy - half * squash)), y1 = Math.Min(fb.Height - 1, (int)(cy + half * squash));
+        // The box on the screen the turned picture can touch: the picture's
+        // rectangle turned, not the circle round its diagonal (which visited
+        // a third more pixels, all empty, at 45 degrees).
+        float aca = MathF.Abs(ca), asa = MathF.Abs(sa);
+        float hx = (_w * aca + _h * asa) * 0.5f * scale + 2, hy = (_w * asa + _h * aca) * 0.5f * scale + 2;
+        int x0 = Math.Max(0, (int)(cx - hx)), x1 = Math.Min(fb.Width - 1, (int)(cx + hx));
+        int y0 = Math.Max(0, (int)(cy - hy * squash)), y1 = Math.Min(fb.Height - 1, (int)(cy + hy * squash));
         float inv = 1 / scale, mx = _w / 2f, my = _h / 2f;
+        // Un-turning is a straight-line map: along a row, u and v each change
+        // by the same amount per pixel, so they are stepped, not recomputed.
+        float du = ca * inv, dv = -sa * inv;
+        int op256 = (int)(opacity * 256);
+        bool isShadow = shadow is Color;
+        int sr = 0, sg = 0, sb = 0;
+        if (shadow is Color sc) { sr = sc.R; sg = sc.G; sb = sc.B; }
         uint[] px = fb.Pixels;
         for (int y = y0; y <= y1; y++)
         {
             float dy = (y + 0.5f - cy) / squash;
             int row = y * fb.Width;
-            for (int x = x0; x <= x1; x++)
+            float dx0 = x0 + 0.5f - cx;
+            float u = (dx0 * ca + dy * sa) * inv + mx - 0.5f, v = (-dx0 * sa + dy * ca) * inv + my - 0.5f;
+            for (int x = x0; x <= x1; x++, u += du, v += dv)
             {
-                float dx = x + 0.5f - cx;
-                // Un-turn and un-scale: where on the original picture is this pixel?
-                float u = (dx * ca + dy * sa) * inv + mx - 0.5f, v = (-dx * sa + dy * ca) * inv + my - 0.5f;
                 if (u < -1 || v < -1 || u >= _w || v >= _h) continue;
-                int iu = (int)MathF.Floor(u), iv = (int)MathF.Floor(v);
-                float fu = u - iu, fv = v - iv;
-                float a = 0, r = 0, g = 0, b = 0;
-                for (int k = 0; k < 4; k++)
-                {
-                    int su = iu + (k & 1), sv = iv + (k >> 1);
-                    if (su < 0 || sv < 0 || su >= _w || sv >= _h) continue;
-                    float wgt = ((k & 1) == 1 ? fu : 1 - fu) * ((k >> 1) == 1 ? fv : 1 - fv);
-                    int i = sv * _w + su;
-                    a += _a[i] * wgt; r += _r[i] * wgt; g += _g[i] * wgt; b += _b[i] * wgt;
-                }
-                if (a <= 0.003f) continue;
                 int idx = row + x;
                 if (onlyWhere != null && !onlyWhere[idx]) continue;
-                uint bg = px[idx];
-                if (shadow is Color sc)
+                int iu = (int)MathF.Floor(u), iv = (int)MathF.Floor(v);
+                float fu = u - iu, fv = v - iv;
+                float w00 = (1 - fu) * (1 - fv), w10 = fu * (1 - fv), w01 = (1 - fu) * fv, w11 = fu * fv;
+                float a, r = 0, g = 0, b = 0;
+                if (iu >= 0 && iv >= 0 && iu + 1 < _w && iv + 1 < _h)
                 {
-                    px[idx] = FrameBuffer.Blend(bg, sc.R, sc.G, sc.B, a * opacity);
+                    // Inside the picture: the four neighbours are all there, no edge tests.
+                    int i = iv * _w + iu;
+                    a = _a[i] * w00 + _a[i + 1] * w10 + _a[i + _w] * w01 + _a[i + _w + 1] * w11;
+                    if (a <= 0.003f) continue;
+                    if (!isShadow)
+                    {
+                        r = _r[i] * w00 + _r[i + 1] * w10 + _r[i + _w] * w01 + _r[i + _w + 1] * w11;
+                        g = _g[i] * w00 + _g[i + 1] * w10 + _g[i + _w] * w01 + _g[i + _w + 1] * w11;
+                        b = _b[i] * w00 + _b[i + 1] * w10 + _b[i + _w] * w01 + _b[i + _w + 1] * w11;
+                    }
+                }
+                else
+                {
+                    // On the picture's edge: only the neighbours that exist.
+                    a = 0;
+                    for (int k = 0; k < 4; k++)
+                    {
+                        int su = iu + (k & 1), sv = iv + (k >> 1);
+                        if (su < 0 || sv < 0 || su >= _w || sv >= _h) continue;
+                        float wgt = (k & 1) == 1 ? ((k >> 1) == 1 ? w11 : w10) : ((k >> 1) == 1 ? w01 : w00);
+                        int i = sv * _w + su;
+                        a += _a[i] * wgt;
+                        if (!isShadow) { r += _r[i] * wgt; g += _g[i] * wgt; b += _b[i] * wgt; }
+                    }
+                    if (a <= 0.003f) continue;
+                }
+                uint bg = px[idx];
+                int a256 = (int)(a * op256);
+                if (isShadow)
+                {
+                    px[idx] = FrameBuffer.Blend256(bg, sr, sg, sb, a256);   // a shadow needs only how solid, not the colours
                     continue;
                 }
                 // Back from premultiplied: colour = premultiplied / solidness.
-                float ia = 1 / a;
-                px[idx] = FrameBuffer.Blend(bg, (int)Math.Min(255, r * ia * 255), (int)Math.Min(255, g * ia * 255), (int)Math.Min(255, b * ia * 255), a * opacity);
+                float ia = 255 / a;
+                px[idx] = FrameBuffer.Blend256(bg, (int)Math.Min(255, r * ia), (int)Math.Min(255, g * ia), (int)Math.Min(255, b * ia), a256);
             }
         }
     }

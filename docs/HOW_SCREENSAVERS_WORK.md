@@ -185,6 +185,16 @@ drawing was never seen or one was shown twice. Falling petals hid it; a river fl
 showed it as a judder (measured on a 4K laptop: 41 frames a second, gaps from 17 to 59 ms). Now
 `FramePump` (in `SceneView.cs`) draws a frame and then waits for the screen to turn its page
 (`DwmFlush`) before drawing the next: 57 to 58 frames a second, nearly every gap 16 to 18 ms.
+When a frame takes too long to be drawn AND shown inside one page (about 16.7 ms), it misses its
+page and lands on the next, 33 ms later; a scene hovering round the limit then shows at 16, 33,
+16, 33, which the eye reads as a stutter, worse than an even 30. So the pump watches how long
+recent frames took and, when they are too close to the page time to make it reliably, waits for
+two pages per frame on purpose, every frame (an even 30), coming back to one page per frame once
+frames are clearly quick again. The scene is told the real time that passed either way, so
+nothing moves slower, only in bigger steps. The other lever is drawing fewer pixels: Sakura Pond's
+"Draw width" setting (2048 by default) is the width it draws at on a wider screen, and Windows
+enlarges the picture; on the owner's 4K laptop 2048 holds 60 frames a second where 2560 held an
+even 30.
 
 *Drawing smaller on purpose.* A saver built from a small photo can say `MaxRenderWidth`: on a
 wider screen it draws its sheet at that width and Windows stretches it to fill the screen
@@ -558,6 +568,22 @@ shadow is the same body painted dark and faint a little down and to the right, s
 grass. It is drawn after the lawn and before the irises, so it runs over the grass and the rocks
 and can pass under the iris leaves.
 
+There are two lizards (a `Lizards` holder, like `Turtles`), and each has a small mind in the
+koi's style. Two dials are rolled when it is made: bold (stays out longer, basks longer, goes
+looking for company, wins a standoff) and energy (longer dashes, shorter rests). The dials only
+load the dice that are rolled whenever a rest ends: roam, climb a rock, go and drink, or go and
+find the other lizard. A drink is a dash to a spot a body width and a half short of the water
+(found by walking from the lizard toward the pond's middle until the land mask says water), a
+stand with the nose to the water, and one tiny ring half a second in. A meeting is spotted by
+`Lizards`: both out, on screen, noses within two body lengths, neither met anyone this visit.
+Both walk up and face each other for about two seconds, then the bolder charges at the other,
+which runs far away from it and leaves within a dash or two. If the snake's head comes within
+a fifth of the screen height, a lizard drops everything and runs for the nearest edge it can
+reach over land. Two lessons from the instruments: a lizard that had run up to the shore facing
+the water only ever turned one frame at a time (every step was refused), so it stood for minutes,
+and now it steps off along the shore toward its goal; and "the nearest edge" can be water, so the
+way out is a land pixel on an edge with an all-land line to it, or a hop toward one.
+
 *The snake feels its way.* The snake (`Snake.cs`) used to run on rails: a curve planned when it
 set out, so it swam straight over a lily pad as if the pad were a shadow. Now it is steered like
 the koi. It has a goal (a point well beyond the far edge of the screen) and a heading, and each
@@ -576,6 +602,27 @@ each koi, turtle and the lizard against points along its whole body, and a touch
 burst to three times its speed, a hard swing away from what touched it (the weave quickens by
 itself because distance drives it), a ring thrown off, and then a few seconds of calming down. It
 cannot startle again for ten seconds or so, so a koi keeping pace does not set it off every frame.
+
+*The snake has a small mind.* Like a koi, the snake does one thing at a time (a `Doing`) and rolls
+weighted dice for the next when that one ends. Two dials are rolled at the start of each visit,
+boldness and nerve, so every visit is a slightly different snake: a bold one has more "hunt" and
+"lie on the log" faces on its dice, startles only at a close touch and calms sooner; a nervous one
+has a heavier "just cross and go" face, startles from further off and stays frightened longer. The
+doings: *Cross* (swim for a point beyond the far edge and leave, the only way a visit ends),
+*Explore* (swim to a spot in open water, then another), *Hunt* (creep toward the nearest school of
+minnows, from `Minnows.NearestSchool`, slowing to half speed over the last bit with a narrower
+weave; when its head is 0.12u from the school's middle it lunges for about half a second at three
+times its cruise with a ring off its head; the minnows already flee a snake's head, so they scatter
+by themselves) and *Bask* (only if the log floats: swim to a point beyond the log's near end, climb
+on along the log's own line, and lie there 10 to 30 seconds). While it lies, the steering is
+switched off and the spine is simply laid on the log's middle line with a gentle S, eased in over
+a second and a half from wherever the body was; a snake longer than the log lets its tail hang off
+the near end into the water. Then the lying body becomes its trail, it faces along the log, throws
+two rings and swims off the far end. The log is not an obstacle to a snake that is climbing on,
+lying on or leaving it, and is to every other doing. All of this only chooses a goal and a speed:
+the feelers, the "never stuck" rule and the startle (which ends a hunt or a lie) still have the
+last word. The weave's width is eased from one doing's value to the next, so the head never jumps
+sideways when the doing changes.
 
 *The fallen log* (`ShorePainter.Log`) is painted once, like a rock, with the same lighting rules:
 a soft shadow down and right, the body shaded across its width so it reads as round, long wavy
@@ -601,7 +648,21 @@ one's more "follow" and "chase" faces. Each doing only changes what the steering
 spot, a point behind a friend, the fish being chased, or a point straight away from the chaser), how
 hard it swims (a chase is all beating, a rest all glide) and how deep it hangs (near the surface to
 nose at something, deep to rest). Being chased interrupts anything; a dragonfly's tap interrupts a
-curious fish that is not busy. That is the whole brain: a state machine, three dials, and dice. Dragonflies hover, dart and stop
+curious fish that is not busy. A swallow skimming low is a shadow sweeping over the water, and a
+fish under it flinches: a dart away and a dive, then a sulk deep down (the bolder the fish, the
+closer the shadow has to pass). That is the whole brain: a state machine, three dials, and dice.
+
+*The lawn is finished every other frame.* The carpet of blades and the tufts are the two dearest
+things in the whole pond to draw, and grass moves slowly (a gust takes seconds to cross the
+lawn). So the carpet is laid on even frames and the tufts are stamped on odd frames, each onto a
+little picture the size of the lawn's box (the "sheet"), and every frame the finished sheet is
+copied onto the screen. Each frame pays for one of the two jobs plus a cheap copy instead of both.
+What the eye reads as a stutter is the slowest frame, not the average, and this halves the lawn's
+share of it. The koi's body painter and the turned pictures of the dragonflies and swallows were
+tightened in the same pass (whole-number blending, no edge tests inside the picture, a box that
+is the turned rectangle rather than the circle round it), and a pixel-by-pixel comparison against
+the previous build at the same seed proved those changes alter nothing but rounding (a difference
+of at most 2 in 255). Dragonflies hover, dart and stop
 dead, perch, and dip. Swallows sweep in long curves and skim the water to drink. A creature that
 cannot be made right in all four ways (really visible there, drawn in this view's perspective,
 turning by bending or turning as a whole, moving the way that animal moves) is left out: that

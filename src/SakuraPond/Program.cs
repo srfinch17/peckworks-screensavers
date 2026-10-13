@@ -15,7 +15,8 @@ internal sealed class SakuraPondScreensaver : ScreensaverDefinition
     // the picture. The scene is soft and painterly, so 1440p detail enlarged
     // to 4K loses almost nothing, and drawing a 4K screen's eight million
     // pixels for every koi, petal and ripple would cost more than a frame has.
-    public override int MaxRenderWidth => 2560;
+    // The width is a setting ("Draw width"), read once when the saver starts.
+    public override int MaxRenderWidth => SakuraPondSettings.LoadSaved().DrawWidth;
 
     public override IScreensaverScene CreateScene(int width, int height, bool isPreview) =>
         new SakuraPondScene(width, height, SakuraPondSettings.LoadSaved());

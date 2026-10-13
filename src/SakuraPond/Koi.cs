@@ -18,6 +18,10 @@ internal sealed class KoiSchool
         _fish = new Koi[Math.Max(0, count)];
         for (int i = 0; i < _fish.Length; i++)
             _fish[i] = new Koi(pond, ripples, where, rng, i, play, petals);
+        int n = _fish.Length;
+        _order = new int[n]; _layer = new int[n]; _depth = new float[n]; _box = new RectangleF[n];
+        _layers = new List<Koi>[Math.Max(1, n)];
+        for (int i = 0; i < _layers.Length; i++) _layers[i] = new List<Koi>(n);
     }
 
     public void Update(float dt)
@@ -31,36 +35,61 @@ internal sealed class KoiSchool
         foreach (Koi k in _fish) k.Notice(x, y);
     }
 
+    /// <summary>A shadow swept over the water here (screen pixels): fish near it dart away and dive.</summary>
+    public void Startle(float x, float y)
+    {
+        foreach (Koi k in _fish) k.Startle(x, y);
+    }
+
     /// <summary>Each fish's doing this frame, for logs and tests.</summary>
     public IEnumerable<(PointF Head, PointF Tail, string State)> States => _fish.Select(f => (f.Head, f.Tail, f.State));
 
     /// <summary>Two points along each koi this frame, its head and its middle, screen pixels (the minnows keep clear of them).</summary>
     public PointF[] Heads => _fish.SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
 
+    // Scratch for Draw, kept between frames so drawing allocates nothing.
+    private readonly int[] _order, _layer;
+    private readonly float[] _depth;
+    private readonly RectangleF[] _box;
+    private readonly List<Koi>[] _layers;
+    private FrameBuffer? _fb;
+
     /// <summary>
     /// Draws the fish deepest first, so a fish nearer the surface covers one
     /// below it. Fish that do not touch cannot paint over each other, so they
-    /// are drawn at the same time on different processor cores: going down
-    /// the deepest-first list, each fish joins the current group if its box
-    /// touches no box already in the group; otherwise the group is drawn and
-    /// a new one starts. The picture comes out exactly as if drawn one by one.
+    /// are drawn at the same time on different processor cores. Each fish is
+    /// put in a LAYER: layer 0 if its box touches no deeper fish, otherwise
+    /// one above the deepest-drawn fish it touches. Layer 0 is drawn first,
+    /// all its fish at once, then layer 1, and so on. (The first version
+    /// started a new group whenever a fish touched any fish in the group,
+    /// which with eight fish often made four or five small groups: more
+    /// waits for the cores to finish, and less for them to do each time.)
+    /// The picture comes out exactly as if drawn one by one.
     /// </summary>
     public void Draw(FrameBuffer fb)
     {
-        var group = new List<Koi>(_fish.Length);
-        foreach (Koi k in _fish.OrderByDescending(f => f.Z))
+        int n = _fish.Length;
+        if (n == 0) return;
+        for (int i = 0; i < n; i++) { _order[i] = i; _depth[i] = -_fish[i].Z; _box[i] = _fish[i].Box; }
+        Array.Sort(_depth, _order, 0, n);                           // deepest first
+        int layers = 0;
+        for (int a = 0; a < n; a++)
         {
-            RectangleF box = k.Box;
-            if (group.Any(o => o.Box.IntersectsWith(box))) { DrawGroup(fb, group); group.Clear(); }
-            group.Add(k);
+            int ia = _order[a], layer = 0;
+            for (int b = 0; b < a; b++)
+                if (_box[ia].IntersectsWith(_box[_order[b]])) layer = Math.Max(layer, _layer[_order[b]] + 1);
+            _layer[ia] = layer;
+            layers = Math.Max(layers, layer + 1);
         }
-        DrawGroup(fb, group);
-    }
-
-    private static void DrawGroup(FrameBuffer fb, List<Koi> group)
-    {
-        if (group.Count == 1) group[0].Draw(fb);
-        else if (group.Count > 1) Parallel.ForEach(group, k => k.Draw(fb));
+        _fb = fb;
+        for (int l = 0; l < layers; l++)
+        {
+            List<Koi> group = _layers[l];
+            group.Clear();
+            for (int a = 0; a < n; a++) if (_layer[_order[a]] == l) group.Add(_fish[_order[a]]);
+            if (group.Count == 1) group[0].Draw(fb);
+            else Parallel.For(0, group.Count, i => group[i].Draw(_fb!));
+        }
     }
 }
 
@@ -146,6 +175,7 @@ internal sealed class Koi : Body
         Follow,        // swim behind and beside a friend
         Chase,         // a short burst after another fish
         Flee,          // being chased: speed up and swerve away
+        Flinch,        // a shadow swept over it (a swallow skimming): a dart away and a dive, then it rests deep
     }
     private Doing _doing;
     private float _doingTimer;                            // how long the current doing may last
@@ -155,6 +185,8 @@ internal sealed class Koi : Body
     private Koi? _partner;                                // the fish it follows, chases or flees
     private int _side;                                    // which side of the partner it follows on (+1 or -1)
     private float _chaseCool;                             // seconds until it may start another chase
+    private float _flinchCool;                            // seconds until a shadow can make it flinch again
+    private float _flinchX, _flinchY;                     // where the shadow was, ground pixels
     private float _stuckFor;                              // seconds its steps have been refused (nosed against something)
 
     /// <summary>The doing now, for logs and tests (never read by the drawing).</summary>
@@ -260,7 +292,7 @@ internal sealed class Koi : Body
 
         // ---- The mind decides what it is doing ----
         Think(dt, school);
-        bool rush = _doing is Doing.Chase or Doing.Flee;                          // flat out
+        bool rush = _doing is Doing.Chase or Doing.Flee or Doing.Flinch;          // flat out
         bool still = _doing == Doing.Rest || (_doing == Doing.Investigate && _hold > 0);   // hanging in the water, nosing at something
 
         // ---- Beat and glide ----
@@ -451,6 +483,7 @@ internal sealed class Koi : Body
     {
         _doingTimer -= dt;
         _chaseCool -= dt;
+        _flinchCool -= dt;
 
         // Someone is after me: the moment a chaser is close behind, flee (whatever I was doing, except already fleeing).
         if (_doing != Doing.Flee)
@@ -470,6 +503,9 @@ internal sealed class Koi : Body
                 break;
             case Doing.Chase:
                 if (_doingTimer <= 0 || _partner == null) Decide(school);
+                break;
+            case Doing.Flinch:
+                if (_doingTimer <= 0) Begin(Doing.Rest);                      // the dart is over: it sulks deep for a while
                 break;
             case Doing.Follow:
                 // Lose interest in time, or when the friend has got well away.
@@ -520,6 +556,12 @@ internal sealed class Koi : Body
                     // Straight away from the chaser, a few body lengths ahead of me.
                     float ax = _x - _partner!._x, ay = _y - _partner._y, l = MathF.Max(1e-3f, MathF.Sqrt(ax * ax + ay * ay));
                     return (_x + ax / l * _len * 3, _y + ay / l * _len * 3, 0.9f);
+                }
+            case Doing.Flinch:
+                {
+                    // Straight away from where the shadow was.
+                    float ax = _x - _flinchX, ay = _y - _flinchY, l = MathF.Max(1e-3f, MathF.Sqrt(ax * ax + ay * ay));
+                    return (_x + ax / l * _len * 3, _y + ay / l * _len * 3, 1.0f);
                 }
             case Doing.Follow:
                 {
@@ -573,6 +615,11 @@ internal sealed class Koi : Body
             case Doing.Flee:
                 _doingTimer = 10;
                 Depth(0.08f + 0.15f * (float)_rng.NextDouble(), 20);
+                break;
+            case Doing.Flinch:
+                _doingTimer = 0.8f + 0.6f * (float)_rng.NextDouble();
+                _flinchCool = 15 + 25 * (float)_rng.NextDouble();
+                Depth(0.6f + 0.3f * (float)_rng.NextDouble(), 30);               // straight down, and it stays down
                 break;
             case Doing.Follow:
                 _doingTimer = 10 + 20 * (float)_rng.NextDouble();
@@ -690,6 +737,26 @@ internal sealed class Koi : Body
     }
 
     /// <summary>Open water in view (not under a pad, not under the branches): where a fish nosing at something can be seen doing it.</summary>
+    /// <summary>
+    /// A shadow swept over the water here (screen pixels): a swallow skimming.
+    /// A fish under or near it darts away and dives, the way pond fish scatter
+    /// when a bird's shadow crosses them. A bold fish (energetic and sociable)
+    /// mostly ignores it; a timid one flinches at a shadow some way off. Never
+    /// twice in quick succession, and never while chasing or being chased.
+    /// </summary>
+    public void Startle(float x, float y)
+    {
+        if (_flinchCool > 0 || _doing is Doing.Chase or Doing.Flee or Doing.Flinch) return;
+        float bold = (_energy + _social) * 0.5f;
+        float reach = _pond.U * (0.06f + 0.16f * (1 - bold));
+        PointF here = ToScreen(_x, _y);
+        float dx = x - here.X, dy = y - here.Y;
+        if (dx * dx + dy * dy > reach * reach) return;
+        (_flinchX, _flinchY) = ToGround(x, y);
+        if (_gulping) { _gulping = false; _gulpTimer = 20; }                     // whatever it was about to do at the surface is forgotten
+        Begin(Doing.Flinch);
+    }
+
     private bool InWater(PointF p)
     {
         int ix = (int)p.X, iy = (int)p.Y;
@@ -812,10 +879,10 @@ internal sealed class Koi : Body
             alpha = _finAlpha * (0.72f + 0.28f * MathF.Cos(v * 15)) * Math.Clamp((end - s) * 30, 0, 1);
             return true;
         }
+        // One lookup: the rounding of the body (Round) is already folded into the sheet.
         int vi = Math.Clamp((int)((v + 1) * 0.5f * SkinWide), 0, SkinWide - 1);
         uint c = _skin[Math.Clamp((int)(s * SkinLen), 0, SkinLen - 1) * SkinWide + vi];
-        float shade = Round[vi];
-        r = (int)(((c >> 16) & 0xFF) * shade); g = (int)(((c >> 8) & 0xFF) * shade); b = (int)((c & 0xFF) * shade);
+        r = (int)((c >> 16) & 0xFF); g = (int)((c >> 8) & 0xFF); b = (int)(c & 0xFF);
         alpha = 1;
         return true;
     }
@@ -842,7 +909,7 @@ internal sealed class Koi : Body
                     cr += c.R / 4f; cg += c.G / 4f; cb += c.B / 4f;
                 }
                 float sc = (si + 0.5f) / SkinLen, vc = (vi + 0.5f) / SkinWide * 2 - 1, av = MathF.Abs(vc);
-                float shade = 1;
+                float shade = Round[vi];                                                                             // the rounded body: backbone brightest, flanks falling away
                 if (_metal) shade *= 0.95f + 0.14f * (1 - av) * (1 - av);                                         // a metallic koi: a soft sheen down the back
                 if (av < 0.1f && sc > 0.34f && sc < 0.74f) shade *= 0.86f;                                       // the dorsal fin, folded flat along the back
                 skin[si * SkinWide + vi] = (uint)(Math.Min(255, (int)(cr * shade)) << 16 | Math.Min(255, (int)(cg * shade)) << 8 | Math.Min(255, (int)(cb * shade)));

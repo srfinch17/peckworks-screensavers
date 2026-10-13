@@ -68,6 +68,7 @@ internal abstract class Body
         int n = Spine.Length, w = fb.Width, h = fb.Height;
         uint[] px = fb.Pixels;
         float invSoft = 1 / soft;
+        int murk256 = (int)(murk * 256);
         Span<float> ux = stackalloc float[n], uy = stackalloc float[n], lens = stackalloc float[n];
         for (int i = 0; i < n - 1; i++)
         {
@@ -139,21 +140,25 @@ internal abstract class Body
                     float s = sA + (sB - sA) * t;
                     float v = hw > 0.01f ? Math.Clamp(-side / hw, -1f, 1f) : 0f;
                     if (!Colour(s, v, out int r, out int g, out int bl, out float alpha)) continue;
-                    alpha *= cover;
-                    if (alpha <= 0.004f) continue;
+                    // From here on the arithmetic is whole numbers (solidness
+                    // in 256ths, the murk in 256ths): this loop runs tens of
+                    // thousands of times a frame per koi, and the float version
+                    // with its conversions and clamps cost a third more.
+                    int a256 = (int)(alpha * cover * 256);
+                    if (a256 <= 1) continue;
                     if (sun != null)
                     {
                         int k = sun[idx];
                         r = r * k >> 8; g = g * k >> 8; bl = bl * k >> 8;
                     }
                     uint bg = px[idx];
-                    if (murk > 0)
+                    if (murk256 > 0)
                     {
                         // Under water: the deeper, the more the fish takes on the water's own colour.
                         int wr = (int)((bg >> 16) & 0xFF), wg = (int)((bg >> 8) & 0xFF), wb = (int)(bg & 0xFF);
-                        r += (int)((wr - r) * murk); g += (int)((wg - g) * murk); bl += (int)((wb - bl) * murk);
+                        r += (wr - r) * murk256 >> 8; g += (wg - g) * murk256 >> 8; bl += (wb - bl) * murk256 >> 8;
                     }
-                    px[idx] = FrameBuffer.Blend(bg, r, g, bl, alpha);
+                    px[idx] = FrameBuffer.Blend256(bg, r, g, bl, a256);
                 }
             }
         }

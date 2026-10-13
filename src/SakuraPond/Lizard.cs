@@ -3,18 +3,104 @@ using Peckworks.Screensavers.Core;
 namespace SakuraPond;
 
 /// <summary>
+/// The lizards on the bank: a small group, each with a mind of its own, and
+/// the one thing that needs to know about all of them at once, the MEETING.
+/// (The same shape as Turtles in Turtle.cs: the scene holds one of these, not
+/// the animals themselves.)
+///
+/// THE MEETING, in plain words. When two lizards are both out and their noses
+/// come within about two body lengths of each other, both stop and turn to
+/// face each other, like two cats on a fence. After a moment the BOLDER one
+/// charges at the other; the other bolts away, and then leaves the screen on
+/// its next dash or two. A meeting happens at most once per visit, so it
+/// never turns into a loop of chasing. This class only spots the moment and
+/// tells the pair; each lizard's own mind does the facing, charging and fleeing.
+/// </summary>
+internal sealed class Lizards
+{
+    private readonly Lizard[] _all;
+    private readonly Random _rng;
+    // The snake wants the noses of whichever lizards are out. Building a new array
+    // every frame would be garbage for the collector, so one array of each possible
+    // size (0, 1, 2 ...) is made once and the right one is filled in and handed back.
+    private readonly PointF[][] _noseArrays;
+
+    public Lizards(Pond pond, int count, Ripples ripples, float often, Random rng)
+    {
+        _rng = rng;
+        int n = Math.Max(0, count);
+        _all = new Lizard[n];
+        _noseArrays = new PointF[n + 1][];
+        for (int k = 0; k <= n; k++) _noseArrays[k] = new PointF[k];
+        // PERSONALITY, rolled once. Dice alone could give two near-twins, and then the
+        // owner sees no difference. So each dial is rolled inside its own slice of 0 to 1
+        // (the first lizard in the low slice, the next in the next ...), and the energy
+        // slices run the other way: the boldest lizard is the laziest, the shyest the
+        // quickest. Which lizard gets which slice is a coin toss.
+        bool flip = rng.Next(2) == 0;
+        for (int i = 0; i < n; i++)
+        {
+            int slot = flip ? n - 1 - i : i;
+            float bold = (slot + (float)rng.NextDouble()) / n;
+            float energy = (n - 1 - slot + (float)rng.NextDouble()) / n;
+            _all[i] = new Lizard(pond, ripples, often, bold, energy, rng);
+        }
+        foreach (Lizard l in _all) l.Peers = _all;
+    }
+
+    /// <summary>Moves every lizard on, then looks for a pair that has just come together.</summary>
+    /// <param name="snakeHead">Where the snake's head is (screen pixels) while it is swimming; null when it is not out.</param>
+    public void Update(float dt, PointF? snakeHead)
+    {
+        foreach (Lizard l in _all) l.Update(dt, snakeHead);
+        for (int i = 0; i < _all.Length; i++)
+            for (int j = i + 1; j < _all.Length; j++)
+            {
+                Lizard a = _all[i], b = _all[j];
+                if (!a.CanMeet || !b.CanMeet || Lizard.Gap(a, b) > a.Len * 2f) continue;
+                float hold = 1.6f + 0.6f * (float)_rng.NextDouble();   // the same stand-off time for both
+                bool aWins = a.Bold >= b.Bold;                          // the bolder one wins
+                a.BeginFace(b, aWins, hold);
+                b.BeginFace(a, !aWins, hold);
+            }
+    }
+
+    /// <summary>The nose of each lizard that is out right now, screen pixels (the snake keeps clear of them). Never allocates.</summary>
+    public PointF[] Noses
+    {
+        get
+        {
+            int k = 0;
+            foreach (Lizard l in _all)
+                if (l.Visible) _noseArrays[_all.Length][k++] = l.Nose;
+            PointF[] result = _noseArrays[k];
+            if (k != _all.Length) Array.Copy(_noseArrays[_all.Length], result, k);
+            return result;
+        }
+    }
+
+    public void Draw(FrameBuffer fb)
+    {
+        foreach (Lizard l in _all) l.Draw(fb);
+    }
+}
+
+/// <summary>
 /// A small lizard on the bank: a kanahebi, the Japanese grass lizard, the
 /// brown lizard with the very long tail that lives in every sunny Japanese
 /// garden. It is hidden most of the time; now and then it comes out, runs
-/// about the grass and the rocks, basks on a stone, and is gone.
+/// about the grass and the rocks, basks on a stone, takes a drink at the
+/// water's edge, and is gone.
 ///
 /// WHAT A GRASS LIZARD DOES (watch one on a warm wall): it moves in DASHES,
 /// a quick sprint of half a second or so and then dead still, head up,
 /// for a second or three, then another dash. Running, its body and tail
 /// throw an S-wave side to side, the legs on opposite corners stepping
 /// together; still, it is a straight stick with its tail in a lazy curve.
-/// It climbs onto a rock and lies flat in the sun for a while. Anything
-/// startling and it is under the grass in a blink.
+/// It climbs onto a rock and lies flat in the sun for a while. It runs to the
+/// water's edge and stands with its nose just over it to drink. Meet another
+/// of its kind and it squares up; the shyer one runs. Anything startling (a
+/// snake) and it is under the grass in a blink.
 ///
 /// HOW IT IS DRAWN: along a bending spine like the koi (Body.cs), the head
 /// following its path and the body and long tail laid along the trail
@@ -25,20 +111,52 @@ namespace SakuraPond;
 /// ground rather than floating over it. Drawn after the lawn (it runs over
 /// the grass and the rocks) and before the irises (it can pass under their
 /// leaves), only where no branch is in the way, in the branches' shade.
+///
+/// THE MIND (the koi's idea, scaled down; see "THE MIND" in Koi.cs). A lizard
+/// has two dials, rolled once when it is made, each 0 to 1:
+///   * BOLD: stays out longer (more dashes), lies on its rock longer, goes
+///     looking for the other lizard, and WINS a meeting (the bolder one charges).
+///   * ENERGY: longer dashes, a little faster, shorter spells standing still.
+/// Like a person's temper, a dial never forces anything; it only loads the
+/// dice. When a stand-still ends, Decide() rolls weighted dice among: roam to
+/// a nearby spot, climb a rock, go and drink, go and find the other lizard.
+/// Three things can cut in: a meeting (Lizards, above), a charge or a flight
+/// that comes out of it, and the snake coming too close (run for the nearest
+/// edge). Whatever the mind decides, the steering below still asks the land
+/// mask before every step, so a lizard can never step onto water.
 /// </summary>
 internal sealed class Lizard : Body
 {
     private const int Points = 16;
-    private enum Doing { Hidden, Dash, Freeze, Bask }
+    private enum Doing
+    {
+        Hidden,    // not on screen at all
+        Dash,      // a quick run toward the goal; WHY it runs is the Aim
+        Freeze,    // dead still, head up
+        Bask,      // lying flat on a rock
+        Drink,     // standing at the water's edge, nose to the water
+        Face,      // squaring up to the other lizard in a meeting
+    }
+    /// <summary>Why a dash is happening. Changes how fast it runs and what is done when it ends.</summary>
+    private enum Aim { Roam, Drink, Charge, Flee }
 
     private readonly Pond _pond;
+    private readonly Ripples _ripples;
     private readonly Random _rng;
     private readonly float _u, _len, _wide, _often;
+    private readonly float _bold, _energy;        // the two personality dials, 0 to 1
     private float _x, _y, _heading, _speed, _amp, _phase;
     private float _goalX, _goalY, _timer, _gait;
-    private int _dashes;                      // dashes left before it heads for a rock or leaves
+    private float _pace = 1, _arrive;             // a dash's speed factor, and how close counts as arrived (ground pixels)
+    private int _dashes;                          // stand-stills left before it leaves
     private Doing _doing = Doing.Hidden;
+    private Aim _aim;
     private bool _leaving, _shadowPass;
+    private bool _met;                            // has it had its meeting this visit?
+    private bool _approach, _isWinner;            // in a meeting: still walking up to the other / the bolder one
+    private Lizard? _other;                       // the lizard in a meeting with it
+    private float _drinkLen;                      // how long this drink lasts in all
+    private bool _sipped;                         // the drink's one ring has been made
     private readonly PointF[] _trail = new PointF[64];
     private int _trailHead, _trailCount;
 
@@ -46,13 +164,29 @@ internal sealed class Lizard : Body
     public PointF Nose => Spine[0];
     public PointF TailTip => Spine[Points - 1];
     public bool Visible => _doing != Doing.Hidden;
+    /// <summary>Body length, screen pixels (the meeting distance is measured in these).</summary>
+    public float Len => _len;
+    public float Bold => _bold;
+    public float Energy => _energy;
+    /// <summary>The doing and its aim, for logs and tests (never read by the drawing).</summary>
+    public string State => _doing + "/" + _aim;
+    /// <summary>The other lizards, so one can look for company. Set by Lizards once all are made.</summary>
+    public Lizard[] Peers { get; set; } = [];
 
-    public Lizard(Pond pond, float often, Random rng) : base(Points)
+    /// <summary>Free to be drawn into a meeting: out, on screen, not leaving, not already met, not squaring up.</summary>
+    public bool CanMeet => Visible && !_leaving && !_met && _doing != Doing.Face && OnScreen(Spine[0]);
+
+    public static float Gap(Lizard a, Lizard b) => Dist(a.Spine[0], b.Spine[0]);
+
+    public Lizard(Pond pond, Ripples ripples, float often, float bold, float energy, Random rng) : base(Points)
     {
         _pond = pond;
+        _ripples = ripples;
         _rng = rng;
         _u = pond.U;
         _often = often;
+        _bold = bold;
+        _energy = energy;
         _len = _u * 0.09f;                   // nose to tail tip; the tail is well over half of it
         _wide = _len * 0.05f;
         for (int i = 0; i < Points; i++) Along[i] = i / (Points - 1f);
@@ -64,6 +198,7 @@ internal sealed class Lizard : Body
     private PointF ToScreen(float gx, float gy) => new(gx, CentreY + (gy - CentreY) * Ripples.Squash);
     private static float Wrap(float a) => MathF.IEEERemainder(a, MathF.Tau);
     private static float Dist(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
+    private bool OnScreen(PointF s) => s.X >= 0 && s.Y >= 0 && s.X < _pond.Width && s.Y < _pond.Height;
 
     /// <summary>Is this ground point on the land? A point just off the screen counts as whatever the nearest edge pixel is (the land runs on out of view).</summary>
     private bool OnLand(float gx, float gy)
@@ -86,47 +221,60 @@ internal sealed class Lizard : Body
         _trailCount = Math.Min(_trail.Length, _trailCount + 1);
     }
 
-    public void Update(float dt)
+    /// <param name="snakeHead">The snake's head in screen pixels while it is swimming, else null.</param>
+    public void Update(float dt, PointF? snakeHead = null)
     {
         _timer -= dt;
-        switch (_doing)
+        if (_doing == Doing.Hidden)
         {
-            case Doing.Hidden:
-                if (_timer <= 0 && Appear()) { _doing = Doing.Freeze; _timer = 0.5f; }
-                return;
-            case Doing.Freeze:
-            case Doing.Bask:
-                if (_timer <= 0) NextDash();
-                break;
-            case Doing.Dash:
-                if (_timer <= 0)
-                {
-                    // The dash is over: stand still, or lie down if this was the run up onto a rock.
-                    bool onRock = _pond.Rocks.Any(r => !r.InWater && Dist(r.Centre, ToScreen(_x, _y)) < r.Radius * 0.6f);
-                    if (onRock && _rng.NextDouble() < 0.7) { _doing = Doing.Bask; _timer = 4 + 8 * (float)_rng.NextDouble(); }
-                    else { _doing = Doing.Freeze; _timer = 0.6f + 2.4f * (float)_rng.NextDouble(); }
-                }
-                break;
+            if (_timer <= 0 && Appear()) { _doing = Doing.Freeze; _timer = 0.5f; }
+            return;
         }
+        Think(snakeHead);
 
         // ---- Steering toward the goal, turning on a circle no tighter than about half its body ----
+        // A charging lizard aims at where the other IS now, not where it was.
+        if (_doing == Doing.Dash && _aim == Aim.Charge && _other != null) (_goalX, _goalY) = ToGround(_other.Spine[0].X, _other.Spine[0].Y);
         float gdx = _goalX - _x, gdy = _goalY - _y, gd = MathF.Sqrt(gdx * gdx + gdy * gdy);
-        bool moving = _doing == Doing.Dash;
+        bool moving = _doing == Doing.Dash || (_doing == Doing.Face && _approach);
+        float turnErr = 0;                                                  // how far round it still has to turn to face the goal (radians)
         if (moving)
         {
             float want = gd > 1 ? MathF.Atan2(gdy, gdx) : _heading;
+            turnErr = Wrap(want - _heading);
             float most = MathF.Min(3.5f, MathF.Max(1.5f, _speed / (_len * 0.4f)));   // a pivot faster than this folded the tail into a hairpin
             _heading = Wrap(_heading + Math.Clamp(Wrap(want - _heading), -most * dt, most * dt));
-            if (gd < _len * 0.15f) _timer = 0;                             // arrived: the dash ends here
+            if (_doing == Doing.Dash && gd < _arrive && !(_aim == Aim.Charge && _timer > 0.6f)) _timer = 0;   // arrived: the dash ends here (a charge runs at least 0.3 s, however near the other starts)
         }
-        float targetSpeed = moving ? _len * 2.6f : 0;
+        float targetSpeed = moving ? _len * 2.6f * _pace : 0;
         _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (moving ? 12f : 10f)));   // off like a shot, stops dead
         float step = _speed * dt;
         if (step > 0.01f)
         {
             float nx = _x + MathF.Cos(_heading) * step, ny = _y + MathF.Sin(_heading) * step;
             if (OnLand(nx, ny)) { _x = nx; _y = ny; }
-            else if (moving) _timer = 0;                                    // water ahead: the dash ends here (a still lizard just stays put)
+            else if (moving)
+            {
+                // Water ahead. If the goal is mostly behind or off to one side (it ran up to the shore
+                // facing the water and now has to go back), do not give up: step off along the shore, the
+                // first of 35, 70, 105, 140 and 170 degrees round toward the goal that is land (a lizard
+                // nose-to-water on a straight shore needs nearly a half turn), and carry on that way. (The first version ended the dash here, so it only ever turned one frame at a
+                // time: a lizard faced the water, stood for a minute and never moved.) If the goal IS
+                // ahead, across the water or at the shore, a dash ends here and a walk up to the other stops.
+                bool slid = false;
+                if (MathF.Abs(turnErr) > 0.5f)
+                    for (int k = 1; k <= 5 && !slid; k++)
+                    {
+                        float a = _heading + (turnErr > 0 ? 0.6f : -0.6f) * k;
+                        float sx = _x + MathF.Cos(a) * step, sy = _y + MathF.Sin(a) * step;
+                        if (OnLand(sx, sy)) { _x = sx; _y = sy; _heading = Wrap(a); slid = true; }
+                    }
+                if (!slid)
+                {
+                    if (_doing == Doing.Dash) _timer = 0;
+                    else _approach = false;
+                }
+            }
             PointF last = _trail[_trailHead];
             if ((last.X - _x) * (last.X - _x) + (last.Y - _y) * (last.Y - _y) > (_len / 30) * (_len / 30)) Remember(new PointF(_x, _y));
         }
@@ -135,6 +283,7 @@ internal sealed class Lizard : Body
         if (_leaving && (here.X < -_len || here.Y > _pond.Height + _len || here.X > _pond.Width + _len))
         {
             _doing = Doing.Hidden;
+            _other = null;
             _timer = (60 + 120 * (float)_rng.NextDouble()) / MathF.Max(0.01f, _often);
             return;
         }
@@ -164,53 +313,350 @@ internal sealed class Lizard : Body
             _speed = 0; _amp = 0; _trailCount = 0; _trailHead = 0;
             for (int i = 20; i >= 0; i--) Remember(new PointF(_x - MathF.Cos(_heading) * _len * i / 18f, _y - MathF.Sin(_heading) * _len * i / 18f));
             _leaving = false;
-            _dashes = 5 + _rng.Next(8);
+            _met = false; _other = null; _aim = Aim.Roam;
+            _dashes = 5 + _rng.Next(8) + (int)(_bold * 4);                 // a bold lizard stays out longer
             LaySpine();
             return true;
         }
         return false;
     }
 
-    /// <summary>Picks the next dash: a spot on the land nearby, a rock to climb, or (when its visit is over) the way out.</summary>
-    private void NextDash()
+    // ==================== THE MIND ====================
+    //
+    // FEYNMAN VERSION: a lizard has one thing on its mind at a time (a Doing),
+    // a feeling for how long to keep at it (a timer), and when that runs out it
+    // rolls weighted dice for what to do next. Bold and energy are only
+    // weights on the dice faces. Below the mind, the steering is told "run to
+    // THIS point, this keenly" and does nothing else.
+
+    /// <summary>How the energy dial stretches a dash: a lazy lizard sprints 0.7 times as long, a keen one 1.5 times.</summary>
+    private float DashScale => 0.7f + 0.8f * _energy;
+    /// <summary>How the energy dial shrinks a stand-still: a lazy lizard stands 1.4 times as long, a keen one 0.6.</summary>
+    private float StillScale => 1.4f - 0.8f * _energy;
+
+    /// <summary>Keeps the current doing going, ends it when it is done, and reacts to the snake.</summary>
+    private void Think(PointF? snakeHead)
+    {
+        // The snake is close: no thinking, just run for the nearest edge and hide. (Even
+        // mid-meeting: the other lizard sees the meeting is off, in ThinkFace.)
+        if (snakeHead is PointF sh && !_leaving && Dist(Spine[0], sh) < _u * 0.2f)
+        {
+            _other = null;
+            _leaving = true;
+            _dashes = 0;
+            Go(Aim.Flee, ExitGoal(ToScreen(_x, _y)), 4f);
+            return;
+        }
+        switch (_doing)
+        {
+            case Doing.Freeze:
+            case Doing.Bask:
+                if (_timer <= 0) Decide();
+                break;
+            case Doing.Drink:
+                // One tiny ring at the water in front of the nose, half a second in: the lip touching the surface.
+                if (!_sipped && _timer < _drinkLen - 0.5f) Sip();
+                if (_timer <= 0) Decide();
+                break;
+            case Doing.Face:
+                ThinkFace();
+                break;
+            case Doing.Dash:
+                if (_timer <= 0) EndDash();
+                break;
+        }
+    }
+
+    /// <summary>Squaring up: walk toward the other's nose until about 0.7 body lengths apart, hold still facing it, then (when the stand-off ends) charge or flee.</summary>
+    private void ThinkFace()
+    {
+        if (_timer <= 0) { EndFace(); return; }            // checked first: both lizards' stand-offs end in the same frame, whoever is updated first
+        if (_other == null || _other._other != this || !_other.Visible)
+        {
+            // The meeting was called off (the other ran from the snake): carry on.
+            _other = null;
+            _doing = Doing.Freeze; _timer = 0.5f;
+            return;
+        }
+        PointF on = _other.Spine[0];
+        (_goalX, _goalY) = ToGround(on.X, on.Y);
+        if (Dist(Spine[0], on) < _len * 0.7f) _approach = false;
+    }
+
+    /// <summary>The meeting is over. The bold one runs AT the other; the shy one runs AWAY, far, and will leave in a dash or two.</summary>
+    private void EndFace()
+    {
+        Lizard o = _other!;
+        if (_isWinner)
+        {
+            Go(Aim.Charge, o.Spine[0], 0.9f);
+            _arrive = _len * 0.3f;
+        }
+        else
+        {
+            Go(Aim.Flee, FleeGoal(o.Spine[0]), 2.5f);
+            _dashes = Math.Min(_dashes, 2);
+            _other = null;
+        }
+    }
+
+    /// <summary>Called by Lizards when two have come together: both stop what they are doing and face each other for <paramref name="hold"/> seconds.</summary>
+    public void BeginFace(Lizard other, bool winner, float hold)
+    {
+        _doing = Doing.Face;
+        _aim = Aim.Roam;
+        _other = other;
+        _isWinner = winner;
+        _met = true;
+        _approach = true;
+        _pace = 0.5f;                      // a wary walk, not a run
+        _timer = hold;
+    }
+
+    /// <summary>Starts a dash toward a screen point: the aim, how long it may last at most, and how fast it runs.</summary>
+    private void Go(Aim aim, PointF screenGoal, float maxTime)
+    {
+        (_goalX, _goalY) = ToGround(screenGoal.X, screenGoal.Y);
+        _doing = Doing.Dash;
+        _aim = aim;
+        _arrive = _len * (aim == Aim.Drink ? 0.1f : 0.15f);               // a drinker stops close to its spot: the spot is only a body width from the water
+        // A flight is the fastest, a charge nearly so; the energy dial adds a little to everything.
+        _pace = (0.9f + 0.25f * _energy) * (aim == Aim.Flee ? 1.35f : aim == Aim.Charge ? 1.25f : 1f);
+        _timer = maxTime;
+    }
+
+    private void Stand(float seconds) { _doing = Doing.Freeze; _timer = seconds; }
+
+    /// <summary>A dash has ended (arrived, ran out of time, or met water). What comes next depends on why it ran.</summary>
+    private void EndDash()
+    {
+        Aim was = _aim;
+        _aim = Aim.Roam;
+        float gdx = _goalX - _x, gdy = _goalY - _y, gd = MathF.Sqrt(gdx * gdx + gdy * gdy);
+        switch (was)
+        {
+            case Aim.Drink when gd < _len * 0.8f:
+                // At the water's edge, nose to the water.
+                _doing = Doing.Drink;
+                _drinkLen = _timer = 1 + 2 * (float)_rng.NextDouble();
+                _sipped = false;
+                return;
+            case Aim.Charge:
+                _other = null;
+                Stand(0.6f + 0.6f * (float)_rng.NextDouble());
+                return;
+            case Aim.Flee:
+                Stand(_leaving ? 0.25f : 0.5f + 0.5f * (float)_rng.NextDouble());
+                return;
+        }
+        // The dash is over: stand still, or lie down if this was the run up onto a rock.
+        bool onRock = _pond.Rocks.Any(r => !r.InWater && Dist(r.Centre, ToScreen(_x, _y)) < r.Radius * 0.6f);
+        if (onRock && _rng.NextDouble() < 0.7) { _doing = Doing.Bask; _timer = (4 + 8 * (float)_rng.NextDouble()) * (0.6f + 0.9f * _bold); }   // the bold bask longest
+        else Stand((0.6f + 2.4f * (float)_rng.NextDouble()) * StillScale);
+    }
+
+    /// <summary>The lip touches the water: one tiny ring on the first water pixel in front of the nose (or, failing that, toward the middle of the pond, where the drink spot was found).</summary>
+    private void Sip()
+    {
+        _sipped = true;
+        PointF n = Spine[0];
+        float hx = MathF.Cos(_heading), hy = MathF.Sin(_heading) * Ripples.Squash;
+        float cx = _pond.Centre.X - n.X, cy = _pond.Centre.Y - n.Y;
+        if (!RingAlong(n, hx, hy)) RingAlong(n, cx, cy);
+    }
+
+    /// <summary>Looks along a screen direction from the nose for the first water pixel within 0.4 body lengths and makes the ring there. False if there is none.</summary>
+    private bool RingAlong(PointF n, float dx, float dy)
+    {
+        float l = MathF.Max(1e-3f, MathF.Sqrt(dx * dx + dy * dy));
+        dx /= l; dy /= l;
+        for (float d = 1; d <= _len * 0.4f; d += 1)
+        {
+            float x = n.X + dx * d, y = n.Y + dy * d;
+            int ix = (int)x, iy = (int)y;
+            if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height) return false;
+            if (_pond.Water[iy * _pond.Width + ix]) { _ripples.Add(x, y, 0.15f); return true; }
+        }
+        return false;
+    }
+
+    /// <summary>Rolls the next doing, weighted by personality and by what there is to do.</summary>
+    private void Decide()
     {
         _dashes--;
         PointF here = ToScreen(_x, _y);
-        PointF? goal = null;
         if (_dashes <= 0)
         {
             // Time to go: toward the nearest screen edge that has land on it, off the screen.
             _leaving = true;
-            bool bottomNear = _pond.Height - here.Y < MathF.Min(here.X, _pond.Width - here.X);
-            goal = bottomNear ? new PointF(here.X + (float)(_rng.NextDouble() - 0.5) * _len * 2, _pond.Height + _len * 1.5f)
-                              : new PointF(here.X < _pond.Width / 2 ? -_len * 1.5f : _pond.Width + _len * 1.5f, here.Y + (float)(_rng.NextDouble() - 0.5) * _len);
+            Go(Aim.Roam, ExitGoal(here), (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale + 3);
+            return;
         }
-        else if (_doing != Doing.Bask && _rng.NextDouble() < 0.35)
+        bool wasDrinking = _doing == Doing.Drink;
+        PointF drinkSpot = default;
+        bool canDrink = TryDrinkSpot(here, out drinkSpot);
+        Lizard? company = FindCompany();
+        // The dice faces. The dials load them: the energetic roam more, the bold favour a sunny rock and go
+        // looking for company; the drink is the same for everyone (all lizards get thirsty) but not twice running.
+        float wRoam = 0.7f + 0.8f * _energy;
+        float wRock = _doing != Doing.Bask ? 0.3f + 0.5f * _bold : 0;
+        float wDrink = canDrink ? (wasDrinking ? 0.1f : 0.35f) : 0;
+        float wSeek = company != null ? 0.1f + 0.6f * _bold : 0;
+        float roll = (float)_rng.NextDouble() * (wRoam + wRock + wDrink + wSeek);
+        if ((roll -= wDrink) < 0)
+        {
+            float dist = Dist(here, drinkSpot);
+            Go(Aim.Drink, drinkSpot, dist / (_len * 2.6f * 0.6f) + 1f);       // a long dash, timed for the whole way
+            return;
+        }
+        if ((roll -= wRock) < 0)
         {
             // A rock to climb: a dry one within reach, not the one it is on.
             var near = _pond.Rocks.Where(r => !r.InWater && r.Radius > _u * 0.02f && Dist(r.Centre, here) < _u * 0.35f && Dist(r.Centre, here) > r.Radius).ToList();
-            if (near.Count > 0) { BankRock r = near[_rng.Next(near.Count)]; goal = r.Centre; }
+            if (near.Count > 0) { Go(Aim.Roam, near[_rng.Next(near.Count)].Centre, (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale); return; }
         }
-        if (goal == null)
+        PointF? goal = RoamGoal(here, (roll -= wSeek) < 0 && company != null ? (PointF?)company.Spine[0] : null);
+        if (goal is not PointF gp) { Stand(1); return; }
+        Go(Aim.Roam, gp, (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale);
+    }
+
+    /// <summary>Somewhere on the land a little way off, in view, on a line that stays on land. With <paramref name="toward"/>, the candidate nearest to that point.</summary>
+    private PointF? RoamGoal(PointF here, PointF? toward)
+    {
+        PointF? best = null;
+        float bestGap = float.MaxValue;
+        for (int tries = 0; tries < 40; tries++)
         {
-            // Somewhere on the land a little way off, in view, on a line that stays on land.
-            for (int tries = 0; tries < 40; tries++)
-            {
-                float a = (float)(_rng.NextDouble() * MathF.Tau), d = _len * (0.6f + 2f * (float)_rng.NextDouble());
-                var s = new PointF(here.X + MathF.Cos(a) * d, here.Y + MathF.Sin(a) * d * Ripples.Squash);
-                int ix = (int)s.X, iy = (int)s.Y;
-                if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height) continue;
-                int i = iy * _pond.Width + ix;
-                if (!_pond.Land[i] || !_pond.Open[i]) continue;
-                if (!LandAt(new PointF((here.X + s.X) / 2, (here.Y + s.Y) / 2))) continue;   // the way there stays on land (here may be off the screen's edge)
-                goal = s;
-                break;
-            }
+            float a = (float)(_rng.NextDouble() * MathF.Tau), d = _len * (0.6f + 2f * (float)_rng.NextDouble());
+            var s = new PointF(here.X + MathF.Cos(a) * d, here.Y + MathF.Sin(a) * d * Ripples.Squash);
+            int ix = (int)s.X, iy = (int)s.Y;
+            if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height) continue;
+            int i = iy * _pond.Width + ix;
+            if (!_pond.Land[i] || !_pond.Open[i]) continue;
+            if (!LandAt(new PointF((here.X + s.X) / 2, (here.Y + s.Y) / 2))) continue;   // the way there stays on land (here may be off the screen's edge)
+            if (toward is not PointF t) return s;
+            float gap = Dist(s, t);
+            if (gap < bestGap) { bestGap = gap; best = s; }
         }
-        if (goal is not PointF gp) { _doing = Doing.Freeze; _timer = 1; return; }
-        (_goalX, _goalY) = ToGround(gp.X, gp.Y);
-        _doing = Doing.Dash;
-        _timer = 0.3f + 0.7f * (float)_rng.NextDouble() + (_leaving ? 3 : 0);
+        return best;
+    }
+
+    /// <summary>Another lizard that is out, free to meet, and on screen: one worth going to look for.</summary>
+    private Lizard? FindCompany()
+    {
+        if (_met) return null;
+        foreach (Lizard o in Peers)
+            if (o != this && o.CanMeet) return o;
+        return null;
+    }
+
+    /// <summary>Is the straight line from a to b all land? Checked every few pixels (the way a lizard can actually run).</summary>
+    private bool LandLine(PointF a, PointF b)
+    {
+        float dx = b.X - a.X, dy = b.Y - a.Y, l = MathF.Sqrt(dx * dx + dy * dy);
+        int steps = (int)(l / 4) + 1;
+        for (int i = 1; i <= steps; i++)
+            if (!LandAt(new PointF(a.X + dx * i / steps, a.Y + dy * i / steps))) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// The way out: a point just past the screen's edge, reached over land. The land is a corner,
+    /// so only part of the bottom edge and of one side edge is land; "the nearest edge" can be water
+    /// (the first version ran at it, was stopped at the shore, and stood there for ever). So: look
+    /// along the bottom edge and the land's side edge for land pixels, keep the nearest one whose
+    /// straight line from here is all land, and aim a body and a half beyond it. If no line is
+    /// clear (it is out on a narrow spur of land), hop to a land spot that IS in a clear line and
+    /// nearer the nearest land edge, and look again from there.
+    /// </summary>
+    private PointF ExitGoal(PointF here)
+    {
+        bool landLeft = _pond.Land[_pond.Height - 1];     // which side the land's corner is (Appear uses the same test)
+        int w = _pond.Width, h = _pond.Height;
+        PointF bestEdge = default, bestAny = default;
+        float bestD = float.MaxValue, bestAnyD = float.MaxValue;
+        for (int k = 0; k <= 48; k++)
+        {
+            // k 0..24 walks the bottom edge, k 25..48 the side edge (its lower half, where the land is).
+            PointF p = k <= 24 ? new PointF((w - 1) * k / 24f, h - 1) : new PointF(landLeft ? 0 : w - 1, h * (0.5f + 0.5f * (k - 25) / 23f) - 1);
+            if (!LandAt(p)) continue;
+            float d = Dist(here, p);
+            if (d < bestAnyD) { bestAnyD = d; bestAny = p; }
+            if (d < bestD && LandLine(here, p)) { bestD = d; bestEdge = p; }
+        }
+        if (bestD == float.MaxValue && bestAnyD < float.MaxValue)
+        {
+            // No edge is in a clear line from here: the first version ran at the edge anyway, was
+            // stopped by the water at the spur's side, and a lizard stood on a spur for two minutes.
+            PointF hop = default;
+            float hopD = bestAnyD - _len * 0.3f;
+            for (int tries = 0; tries < 30; tries++)
+            {
+                float ang = (float)(_rng.NextDouble() * MathF.Tau), dd = _len * (0.5f + 2.5f * (float)_rng.NextDouble());
+                var c = new PointF(here.X + MathF.Cos(ang) * dd, here.Y + MathF.Sin(ang) * dd);
+                if (!OnScreen(c) || !LandAt(c) || !LandLine(here, c)) continue;
+                float cd = Dist(c, bestAny);
+                if (cd < hopD) { hopD = cd; hop = c; }
+            }
+            if (hopD < bestAnyD - _len * 0.3f) return hop;
+        }
+        PointF e = bestD < float.MaxValue ? bestEdge : bestAnyD < float.MaxValue ? bestAny : new PointF(here.X, h - 1);
+        float jitter = (float)(_rng.NextDouble() - 0.5) * _len;
+        if (e.Y >= h - 2) return new PointF(e.X + jitter, h + _len * 1.5f);
+        return new PointF(landLeft ? -_len * 1.5f : w + _len * 1.5f, e.Y + jitter);
+    }
+
+    /// <summary>
+    /// Where to run to get away from a point: straight away from it if there is land that way, else
+    /// the clearest heading within about 90 degrees of straight away. March along each heading in
+    /// small steps while the ground is land and out from under the branches; take the longest run
+    /// (a slightly shorter one on the straight line wins, so it does not swerve for nothing).
+    /// If nothing is clear for at least a body and a half, take the way out of the screen.
+    /// </summary>
+    private PointF FleeGoal(PointF from)
+    {
+        PointF me = Spine[0];
+        float ax = me.X - from.X, ay = me.Y - from.Y, al = MathF.Max(1e-3f, MathF.Sqrt(ax * ax + ay * ay));
+        float baseA = MathF.Atan2(ay / al, ax / al), bestD = 0, bestA = baseA;
+        for (int k = 0; k < 7; k++)
+        {
+            float off = k == 0 ? 0 : ((k + 1) / 2) * 0.5f * (k % 2 == 1 ? 1 : -1);
+            float a = baseA + off, cos = MathF.Cos(a), sin = MathF.Sin(a), d = 0;
+            for (float t = _len * 0.4f; t <= _len * 6f; t += _len * 0.4f)
+            {
+                var p = new PointF(me.X + cos * t, me.Y + sin * t);
+                if (!LandAt(p) || (OnScreen(p) && !_pond.Open[(int)p.Y * _pond.Width + (int)p.X])) break;
+                d = t;
+            }
+            if (d > bestD + _len * 0.5f) { bestD = d; bestA = a; }
+        }
+        if (bestD < _len * 1.5f) return ExitGoal(ToScreen(_x, _y));
+        return new PointF(me.X + MathF.Cos(bestA) * bestD, me.Y + MathF.Sin(bestA) * bestD);
+    }
+
+    /// <summary>
+    /// A spot to drink at. Walk from where it stands toward the middle of the pond one small step
+    /// at a time, over land, until the next step would be water; stop one body width short of that.
+    /// False if it is off screen, the water is too far, or the spot is under a branch.
+    /// </summary>
+    private bool TryDrinkSpot(PointF here, out PointF spot)
+    {
+        spot = default;
+        if (!OnScreen(here) || !LandAt(here)) return false;
+        float dx = _pond.Centre.X - here.X, dy = _pond.Centre.Y - here.Y, l = MathF.Sqrt(dx * dx + dy * dy);
+        if (l < 1) return false;
+        dx /= l; dy /= l;
+        for (float d = 2; d < _u * 0.5f; d += 2)
+        {
+            var p = new PointF(here.X + dx * d, here.Y + dy * d);
+            if (!OnScreen(p)) return false;
+            if (LandAt(p)) continue;
+            float stop = d - 2 - _wide * 3;                 // the last land step, then a body width and a half back (it stops a few pixels short or long of its spot)
+            if (stop < _len * 0.8f) return false;           // already there: it would not even have to turn
+            spot = new PointF(here.X + dx * stop, here.Y + dy * stop);
+            return _pond.Open[(int)spot.Y * _pond.Width + (int)spot.X];
+        }
+        return false;
     }
 
     /// <summary>Lays the spine along the trail with the running wave (the koi's method, with the wave strongest down the tail).</summary>
