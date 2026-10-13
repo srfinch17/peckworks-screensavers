@@ -91,6 +91,14 @@ travelling wave (the cattails and irises sway with it stiffly).
   in the water, hazier when deep, slip under the lily pads, and now and then come up to gulp at
   the surface, leaving a ring. Once in a while one rises slowly until its back brushes the
   surface from below, and three thin, slow rings slip off it as it glides on.
+- **Each koi has a mind of its own.** Three personality dials are rolled when it is born: how
+  energetic it is (how much it beats rather than glides, how fast it cruises), how sociable, and
+  how curious. From those it decides, one thing at a time, what to do next: wander, rest deep and
+  still, go and nose at something (a floating petal, which it may gulp down, the rim of a lily
+  pad, the foot of the cattails, the side of the floating log, or the spot where a dragonfly just
+  tapped the water), swim along behind and beside a friend, or now and then burst after another
+  fish, which speeds up and swerves away until the chaser loses interest. Only one chase runs in
+  the pond at a time, and a curious fish answers a dragonfly's tap far more often than a dull one.
 - Two **schools of minnows**, a dozen or so tiny fish each, hang just under the surface and move
   as one: all facing the same way, fidgeting in little darts, flashing silver when the whole
   school turns, and scattering like thrown rice when a koi cruises underneath. Each minnow is a
@@ -125,7 +133,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   drifting out on the water when it is not. Bark streaks, cracks, a knot or two, moss on top, and
   the cut end's rings where it faces us.
 
-Settings: petals, number of koi, number of minnow schools (0 means no game), number of turtles,
+Settings: petals, number of koi, how playful the koi are (0 means they only cruise and rest),
+number of minnow schools (0 means no game), number of turtles,
 number of dragonflies, how often the swallows visit, how often the snake crosses, and how often
 the lizard comes out.
 

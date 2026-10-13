@@ -223,6 +223,38 @@ internal sealed class Petals
         _floating.Add(NewFloating(p.X, p.Y, 0, p.Size, p.Angle, p.Pink));
     }
 
+    /// <summary>The nearest floating petal within "within" pixels of (x, y), screen pixels. False if none.</summary>
+    public bool NearestFloating(float x, float y, float within, out PointF at)
+    {
+        int best = Nearest(x, y, within);
+        at = best < 0 ? default : new PointF(_floating[best].X, _floating[best].Y);
+        return best >= 0;
+    }
+
+    /// <summary>A koi's mouth closed here: the nearest petal within reach is eaten (it sinks away over a moment).</summary>
+    public void Take(float x, float y, float within)
+    {
+        int i = Nearest(x, y, within);
+        if (i < 0) return;
+        Floating f = _floating[i];
+        f.Life = MathF.Min(f.Life, f.Age + 0.6f);
+        _floating[i] = f;
+    }
+
+    private int Nearest(float x, float y, float within)
+    {
+        int best = -1;
+        float bestD = within * within;
+        for (int i = 0; i < _floating.Count; i++)
+        {
+            Floating f = _floating[i];
+            if (f.Life - f.Age < 2) continue;                                    // already sinking
+            float dx = f.X - x, dy = f.Y - y, d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+    }
+
     /// <summary>The petals lying on the water. Drawn after the koi (they float above them) and before the falling ones.</summary>
     public void DrawFloating(FrameBuffer fb)
     {

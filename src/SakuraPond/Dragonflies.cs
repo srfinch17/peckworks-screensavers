@@ -52,6 +52,7 @@ internal sealed class Dragonflies
     private readonly Pond _pond;
     private readonly Ripples _ripples;
     private readonly Minnows? _minnows;
+    private readonly KoiSchool? _koi;
     private readonly Random _rng;
     private readonly Fly[] _flies;
     private readonly TurningStamp[][] _looks;    // [kind][0 still, 1 blur A, 2 blur B]
@@ -59,11 +60,13 @@ internal sealed class Dragonflies
     private int _frame;
     private double _time;
 
-    public Dragonflies(Pond pond, Ripples ripples, int count, Random rng, Minnows? minnows = null)
+    /// <param name="koi">The koi, told of each tap too: a curious one comes to look.</param>
+    public Dragonflies(Pond pond, Ripples ripples, int count, Random rng, Minnows? minnows = null, KoiSchool? koi = null)
     {
         _pond = pond;
         _ripples = ripples;
         _minnows = minnows;
+        _koi = koi;
         _rng = rng;
         _u = pond.U;
         _looks = [Looks(Color.FromArgb(120, 172, 214), Color.FromArgb(30, 34, 40)), Looks(Color.FromArgb(214, 168, 70), Color.FromArgb(70, 50, 24))];
@@ -185,6 +188,7 @@ internal sealed class Dragonflies
                         float tx = f.X - MathF.Cos(f.Heading) * _u * 0.016f, ty = f.Y - MathF.Sin(f.Heading) * _u * 0.016f * Ripples.Squash;
                         _ripples.Add(tx, ty, 0.45f);
                         _minnows?.Lure(tx, ty);
+                        _koi?.Notice(tx, ty);
                         f.Taps++;
                     }
                     if (f.Progress >= 1)

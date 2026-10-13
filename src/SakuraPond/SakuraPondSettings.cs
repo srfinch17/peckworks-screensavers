@@ -8,12 +8,13 @@ namespace SakuraPond;
 /// </summary>
 public sealed class SakuraPondSettings : ScreensaverSettings
 {
-    private readonly IntSetting _petals, _koi, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard;
+    private readonly IntSetting _petals, _koi, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard;
 
     public SakuraPondSettings() : base("SakuraPond")
     {
         _petals = Add(nameof(PetalPercent), "Petals", 0, 300, 100, "%");
         _koi = Add(nameof(KoiCount), "Koi", 0, 12, 7);
+        _koiPlay = Add(nameof(KoiPlayPercent), "Koi play", 0, 300, 100, "%");
         _minnows = Add(nameof(MinnowSchools), "Minnow schools", 0, 4, 2);
         _turtles = Add(nameof(TurtleCount), "Turtles", 0, 3, 1);
         _dragonflies = Add(nameof(DragonflyCount), "Dragonflies", 0, 6, 2);
@@ -30,6 +31,9 @@ public sealed class SakuraPondSettings : ScreensaverSettings
 
     /// <summary>How many koi swim in the pond.</summary>
     public int KoiCount => _koi.Value;
+
+    /// <summary>How playful the koi are: how often they go and look at things, follow a friend or chase one. 0 = they only cruise and rest.</summary>
+    public int KoiPlayPercent => _koiPlay.Value;
 
     /// <summary>How many schools of minnows there are for the dragonflies to tease. 0 = none (and no game).</summary>
     public int MinnowSchools => _minnows.Value;

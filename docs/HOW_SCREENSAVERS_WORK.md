@@ -589,7 +589,19 @@ thick, which way, and every streak and knot are rolled fresh each time.
 
 *Behaviour from watching the real thing.* Koi beat and glide, steer toward a spot they have
 picked anywhere in the pond (a few headings tried either side when the bank comes close, taking
-the smallest turn that clears it), and keep clear of each other. Dragonflies hover, dart and stop
+the smallest turn that clears it), and keep clear of each other.
+
+*A mind on top of the reflexes.* The koi's steering only ever takes a point to swim toward and how
+firmly to turn to it; the bank, the other fish and the "never stuck" rule have the last word. On
+top of that sits a small mind (the top of `Koi.cs`): one thing at a time (a "doing": wander, rest,
+investigate, follow, chase, flee), a timer for how long to keep at it, and a roll of weighted dice
+when it ends. The weights are the personality: three numbers rolled once per fish, energy,
+sociability and curiosity, so a curious fish's dice have more "go and look" faces and a sociable
+one's more "follow" and "chase" faces. Each doing only changes what the steering is handed (a petal's
+spot, a point behind a friend, the fish being chased, or a point straight away from the chaser), how
+hard it swims (a chase is all beating, a rest all glide) and how deep it hangs (near the surface to
+nose at something, deep to rest). Being chased interrupts anything; a dragonfly's tap interrupts a
+curious fish that is not busy. That is the whole brain: a state machine, three dials, and dice. Dragonflies hover, dart and stop
 dead, perch, and dip. Swallows sweep in long curves and skim the water to drink. A creature that
 cannot be made right in all four ways (really visible there, drawn in this view's perspective,
 turning by bending or turning as a whole, moving the way that animal moves) is left out: that

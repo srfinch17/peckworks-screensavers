@@ -13,7 +13,9 @@ namespace SakuraPond;
 ///      pads, the overhanging branches and their shadows. Painted once. Then
 ///      the LAWN in the wind (the shared Lawn in Core/Sakura/Plants.cs): the
 ///      carpet of blades slid by each gust, and the tufts swaying in it.
-///   2. Under the water: the KOI (Koi.cs), and just under the surface the
+///   2. Under the water: the KOI (Koi.cs), each with a mind of its own (it
+///      wanders, rests, goes to look at things, follows a friend, now and then
+///      chases one), and just under the surface the
 ///      TURTLES (Turtle.cs) and the schools of MINNOWS (Minnows.cs).
 ///   3. On the water: RIPPLES (Ripples.cs), floating PETALS (Petals.cs), and
 ///      now and then a swimming SNAKE (Snake.cs). Standing in the shallows,
@@ -69,13 +71,13 @@ internal sealed class SakuraPondScene : IScreensaverScene
         foreach ((PointF root, float toward) in _pond.IrisSpots)
             _irises.Add(root, Flipbook.IrisClump(u * 0.11f, toward, _rng), 0.45f, 40);
 
-        _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng);
+        _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _wind, _rng);
+        _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng, settings.KoiPlayPercent / 100f, _petals);   // the koi nose at and eat the floating petals
         _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _ripples, _rng);
         _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng);
-        _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _wind, _rng);
         _snake = new Snake(_pond, _ripples, settings.SnakePercent / 100f, _rng);
         _lizard = new Lizard(_pond, settings.LizardPercent / 100f, _rng);
-        _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng, settings.MinnowSchools > 0 ? _minnows : null);
+        _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng, settings.MinnowSchools > 0 ? _minnows : null, _koi);
         _swallows = new Swallows(_pond, _ripples, settings.BirdPercent / 100f, _rng);
     }
 
