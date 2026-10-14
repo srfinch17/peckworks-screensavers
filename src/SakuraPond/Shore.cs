@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using Peckworks.Screensavers.Core.Sakura;
 
 namespace SakuraPond;
@@ -221,6 +222,67 @@ internal static class ShorePainter
     }
 
     private static float Dist(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
+
+    /// <summary>
+    /// Chooses where the island rock stands: out in the open water, well
+    /// clear of the bank (further out than any lily pad cluster reaches),
+    /// clear of the log, away from the screen's edges and from the blossom
+    /// along the top. The cap sits a little above the stone's middle (the
+    /// high point of a stone seen from our slant). Null if no spot is found
+    /// after many tries (a very small or very tall screen).
+    /// </summary>
+    /// <param name="shade">The branches' shadow map (0 = open sky): the island keeps out from under the blossom.</param>
+    public static Island? PlaceIsland(bool[] inPond, int[] dist, byte[] shade, Log? log, int w, int h, float u, Random rng)
+    {
+        float r = u * (0.09f + 0.03f * (float)rng.NextDouble());
+        float capR = r * (0.32f + 0.08f * (float)rng.NextDouble());
+        for (int tries = 0; tries < 300; tries++)
+        {
+            float x = w * (0.12f + 0.76f * (float)rng.NextDouble()), y = h * (0.4f + 0.4f * (float)rng.NextDouble());
+            int i = (int)y * w + (int)x;
+            if (!inPond[i] || dist[i] < u * 0.45f * 10) continue;                                  // open water: pads cluster within 0.3u of the bank
+            bool shaded = false;
+            for (int k = 0; k < 12 && !shaded; k++)                                                 // open sky over the whole stone and a margin round it
+            {
+                float a = k * MathF.Tau / 12, sx = x + MathF.Cos(a) * r * 1.3f, sy = y + MathF.Sin(a) * r * 1.3f;
+                int si = Math.Clamp((int)sy, 0, h - 1) * w + Math.Clamp((int)sx, 0, w - 1);
+                shaded = shade[si] > 0 || shade[i] > 0;
+            }
+            if (shaded) continue;
+            if (x < r + u * 0.05f || x > w - r - u * 0.05f || y < r + u * 0.05f || y > h - r - u * 0.08f) continue;
+            if (log is Log l && Dist(l.Centre, new PointF(x, y)) < l.Length * 0.5f + r + u * 0.08f) continue;
+            var cap = new PointF(x, y - r * 0.18f);
+            return new Island(new PointF(x, y), r, cap, capR);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Paints the island's stone: the whole boulder, painted as any rock is,
+    /// into the picture only (nothing into the blockers: under water it is no
+    /// wall, fish swim over it). The painter then lays the water back over it
+    /// (WrapIsland) before the cap goes on.
+    /// </summary>
+    public static void IslandStone(Graphics g, Island isle, float u, Random rng)
+    {
+        using var scratch = new Bitmap(4, 4);
+        using var gs = Graphics.FromImage(scratch);
+        Rock(g, gs, gs, isle.Centre.X, isle.Centre.Y, isle.Radius, u, rng);
+    }
+
+    /// <summary>
+    /// The island's dry cap: a small rock of its own on top of the wrapped
+    /// stone, with every rock's faces, creases, grain and moss, and the only
+    /// part of the island that goes into the blockers (a wall to the koi, a
+    /// thing for a turtle to climb onto). Its own small drop shadow falls on
+    /// the wet stone round it, as the top of a boulder shades its flank.
+    /// </summary>
+    public static void IslandCap(Graphics g, Graphics gb, Island isle, float u, Random rng)
+    {
+        using var scratch = new Bitmap(4, 4);
+        using var gs = Graphics.FromImage(scratch);
+        Rock(g, gb, gs, isle.Cap.X, isle.Cap.Y, isle.CapRadius, u, rng);
+    }
 
     /// <summary>
     /// Chooses where the fallen log lies. He asked for "a log randomly on the

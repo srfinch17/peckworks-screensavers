@@ -94,7 +94,10 @@ travelling wave (the cattails and irises sway with it stiffly).
   the screen as it rises, and in the shallows it throws a shadow on the bed. A deep fish is
   smaller, hazier and softer than one at the top, and when one passes over another its shadow
   slides across the deeper fish's back, so from above you can tell which is over which. They
-  slip under the lily pads, and now and then come up to gulp at the surface, leaving a ring. Once in a while one rises slowly until its back brushes the
+  slip under the lily pads, and now and then come up to gulp at the surface, leaving a ring.
+- **An island rock** stands out in the open water: a boulder that goes down deep, darker and
+  bluer the deeper it goes until the water hides it, with a small dry cap breaking the surface.
+  The koi swim up and over its shoulders and round the cap. Once in a while one rises slowly until its back brushes the
   surface from below, and three thin, slow rings slip off it as it glides on.
 - **Each koi has a mind of its own.** Three personality dials are dealt when it is born (spread
   across the school, so near-twins are rare): how

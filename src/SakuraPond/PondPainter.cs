@@ -23,6 +23,15 @@ internal readonly record struct Log(PointF Centre, float Angle, float Length, fl
 }
 
 /// <summary>
+/// The island rock: one big stone out in the open water, most of it under
+/// the surface, with a small dry CAP breaking the surface. Centre and Radius
+/// are the whole stone as painted (pixels); Cap and CapRadius the dry top.
+/// Fish swim over its shoulders, rising as the bed comes up to meet the cap
+/// (Pond.Floor), and the cap alone is a wall. A turtle hauls out onto the cap.
+/// </summary>
+internal readonly record struct Island(PointF Centre, float Radius, PointF Cap, float CapRadius);
+
+/// <summary>
 /// Everything the moving things need to know about the painted pond. The
 /// painter works it out once; the koi, the petals, the dragonflies and the
 /// birds only ever READ it.
@@ -95,6 +104,9 @@ internal sealed class Pond
 
     /// <summary>The fallen log, if the seed placed one (nearly always).</summary>
     public required Log? Log { get; init; }
+
+    /// <summary>The island rock out in the water, if the seed found room for one (nearly always).</summary>
+    public required Island? Island { get; init; }
 
     /// <summary>The pond's middle, and roughly how far it reaches each way (for choosing paths across it).</summary>
     public required PointF Centre { get; init; }
@@ -232,6 +244,23 @@ internal static class PondPainter
         if (log is Log beached && !beached.Afloat) ShorePainter.Log(g, gb, gn, beached, u, rng);
         WrapWater(bmp, beforeRocks, Read(blockers), inPond, dist, DistanceToEdge(inPond.Select(p => !p).ToArray(), w, h, edgeIsBank: false), w, h, u);
         if (log is Log afloat && afloat.Afloat) ShorePainter.Log(g, gb, gn, afloat, u, rng);
+        // The island rock, out in the open water: painted after the wrap (it has a wrap of its
+        // own: a stone that goes down deep, with only a small cap dry), and the cap alone goes
+        // into the blockers, so the koi swim over its shoulders and round its top.
+        // The branches' shadow map is made now (its dice are rolled here, before the island's),
+        // so the island can keep out from under the blossom: a stone nobody sees is no stone.
+        int seed = rng.Next();
+        float shadowX = u * 0.035f, shadowY = u * 0.05f;      // sun up and to the left: shadows fall down and right
+        byte[] shade = BranchShadow(w, h, u, seed, shadowX, shadowY);
+        Island? island = ShorePainter.PlaceIsland(inPond, dist, shade, log, w, h, u, rng);
+        if (island is Island isle)
+        {
+            uint[] beforeIsland = Read(bmp);
+            ShorePainter.IslandStone(g, isle, u, rng);
+            WrapIsland(bmp, beforeIsland, isle, u);
+            ShorePainter.IslandCap(g, gb, isle, u, rng);
+            rocks.Add(new BankRock(isle.Cap, isle.CapRadius, InWater: true));   // the snake keeps off the cap; the lizard never sees an in-water rock
+        }
         PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
         List<(PointF Root, float Toward)> irises = IrisSpots(gn, Read(noGrassSheet), inPond, bank, corner, cattails, u, w, h, rng);   // after the rocks and the sand: on the lawn behind them
 
@@ -240,9 +269,6 @@ internal static class PondPainter
         LilyPads(g, gp, pads, inPond, dist, cattails, w, h, u, rng);
 
         // ---- 5: branch shadows, then the branches ----
-        int seed = rng.Next();
-        float shadowX = u * 0.035f, shadowY = u * 0.05f;      // sun up and to the left: shadows fall down and right
-        byte[] shade = BranchShadow(w, h, u, seed, shadowX, shadowY);
         px = Read(bmp);
         var sun = new byte[w * h];
         for (int i = 0; i < px.Length; i++)
@@ -305,6 +331,25 @@ internal static class PondPainter
                     floor[i] = (byte)Math.Min(floor[i], (int)(f * 255));
                 }
         }
+        // The island is a hill, not a disc: the bed climbs its painted shoulders
+        // from full depth a little outside the stone to nothing at the cap's rim,
+        // so a fish crossing it rises up and over and goes round the dry top.
+        if (island is Island hill)
+        {
+            float outer = hill.Radius + u * 0.05f, inner = hill.CapRadius;
+            int x0 = Math.Max(0, (int)(hill.Cap.X - outer)), x1 = Math.Min(w - 1, (int)(hill.Cap.X + outer));
+            int y0 = Math.Max(0, (int)(hill.Cap.Y - outer)), y1 = Math.Min(h - 1, (int)(hill.Cap.Y + outer));
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                {
+                    float dx = x + 0.5f - hill.Cap.X, dy = y + 0.5f - hill.Cap.Y;
+                    float d = (MathF.Sqrt(dx * dx + dy * dy) - inner) / (outer - inner);
+                    if (d >= 1) continue;
+                    float f = d <= 0 ? 0 : d * d * (3 - 2 * d);
+                    int i = y * w + x;
+                    floor[i] = (byte)Math.Min(floor[i], (int)(f * 255));
+                }
+        }
 
         return new Pond(room, gw, gh, cell)
         {
@@ -312,7 +357,7 @@ internal static class PondPainter
             Pixels = final, Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun,
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
-            Rocks = rocks, Log = log,
+            Rocks = rocks, Log = log, Island = island,
         };
     }
 
@@ -750,6 +795,55 @@ internal static class PondPainter
             else continue;
             px[i] = (uint)(r << 16 | g << 8 | b);
         }
+        Write(bmp, px);
+    }
+
+    /// <summary>
+    /// Lays the water back over the island's stone. The stone is painted
+    /// whole, as if it stood on dry land; this is what makes it a stone
+    /// standing in deep water. Every pixel the painting touched (the stone,
+    /// its soft edge, its drop shadow) is mixed toward the water that was
+    /// there before, by how far it is from the cap's rim: near the rim the
+    /// stone just under the surface, darker and bluer, as a wet stone is,
+    /// then fading into the water as it goes down, gone before the painted
+    /// edge (so no outline is left, and no shadow lies on the water: a tall
+    /// stone's shadow falls on the bed far below, out of sight). Water above
+    /// a stone makes it darker and bluer, never paler (a mix toward pale water
+    /// is fog), so the mix goes toward the water darkened by a third near the
+    /// rim and toward the water itself far out. The dry cap is painted on top
+    /// afterwards (IslandCap), as a small rock of its own.
+    /// </summary>
+    private static void WrapIsland(Bitmap bmp, uint[] before, Island isle, float u)
+    {
+        uint[] px = Read(bmp);
+        int w = bmp.Width, h = bmp.Height;
+        float capR = isle.CapRadius, reach = (isle.Radius - capR) * 0.85f;
+        int x0 = Math.Max(0, (int)(isle.Centre.X - isle.Radius * 1.8f)), x1 = Math.Min(w - 1, (int)(isle.Centre.X + isle.Radius * 1.8f));
+        int y0 = Math.Max(0, (int)(isle.Centre.Y - isle.Radius * 1.8f)), y1 = Math.Min(h - 1, (int)(isle.Centre.Y + isle.Radius * 1.8f));
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                int i = y * w + x;
+                if (px[i] == before[i]) continue;
+                float dx = x + 0.5f - isle.Cap.X, dy = y + 0.5f - isle.Cap.Y;
+                float d = MathF.Sqrt(dx * dx + dy * dy) - capR * 0.6f;         // pixels out from well inside the cap (the cap rock covers the rest)
+                float k = Math.Clamp(d / reach, 0, 1);                          // 0 under the cap, 1 where the stone is gone
+                float sink = k * k * (3 - 2 * k);                               // how far gone into the water: the stone stays a stone for a while, then goes
+                // Two things happen to a stone as it goes down. Less light reaches
+                // it and less comes back, so the stone itself gets DARKER (a wet
+                // stone just under the surface is already darker than a dry one);
+                // and the water between it and the eye adds its own colour, more
+                // the deeper, until only water is left. The stone is never made
+                // paler than the water (a light stone mixed with dark water is fog).
+                float keep = 0.72f - 0.5f * sink;                                // how bright the stone itself still is
+                float mix = 0.1f + 0.9f * MathF.Pow(sink, 1.2f);                 // how much of what we see is the water
+                uint c = px[i], o = before[i];
+                int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
+                int or_ = (int)((o >> 16) & 0xFF), og = (int)((o >> 8) & 0xFF), ob = (int)(o & 0xFF);
+                r = (int)(r * keep); g = (int)(g * (keep + 0.03f)); b = (int)(b * (keep + 0.07f));
+                r += (int)((or_ - r) * mix); g += (int)((og - g) * mix); b += (int)((ob - b) * mix);
+                px[i] = (uint)(Math.Clamp(r, 0, 255) << 16 | Math.Clamp(g, 0, 255) << 8 | Math.Clamp(b, 0, 255));
+            }
         Write(bmp, px);
     }
 

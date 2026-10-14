@@ -697,6 +697,18 @@ it has no whole-body cap because it never goes deep. The floating log is a wall 
 steering, not something they swim under: what you may see is a deep fish's sunk picture slipping
 under the log's edge, which is what a log floating over a fish looks like.
 
+*The island rock is a hill with a dry top.* One big stone is placed out in the open water
+(further from the bank than any lily pad cluster reaches, clear of the log, and not under the
+blossom: the branches' shadow map is made before the island is placed and the spot must be open
+sky). It is painted as any rock is, whole, and then the water is laid back over it by distance
+from the cap: the stone gets darker the further down it goes (less light reaches it and less comes
+back) and takes on more of the water's colour, until only water is left a little inside its painted
+edge, so no outline and no drop shadow are left on the water. Then the cap is painted on top as a
+small rock of its own, with faces, creases, grain and moss, and the cap alone goes into the
+blockers: a wall to the koi, a thing for a turtle to haul out onto. `Pond.Floor` climbs the stone's
+shoulders from full depth a little outside it to nothing at the cap's rim, so a fish crossing it
+rises up and over and goes round the top. `Pond.Island` holds the stone and its cap.
+
 *The lawn is finished every other frame.* The carpet of blades and the tufts are the two dearest
 things in the whole pond to draw, and grass moves slowly (a gust takes seconds to cross the
 lawn). So the carpet is laid on even frames and the tufts are stamped on odd frames, each onto a
