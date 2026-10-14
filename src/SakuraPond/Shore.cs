@@ -236,11 +236,13 @@ internal static class ShorePainter
     {
         float r = u * (0.09f + 0.03f * (float)rng.NextDouble());
         float capR = r * (0.32f + 0.08f * (float)rng.NextDouble());
-        for (int tries = 0; tries < 300; tries++)
+        for (int tries = 0; tries < 600; tries++)
         {
             float x = w * (0.12f + 0.76f * (float)rng.NextDouble()), y = h * (0.4f + 0.4f * (float)rng.NextDouble());
             int i = (int)y * w + (int)x;
-            if (!inPond[i] || dist[i] < u * 0.45f * 10) continue;                                  // open water: pads cluster within 0.3u of the bank
+            // Open water, well out from the bank; when the first three hundred tries find none
+            // (a wide screen with the blossom low), nearer will do (the pads keep clear of it).
+            if (!inPond[i] || dist[i] < u * (tries < 300 ? 0.45f : 0.3f) * 10) continue;
             bool shaded = false;
             for (int k = 0; k < 12 && !shaded; k++)                                                 // open sky over the whole stone and a margin round it
             {

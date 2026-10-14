@@ -266,7 +266,7 @@ internal static class PondPainter
 
         // ---- 4: on the water ----
         var pads = new List<LilyPad>();
-        LilyPads(g, gp, pads, inPond, dist, cattails, w, h, u, rng);
+        LilyPads(g, gp, pads, inPond, dist, cattails, island, w, h, u, rng);
 
         // ---- 5: branch shadows, then the branches ----
         px = Read(bmp);
@@ -515,7 +515,7 @@ internal static class PondPainter
     /// middle (the notch real lily pads have), seen at our slant, so a little
     /// flatter than round. Veins run out from the middle.
     /// </summary>
-    private static void LilyPads(Graphics g, Graphics gb, List<LilyPad> pads, bool[] inPond, int[] dist, PointF cattails, int w, int h, float u, Random rng)
+    private static void LilyPads(Graphics g, Graphics gb, List<LilyPad> pads, bool[] inPond, int[] dist, PointF cattails, Island? island, int w, int h, float u, Random rng)
     {
         int clusters = 3;
         int tries = 0;
@@ -527,6 +527,7 @@ internal static class PondPainter
             if (!inPond[i] || dist[i] < u * 0.07f * 10 || dist[i] > u * 0.3f * 10) continue;
             if (pads.Any(p => Math.Abs(p.Center.X - x) + Math.Abs(p.Center.Y - y) < u * 0.45f)) continue;
             if (Math.Abs(cattails.X - x) + Math.Abs(cattails.Y - y) < u * 0.22f) continue;        // not among the cattails
+            if (island is Island isle && Dist(isle.Centre, new PointF(x, y)) < isle.Radius + u * 0.2f) continue;   // not on or against the island rock
             clusters--;
             int n = 8 + rng.Next(8);
             for (int k = 0; k < n; k++)
