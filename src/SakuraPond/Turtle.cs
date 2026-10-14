@@ -82,6 +82,9 @@ internal sealed class Turtle : Body
     public PointF Nose => Spine[0];
     public PointF Middle => Spine[Points / 2];
 
+    /// <summary>True while it is in the pond (always, so far): it then throws and receives the koi's cross shadows, and is hazed and sunk by its depth.</summary>
+    public bool InWater => true;
+
     public Turtle(Pond pond, Ripples ripples, bool[] where, Random rng) : base(Points)
     {
         _pond = pond;
@@ -217,10 +220,14 @@ internal sealed class Turtle : Body
     {
         float dx = MathF.Cos(_heading), dy = MathF.Sin(_heading);
         // The nose is at (_x, _y) and the body lies BEHIND it, against the heading.
-        float gx = _x - dx * s * _len - dy * v * _wide * Profile(s), gy = _y - dy * s * _len + dx * v * _wide * Profile(s);
+        float k = Scale;
+        float gx = _x - dx * s * _len * k - dy * v * _wide * Profile(s) * k, gy = _y - dy * s * _len * k + dx * v * _wide * Profile(s) * k;
         PointF p = ToScreen(gx, gy);
         return new PointF(p.X, p.Y + Sink);
     }
+
+    /// <summary>How much smaller it is drawn for its depth, like a koi (KoiSchool.Shrink): we look from a few body lengths up.</summary>
+    private float Scale => 1 - KoiSchool.Shrink * Z;
 
     /// <summary>How far down the screen its picture sits for its depth, like a koi's (Light.Sink). Small: a turtle stays near the top.</summary>
     private float Sink => Z * Pond.DepthU * _pond.U * Light.Sink;
@@ -322,7 +329,8 @@ internal sealed class Turtle : Body
     private static (float, float, float) Mix((float R, float G, float B) a, (float R, float G, float B) b, float k) =>
         (a.R + (b.R - a.R) * k, a.G + (b.G - a.G) * k, a.B + (b.B - a.B) * k);
 
-    public void Draw(FrameBuffer fb)
+    /// <param name="mark">If given, set true at every pixel the shell paints (KoiSchool throws the shallower fishes' shadows onto those).</param>
+    public void Draw(FrameBuffer fb, bool[]? mark = null)
     {
         float murk = 0.06f + 0.62f * Z;
         float soft = MathF.Max(1f, _pond.U * 0.0012f) * (1 + 3 * Z);
@@ -334,11 +342,11 @@ internal sealed class Turtle : Body
             Leg(fb, 0.3f, side, 1.22f - 0.7f * Stroke(front) * _stroke - 0.17f * (1 - _stroke), 0.34f, Thrust(front) * _stroke, murk);
             Leg(fb, 0.74f, side, 2.36f - 0.5f * Stroke(rear) * _stroke + 0.26f * (1 - _stroke), 0.3f, Thrust(rear) * _stroke, murk);
         }
-        Paint(fb, _where, _pond.Sun, murk, soft);
+        Paint(fb, _where, _pond.Sun, murk, soft, _pond.Pixels, mark: mark);
         // The eyes: a dark dot each side of the head, toward the front.
-        float er = MathF.Max(0.8f, _len * 0.014f);
+        float er = MathF.Max(0.8f, _len * 0.014f * Scale);
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
-            Oval(fb, _where, At(0.07f, side * 0.7f), 0, er, er, 20, 24, 16, 0.95f, murk * 0.7f, _pond.Sun);
+            Oval(fb, _where, At(0.07f, side * 0.7f), 0, er, er, 20, 24, 16, 0.95f, murk * 0.7f, _pond.Sun, water: _pond.Pixels);
     }
 
     /// <summary>
@@ -370,13 +378,13 @@ internal sealed class Turtle : Body
         float a = _heading + side * angle;
         float dx = MathF.Cos(a), dy = MathF.Sin(a);
         float hdx = MathF.Cos(_heading), hdy = MathF.Sin(_heading);
-        float l = _len * length;
+        float k = Scale, l = _len * length * k;
         // The hip, just inside the shell's edge, in ground pixels.
-        float hw = _wide * Profile(s) * 0.8f;
-        float hx = _x - hdx * s * _len - hdy * side * hw, hy = _y - hdy * s * _len + hdx * side * hw;
+        float hw = _wide * Profile(s) * 0.8f * k;
+        float hx = _x - hdx * s * _len * k - hdy * side * hw, hy = _y - hdy * s * _len * k + hdx * side * hw;
         PointF thigh = ToScreen(hx + dx * l * 0.4f, hy + dy * l * 0.4f), foot = ToScreen(hx + dx * l * 0.85f, hy + dy * l * 0.85f);
         thigh.Y += Sink; foot.Y += Sink;
-        Oval(fb, _where, thigh, a, l * 0.5f, l * 0.2f, 66, 84, 44, 1f, murk, _pond.Sun, rays: false);
-        Oval(fb, _where, foot, a, l * 0.3f, l * (0.13f + 0.08f * spread), 56, 74, 40, 1f, murk, _pond.Sun, rays: false);   // the webbed foot opens on the push, folds on the return
+        Oval(fb, _where, thigh, a, l * 0.5f, l * 0.2f, 66, 84, 44, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        Oval(fb, _where, foot, a, l * 0.3f, l * (0.13f + 0.08f * spread), 56, 74, 40, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);   // the webbed foot opens on the push, folds on the return
     }
 }

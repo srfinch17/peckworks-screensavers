@@ -91,9 +91,10 @@ travelling wave (the cattails and irises sway with it stiffly).
   the pond has a bed that slopes up to the bank and to every rock, a fish is never deeper than
   the water under any part of its body and rises up the slope before the shallows, a deep fish
   sits lower on the screen than the water above it (we look at the pond at a slant) and comes up
-  the screen as it rises, and in the shallows it throws a shadow on the bed. They are hazier when
-  deep, pass over one another at different depths, slip under the lily pads, and now and then come up to gulp at
-  the surface, leaving a ring. Once in a while one rises slowly until its back brushes the
+  the screen as it rises, and in the shallows it throws a shadow on the bed. A deep fish is
+  smaller, hazier and softer than one at the top, and when one passes over another its shadow
+  slides across the deeper fish's back, so from above you can tell which is over which. They
+  slip under the lily pads, and now and then come up to gulp at the surface, leaving a ring. Once in a while one rises slowly until its back brushes the
   surface from below, and three thin, slow rings slip off it as it glides on.
 - **Each koi has a mind of its own.** Three personality dials are dealt when it is born (spread
   across the school, so near-twins are rare): how

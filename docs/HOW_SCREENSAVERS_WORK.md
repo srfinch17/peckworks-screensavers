@@ -673,8 +673,23 @@ come up the screen as it sharpens. Where the bed shows through (the shallows, by
 own rule for how much bed shows at a depth), the fish throws a shadow on it: the same body
 painted dark and blurred, down and to the right by the gap between the fish and the bed, the
 blurrier the bigger that gap, under the fish. Fish at very different depths may pass right over
-each other (the deeper one drawn under and hazier), and a fish deep down is out of reach of the
-minnows and the snake at the surface. The koi and the turtles are drawn in one depth order, so a
+each other, and a fish deep down is out of reach of the minnows and the snake at the surface.
+
+*What makes "over" read as over, not through.* Seen from above, two fish crossing at different
+depths are two hazy pictures overlapping, and the eye reads that as one swimming through the
+other unless the picture carries the cues a real pond does. Four of them, all in the painter:
+the deeper fish is drawn a little SMALLER (we look from a few body lengths up, so the bed is
+further off than the surface: `KoiSchool.Shrink`, 22% at full depth, and a fish rising to gulp
+grows as it comes up); its markings are BLURRED and the whole fish DIMMER by depth (a second
+skin sheet, blurred once when the fish is made, mixed in by depth); its haze mixes it toward
+the WATER'S colour (the backdrop under it), never toward whatever is already on the frame
+there, because the haze is the water above the fish, and mixing toward the frame made an upper
+fish two thirds made of the lower one; and the shallower fish throws its SHADOW onto the back
+of the deeper one (`Body.CastShadow`), down and right by the depth between them and softer
+the bigger that gap, a soft dark fish shape sliding across the deeper fish as the other passes
+over it. The school draws each animal with a stencil of the pixels it painted, throws every
+shallower overlapping animal's shadow onto that stencil only, and wipes it; animals drawn at
+the same time on different cores have boxes that do not touch, so each works its own patch. The koi and the turtles are drawn in one depth order, so a
 turtle (which keeps near the top) is painted over the koi below it and under a koi that is gulping
 above it; the bed shadows are painted first, under every fish, and fade to nothing in a branch's
 shade. The turtle reads the same floor, at its nose only, and sinks on the screen by the same rule;

@@ -464,7 +464,7 @@ internal sealed class Minnow : Body
     public void Draw(FrameBuffer fb)
     {
         const float murk = 0.2f;                   // just under the surface: a little of the water's colour, no haze
-        Paint(fb, _where, _pond.Sun, murk, MathF.Max(0.8f, _u * 0.0007f));
+        Paint(fb, _where, _pond.Sun, murk, MathF.Max(0.8f, _u * 0.0007f), _pond.Pixels);   // hazed toward the water, not toward a koi it crosses
         // Two tiny dark eyes either side of the head.
         PointF e0 = Spine[0], e1 = Spine[1];
         float ex = e1.X - e0.X, ey = e1.Y - e0.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));

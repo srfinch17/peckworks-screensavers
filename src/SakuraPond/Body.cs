@@ -61,14 +61,34 @@ internal abstract class Body
     /// </summary>
     /// <param name="onlyWhere">Stencil: draw only where true (open water, not under a branch).</param>
     /// <param name="sun">0 to 255 per pixel: how much sun reaches it (branch shadows darken the body too).</param>
-    /// <param name="murk">0 = seen clearly, 1 = lost in the water: mixes the body toward the water behind it.</param>
+    /// <param name="murk">0 = seen clearly, 1 = lost in the water: mixes the body toward the water's colour.</param>
     /// <param name="soft">How many pixels the edge fades over: 1 for a sharp edge, more for a fish deep in the water.</param>
-    protected void Paint(FrameBuffer fb, bool[]? onlyWhere, byte[]? sun, float murk, float soft)
+    /// <param name="water">
+    /// The painted pond (the backdrop's pixels): what the murk mixes toward.
+    /// Null mixes toward whatever is on the frame under the body, which is
+    /// right for a thing with nothing between it and the water, and WRONG for
+    /// a fish over another fish: the upper one came out two thirds made of the
+    /// lower one, and the two looked like they swam through each other. The
+    /// haze is the water ABOVE a fish, so it is the water's own colour.
+    /// </param>
+    /// <param name="ox">Paint the spine moved this far across and down (a shadow thrown to one side), without touching it.</param>
+    /// <param name="shadow">0 paints the animal; more paints its shape as a shadow this dark instead (the colours are ignored, the see-through fins stay fainter).</param>
+    /// <param name="mark">If given, every pixel painted is set true here (a stencil for what lands ON this body: a shallower fish's shadow).</param>
+    /// <param name="clip">If given, nothing outside this screen box is painted.</param>
+    protected void Paint(FrameBuffer fb, bool[]? onlyWhere, byte[]? sun, float murk, float soft, uint[]? water = null,
+        float ox = 0, float oy = 0, float shadow = 0, bool[]? mark = null, Rectangle? clip = null)
     {
         int n = Spine.Length, w = fb.Width, h = fb.Height;
         uint[] px = fb.Pixels;
         float invSoft = 1 / soft;
         int murk256 = (int)(murk * 256);
+        int cx0 = 0, cy0 = 0, cx1 = w - 1, cy1 = h - 1;
+        if (clip is Rectangle c)
+        {
+            cx0 = Math.Max(0, c.Left); cy0 = Math.Max(0, c.Top); cx1 = Math.Min(w - 1, c.Right - 1); cy1 = Math.Min(h - 1, c.Bottom - 1);
+            if (cx0 > cx1 || cy0 > cy1) return;
+        }
+        int sh256 = (int)(shadow * 256);
         Span<float> ux = stackalloc float[n], uy = stackalloc float[n], lens = stackalloc float[n];
         for (int i = 0; i < n - 1; i++)
         {
@@ -83,7 +103,7 @@ internal abstract class Body
         {
             float len = lens[i];
             if (len < 1e-3f) continue;
-            PointF a = Spine[i], b = Spine[i + 1];
+            PointF a = new(Spine[i].X + ox, Spine[i].Y + oy), b = new(Spine[i + 1].X + ox, Spine[i + 1].Y + oy);
             float dx = ux[i], dy = uy[i], nx = -dy, ny = dx;
             float hwA = HalfWidth[i], hwB = HalfWidth[i + 1];
             float reach = MathF.Max(hwA, hwB) + soft + 1;
@@ -97,8 +117,8 @@ internal abstract class Body
             float before = first ? reach : 0, after = last ? reach : 0;
             float bx0 = MathF.Min(a.X, b.X) - reach - before, bx1 = MathF.Max(a.X, b.X) + reach + after;
             float by0 = MathF.Min(a.Y, b.Y) - reach - before, by1 = MathF.Max(a.Y, b.Y) + reach + after;
-            int y0 = Math.Max(0, (int)by0), y1 = Math.Min(h - 1, (int)by1);
-            int xMin = Math.Max(0, (int)bx0), xMax = Math.Min(w - 1, (int)bx1);
+            int y0 = Math.Max(cy0, (int)by0), y1 = Math.Min(cy1, (int)by1);
+            int xMin = Math.Max(cx0, (int)bx0), xMax = Math.Min(cx1, (int)bx1);
             float sA = Along[i], sB = Along[i + 1];
             for (int y = y0; y <= y1; y++)
             {
@@ -145,7 +165,9 @@ internal abstract class Body
                     // thousands of times a frame per koi, and the float version
                     // with its conversions and clamps cost a third more.
                     int a256 = (int)(alpha * cover * 256);
+                    if (sh256 > 0) { r = 10; g = 24; bl = 24; a256 = a256 * sh256 >> 8; }   // the shadow: the body's shape in the water's own dark
                     if (a256 <= 1) continue;
+                    if (mark != null) mark[idx] = true;
                     if (sun != null)
                     {
                         int k = sun[idx];
@@ -155,7 +177,8 @@ internal abstract class Body
                     if (murk256 > 0)
                     {
                         // Under water: the deeper, the more the fish takes on the water's own colour.
-                        int wr = (int)((bg >> 16) & 0xFF), wg = (int)((bg >> 8) & 0xFF), wb = (int)(bg & 0xFF);
+                        uint wc = water != null ? water[idx] : bg;
+                        int wr = (int)((wc >> 16) & 0xFF), wg = (int)((wc >> 8) & 0xFF), wb = (int)(wc & 0xFF);
                         r += (wr - r) * murk256 >> 8; g += (wg - g) * murk256 >> 8; bl += (wb - bl) * murk256 >> 8;
                     }
                     px[idx] = FrameBuffer.Blend256(bg, r, g, bl, a256);
@@ -163,6 +186,30 @@ internal abstract class Body
             }
         }
     }
+
+    /// <summary>
+    /// The body's shadow: its own shape painted dark and soft, moved dx across
+    /// and dy down the screen from where the body is drawn. Used for a koi's
+    /// shadow on the bed, and (through CastShadow) for its shadow on the back
+    /// of a deeper fish it swims over.
+    /// </summary>
+    protected void PaintShadow(FrameBuffer fb, bool[]? onlyWhere, float dx, float dy, float alpha, float soft, Rectangle? clip = null)
+        => Paint(fb, onlyWhere, null, 0, soft, null, dx, dy, alpha, null, clip);
+
+    /// <summary>
+    /// This animal's shadow thrown onto something a "gap" below it in the water
+    /// (gap in screen pixels of depth): a deeper fish's back. "onto" is a
+    /// stencil of that thing's painted pixels and "clip" its screen box, so
+    /// the shadow lands on it and nowhere else. The sun is up and to the left,
+    /// so the shadow falls down and right by the gap (Light.ShadowX, ShadowY),
+    /// and the deeper thing's picture also sits lower on the screen by the gap
+    /// (Light.Sink), so the shadow goes down by that too. The bigger the gap
+    /// the softer the shadow's edge: THIS is what says "above", not "through".
+    /// Safe to call for one animal from several threads at once: nothing of
+    /// the animal's own is changed.
+    /// </summary>
+    public void CastShadow(FrameBuffer fb, bool[] onto, Rectangle clip, float gap, float alpha)
+        => PaintShadow(fb, onto, Light.ShadowX * gap, (Light.ShadowY + Light.Sink) * gap, alpha, MathF.Max(1f, gap * 0.15f), clip);
 
     /// <summary>
     /// Narrows the stretch [lo, hi] of x-offsets to those where
@@ -189,7 +236,7 @@ internal abstract class Body
     /// </summary>
     /// <param name="rays">Faint rays across a long oval (a fin). False for a solid limb.</param>
     protected static void Oval(FrameBuffer fb, bool[]? onlyWhere, PointF c, float angle, float len, float wid,
-        int r, int g, int b, float alpha, float murk, byte[]? sun, bool rays = true)
+        int r, int g, int b, float alpha, float murk, byte[]? sun, bool rays = true, uint[]? water = null)
     {
         float ca = MathF.Cos(angle), sa = MathF.Sin(angle);
         int reach = (int)MathF.Ceiling(MathF.Max(len, wid)) + 2;
@@ -211,7 +258,8 @@ internal abstract class Body
                 uint bg = px[idx];
                 if (murk > 0)
                 {
-                    rr += (int)((((bg >> 16) & 0xFF) - rr) * murk); gg += (int)((((bg >> 8) & 0xFF) - gg) * murk); bb += (int)(((bg & 0xFF) - bb) * murk);
+                    uint wc = water != null ? water[idx] : bg;      // toward the water's colour, not whatever is under it (see Paint)
+                    rr += (int)((((wc >> 16) & 0xFF) - rr) * murk); gg += (int)((((wc >> 8) & 0xFF) - gg) * murk); bb += (int)(((wc & 0xFF) - bb) * murk);
                 }
                 px[idx] = FrameBuffer.Blend(bg, rr, gg, bb, a);
             }
