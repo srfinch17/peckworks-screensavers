@@ -142,6 +142,37 @@ public sealed class Mind<TDoing> where TDoing : struct, Enum
 /// shadow) starts one, and nothing can fire it again until it has run out,
 /// so a thing that stays close cannot set it off thirty times a second.
 /// </summary>
+/// <summary>
+/// One thing that only one animal may hold at a time: a perch (the island's
+/// cap, the log). An animal TAKES it when it sets out for the thing and
+/// RELEASES it when it is done or gives up; another asking meanwhile is told
+/// no. Without this, two animals written by two authors each believed the
+/// log was theirs (a snake climbed onto a log a turtle was sunning on). It
+/// is deliberately dumb: no queue, no timeout. An animal must release what it
+/// took, so the pattern is "release it every frame that I am not using it".
+/// </summary>
+public sealed class Claim
+{
+    private object? _by;
+
+    /// <summary>True when nobody holds it, or "who" does.</summary>
+    public bool Free(object who) => _by == null || _by == who;
+
+    /// <summary>Takes it for "who" if it is free; false if another holds it.</summary>
+    public bool Take(object who)
+    {
+        if (!Free(who)) return false;
+        _by = who;
+        return true;
+    }
+
+    /// <summary>Lets it go, if "who" is the holder (anyone else's release is ignored).</summary>
+    public void Release(object who)
+    {
+        if (_by == who) _by = null;
+    }
+}
+
 public sealed class Cooldown
 {
     private float _left;

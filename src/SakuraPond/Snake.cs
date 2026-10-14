@@ -167,7 +167,7 @@ internal sealed class Snake : Body
     /// <summary>The floating log, if there is one it can climb onto and be seen on.</summary>
     private bool LogReady()
     {
-        if (_pond.Log is not Log log || !log.Afloat) return false;
+        if (_pond.Log is not Log log || !log.Afloat || !_pond.LogPerch.Free(this)) return false;   // not while a turtle has it, or is on its way to it
         int x = (int)log.Centre.X, y = (int)log.Centre.Y;
         return x >= 0 && y >= 0 && x < _pond.Width && y < _pond.Height && _pond.Open[y * _pond.Width + x];
     }
@@ -232,6 +232,7 @@ internal sealed class Snake : Body
     private void BeginBask()
     {
         Log log = _pond.Log!.Value;
+        _pond.LogPerch.Take(this);
         _basked = true; _mind.Begin(Doing.Bask, 60); _phase = 0;
         _logDir = Dist(new PointF(_x, _y), log.At(0)) <= Dist(new PointF(_x, _y), log.At(1)) ? 1 : -1;
         _goal = LogPoint(log, -(log.Length * 0.5f + _u * 0.14f), 0);
@@ -415,6 +416,7 @@ internal sealed class Snake : Body
     /// <param name="animals">Points on the other animals this frame (koi heads and middles, turtles, the lizard), screen pixels.</param>
     public void Update(float dt, ReadOnlySpan<PointF> animals)
     {
+        if (!_live || _doing != Doing.Bask) _pond.LogPerch.Release(this);   // the log is only the snake's while it is basking (or on its way to)
         if (!_live)
         {
             _next -= dt;

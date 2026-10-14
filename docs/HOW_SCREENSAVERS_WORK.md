@@ -702,11 +702,17 @@ skin sheet, blurred once when the fish is made, mixed in by depth); its haze mix
 the WATER'S colour (the backdrop under it), never toward whatever is already on the frame
 there, because the haze is the water above the fish, and mixing toward the frame made an upper
 fish two thirds made of the lower one; and the shallower fish throws its SHADOW onto the back
-of the deeper one (`Body.CastShadow`), down and right by the depth between them and softer
-the bigger that gap, a soft dark fish shape sliding across the deeper fish as the other passes
-over it. The school draws each animal with a stencil of the pixels it painted, throws every
-shallower overlapping animal's shadow onto that stencil only, and wipes it; animals drawn at
-the same time on different cores have boxes that do not touch, so each works its own patch. The koi and the turtles are drawn in one depth order, so a
+of the deeper one (`Body.CastShadow`), a soft dark echo of itself just down and right of where
+it is drawn, softer the bigger the depth between them. The first three cues are what carry the
+read (the review's own renders showed a crisp fish over a soft, dim, water-coloured one reads as
+over with the shadow switched off); the echo ties the two together where they overlap. It is
+held to about a body width from the fish that casts it: thrown the whole way the sun would throw
+it, a shadow for a deep crossing landed two body widths off, on a fish nothing was over, and read
+as a blotch. The school draws each animal with a stencil of the pixels it painted (fins too),
+throws every shallower overlapping animal's shadow onto that stencil only, and wipes it; animals
+drawn at the same time on different cores have boxes that do not touch, so each works its own
+patch. The bed shadow goes by the painter's depth or the floor, whichever is shallower, so a fish
+pushed up over the island's shoulder throws its shadow on the stone. The koi and the turtles are drawn in one depth order, so a
 turtle (which keeps near the top) is painted over the koi below it and under a koi that is gulping
 above it; the bed shadows are painted first, under every fish, and fade to nothing in a branch's
 shade. The turtle reads the same floor, at its nose only, and sinks on the screen by the same rule;
@@ -717,14 +723,20 @@ under the log's edge, which is what a log floating over a fish looks like.
 *The island rock is a hill with a dry top.* One big stone is placed out in the open water
 (further from the bank than any lily pad cluster reaches, clear of the log, and not under the
 blossom: the branches' shadow map is made before the island is placed and the spot must be open
-sky). It is painted as any rock is, whole, and then the water is laid back over it by distance
-from the cap: the stone gets darker the further down it goes (less light reaches it and less comes
-back) and takes on more of the water's colour, until only water is left a little inside its painted
-edge, so no outline and no drop shadow are left on the water. Then the cap is painted on top as a
-small rock of its own, with faces, creases, grain and moss, and the cap alone goes into the
-blockers: a wall to the koi, a thing for a turtle to haul out onto. `Pond.Floor` climbs the stone's
-shoulders from full depth a little outside it to nothing at the cap's rim, so a fish crossing it
-rises up and over and goes round the top. `Pond.Island` holds the stone and its cap.
+sky). The stone is painted as any rock is, whole and bare (no moss: green survived the water as a
+lime glow), the cap on top of it as a small rock of its own with faces, creases, grain and moss, and
+THEN the water is laid back over both (`WrapIsland`). The cap keeps a wet band just inside its own
+rim, the waterline every bank rock has, and no shadow on the water. The stone is faded by two
+distances, whichever has it further gone: out from the cap's rim down the flank, and in from the
+stone's own painted edge, so the fade ends exactly where the painting does on every side. Going
+down, the stone gets darker (less light reaches it and less comes back) and bluer (the water takes
+the warm colours first), and takes on more of the water's colour, until only water is left; it is
+never made paler than the water. Along the cap's rim a dark line: the surface meeting the stone.
+The cap alone goes into the blockers: a wall to the koi, a thing for a turtle to haul out onto
+(the turtle reads the cap's painted shape from the blockers, not a circle). `Pond.Floor` climbs the
+stone's shoulders from full depth a little outside it to nothing at the cap's rim, so a fish
+crossing it rises up and over and goes round the top, with its shadow on the stone. `Pond.Island`
+holds the stone and its cap; `Pond.IslandPerch` and `Pond.LogPerch` say who is sitting on them.
 
 *The lawn is finished every other frame.* The carpet of blades and the tufts are the two dearest
 things in the whole pond to draw, and grass moves slowly (a gust takes seconds to cross the

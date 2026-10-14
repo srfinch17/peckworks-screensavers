@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using Peckworks.Screensavers.Core.Minds;
 using Peckworks.Screensavers.Core.Sakura;
 
 namespace SakuraPond;
@@ -107,6 +108,10 @@ internal sealed class Pond
 
     /// <summary>The island rock out in the water, if the seed found room for one (nearly always).</summary>
     public required Island? Island { get; init; }
+
+    /// <summary>Who holds the island's cap and the log as a perch right now (Core/Minds Claim): a turtle setting out for one takes it, the snake asks before it climbs onto the log.</summary>
+    public Claim IslandPerch { get; } = new();
+    public Claim LogPerch { get; } = new();
 
     /// <summary>The pond's middle, and roughly how far it reaches each way (for choosing paths across it).</summary>
     public required PointF Centre { get; init; }
@@ -256,9 +261,9 @@ internal static class PondPainter
         if (island is Island isle)
         {
             uint[] beforeIsland = Read(bmp);
-            ShorePainter.IslandStone(g, isle, u, rng);
-            WrapIsland(bmp, beforeIsland, isle, u);
-            ShorePainter.IslandCap(g, gb, isle, u, rng);
+            bool[] stone = ShorePainter.IslandStone(g, isle, w, h, u, rng);
+            bool[] cap = ShorePainter.IslandCap(g, gb, isle, w, h, u, rng);
+            WrapIsland(bmp, beforeIsland, stone, cap, isle, w, h, u);
             rocks.Add(new BankRock(isle.Cap, isle.CapRadius, InWater: true));   // the snake keeps off the cap; the lizard never sees an in-water rock
         }
         PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
@@ -800,49 +805,61 @@ internal static class PondPainter
     }
 
     /// <summary>
-    /// Lays the water back over the island's stone. The stone is painted
-    /// whole, as if it stood on dry land; this is what makes it a stone
-    /// standing in deep water. Every pixel the painting touched (the stone,
-    /// its soft edge, its drop shadow) is mixed toward the water that was
-    /// there before, by how far it is from the cap's rim: near the rim the
-    /// stone just under the surface, darker and bluer, as a wet stone is,
-    /// then fading into the water as it goes down, gone before the painted
-    /// edge (so no outline is left, and no shadow lies on the water: a tall
-    /// stone's shadow falls on the bed far below, out of sight). Water above
-    /// a stone makes it darker and bluer, never paler (a mix toward pale water
-    /// is fog), so the mix goes toward the water darkened by a third near the
-    /// rim and toward the water itself far out. The dry cap is painted on top
-    /// afterwards (IslandCap), as a small rock of its own.
+    /// Lays the water back over the island. The stone and its cap are painted
+    /// whole, as if they stood on dry land; this is what makes them a boulder
+    /// standing in deep water with its top dry.
+    ///
+    /// The CAP keeps a waterline round its own rim, the way every bank rock
+    /// has one (WrapWater): a thin band just inside its edge is darkened, wet.
+    /// The STONE is faded by two distances, whichever has it further gone:
+    /// out from the cap's rim (down the flank) and in from the stone's OWN
+    /// painted edge (so the fade ends exactly where the painting does, on
+    /// every side; measured from the cap alone, the stone's top edge was still
+    /// showing when the fade ran out). Two things happen to a stone as it goes
+    /// down: less light reaches it and less comes back, so it gets DARKER, and
+    /// the water takes the warm colours first, so it gets BLUER (red is dimmed
+    /// most, blue least); and the water between it and the eye adds its own
+    /// colour, more the deeper, until only water is left. It is never made
+    /// paler than the water (a light stone mixed with dark water is fog).
+    /// Along the cap's rim, outside it, a dark line: where the surface meets
+    /// the stone. Anything the painting touched outside the stone (its drop
+    /// shadow and the cap's, on the water) is put back: a boulder's shadow
+    /// falls on the bed far below, out of sight.
     /// </summary>
-    private static void WrapIsland(Bitmap bmp, uint[] before, Island isle, float u)
+    private static void WrapIsland(Bitmap bmp, uint[] before, bool[] stone, bool[] cap, Island isle, int w, int h, float u)
     {
         uint[] px = Read(bmp);
-        int w = bmp.Width, h = bmp.Height;
-        float capR = isle.CapRadius, reach = (isle.Radius - capR) * 0.85f;
+        int[] inStone = DistanceToEdge(stone, w, h, edgeIsBank: false);               // tenths of a pixel in from the stone's own edge
+        int[] inCap = DistanceToEdge(cap, w, h, edgeIsBank: false);                   // the same for the cap
+        int[] outCap = DistanceToEdge(cap.Select(c => !c).ToArray(), w, h, edgeIsBank: false);   // for pixels outside the cap: how far from its rim
+        float fade = isle.Radius * 0.45f * 10, band = u * 0.012f * 10, reach = (isle.Radius - isle.CapRadius) * 0.85f * 10;
         int x0 = Math.Max(0, (int)(isle.Centre.X - isle.Radius * 1.8f)), x1 = Math.Min(w - 1, (int)(isle.Centre.X + isle.Radius * 1.8f));
         int y0 = Math.Max(0, (int)(isle.Centre.Y - isle.Radius * 1.8f)), y1 = Math.Min(h - 1, (int)(isle.Centre.Y + isle.Radius * 1.8f));
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++)
             {
                 int i = y * w + x;
-                if (px[i] == before[i]) continue;
-                float dx = x + 0.5f - isle.Cap.X, dy = y + 0.5f - isle.Cap.Y;
-                float d = MathF.Sqrt(dx * dx + dy * dy) - capR * 0.6f;         // pixels out from well inside the cap (the cap rock covers the rest)
-                float k = Math.Clamp(d / reach, 0, 1);                          // 0 under the cap, 1 where the stone is gone
-                float sink = k * k * (3 - 2 * k);                               // how far gone into the water: the stone stays a stone for a while, then goes
-                // Two things happen to a stone as it goes down. Less light reaches
-                // it and less comes back, so the stone itself gets DARKER (a wet
-                // stone just under the surface is already darker than a dry one);
-                // and the water between it and the eye adds its own colour, more
-                // the deeper, until only water is left. The stone is never made
-                // paler than the water (a light stone mixed with dark water is fog).
-                float keep = 0.72f - 0.5f * sink;                                // how bright the stone itself still is
-                float mix = 0.1f + 0.9f * MathF.Pow(sink, 1.2f);                 // how much of what we see is the water
                 uint c = px[i], o = before[i];
                 int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
+                if (cap[i])
+                {
+                    // The dry top: untouched but for the wet band just inside its rim.
+                    float wet = Math.Clamp(1 - inCap[i] / band, 0, 1);
+                    if (wet <= 0) continue;
+                    r = (int)(r * (1 - 0.3f * wet)); g = (int)(g * (1 - 0.26f * wet)); b = (int)(b * (1 - 0.2f * wet));
+                    px[i] = (uint)(r << 16 | g << 8 | b);
+                    continue;
+                }
+                if (c == o) continue;
+                if (!stone[i]) { px[i] = o; continue; }                                 // a shadow on the water: gone
+                float kCap = Math.Clamp(outCap[i] / reach, 0, 1), kEdge = 1 - Math.Clamp(inStone[i] / fade, 0, 1);
+                float k = MathF.Max(kCap, kEdge);
+                float sink = k * k * (3 - 2 * k);                                       // how far gone into the water: a stone for a while, then water
+                float line = Math.Clamp(1 - outCap[i] / band, 0, 1) * 0.3f;             // the dark line where the surface meets the stone
+                r = (int)(r * (0.7f - 0.55f * sink - line)); g = (int)(g * (0.75f - 0.4f * sink - line)); b = (int)(b * (0.8f - 0.3f * sink - line));
+                float dk = 0.5f + 0.5f * sink, mix = 0.3f + 0.7f * MathF.Pow(sink, 1.1f);
                 int or_ = (int)((o >> 16) & 0xFF), og = (int)((o >> 8) & 0xFF), ob = (int)(o & 0xFF);
-                r = (int)(r * keep); g = (int)(g * (keep + 0.03f)); b = (int)(b * (keep + 0.07f));
-                r += (int)((or_ - r) * mix); g += (int)((og - g) * mix); b += (int)((ob - b) * mix);
+                r += (int)((or_ * dk - r) * mix); g += (int)((og * (dk + 0.04f) - g) * mix); b += (int)((ob * (dk + 0.08f) - b) * mix);
                 px[i] = (uint)(Math.Clamp(r, 0, 255) << 16 | Math.Clamp(g, 0, 255) << 8 | Math.Clamp(b, 0, 255));
             }
         Write(bmp, px);

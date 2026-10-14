@@ -138,3 +138,16 @@ The honest next shared piece is a steering kit (feelers over a mask, the smalles
 the refused-step rule, a point-to-spine touch with a `Cooldown`), to be added when the next
 animal needs the same shape as one that exists. Add to `Core/Minds` only what two animals need
 in the same shape; a thing one animal needs stays in that animal.
+
+The first such piece arrived with the turtle: a `Claim`, one thing only one animal may hold (the
+log, the island's cap). The snake's log bask and the turtle's log bask were written by two
+authors who each believed the log was theirs, and a snake climbed onto a log a turtle was
+sunning on. Now both ask `Pond.LogPerch` (and the turtles `Pond.IslandPerch`) before setting
+out, take it, and release it every frame they are not using it. A `Claim` has no queue and no
+timeout on purpose: an animal that forgets to release is a bug the timeline shows.
+
+One exception to "the steering is never told to ignore the bank" (section 1, rule 4): the
+turtle's Approach, once it is lined up beside its perch, swaps the bank reflex and the
+"room to swim" rule for a plain "is the next step on water" test, because the perch IS a wall
+to the reflexes and the turtle has to swim right up to it. It is the only place a mind quiets
+a reflex, it lasts a body length, and a refused step there still ends the approach.

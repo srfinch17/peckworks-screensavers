@@ -260,30 +260,42 @@ internal static class ShorePainter
     }
 
     /// <summary>
-    /// Paints the island's stone: the whole boulder, painted as any rock is,
-    /// into the picture only (nothing into the blockers: under water it is no
-    /// wall, fish swim over it). The painter then lays the water back over it
-    /// (WrapIsland) before the cap goes on.
+    /// Paints the island's stone: the whole boulder, painted as any rock is
+    /// but bare (no moss, no lichen: it is going under water), into the
+    /// picture only (nothing into the blockers: under water it is no wall,
+    /// fish swim over it). Returns where the stone is, pixel by pixel, for the
+    /// painter's water wrap (WrapIsland), which fades the stone from its OWN
+    /// edge inward.
     /// </summary>
-    public static void IslandStone(Graphics g, Island isle, float u, Random rng)
+    public static bool[] IslandStone(Graphics g, Island isle, int w, int h, float u, Random rng)
     {
-        using var scratch = new Bitmap(4, 4);
-        using var gs = Graphics.FromImage(scratch);
-        Rock(g, gs, gs, isle.Centre.X, isle.Centre.Y, isle.Radius, u, rng);
+        using var sheet = new Bitmap(w, h, PixelFormat.Format32bppRgb);
+        using var gs = Graphics.FromImage(sheet);
+        gs.Clear(Color.Black);
+        Rock(g, gs, gs, isle.Centre.X, isle.Centre.Y, isle.Radius, u, rng, bare: true);
+        return Brushwork.ToPixels(sheet).Select(c => (c & 0xFF) >= 128).ToArray();
     }
 
     /// <summary>
-    /// The island's dry cap: a small rock of its own on top of the wrapped
-    /// stone, with every rock's faces, creases, grain and moss, and the only
-    /// part of the island that goes into the blockers (a wall to the koi, a
-    /// thing for a turtle to climb onto). Its own small drop shadow falls on
-    /// the wet stone round it, as the top of a boulder shades its flank.
+    /// The island's dry cap: a small rock of its own on top of the stone, with
+    /// every rock's faces, creases, grain and moss, and the only part of the
+    /// island that goes into the blockers (a wall to the koi, a thing for a
+    /// turtle to climb onto). Painted BEFORE the water wrap, so the wrap can
+    /// run a waterline round the cap's own rim the way it does round every
+    /// bank rock (painted after the wrap, it was a dry cut-out pasted on the
+    /// water, with a drop shadow across it). Returns where the cap is.
     /// </summary>
-    public static void IslandCap(Graphics g, Graphics gb, Island isle, float u, Random rng)
+    public static bool[] IslandCap(Graphics g, Graphics gb, Island isle, int w, int h, float u, Random rng)
     {
-        using var scratch = new Bitmap(4, 4);
-        using var gs = Graphics.FromImage(scratch);
-        Rock(g, gb, gs, isle.Cap.X, isle.Cap.Y, isle.CapRadius, u, rng);
+        using var sheet = new Bitmap(w, h, PixelFormat.Format32bppRgb);
+        using var gs = Graphics.FromImage(sheet);
+        gs.Clear(Color.Black);
+        Rock(g, gs, gs, isle.Cap.X, isle.Cap.Y, isle.CapRadius, u, rng);
+        // The cap's shape into the blockers (black on the sheet is "nothing": keyed out).
+        using var key = new ImageAttributes();
+        key.SetColorKey(Color.Black, Color.FromArgb(40, 40, 40));
+        gb.DrawImage(sheet, new Rectangle(0, 0, w, h), 0, 0, w, h, GraphicsUnit.Pixel, key);
+        return Brushwork.ToPixels(sheet).Select(c => (c & 0xFF) >= 128).ToArray();
     }
 
     /// <summary>
@@ -524,7 +536,8 @@ internal static class ShorePainter
     /// a light edge where the sun catches its rim and a dark edge on the
     /// shaded side. The water is laid back over its submerged part afterwards.
     /// </summary>
-    private static void Rock(Graphics g, Graphics gb, Graphics noGrass, float x, float y, float r, float u, Random rng)
+    /// <param name="bare">No moss or lichen: a stone that will be under water (their green survived the water wrap as a lime glow).</param>
+    private static void Rock(Graphics g, Graphics gb, Graphics noGrass, float x, float y, float r, float u, Random rng, bool bare = false)
     {
         PointF[] pts = RockShape(x, y, r, 0.8f, rng);
         using var path = new GraphicsPath();
@@ -594,7 +607,7 @@ internal static class ShorePainter
             g.FillEllipse(sb, sx - sr, sy - sr, sr * 2, sr * 2);
         }
         // Moss on the top and sunny side, and a spot or two of pale lichen.
-        int mossy = 2 + rng.Next(4);
+        int mossy = bare ? 0 : 2 + rng.Next(4);
         for (int m = 0; m < mossy; m++)
         {
             float mx = x - r * 0.5f + (float)rng.NextDouble() * r * 0.9f, my = y - r * 0.6f + (float)rng.NextDouble() * r * 0.7f;
@@ -605,7 +618,7 @@ internal static class ShorePainter
             using var mb = new PathGradientBrush(mp) { CenterColor = Color.FromArgb(200, moss), SurroundColors = [Color.FromArgb(0, moss)] };
             g.FillPath(mb, mp);
         }
-        if (rng.Next(3) > 0)
+        if (!bare && rng.Next(3) > 0)
         {
             float lx = x + ((float)rng.NextDouble() - 0.5f) * r, ly = y + ((float)rng.NextDouble() - 0.6f) * r * 0.6f, lr = r * (0.1f + 0.15f * (float)rng.NextDouble());
             using var lp = new GraphicsPath();

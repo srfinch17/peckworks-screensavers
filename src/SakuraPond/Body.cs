@@ -201,15 +201,28 @@ internal abstract class Body
     /// (gap in screen pixels of depth): a deeper fish's back. "onto" is a
     /// stencil of that thing's painted pixels and "clip" its screen box, so
     /// the shadow lands on it and nowhere else. The sun is up and to the left,
-    /// so the shadow falls down and right by the gap (Light.ShadowX, ShadowY),
-    /// and the deeper thing's picture also sits lower on the screen by the gap
-    /// (Light.Sink), so the shadow goes down by that too. The bigger the gap
-    /// the softer the shadow's edge: THIS is what says "above", not "through".
-    /// Safe to call for one animal from several threads at once: nothing of
-    /// the animal's own is changed.
+    /// so the shadow falls down and right of the caster; under water the sun's
+    /// rays bend steeper (about two thirds of the slant they have in air), so
+    /// it falls less far per unit of depth than a petal's would; and the deeper
+    /// thing's picture sits lower on the screen by the gap (Light.Sink), so the
+    /// shadow goes down by that too. Then the whole offset is held to "maxOff":
+    /// a shadow thrown further than that from the fish that casts it lands on a
+    /// fish nothing is passing over, and reads as a dark blotch, not a shadow
+    /// (measured: thrown the full way, a crossing of fish far apart in depth
+    /// never got its shadow at all, and one frame in eight had a blotch
+    /// somewhere). So the shadow is a soft dark echo just down and right of the
+    /// caster, softer the bigger the gap. What says "above" is mostly the deeper
+    /// fish being smaller, hazier, softer and dimmer (Koi.Draw); this echo is
+    /// the touch that ties the two together where they overlap. Safe to call
+    /// for one animal from several threads at once: nothing of its own changes.
     /// </summary>
-    public void CastShadow(FrameBuffer fb, bool[] onto, Rectangle clip, float gap, float alpha)
-        => PaintShadow(fb, onto, Light.ShadowX * gap, (Light.ShadowY + Light.Sink) * gap, alpha, MathF.Max(1f, gap * 0.15f), clip);
+    public void CastShadow(FrameBuffer fb, bool[] onto, Rectangle clip, float gap, float alpha, float maxOff)
+    {
+        float dx = Light.ShadowX * 0.67f * gap, dy = (Light.ShadowY * 0.67f + Light.Sink) * gap;
+        float len = MathF.Sqrt(dx * dx + dy * dy);
+        if (len > maxOff) { dx *= maxOff / len; dy *= maxOff / len; }
+        PaintShadow(fb, onto, dx, dy, alpha, MathF.Min(MathF.Max(1f, gap * 0.15f), maxOff * 0.5f), clip);
+    }
 
     /// <summary>
     /// Narrows the stretch [lo, hi] of x-offsets to those where
@@ -235,8 +248,9 @@ internal abstract class Body
     /// the spine: turn each pixel into the oval's own frame and test.
     /// </summary>
     /// <param name="rays">Faint rays across a long oval (a fin). False for a solid limb.</param>
+    /// <param name="mark">If given, set true at every pixel painted (so a fin counts as part of the body for the shadows that land on it).</param>
     protected static void Oval(FrameBuffer fb, bool[]? onlyWhere, PointF c, float angle, float len, float wid,
-        int r, int g, int b, float alpha, float murk, byte[]? sun, bool rays = true, uint[]? water = null)
+        int r, int g, int b, float alpha, float murk, byte[]? sun, bool rays = true, uint[]? water = null, bool[]? mark = null)
     {
         float ca = MathF.Cos(angle), sa = MathF.Sin(angle);
         int reach = (int)MathF.Ceiling(MathF.Max(len, wid)) + 2;
@@ -253,6 +267,7 @@ internal abstract class Body
                 float q = u * u + v * v;
                 if (q >= 1) continue;
                 float a = alpha * Math.Clamp((1 - q) * 3, 0, 1) * (rays && len > wid * 1.2f ? 0.75f + 0.25f * MathF.Sin(v * 9) : 1f);   // soft edge; fins get faint rays
+                if (mark != null && a > 0.02f) mark[idx] = true;
                 int rr = r, gg = g, bb = b;
                 if (sun != null) { int k = sun[idx]; rr = rr * k >> 8; gg = gg * k >> 8; bb = bb * k >> 8; }
                 uint bg = px[idx];

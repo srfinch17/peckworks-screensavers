@@ -35,6 +35,17 @@ internal sealed class Turtles
     /// <summary>The turtles themselves, for KoiSchool to deal into its depth order (a turtle is drawn between the koi deeper and shallower than it).</summary>
     public IReadOnlyList<Turtle> All => _all;
 
+    /// <summary>
+    /// Paints the turtles that are up on a perch. KoiSchool leaves those out:
+    /// a hauled-out turtle is above the water, so it goes over everything that
+    /// paints the water's surface (minnows, rings, floating petals, the snake),
+    /// all of which would otherwise be painted across its overhanging shell.
+    /// </summary>
+    public void DrawOut(FrameBuffer fb)
+    {
+        foreach (Turtle t in _all) if (!t.InWater) t.Draw(fb);
+    }
+
 }
 
 /// <summary>
@@ -247,6 +258,7 @@ internal sealed class Turtle : Body
 
     public void Update(float dt, PointF? snakeHead = null)
     {
+        if (_perch == Perch.None) { _pond.IslandPerch.Release(this); _pond.LogPerch.Release(this); }   // a perch is mine only while _perch names it
         _time += dt;
         float t = (float)(_time % 100000.0);
         _snake = snakeHead;
@@ -356,6 +368,16 @@ internal sealed class Turtle : Body
                 turn += Wrap(MathF.Atan2(gdy, gdx) - _heading) * 0.3f;
                 turn += BankTurn(here, dt, ref most);
             }
+            // Room from the other turtles: two shells at one depth must not pass through each
+            // other (the koi keep their distance the same way). A gentle swing away, stronger the
+            // nearer, only for a turtle at about the same depth.
+            foreach (Turtle p in _peers)
+            {
+                if (p == this || !p.InWater || MathF.Abs(p.Z - Z) > 0.12f) continue;
+                float ox = p._x - _x, oy = p._y - _y, od = MathF.Sqrt(ox * ox + oy * oy);
+                if (od > _len * 1.1f || od < 1e-3f) continue;
+                turn += Wrap(MathF.Atan2(-oy, -ox) - _heading) * (1 - od / (_len * 1.1f)) * 2f;
+            }
             // The turning circle: a rigid shell turns in an arc, and the middle of it drifts sideways
             // if the arc is tighter than about 0.6 of a body length (it would then look to be going
             // tail first). A turn can be no sharper than speed / (0.6 body lengths); never less than
@@ -462,11 +484,8 @@ internal sealed class Turtle : Body
 
     // ============================== PERCHES ==============================
 
-    private bool PerchTaken(Perch kind)
-    {
-        foreach (Turtle p in _peers) if (p != this && p._perch == kind) return true;
-        return false;
-    }
+    /// <summary>Another animal holds this perch, or is on its way to it (the shared claim in Pond: the other turtle, or the snake for the log).</summary>
+    private bool PerchTaken(Perch kind) => !(kind == Perch.Island ? _pond.IslandPerch : _pond.LogPerch).Free(this);
 
     private bool SnakeNear(PointF p) => _snake is PointF s && Dist(s, p) < _pond.U * 0.15f;
 
@@ -515,7 +534,7 @@ internal sealed class Turtle : Body
             PointF outward = new(MathF.Cos(a0 + off), MathF.Sin(a0 + off));
             PointF near = Toward(c, outward, r + 0.4f * _len), far = Toward(c, outward, r + 1.6f * _len);
             if (!StageOk(far, near, outward) || !LineClear(nose, far)) continue;
-            PointF mid = Toward(c, outward, 0.5f * r);
+            PointF mid = Toward(c, outward, 0.1f * r);                      // the shell's middle nearly on the cap's centre: the cap is small, and a shell hung half off it was mostly over water
             float face = GroundHeading(-outward.X, -outward.Y);
             if (SnakeNear(mid)) return false;
             plan = new Plan(Perch.Island, far, near, mid, face, face);
@@ -564,6 +583,7 @@ internal sealed class Turtle : Body
         if (pick < 0) return false;
         Plan p = pick == 0 ? pi : pl;
         _perch = p.Kind;
+        (p.Kind == Perch.Island ? _pond.IslandPerch : _pond.LogPerch).Take(this);   // mine from now until I am off it (released every frame that _perch is None)
         _far = p.Far; _near = p.Near; _sitMid = p.Mid; _comeIn = p.ComeIn; _sitFace = p.Face;
         _refused = 0;
         _zTarget = 0;
@@ -754,7 +774,19 @@ internal sealed class Turtle : Body
             if (ExitOk(sa + off)) good[count++] = sa + off;
         }
         if (count == 0) { _mind.Left = 6; return; }                          // blocked: sit on and look again
-        _exitAngle = good[_rng.Next(count)];
+        // Any clear side will do, unless the snake is what sent it: then the side furthest from the snake's head.
+        int best = _rng.Next(count);
+        if (_snake is PointF sh)
+        {
+            float furthest = -1;
+            for (int k = 0; k < count; k++)
+            {
+                ExitPoint(good[k], out PointF x);
+                float d = Dist(x, sh);
+                if (d > furthest) { furthest = d; best = k; }
+            }
+        }
+        _exitAngle = good[best];
         _exitHeading = GroundHeading(MathF.Cos(_exitAngle), MathF.Sin(_exitAngle));
         _sitFace = Wrap(_sitFace + _align + _headOff);                        // from now on the pivot starts from where it is facing
         _align = 0; _headOff = 0; _turnT = 1; _stretchT = 1; _stretch = 0;
@@ -819,24 +851,27 @@ internal sealed class Turtle : Body
     /// <summary>
     /// How high above the water a point of the body is, 0 to 1, from where it
     /// is: 0 over water, rising smoothly as it comes over the perch's edge, 1
-    /// well inside. The island's cap is a circle on the screen, and the log a
-    /// long thin box. Nothing when no perch is in hand.
+    /// well inside. The perch is read from the PAINTED thing (the blockers in
+    /// Pond.Land: the cap as the painter drew it, lumps and all, or the log),
+    /// not from a circle or a box: a cap is a lumpy, squashed rock shape, and
+    /// a circle of its nominal radius left the shell lifted over open water on
+    /// most frames. The height is how much of a small ring round the point
+    /// stands on the perch (nine samples), so it rises over a few pixels at
+    /// the edge. Nothing when no perch is in hand.
     /// </summary>
     private float Height(PointF p)
     {
-        if (_perch == Perch.Island && _pond.Island is Island isle)
+        float ring;
+        if (_perch == Perch.Island && _pond.Island is Island isle) ring = isle.CapRadius * 0.35f;
+        else if (_perch == Perch.Log && _pond.Log is Log log) ring = log.Width * 0.3f;
+        else return 0;
+        int on = LandAt(p) ? 1 : 0;
+        for (int k = 0; k < 8; k++)
         {
-            float r = isle.CapRadius;
-            return Smooth((1.25f * r - Dist(p, isle.Cap)) / (0.45f * r));
+            float a = k * MathF.Tau / 8;
+            if (LandAt(new PointF(p.X + MathF.Cos(a) * ring, p.Y + MathF.Sin(a) * ring))) on++;
         }
-        if (_perch == Perch.Log && _pond.Log is Log log)
-        {
-            float dx = p.X - log.Centre.X, dy = p.Y - log.Centre.Y;
-            float a = dx * _logAx + dy * _logAy, b = -dx * _logAy + dy * _logAx;
-            float inside = MathF.Min(log.Length * 0.5f - MathF.Abs(a), log.Width * 0.5f - MathF.Abs(b));   // pixels inside the nearest edge
-            return Smooth((inside + 0.1f * log.Width) / (0.45f * log.Width));
-        }
-        return 0;
+        return Smooth((on - 1.5f) / 6f);
     }
 
     /// <summary>How much smaller it is drawn for its depth, like a koi (KoiSchool.Shrink): we look from a few body lengths up.</summary>
@@ -845,19 +880,33 @@ internal sealed class Turtle : Body
     /// <summary>How far down the screen its picture sits for its depth, like a koi's (Light.Sink). Small: a turtle stays near the top.</summary>
     private float Sink => Z * Pond.DepthU * _pond.U * Light.Sink;
 
-    /// <summary>The straight spine from nose to tail, each pair of edge points squashed to the screen, each point lifted by its own height.</summary>
+    /// <summary>
+    /// The straight spine from nose to tail, each pair of edge points squashed
+    /// to the screen. The head and the tail are lifted by their own height;
+    /// the SHELL is lifted as one piece, by the mean height under it: a shell
+    /// is rigid, and lifting its front by its own height while its back stayed
+    /// down drew it bent and stretched (up to 14% longer) on a small perch.
+    /// </summary>
     private void LaySpine()
     {
-        float most = 0;
+        float most = 0, shellSum = 0;
+        int shellCount = 0;
+        Span<PointF> mid = stackalloc PointF[Points];
         for (int i = 0; i < Points; i++)
         {
             PointF l = Raw(Along[i], -1), r = Raw(Along[i], 1);
-            PointF c = new((l.X + r.X) / 2, (l.Y + r.Y) / 2);
-            float h = Height(c);
+            mid[i] = new((l.X + r.X) / 2, (l.Y + r.Y) / 2);
+            float h = Height(mid[i]);
             _h[i] = h;
             if (h > most) most = h;
-            Spine[i] = new PointF(c.X, c.Y + Sink - h * LiftPx);
+            if (Along[i] >= 0.22f && Along[i] <= 0.88f) { shellSum += h; shellCount++; }
             HalfWidth[i] = Dist(l, r) / 2;
+        }
+        float shell = shellCount > 0 ? shellSum / shellCount : 0;
+        for (int i = 0; i < Points; i++)
+        {
+            if (Along[i] >= 0.22f && Along[i] <= 0.88f) _h[i] = shell;
+            Spine[i] = new PointF(mid[i].X, mid[i].Y + Sink - _h[i] * LiftPx);
         }
         _out = most;
     }

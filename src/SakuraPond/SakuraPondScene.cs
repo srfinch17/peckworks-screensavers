@@ -121,6 +121,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _petals.DrawFloating(fb);
         Sections.Mark("petals afloat");
         _snake.Draw(fb);
+        _turtles.DrawOut(fb);                     // a turtle up on the island or the log: over the ripples, the floating petals and the snake, which all paint the water under its overhanging shell
         Sections.Mark("snake");
         _cattails.Draw(fb);
         _irises.Draw(fb);

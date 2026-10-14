@@ -92,9 +92,10 @@ travelling wave (the cattails and irises sway with it stiffly).
   the water under any part of its body and rises up the slope before the shallows, a deep fish
   sits lower on the screen than the water above it (we look at the pond at a slant) and comes up
   the screen as it rises, and in the shallows it throws a shadow on the bed. A deep fish is
-  smaller, hazier and softer than one at the top, and when one passes over another its shadow
-  slides across the deeper fish's back, so from above you can tell which is over which. They
-  slip under the lily pads, and now and then come up to gulp at the surface, leaving a ring.
+  smaller, hazier, softer and dimmer than one at the top, so when one passes over another you
+  can tell from above which is over which, and the near one leaves a soft dark echo of itself
+  on the deeper one's back where they overlap. They slip under the lily pads, and now and then
+  come up to gulp at the surface, leaving a ring.
 - **An island rock** stands out in the open water: a boulder that goes down deep, darker and
   bluer the deeper it goes until the water hides it, with a small dry cap breaking the surface.
   The koi swim up and over its shoulders and round the cap. Once in a while one rises slowly until its back brushes the
@@ -126,8 +127,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   on each stroke, turning as one rigid piece in wide slow arcs. Now and then it stops, spreads
   its legs and floats, pokes its nose up for a breath (one small ring), then paddles off, or
   dives to the bed for a while. And it hauls out: it swims up to the island rock or the fallen
-  log, climbs onto it, sits with its legs spread in the sun for 20 to 60 seconds, and slips back
-  in (sooner if the snake comes near). Each turtle has its own dials: how much it loves the sun
+  log, climbs onto it, sits with its legs spread in the sun for a quarter to a full minute, and
+  slips back in (sooner if the snake comes near, and then on the side away from it). Each turtle has its own dials: how much it loves the sun
   and how jumpy it is.
 - **Petals** let go of the blossom, sway and tumble down, their shadows sliding in to meet them,
   touch the water with a tiny ring, then float, drifting slowly and gathering against the banks.
