@@ -138,11 +138,6 @@ public sealed class Mind<TDoing> where TDoing : struct, Enum
 }
 
 /// <summary>
-/// A cooldown: "not again for a while". An interrupt (a fright, a chase, a
-/// shadow) starts one, and nothing can fire it again until it has run out,
-/// so a thing that stays close cannot set it off thirty times a second.
-/// </summary>
-/// <summary>
 /// One thing that only one animal may hold at a time: a perch (the island's
 /// cap, the log). An animal TAKES it when it sets out for the thing and
 /// RELEASES it when it is done or gives up; another asking meanwhile is told
@@ -173,6 +168,11 @@ public sealed class Claim
     }
 }
 
+/// <summary>
+/// A cooldown: "not again for a while". An interrupt (a fright, a chase, a
+/// shadow) starts one, and nothing can fire it again until it has run out,
+/// so a thing that stays close cannot set it off thirty times a second.
+/// </summary>
 public sealed class Cooldown
 {
     private float _left;

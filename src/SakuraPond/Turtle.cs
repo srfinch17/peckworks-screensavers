@@ -369,14 +369,22 @@ internal sealed class Turtle : Body
                 turn += BankTurn(here, dt, ref most);
             }
             // Room from the other turtles: two shells at one depth must not pass through each
-            // other (the koi keep their distance the same way). A gentle swing away, stronger the
-            // nearer, only for a turtle at about the same depth.
+            // other (the koi keep their distance the same way). Measured SHELL to shell (the
+            // middles), not nose to nose: a first version measured the noses and changed
+            // nothing, because two shells overlap long before two noses are close. The swing
+            // away is allowed to be quicker than a cruising turn, and when the other is AHEAD
+            // the paddling eases off: a rigid shell cannot turn tight enough to clear a shell
+            // right in front of it, so it slows instead, as a real one does.
             foreach (Turtle p in _peers)
             {
                 if (p == this || !p.InWater || MathF.Abs(p.Z - Z) > 0.12f) continue;
-                float ox = p._x - _x, oy = p._y - _y, od = MathF.Sqrt(ox * ox + oy * oy);
-                if (od > _len * 1.1f || od < 1e-3f) continue;
-                turn += Wrap(MathF.Atan2(-oy, -ox) - _heading) * (1 - od / (_len * 1.1f)) * 2f;
+                PointF m = Middle, pm = p.Middle;
+                float ox = pm.X - m.X, oy = pm.Y - m.Y, od = MathF.Sqrt(ox * ox + oy * oy);
+                if (od > _len * 1.2f || od < 1e-3f) continue;
+                float near = 1 - od / (_len * 1.2f);
+                turn += Wrap(GroundHeading(-ox, -oy) - _heading) * near * 3f;
+                most = MathF.Max(most, 1.2f);
+                if (MathF.Abs(Wrap(GroundHeading(ox, oy) - _heading)) < 1.1f) _speed *= MathF.Max(0f, 1 - 2.5f * near * dt);
             }
             // The turning circle: a rigid shell turns in an arc, and the middle of it drifts sideways
             // if the arc is tighter than about 0.6 of a body length (it would then look to be going
@@ -384,6 +392,20 @@ internal sealed class Turtle : Body
             // the speed of a slow stroke, so a bank can always be answered.
             most = MathF.Min(most, MathF.Max(_speed, _len * 0.25f) / ((approach ? 0.85f : 0.6f) * _len));   // a touch wider when lining up on a perch, where the eye is on it
             _heading = Wrap(_heading + Math.Clamp(turn, -most, most) * dt);
+        }
+        if (floating)
+        {
+            // A floating turtle does not steer, but it does not let another shell drift into it
+            // either: it eases away, slowly, a sixth of a body length a second at most.
+            foreach (Turtle p in _peers)
+            {
+                if (p == this || !p.InWater || MathF.Abs(p.Z - Z) > 0.12f) continue;
+                float ox = p._x - _x, oy = p._y - _y, od = MathF.Sqrt(ox * ox + oy * oy);
+                if (od > _len * 1.2f || od < 1e-3f) continue;
+                float ease = (1 - od / (_len * 1.2f)) * _len * 0.17f * dt;
+                PointF to = ToScreen(_x - ox / od * ease, _y - oy / od * ease);
+                if (WaterAt(to) && _pond.RoomAt(to.X, to.Y) > _len * 0.2f) { _x -= ox / od * ease; _y -= oy / od * ease; }
+            }
         }
         float step = _speed * dt;
         PointF next = ToScreen(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step);

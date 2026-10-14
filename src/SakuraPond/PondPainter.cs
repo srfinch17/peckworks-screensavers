@@ -856,10 +856,17 @@ internal static class PondPainter
                 float k = MathF.Max(kCap, kEdge);
                 float sink = k * k * (3 - 2 * k);                                       // how far gone into the water: a stone for a while, then water
                 float line = Math.Clamp(1 - outCap[i] / band, 0, 1) * 0.3f;             // the dark line where the surface meets the stone
-                r = (int)(r * (0.7f - 0.55f * sink - line)); g = (int)(g * (0.75f - 0.4f * sink - line)); b = (int)(b * (0.8f - 0.3f * sink - line));
+                // The stone under water: red dimmed most, blue least (the water takes the warm colours
+                // first), so even at the rim the stone is bluer than its dry self, and far down it is
+                // the water's own hue before the mix finishes it.
+                r = (int)(r * (0.55f - 0.4f * sink - line)); g = (int)(g * (0.72f - 0.37f * sink - line)); b = (int)(b * (0.85f - 0.3f * sink - line));
                 float dk = 0.5f + 0.5f * sink, mix = 0.3f + 0.7f * MathF.Pow(sink, 1.1f);
+                // The water it mixes toward: darkened near the top, and a touch greener and bluer
+                // there too, but that touch fades with the stone: where the stone is gone the mix
+                // goes to the plain water, or a faint blue ring would outline every island.
+                float tint = 1 - sink;
                 int or_ = (int)((o >> 16) & 0xFF), og = (int)((o >> 8) & 0xFF), ob = (int)(o & 0xFF);
-                r += (int)((or_ * dk - r) * mix); g += (int)((og * (dk + 0.04f) - g) * mix); b += (int)((ob * (dk + 0.08f) - b) * mix);
+                r += (int)((or_ * dk - r) * mix); g += (int)((og * (dk + 0.04f * tint) - g) * mix); b += (int)((ob * (dk + 0.08f * tint) - b) * mix);
                 px[i] = (uint)(Math.Clamp(r, 0, 255) << 16 | Math.Clamp(g, 0, 255) << 8 | Math.Clamp(b, 0, 255));
             }
         Write(bmp, px);

@@ -127,7 +127,7 @@ travelling wave (the cattails and irises sway with it stiffly).
   on each stroke, turning as one rigid piece in wide slow arcs. Now and then it stops, spreads
   its legs and floats, pokes its nose up for a breath (one small ring), then paddles off, or
   dives to the bed for a while. And it hauls out: it swims up to the island rock or the fallen
-  log, climbs onto it, sits with its legs spread in the sun for a quarter to a full minute, and
+  log, climbs onto it, sits with its legs spread in the sun for fifteen seconds to a minute, and
   slips back in (sooner if the snake comes near, and then on the side away from it). Each turtle has its own dials: how much it loves the sun
   and how jumpy it is.
 - **Petals** let go of the blossom, sway and tumble down, their shadows sliding in to meet them,

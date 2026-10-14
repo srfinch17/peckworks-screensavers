@@ -150,4 +150,5 @@ One exception to "the steering is never told to ignore the bank" (section 1, rul
 turtle's Approach, once it is lined up beside its perch, swaps the bank reflex and the
 "room to swim" rule for a plain "is the next step on water" test, because the perch IS a wall
 to the reflexes and the turtle has to swim right up to it. It is the only place a mind quiets
-a reflex, it lasts a body length, and a refused step there still ends the approach.
+a reflex, it holds within about three body lengths of the perch, and a refused step there still
+ends the approach.

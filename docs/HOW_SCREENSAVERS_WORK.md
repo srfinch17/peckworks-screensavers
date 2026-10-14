@@ -731,7 +731,9 @@ distances, whichever has it further gone: out from the cap's rim down the flank,
 stone's own painted edge, so the fade ends exactly where the painting does on every side. Going
 down, the stone gets darker (less light reaches it and less comes back) and bluer (the water takes
 the warm colours first), and takes on more of the water's colour, until only water is left; it is
-never made paler than the water. Along the cap's rim a dark line: the surface meeting the stone.
+darker than the water everywhere but the thin wet band at the waterline, and the touch of extra
+blue in the mix fades with the stone, so its edge ends as plain water with no ring. Along the
+cap's rim a dark line: the surface meeting the stone.
 The cap alone goes into the blockers: a wall to the koi, a thing for a turtle to haul out onto
 (the turtle reads the cap's painted shape from the blockers, not a circle). `Pond.Floor` climbs the
 stone's shoulders from full depth a little outside it to nothing at the cap's rim, so a fish
