@@ -33,7 +33,9 @@ public static class Dice
     /// <summary>
     /// Rolls once and returns the index of the face that came up. A face's
     /// chance is its weight divided by the total; a weight of 0 (or less) is a
-    /// face that is not on the dice at all. Returns -1 if no face is.
+    /// face that is not on the dice at all. Returns -1, without rolling, if no
+    /// face is (so keep one face that is always on, as every animal here does,
+    /// or handle -1).
     ///
     /// Think of a wheel of fortune: each face gets a slice as wide as its
     /// weight, the pointer lands somewhere round the rim, and we walk the
@@ -104,11 +106,8 @@ public sealed class Mind<TDoing> where TDoing : struct, Enum
     /// <summary>What it is doing now.</summary>
     public TDoing Doing { get; private set; }
 
-    /// <summary>Seconds left before the doing is over. Never counts down from Forever.</summary>
+    /// <summary>Seconds left before the doing is over. Never counts down from Forever. An animal may set it to cut a doing short or stretch it.</summary>
     public float Left { get; set; }
-
-    /// <summary>Seconds spent in the current doing so far (for logs, and for "it has been at this a while").</summary>
-    public double For { get; private set; }
 
     /// <summary>A doing with no timer: it ends only when something else ends it.</summary>
     public const float Forever = float.MaxValue;
@@ -120,13 +119,11 @@ public sealed class Mind<TDoing> where TDoing : struct, Enum
     {
         Doing = doing;
         Left = seconds;
-        For = 0;
     }
 
     /// <summary>Counts the timer down. Call once a frame, before asking Over.</summary>
     public void Tick(float dt)
     {
-        For += dt;
         if (Left != Forever) Left -= dt;
     }
 

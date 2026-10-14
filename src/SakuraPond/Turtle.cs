@@ -21,6 +21,10 @@ internal sealed class Turtles
     /// <summary>A point at each turtle's nose and under its shell this frame, screen pixels (the snake keeps clear of them).</summary>
     public PointF[] Spots => _all.SelectMany(t => new[] { t.Nose, t.Middle }).ToArray();
 
+    /// <summary>The turtles themselves, for KoiSchool to deal into its depth order (a turtle is drawn between the koi deeper and shallower than it).</summary>
+    public IReadOnlyList<Turtle> All => _all;
+
+    /// <summary>Draws them all, in no depth order: only for a pond with no koi (KoiSchool.Draw takes them otherwise).</summary>
     public void Draw(FrameBuffer fb)
     {
         foreach (Turtle t in _all) t.Draw(fb);
@@ -68,6 +72,18 @@ internal sealed class Turtle : Body
 
     /// <summary>How deep it is: 0 at the surface, 1 as deep as a koi goes. A turtle stays near the top.</summary>
     public float Z { get; private set; }
+
+    /// <summary>The screen box it can paint in this frame (shell, head, legs and their soft edges), for the shared draw order.</summary>
+    public RectangleF Box
+    {
+        get
+        {
+            float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
+            foreach (PointF p in Spine) { x0 = MathF.Min(x0, p.X); y0 = MathF.Min(y0, p.Y); x1 = MathF.Max(x1, p.X); y1 = MathF.Max(y1, p.Y); }
+            float m = _wide * 2.5f + _len * 0.5f + _pond.U * 0.01f;       // the shell's width, the legs reaching out, the soft edge
+            return RectangleF.FromLTRB(x0 - m, y0 - m, x1 + m, y1 + m);
+        }
+    }
     public PointF Nose => Spine[0];
     public PointF Middle => Spine[Points / 2];
 

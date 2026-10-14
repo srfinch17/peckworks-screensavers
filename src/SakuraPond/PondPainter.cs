@@ -58,10 +58,14 @@ internal sealed class Pond
     /// surface) to 255 (the pond's full depth, DepthU). It is the water's
     /// depth with the rocks taken into account: a rock standing in the water
     /// has a flank sloping out under the surface, so the bed rises to meet it
-    /// over the last tenth of a screen height, the way it rises to the bank.
-    /// A fish's depth is capped by this under EVERY part of its body, so no
-    /// fish is ever inside the ground or a stone. (A lily pad and the floating
-    /// log are not in it: fish swim under those.)
+    /// over a short slope (0.08u), the way it rises to the bank. A fish's depth
+    /// is capped by this under every point of its spine and both edges of its
+    /// body (Koi.LaySpine), so no fish is inside the ground or a stone; the
+    /// water stencil hides the fins' soft edge where it still crosses a rim.
+    /// A lily pad is not in it: fish swim under pads. The floating log is not
+    /// in it either: it is a wall to the koi's steering (Pond.Land), so no fish
+    /// swims under it, and a deep fish's sunk picture slipping under its edge
+    /// is what a log floating over a fish looks like.
     /// </summary>
     public required byte[] Floor { get; init; }
 

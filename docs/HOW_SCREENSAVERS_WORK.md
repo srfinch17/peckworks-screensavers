@@ -674,7 +674,13 @@ own rule for how much bed shows at a depth), the fish throws a shadow on it: the
 painted dark and blurred, down and to the right by the gap between the fish and the bed, the
 blurrier the bigger that gap, under the fish. Fish at very different depths may pass right over
 each other (the deeper one drawn under and hazier), and a fish deep down is out of reach of the
-minnows and the snake at the surface. The turtle sits on the same rule.
+minnows and the snake at the surface. The koi and the turtles are drawn in one depth order, so a
+turtle (which keeps near the top) is painted over the koi below it and under a koi that is gulping
+above it; the bed shadows are painted first, under every fish, and fade to nothing in a branch's
+shade. The turtle reads the same floor, at its nose only, and sinks on the screen by the same rule;
+it has no whole-body cap because it never goes deep. The floating log is a wall to the koi's
+steering, not something they swim under: what you may see is a deep fish's sunk picture slipping
+under the log's edge, which is what a log floating over a fish looks like.
 
 *The lawn is finished every other frame.* The carpet of blades and the tufts are the two dearest
 things in the whole pond to draw, and grass moves slowly (a gust takes seconds to cross the

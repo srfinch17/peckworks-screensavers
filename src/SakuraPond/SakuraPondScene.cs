@@ -112,10 +112,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("lawn");
         _lizards.Draw(fb);
         Sections.Mark("lizard");
-        _koi.Draw(fb);
-        Sections.Mark("koi");
-        _turtles.Draw(fb);
-        Sections.Mark("turtles");
+        _koi.Draw(fb, _turtles);                  // the koi and the turtles in one depth order (a turtle between the fish deeper and shallower than it)
+        Sections.Mark("koi, turtles");
         _minnows.Draw(fb);
         Sections.Mark("minnows");
         _ripples.Draw(fb);

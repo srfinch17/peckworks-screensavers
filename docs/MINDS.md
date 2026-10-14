@@ -38,8 +38,8 @@ people watch for an hour without seeing the same thing twice.
 | `Traits.Roll(rng)` | One dial, 0 to 1. | The snake rolls two fresh dials for every visit. |
 | `Traits.Slice(rng, k, n, reverse)` | A dial for the k-th of n animals, inside its own slice of 0 to 1, so a group never comes out as near-twins. `reverse` runs the slices the other way, to pair two dials against each other. | The lizards: the boldest is also the laziest. |
 | `Traits.Deal(rng, n)` | n dials, one per slice, in a random order. | `KoiSchool` deals energy, sociability and curiosity to its eight koi. |
-| `Mind<TDoing>` | One thing at a time, with a timer. `Begin(doing, seconds)`, `Tick(dt)` once a frame, `Over` when the timer has run out, `Left` and `For` for "how long still" and "how long so far", `End()` to cut it short. | `_mind.Begin(Doing.Rest, 8 + 14 * roll)`; in Think: `if (_mind.Over) Decide();` |
-| `Cooldown` | "Not again for a while". `Start(seconds)`, `Tick(dt)`, `Ready`. | A koi cannot flinch at a shadow twice in twenty seconds. |
+| `Mind<TDoing>` | One thing at a time, with a timer. `Begin(doing, seconds)`, `Tick(dt)` once a frame, `Over` when the timer has run out, `Left` for "how long still" (an animal may set it to stretch or cut a doing), `End()` to cut it short. | `_mind.Begin(Doing.Rest, 8 + 14 * roll)`; in Think: `if (_mind.Over) Decide();` |
+| `Cooldown` | "Not again for a while". `Start(seconds)`, `Tick(dt)`, `Ready`. | A koi that flinched at a shadow cannot flinch again for fifteen to forty seconds. |
 
 Each animal keeps its own `enum Doing { ... }`, its own dials, its own `Decide()` (the faces
 and what loads them), its own `Begin()` (what starting each doing sets: the timer, a goal, a
@@ -81,9 +81,12 @@ These are in the code comments too; here they are in one place.
   itself force the avoidance turn, or the goal's pull holds the nose on the obstacle for ever.
 - **Obstacles are per layer.** A lily pad is no wall to a koi under it and a wall to a snake on
   it. Hold obstacles as shapes and let each animal pick which ones count. The same goes for
-  depth: a koi's depth is capped by the bed under every part of its body (`Pond.Floor`), which
-  counts the rocks' underwater flanks, and it rises up the slope before the bank, so no fish is
-  ever drawn inside the ground or a stone.
+  depth: a koi's depth is capped by the bed under every point of its spine and both edges of its
+  body (`Pond.Floor`), which counts the rocks' underwater flanks, and it rises up the slope before
+  the bank, so no fish is inside the ground or a stone; the water stencil hides the fins' soft
+  edge where it still crosses a rim. And a rise must not outrun the fish: lifting a picture up the
+  screen while the fish heads down the screen reads as swimming backward, so the rise is held to
+  half of the forward motion.
 - **A touch between animals is a point-to-spine test with a cooldown of seconds.**
 - **Targets must be in view and partners must be near.** A fish nosing at a petal under the
   blossom is a fish nobody sees doing it.
@@ -116,8 +119,21 @@ so the eye can judge the look last. Run three seeds for three minutes before any
 animal; every creature bug so far was a standstill, a wrong direction or a jam that a frame
 rate and a still could not show.
 
-## 7. Contributing a shared piece
+## 7. What is shared, what is not, and why
 
-Add to `Core/Minds` only what two animals need in the same shape. A thing one animal needs
-stays in that animal. The parts above were taken from three animals that had each written the
-same dice loop and the same timer bookkeeping; the fourth animal should not write them again.
+`Core/Minds` holds the DECIDING half of a mind: the dice, the dials, the timer and the cooldown.
+Those were the same in three animals, so they are written once.
+
+The MOVING half, the steering reflexes under the mind (feelers along the heading, the smallest
+turn that clears a thing, the refused step that forces a turn, the touch test between animals),
+is still written per animal, and that is where every creature bug so far has lived. It is not
+shared yet because each animal reads a different world: a koi asks a coarse "room to swim" grid
+and swims under pads; the snake asks a list of circles and a capsule and goes round pads; a
+lizard asks a land mask and slides along the shore. A stranger giving a new animal a mind from
+this page gets the deciding half for free and must still build the steering, following the rules
+in section 4, and should expect the instruments in section 6 to find its first bugs there.
+
+The honest next shared piece is a steering kit (feelers over a mask, the smallest-turn search,
+the refused-step rule, a point-to-spine touch with a `Cooldown`), to be added when the next
+animal needs the same shape as one that exists. Add to `Core/Minds` only what two animals need
+in the same shape; a thing one animal needs stays in that animal.

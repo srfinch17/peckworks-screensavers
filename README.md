@@ -95,8 +95,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   deep, pass over one another at different depths, slip under the lily pads, and now and then come up to gulp at
   the surface, leaving a ring. Once in a while one rises slowly until its back brushes the
   surface from below, and three thin, slow rings slip off it as it glides on.
-- **Each koi has a mind of its own.** Three personality dials are dealt when it is born (no two
-  fish alike): how
+- **Each koi has a mind of its own.** Three personality dials are dealt when it is born (spread
+  across the school, so near-twins are rare): how
   energetic it is (how much it beats rather than glides, how fast it cruises), how sociable, and
   how curious. From those it decides, one thing at a time, what to do next: wander, rest deep and
   still, go and nose at something (a floating petal, which it may gulp down, the rim of a lily

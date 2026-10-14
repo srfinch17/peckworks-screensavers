@@ -541,7 +541,7 @@ internal sealed class Lizard : Body
             if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height) continue;
             int i = iy * _pond.Width + ix;
             if (!_pond.Land[i] || !_pond.Open[i]) continue;
-            if (!LandAt(new PointF((here.X + s.X) / 2, (here.Y + s.Y) / 2))) continue;   // the way there stays on land (here may be off the screen's edge)
+            if (!LandLine(here, s)) continue;      // the whole way there stays on land (testing only the midpoint let a lizard on a wet rock pick spots across the water, and stand refused)
             if (toward is not PointF t) return s;
             float gap = Dist(s, t);
             if (gap < bestGap) { bestGap = gap; best = s; }
