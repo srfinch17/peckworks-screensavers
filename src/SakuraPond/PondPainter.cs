@@ -50,8 +50,23 @@ internal sealed class Pond
     /// <summary>The lawn's blades, on a clear sheet (0xAARRGGBB), laid over the ground by Grass.cs every frame.</summary>
     public required uint[] Carpet { get; init; }
 
-    /// <summary>How deep the water is, 0 (the very edge) to 255 (the middle of the pond). 0 off the water.</summary>
+    /// <summary>How deep the water is, 0 (the very edge) to 255 (the middle of the pond). 0 off the water. This is what the water's COLOUR was painted from.</summary>
     public required byte[] Depth { get; init; }
+
+    /// <summary>
+    /// How deep a fish may be at each water pixel, 0 (the bed is at the
+    /// surface) to 255 (the pond's full depth, DepthU). It is the water's
+    /// depth with the rocks taken into account: a rock standing in the water
+    /// has a flank sloping out under the surface, so the bed rises to meet it
+    /// over the last tenth of a screen height, the way it rises to the bank.
+    /// A fish's depth is capped by this under EVERY part of its body, so no
+    /// fish is ever inside the ground or a stone. (A lily pad and the floating
+    /// log are not in it: fish swim under those.)
+    /// </summary>
+    public required byte[] Floor { get; init; }
+
+    /// <summary>How deep the water is where Floor is 255, in u: what "as deep as a fish goes" means on the screen.</summary>
+    public const float DepthU = 0.12f;
 
     /// <summary>How much sun reaches each pixel, 0 to 255 (the branches' shadows are darker).</summary>
     public required byte[] Sun { get; init; }
@@ -264,10 +279,33 @@ internal static class PondPainter
                 room[gy * gw + gx] = swimDist[y * w + x] / 10f;
             }
 
+        // ---- the floor under the fish: the water's depth, with every rock's underwater flank raised into it ----
+        // A rock is painted as a disc at the surface, but under the water it
+        // widens out like the foot of a hill, so the bed comes up to meet its
+        // rim over a short slope ("flank"): from full depth that far out, to
+        // nothing at the rim. The same smooth ramp the bank uses, only steeper.
+        var floor = (byte[])depth.Clone();
+        float flank = u * 0.08f;
+        foreach (BankRock rock in rocks)
+        {
+            int x0 = Math.Max(0, (int)(rock.Centre.X - rock.Radius - flank)), x1 = Math.Min(w - 1, (int)(rock.Centre.X + rock.Radius + flank));
+            int y0 = Math.Max(0, (int)(rock.Centre.Y - rock.Radius - flank)), y1 = Math.Min(h - 1, (int)(rock.Centre.Y + rock.Radius + flank));
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                {
+                    float dx = x + 0.5f - rock.Centre.X, dy = y + 0.5f - rock.Centre.Y;
+                    float d = (MathF.Sqrt(dx * dx + dy * dy) - rock.Radius) / flank;
+                    if (d >= 1) continue;
+                    float f = d <= 0 ? 0 : d * d * (3 - 2 * d);
+                    int i = y * w + x;
+                    floor[i] = (byte)Math.Min(floor[i], (int)(f * 255));
+                }
+        }
+
         return new Pond(room, gw, gh, cell)
         {
             Width = w, Height = h, U = u,
-            Pixels = final, Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Sun = sun,
+            Pixels = final, Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun,
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
             Rocks = rocks, Log = log,

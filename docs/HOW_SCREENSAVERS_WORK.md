@@ -75,6 +75,7 @@ src/
     Sakura/Brushwork.cs            banks, hills, trunks, blossoms, a pine, and self-growing branches
     Sakura/Boat.cs                 the little boat that crosses the water in both sakura scenes
     Sakura/Plants.cs               one Wind for a whole scene; plants as flip-books (tufts, cattails, irises); a Lawn whose carpet slides in the gusts
+    Minds/Mind.cs                  the parts every animal mind is built from: dials, weighted dice, one doing at a time, cooldowns (see MINDS.md)
     ChimneySmoke.cs                puffs that rise, cool, spread and thin (Cabin by Stream)
     Photo/PhotoBackdrop.cs         a photo fitted to the screen, plus where its water is
     Photo/WaterRipples.cs          a still brook's reflections, rippling; trout rising
@@ -642,7 +643,7 @@ the smallest turn that clears it), and keep clear of each other.
 firmly to turn to it; the bank, the other fish and the "never stuck" rule have the last word. On
 top of that sits a small mind (the top of `Koi.cs`): one thing at a time (a "doing": wander, rest,
 investigate, follow, chase, flee), a timer for how long to keep at it, and a roll of weighted dice
-when it ends. The weights are the personality: three numbers rolled once per fish, energy,
+when it ends. The weights are the personality: three numbers dealt once per fish, energy,
 sociability and curiosity, so a curious fish's dice have more "go and look" faces and a sociable
 one's more "follow" and "chase" faces. Each doing only changes what the steering is handed (a petal's
 spot, a point behind a friend, the fish being chased, or a point straight away from the chaser), how
@@ -651,6 +652,29 @@ nose at something, deep to rest). Being chased interrupts anything; a dragonfly'
 curious fish that is not busy. A swallow skimming low is a shadow sweeping over the water, and a
 fish under it flinches: a dart away and a dive, then a sulk deep down (the bolder the fish, the
 closer the shadow has to pass). That is the whole brain: a state machine, three dials, and dice.
+The machinery of it (the dice, the dials, the one-doing-at-a-time timer, the cooldowns) is the
+engine's `Core/Minds/Mind.cs`, and the koi, the lizards and the snake all run on it; the recipe
+for giving a new animal a mind, and the rules learned building these three, is
+[MINDS.md](MINDS.md).
+
+*Depth is real.* A koi lives on the water's plane at some depth below it, and the pond has a
+bed. `Pond.Floor` says how deep the water is under every pixel: it slopes up to the bank the way
+the painted water does, and it also rises to meet each rock's rim over a short slope, because a
+stone standing in the water widens out under the surface like the foot of a hill. A fish may be
+no deeper than nine tenths of the floor under ANY part of its body (the spine is laid, the
+shallowest floor under it found, and the depth capped there and then, so it holds on every
+frame), and it looks a body length and a half ahead so it rises up the slope as the bank or a
+rock comes near, the way a fish follows the bed, rather than finding itself inside it. On the
+screen, depth is drawn the way height is drawn for the petals and the dragonflies, only in
+reverse: we look at the pond at a slant, so the deeper a fish is, the LOWER on the screen its
+picture sits than the water above it (`Light.Sink`, a little less than `Light.Lift` because
+water bends the light and a pond looks shallower than it is). A fish rising to gulp is seen to
+come up the screen as it sharpens. Where the bed shows through (the shallows, by the painter's
+own rule for how much bed shows at a depth), the fish throws a shadow on it: the same body
+painted dark and blurred, down and to the right by the gap between the fish and the bed, the
+blurrier the bigger that gap, under the fish. Fish at very different depths may pass right over
+each other (the deeper one drawn under and hazier), and a fish deep down is out of reach of the
+minnows and the snake at the surface. The turtle sits on the same rule.
 
 *The lawn is finished every other frame.* The carpet of blades and the tufts are the two dearest
 things in the whole pond to draw, and grass moves slowly (a gust takes seconds to cross the
@@ -720,6 +744,8 @@ reopen it. `install.ps1` does that for you and then checks the list.
 7. Want something that flies or glows? Paint it once with `Sprite.Paint` (or `Sprite.Glow`) and
    stamp it each frame, as `HalloweenScene.cs` does for its bats.
 8. Want small surprises that come and go? Follow [ADDING_HAPPENINGS.md](ADDING_HAPPENINGS.md).
+9. Want an animal that decides for itself what to do next? Build its mind on `Core/Minds` and
+   follow [MINDS.md](MINDS.md): dials, doings, weighted dice, reflexes that keep the last word.
 
 `scripts/publish.ps1` and `install.ps1` find every screensaver folder under `src\` on their own.
 Everything about being a screensaver (monitors, preview box, wake-up rule, fast drawing, glow,

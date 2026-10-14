@@ -1,4 +1,5 @@
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Minds;
 
 namespace SakuraPond;
 
@@ -75,9 +76,9 @@ internal sealed class Snake : Body
     // and what they turn into: how fast it cruises and how long a fright lasts.
     private float _bold, _nerve, _cruise, _fleeFor;
     private enum Doing { Cross, Explore, Hunt, Bask }
-    private Doing _doing;
+    private readonly Mind<Doing> _mind = new();          // the doing now and how long before it gives it up (Core/Minds)
+    private Doing _doing => _mind.Doing;
     private int _phase;                                    // where in the doing it is (Hunt: 0 stalk, 1 strike. Bask: 0 swim to the log, 1 climb on, 2 lie, 3 slip off)
-    private float _doingTimer;                             // seconds before it gives this doing up
     private int _exploreLeft, _huntsLeft, _legs;           // what the visit still has on its list, and how many doings it has had
     private bool _basked;                                  // one lie on the log per visit
     private float _strikeT, _lieT, _lieFor, _slipFrom;
@@ -91,7 +92,8 @@ internal sealed class Snake : Body
     private float _x, _y, _heading, _speed, _travelled;
     private PointF _goal;                                  // the point beyond the far edge it is making for
     private float _wakeTimer, _next, _alive;
-    private float _flee, _fleeAway, _calm;                 // startle: seconds left, the way away, seconds before it can startle again
+    private float _flee, _fleeAway;                        // startle: seconds left, and the way away
+    private readonly Cooldown _calm = new();               // no startle again until this has run out
     private bool _live, _blocked;                          // _blocked: last frame's step was refused
 
     public Snake(Pond pond, Ripples ripples, Minnows? minnows, float often, Random rng) : base(Points)
@@ -135,7 +137,7 @@ internal sealed class Snake : Body
     /// </summary>
     private void Begin()
     {
-        _bold = (float)_rng.NextDouble(); _nerve = (float)_rng.NextDouble();
+        _bold = Traits.Roll(_rng); _nerve = Traits.Roll(_rng);
         _cruise = _u * 0.06f * (1.15f - 0.3f * _bold);    // a nervous snake swims a little quicker, a bold one more leisurely
         _fleeFor = 1.8f + 1.6f * _nerve;                  // and stays frightened longer
         _exploreLeft = 1 + _rng.Next(3); _huntsLeft = 1 + _rng.Next(2); _basked = false; _legs = 0;
@@ -145,7 +147,7 @@ internal sealed class Snake : Body
         _x = from.X; _y = from.Y;
         _heading = MathF.Atan2(to.Y - from.Y, to.X - from.X);
         _speed = _cruise;
-        _travelled = 0; _alive = 0; _flee = 0; _calm = 0; _blocked = false; _weaveAmp = 1;
+        _travelled = 0; _alive = 0; _flee = 0; _calm.Start(0); _blocked = false; _weaveAmp = 1;
         _trailCount = 0;
         // Its body starts laid out straight behind it, off the screen.
         for (int i = 60; i >= 0; i--) Remember(new PointF(_x - MathF.Cos(_heading) * _len * 1.2f * i / 60, _y - MathF.Sin(_heading) * _len * 1.2f * i / 60));
@@ -180,17 +182,19 @@ internal sealed class Snake : Body
         float wBask = !_basked && LogReady() ? 0.15f + 0.9f * _bold : 0;
         float wCross = 0.3f + 1.2f * _nerve + 0.4f * _legs;
         if (_alive > 200) wExplore = wHunt = wBask = 0;    // a long visit ends now
-        float roll = (float)_rng.NextDouble() * (wExplore + wHunt + wBask + wCross);
-        if ((roll -= wHunt) < 0) { BeginHunt(school!.Value); return; }
-        if ((roll -= wBask) < 0) { BeginBask(); return; }
-        if ((roll -= wExplore) < 0 && BeginExplore()) return;
-        BeginCross();
+        switch (Dice.Pick(_rng, [wHunt, wBask, wExplore, wCross]))
+        {
+            case 0: BeginHunt(school!.Value); break;
+            case 1: BeginBask(); break;
+            case 2 when BeginExplore(): break;                  // nowhere to explore: it crosses instead
+            default: BeginCross(); break;
+        }
     }
 
     /// <summary>Leave: toward a point well beyond the far side of the screen, as seen from here through the pond's middle.</summary>
     private void BeginCross()
     {
-        _doing = Doing.Cross; _phase = 0; _doingTimer = float.MaxValue;
+        _mind.Begin(Doing.Cross); _phase = 0;
         PointF c = _pond.Centre;
         float b = Dist(new PointF(_x, _y), c) > _u * 0.15f ? MathF.Atan2(c.Y - _y, c.X - _x) + ((float)_rng.NextDouble() - 0.5f) * 1.2f : (float)(_rng.NextDouble() * MathF.Tau);
         PointF to = OffScreen(b);
@@ -209,7 +213,7 @@ internal sealed class Snake : Body
             if (!_pond.Water[i] || !_pond.Open[i] || _pond.RoomAt(x, y) < _u * 0.05f || Clear(x, y) < _u * 0.06f) continue;
             if (Dist(new PointF(x, y), new PointF(_x, _y)) < _u * 0.25f) continue;       // not just next door
             _goal = new PointF(x, y);
-            _doing = Doing.Explore; _phase = 0; _doingTimer = 45; _exploreLeft--;
+            _mind.Begin(Doing.Explore, 45); _phase = 0; _exploreLeft--;
             return true;
         }
         return false;
@@ -217,7 +221,7 @@ internal sealed class Snake : Body
 
     private void BeginHunt(PointF school)
     {
-        _doing = Doing.Hunt; _phase = 0; _doingTimer = 60;      // a hunt only counts against the visit's one or two once it has struck or given up
+        _mind.Begin(Doing.Hunt, 60); _phase = 0;      // a hunt only counts against the visit's one or two once it has struck or given up
         _prey = school; _goal = school;
     }
 
@@ -228,7 +232,7 @@ internal sealed class Snake : Body
     private void BeginBask()
     {
         Log log = _pond.Log!.Value;
-        _basked = true; _doing = Doing.Bask; _phase = 0; _doingTimer = 60;
+        _basked = true; _mind.Begin(Doing.Bask, 60); _phase = 0;
         _logDir = Dist(new PointF(_x, _y), log.At(0)) <= Dist(new PointF(_x, _y), log.At(1)) ? 1 : -1;
         _goal = LogPoint(log, -(log.Length * 0.5f + _u * 0.14f), 0);
     }
@@ -250,13 +254,13 @@ internal sealed class Snake : Body
     /// <summary>Keeps the current doing going, moves it on a step, or ends it.</summary>
     private void Think(float dt)
     {
-        _doingTimer -= dt;
+        _mind.Tick(dt);
         var head = new PointF(_x, _y);
         switch (_doing)
         {
             case Doing.Explore:
                 // Reached: close enough that its turning circle cannot orbit the spot.
-                if (Dist(head, _goal) < _u * 0.08f || _doingTimer <= 0) Decide();
+                if (Dist(head, _goal) < _u * 0.08f || _mind.Over) Decide();
                 break;
             case Doing.Hunt:
                 // The school drifts about, so keep the aim on it (but ignore a jump to a different school).
@@ -269,7 +273,7 @@ internal sealed class Snake : Body
                         _phase = 1; _strikeT = StrikeFor; _huntsLeft--;
                         _ripples.Add(Spine[0].X, Spine[0].Y, 0.9f);        // the lunge pushes the water
                     }
-                    else if (_doingTimer <= 0) { _huntsLeft--; Decide(); }
+                    else if (_mind.Over) { _huntsLeft--; Decide(); }
                 }
                 else
                 {
@@ -282,14 +286,14 @@ internal sealed class Snake : Body
                 if (_phase == 0)
                 {
                     if (Dist(head, _goal) < _u * 0.08f) { _phase = 1; _goal = LogPoint(log, LieHead(log), 0); }
-                    else if (_doingTimer <= 0) Decide();
+                    else if (_mind.Over) Decide();
                 }
                 else if (_phase == 1)
                 {
                     if (Dist(head, _goal) < _u * 0.03f) BeginLie();
-                    else if (_doingTimer <= 0) StartSlip();                 // on the log and out of patience: off by the log's line, never just "another doing"
+                    else if (_mind.Over) StartSlip();                 // on the log and out of patience: off by the log's line, never just "another doing"
                 }
-                else if (_phase == 3 && (_travelled - _slipFrom > _len * 1.3f || _doingTimer <= 0)) Decide();
+                else if (_phase == 3 && (_travelled - _slipFrom > _len * 1.3f || _mind.Over)) Decide();
                 break;
         }
     }
@@ -341,7 +345,7 @@ internal sealed class Snake : Body
         _x = Spine[0].X; _y = Spine[0].Y;
         _heading = Wrap(_pond.Log!.Value.Angle + (_logDir < 0 ? MathF.PI : 0));
         _weaveAmp = 0;                                      // eases back to a full weave, so the head does not jump sideways
-        _phase = 3; _slipFrom = _travelled; _doingTimer = 10; _blocked = false;
+        _phase = 3; _slipFrom = _travelled; _mind.Left = 10; _blocked = false;
         _speed = _cruise * 0.8f;                            // it slides off at once; it has been lying there long enough
         _ripples.Add(Spine[0].X, Spine[0].Y, 0.6f);
         _ripples.Add(Spine[Points / 2].X, Spine[Points / 2].Y, 0.5f);
@@ -422,12 +426,12 @@ internal sealed class Snake : Body
         // ---- A touch from another animal: startle ----
         // A bold snake feels a touch only when it is close (0.035u), a nervous one
         // from further (0.06u), and the nervous one stays frightened longer.
-        _calm -= dt;
+        _calm.Tick(dt);
         _flee = MathF.Max(0, _flee - dt);
-        if (_calm <= 0)
+        if (_calm.Ready)
         {
             float near = _u * (0.035f + 0.025f * _nerve), near2 = near * near;
-            for (int k = 0; k < animals.Length && _calm <= 0; k++)
+            for (int k = 0; k < animals.Length && _calm.Ready; k++)
                 for (int i = 0; i < Points; i += 3)
                 {
                     float dx = Spine[i].X - animals[k].X, dy = Spine[i].Y - animals[k].Y;
@@ -435,7 +439,7 @@ internal sealed class Snake : Body
                     // Away from whatever touched it, judged from its head.
                     _fleeAway = MathF.Atan2(_y - animals[k].Y, _x - animals[k].X);
                     _flee = _fleeFor;
-                    _calm = 7 + 5 * _nerve + 6 * (float)_rng.NextDouble();
+                    _calm.Start(7 + 5 * _nerve + 6 * (float)_rng.NextDouble());
                     _ripples.Add(Spine[0].X, Spine[0].Y, 0.7f);
                     // A fright ends a lie on the log, and a nervous snake's hunt; a bold snake gets over
                     // it and goes back to stalking (every hunt was being cut short by a koi on the way).

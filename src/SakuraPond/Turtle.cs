@@ -175,7 +175,7 @@ internal sealed class Turtle : Body
             _depthTimer = 8 + 10 * (float)_rng.NextDouble();
         }
         int ix = Math.Clamp((int)here.X, 0, _pond.Width - 1), iy = Math.Clamp((int)here.Y, 0, _pond.Height - 1);
-        float bottom = 0.05f + 0.9f * _pond.Depth[iy * _pond.Width + ix] / 255f;
+        float bottom = 0.05f + 0.9f * _pond.Floor[iy * _pond.Width + ix] / 255f;   // the bed, rocks included (never inside a stone)
         Z += (MathF.Min(_zTarget, bottom) - Z) * (1 - MathF.Exp(-dt * 0.3f));
 
         LaySpine();
@@ -207,8 +207,12 @@ internal sealed class Turtle : Body
         float dx = MathF.Cos(_heading), dy = MathF.Sin(_heading);
         // The nose is at (_x, _y) and the body lies BEHIND it, against the heading.
         float gx = _x - dx * s * _len - dy * v * _wide * Profile(s), gy = _y - dy * s * _len + dx * v * _wide * Profile(s);
-        return ToScreen(gx, gy);
+        PointF p = ToScreen(gx, gy);
+        return new PointF(p.X, p.Y + Sink);
     }
+
+    /// <summary>How far down the screen its picture sits for its depth, like a koi's (Light.Sink). Small: a turtle stays near the top.</summary>
+    private float Sink => Z * Pond.DepthU * _pond.U * Light.Sink;
 
     /// <summary>The straight spine from nose to tail, each pair of edge points squashed to the screen.</summary>
     private void LaySpine()
@@ -360,6 +364,7 @@ internal sealed class Turtle : Body
         float hw = _wide * Profile(s) * 0.8f;
         float hx = _x - hdx * s * _len - hdy * side * hw, hy = _y - hdy * s * _len + hdx * side * hw;
         PointF thigh = ToScreen(hx + dx * l * 0.4f, hy + dy * l * 0.4f), foot = ToScreen(hx + dx * l * 0.85f, hy + dy * l * 0.85f);
+        thigh.Y += Sink; foot.Y += Sink;
         Oval(fb, _where, thigh, a, l * 0.5f, l * 0.2f, 66, 84, 44, 1f, murk, _pond.Sun, rays: false);
         Oval(fb, _where, foot, a, l * 0.3f, l * (0.13f + 0.08f * spread), 56, 74, 40, 1f, murk, _pond.Sun, rays: false);   // the webbed foot opens on the push, folds on the return
     }

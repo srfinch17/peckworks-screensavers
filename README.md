@@ -87,11 +87,16 @@ travelling wave (the cattails and irises sway with it stiffly).
 
 - **Koi** of eight real varieties (kohaku, sanke, showa, yamabuki ogon, chagoi, asagi, tancho,
   plain red-orange) cruise the whole pond: a few tail beats, then a long glide. Each body bends
-  through its turns along the path its head swam, never flipped or slid. They drift up and down
-  in the water, hazier when deep, slip under the lily pads, and now and then come up to gulp at
+  through its turns along the path its head swam, never flipped or slid. They swim at real depths:
+  the pond has a bed that slopes up to the bank and to every rock, a fish is never deeper than
+  the water under any part of its body and rises up the slope before the shallows, a deep fish
+  sits lower on the screen than the water above it (we look at the pond at a slant) and comes up
+  the screen as it rises, and in the shallows it throws a shadow on the bed. They are hazier when
+  deep, pass over one another at different depths, slip under the lily pads, and now and then come up to gulp at
   the surface, leaving a ring. Once in a while one rises slowly until its back brushes the
   surface from below, and three thin, slow rings slip off it as it glides on.
-- **Each koi has a mind of its own.** Three personality dials are rolled when it is born: how
+- **Each koi has a mind of its own.** Three personality dials are dealt when it is born (no two
+  fish alike): how
   energetic it is (how much it beats rather than glides, how fast it cruises), how sociable, and
   how curious. From those it decides, one thing at a time, what to do next: wander, rest deep and
   still, go and nose at something (a floating petal, which it may gulp down, the rim of a lily
@@ -101,7 +106,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   the pond at a time, and a curious fish answers a dragonfly's tap far more often than a dull one.
   When a swallow skims low over a fish, its shadow makes the fish dart away and dive, and it sulks
   deep for a while; a bold fish (energetic and sociable) barely notices, a timid one flinches at a
-  shadow some way off.
+  shadow some way off. The lizards and the snake think the same way, on the same shared parts
+  (`Core/Minds`); how to give any animal in any saver a mind is [docs/MINDS.md](docs/MINDS.md).
 - Two **schools of minnows**, a dozen or so tiny fish each, hang just under the surface and move
   as one: all facing the same way, fidgeting in little darts, flashing silver when the whole
   school turns, and scattering like thrown rice when a koi cruises underneath. Each minnow is a
@@ -325,7 +331,7 @@ src/CabinByStream/                 the Cabin by Stream screensaver
 src/CotswoldBrook/                 retired: kept as a reference, not built (its RETIRED.md says why)
 scripts/                           publish / install / uninstall / verify / happening (render one happening)
                                    / depthmap.py (a photo's depth map, made once)
-docs/                              the how-it-works guide
+docs/                              the how-it-works guide, the happenings recipe, the minds recipe
 ```
 
 ## Performance (measured, i7-8850H laptop)

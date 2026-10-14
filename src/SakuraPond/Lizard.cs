@@ -1,4 +1,5 @@
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Minds;
 
 namespace SakuraPond;
 
@@ -40,9 +41,8 @@ internal sealed class Lizards
         bool flip = rng.Next(2) == 0;
         for (int i = 0; i < n; i++)
         {
-            int slot = flip ? n - 1 - i : i;
-            float bold = (slot + (float)rng.NextDouble()) / n;
-            float energy = (n - 1 - slot + (float)rng.NextDouble()) / n;
+            float bold = Traits.Slice(rng, i, n, reverse: flip);
+            float energy = Traits.Slice(rng, i, n, reverse: !flip);
             _all[i] = new Lizard(pond, ripples, often, bold, energy, rng);
         }
         foreach (Lizard l in _all) l.Peers = _all;
@@ -146,12 +146,14 @@ internal sealed class Lizard : Body
     private readonly float _u, _len, _wide, _often;
     private readonly float _bold, _energy;        // the two personality dials, 0 to 1
     private float _x, _y, _heading, _speed, _amp, _phase;
-    private float _goalX, _goalY, _timer, _gait;
+    private float _goalX, _goalY, _gait;
     private float _pace = 1, _arrive;             // a dash's speed factor, and how close counts as arrived (ground pixels)
     private int _dashes;                          // stand-stills left before it leaves
-    private Doing _doing = Doing.Hidden;
+    private readonly Mind<Doing> _mind = new(Doing.Hidden);   // the doing now and its timer (Core/Minds); while Hidden the timer is the wait for the next visit
+    private Doing _doing => _mind.Doing;
     private Aim _aim;
     private bool _leaving, _shadowPass;
+    private bool _stranded;                       // its dash to leave was stopped by water at once: walk somewhere reachable first
     private bool _met;                            // has it had its meeting this visit?
     private bool _approach, _isWinner;            // in a meeting: still walking up to the other / the bolder one
     private Lizard? _other;                       // the lizard in a meeting with it
@@ -190,7 +192,7 @@ internal sealed class Lizard : Body
         _len = _u * 0.09f;                   // nose to tail tip; the tail is well over half of it
         _wide = _len * 0.05f;
         for (int i = 0; i < Points; i++) Along[i] = i / (Points - 1f);
-        _timer = often > 0 ? (15 + 30 * (float)rng.NextDouble()) / often : float.MaxValue;
+        _mind.Begin(Doing.Hidden, often > 0 ? (15 + 30 * (float)rng.NextDouble()) / often : Mind<Doing>.Forever);
     }
 
     private float CentreY => _pond.Centre.Y;
@@ -224,10 +226,10 @@ internal sealed class Lizard : Body
     /// <param name="snakeHead">The snake's head in screen pixels while it is swimming, else null.</param>
     public void Update(float dt, PointF? snakeHead = null)
     {
-        _timer -= dt;
+        _mind.Tick(dt);
         if (_doing == Doing.Hidden)
         {
-            if (_timer <= 0 && Appear()) { _doing = Doing.Freeze; _timer = 0.5f; }
+            if (_mind.Over && Appear()) _mind.Begin(Doing.Freeze, 0.5f);
             return;
         }
         Think(snakeHead);
@@ -244,7 +246,7 @@ internal sealed class Lizard : Body
             turnErr = Wrap(want - _heading);
             float most = MathF.Min(3.5f, MathF.Max(1.5f, _speed / (_len * 0.4f)));   // a pivot faster than this folded the tail into a hairpin
             _heading = Wrap(_heading + Math.Clamp(Wrap(want - _heading), -most * dt, most * dt));
-            if (_doing == Doing.Dash && gd < _arrive && !(_aim == Aim.Charge && _timer > 0.6f)) _timer = 0;   // arrived: the dash ends here (a charge runs at least 0.3 s, however near the other starts)
+            if (_doing == Doing.Dash && gd < _arrive && !(_aim == Aim.Charge && _mind.Left > 0.6f)) _mind.End();   // arrived: the dash ends here (a charge runs at least 0.3 s, however near the other starts)
         }
         float targetSpeed = moving ? _len * 2.6f * _pace : 0;
         _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (moving ? 12f : 10f)));   // off like a shot, stops dead
@@ -252,7 +254,7 @@ internal sealed class Lizard : Body
         if (step > 0.01f)
         {
             float nx = _x + MathF.Cos(_heading) * step, ny = _y + MathF.Sin(_heading) * step;
-            if (OnLand(nx, ny)) { _x = nx; _y = ny; }
+            if (OnLand(nx, ny)) { _x = nx; _y = ny; _stranded = false; }
             else if (moving)
             {
                 // Water ahead. If the goal is mostly behind or off to one side (it ran up to the shore
@@ -271,7 +273,10 @@ internal sealed class Lizard : Body
                     }
                 if (!slid)
                 {
-                    if (_doing == Doing.Dash) _timer = 0;
+                    // Water every way it tried: the dash ends here. If this was the dash to leave,
+                    // it is STRANDED (on a stone out in the water, say, reached by a drink spot on
+                    // the stone's dry top) and the next dash must go somewhere it can walk to.
+                    if (_doing == Doing.Dash) { _mind.End(); _stranded = _leaving; }
                     else _approach = false;
                 }
             }
@@ -282,9 +287,8 @@ internal sealed class Lizard : Body
         PointF here = ToScreen(_x, _y);
         if (_leaving && (here.X < -_len || here.Y > _pond.Height + _len || here.X > _pond.Width + _len))
         {
-            _doing = Doing.Hidden;
+            _mind.Begin(Doing.Hidden, (60 + 120 * (float)_rng.NextDouble()) / MathF.Max(0.01f, _often));
             _other = null;
-            _timer = (60 + 120 * (float)_rng.NextDouble()) / MathF.Max(0.01f, _often);
             return;
         }
 
@@ -351,18 +355,18 @@ internal sealed class Lizard : Body
         {
             case Doing.Freeze:
             case Doing.Bask:
-                if (_timer <= 0) Decide();
+                if (_mind.Over) Decide();
                 break;
             case Doing.Drink:
                 // One tiny ring at the water in front of the nose, half a second in: the lip touching the surface.
-                if (!_sipped && _timer < _drinkLen - 0.5f) Sip();
-                if (_timer <= 0) Decide();
+                if (!_sipped && _mind.Left < _drinkLen - 0.5f) Sip();
+                if (_mind.Over) Decide();
                 break;
             case Doing.Face:
                 ThinkFace();
                 break;
             case Doing.Dash:
-                if (_timer <= 0) EndDash();
+                if (_mind.Over) EndDash();
                 break;
         }
     }
@@ -370,12 +374,12 @@ internal sealed class Lizard : Body
     /// <summary>Squaring up: walk toward the other's nose until about 0.7 body lengths apart, hold still facing it, then (when the stand-off ends) charge or flee.</summary>
     private void ThinkFace()
     {
-        if (_timer <= 0) { EndFace(); return; }            // checked first: both lizards' stand-offs end in the same frame, whoever is updated first
+        if (_mind.Over) { EndFace(); return; }            // checked first: both lizards' stand-offs end in the same frame, whoever is updated first
         if (_other == null || _other._other != this || !_other.Visible)
         {
             // The meeting was called off (the other ran from the snake): carry on.
             _other = null;
-            _doing = Doing.Freeze; _timer = 0.5f;
+            _mind.Begin(Doing.Freeze, 0.5f);
             return;
         }
         PointF on = _other.Spine[0];
@@ -403,29 +407,27 @@ internal sealed class Lizard : Body
     /// <summary>Called by Lizards when two have come together: both stop what they are doing and face each other for <paramref name="hold"/> seconds.</summary>
     public void BeginFace(Lizard other, bool winner, float hold)
     {
-        _doing = Doing.Face;
+        _mind.Begin(Doing.Face, hold);
         _aim = Aim.Roam;
         _other = other;
         _isWinner = winner;
         _met = true;
         _approach = true;
         _pace = 0.5f;                      // a wary walk, not a run
-        _timer = hold;
     }
 
     /// <summary>Starts a dash toward a screen point: the aim, how long it may last at most, and how fast it runs.</summary>
     private void Go(Aim aim, PointF screenGoal, float maxTime)
     {
         (_goalX, _goalY) = ToGround(screenGoal.X, screenGoal.Y);
-        _doing = Doing.Dash;
+        _mind.Begin(Doing.Dash, maxTime);
         _aim = aim;
         _arrive = _len * (aim == Aim.Drink ? 0.1f : 0.15f);               // a drinker stops close to its spot: the spot is only a body width from the water
         // A flight is the fastest, a charge nearly so; the energy dial adds a little to everything.
         _pace = (0.9f + 0.25f * _energy) * (aim == Aim.Flee ? 1.35f : aim == Aim.Charge ? 1.25f : 1f);
-        _timer = maxTime;
     }
 
-    private void Stand(float seconds) { _doing = Doing.Freeze; _timer = seconds; }
+    private void Stand(float seconds) => _mind.Begin(Doing.Freeze, seconds);
 
     /// <summary>A dash has ended (arrived, ran out of time, or met water). What comes next depends on why it ran.</summary>
     private void EndDash()
@@ -437,8 +439,8 @@ internal sealed class Lizard : Body
         {
             case Aim.Drink when gd < _len * 0.8f:
                 // At the water's edge, nose to the water.
-                _doing = Doing.Drink;
-                _drinkLen = _timer = 1 + 2 * (float)_rng.NextDouble();
+                _drinkLen = 1 + 2 * (float)_rng.NextDouble();
+                _mind.Begin(Doing.Drink, _drinkLen);
                 _sipped = false;
                 return;
             case Aim.Charge:
@@ -451,7 +453,7 @@ internal sealed class Lizard : Body
         }
         // The dash is over: stand still, or lie down if this was the run up onto a rock.
         bool onRock = _pond.Rocks.Any(r => !r.InWater && Dist(r.Centre, ToScreen(_x, _y)) < r.Radius * 0.6f);
-        if (onRock && _rng.NextDouble() < 0.7) { _doing = Doing.Bask; _timer = (4 + 8 * (float)_rng.NextDouble()) * (0.6f + 0.9f * _bold); }   // the bold bask longest
+        if (onRock && _rng.NextDouble() < 0.7) _mind.Begin(Doing.Bask, (4 + 8 * (float)_rng.NextDouble()) * (0.6f + 0.9f * _bold));   // the bold bask longest
         else Stand((0.6f + 2.4f * (float)_rng.NextDouble()) * StillScale);
     }
 
@@ -488,8 +490,13 @@ internal sealed class Lizard : Body
         if (_dashes <= 0)
         {
             // Time to go: toward the nearest screen edge that has land on it, off the screen.
+            // Unless the last dash to leave was stopped by water at the first step: then any
+            // spot it CAN walk to first (back along the stones toward the shore), and the edge
+            // again after that. (A lizard on a wet rock dashed at the far edge, was refused,
+            // stood, dashed again, 70 times in 140 seconds, going nowhere.)
             _leaving = true;
-            Go(Aim.Roam, ExitGoal(here), (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale + 3);
+            if (_stranded && RoamGoal(here, null) is PointF back) Go(Aim.Roam, back, (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale);
+            else Go(Aim.Roam, ExitGoal(here), (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale + 3);
             return;
         }
         bool wasDrinking = _doing == Doing.Drink;
@@ -502,20 +509,21 @@ internal sealed class Lizard : Body
         float wRock = _doing != Doing.Bask ? 0.3f + 0.5f * _bold : 0;
         float wDrink = canDrink ? (wasDrinking ? 0.1f : 0.35f) : 0;
         float wSeek = company != null ? 0.1f + 0.6f * _bold : 0;
-        float roll = (float)_rng.NextDouble() * (wRoam + wRock + wDrink + wSeek);
-        if ((roll -= wDrink) < 0)
+        int face = Dice.Pick(_rng, [wDrink, wRock, wSeek, wRoam]);
+        if (face == 0)
         {
             float dist = Dist(here, drinkSpot);
             Go(Aim.Drink, drinkSpot, dist / (_len * 2.6f * 0.6f) + 1f);       // a long dash, timed for the whole way
             return;
         }
-        if ((roll -= wRock) < 0)
+        if (face == 1)
         {
-            // A rock to climb: a dry one within reach, not the one it is on.
+            // A rock to climb: a dry one within reach, not the one it is on. None in reach: it looks for company, or roams.
             var near = _pond.Rocks.Where(r => !r.InWater && r.Radius > _u * 0.02f && Dist(r.Centre, here) < _u * 0.35f && Dist(r.Centre, here) > r.Radius).ToList();
             if (near.Count > 0) { Go(Aim.Roam, near[_rng.Next(near.Count)].Centre, (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale); return; }
+            face = 2;
         }
-        PointF? goal = RoamGoal(here, (roll -= wSeek) < 0 && company != null ? (PointF?)company.Spine[0] : null);
+        PointF? goal = RoamGoal(here, face == 2 && company != null ? (PointF?)company.Spine[0] : null);
         if (goal is not PointF gp) { Stand(1); return; }
         Go(Aim.Roam, gp, (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale);
     }

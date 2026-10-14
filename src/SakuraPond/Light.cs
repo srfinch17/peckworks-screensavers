@@ -18,6 +18,16 @@ internal static class Light
     public const float Lift = 0.75f;
     public const float ShadowX = 0.45f, ShadowY = 0.6f;
 
+    /// <summary>
+    /// The same rule run the other way for things UNDER the water: a thing at
+    /// a depth below the surface shows this much further DOWN the screen, per
+    /// unit of depth, than the spot of surface above it. Less than Lift,
+    /// because water bends the light: looking into a pond at a slant, the
+    /// bottom looks shallower than it is (about three quarters of the true
+    /// depth, which is why a stick in water looks bent at the surface).
+    /// </summary>
+    public const float Sink = 0.55f;
+
     /// <summary>The same numbers, plus the water's squash, for the shared plants (Core/Sakura/Plants.cs).</summary>
     public static readonly Overhead View = new(Ripples.Squash, Lift, ShadowX, ShadowY);
 }

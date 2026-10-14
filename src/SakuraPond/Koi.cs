@@ -1,11 +1,13 @@
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Minds;
 
 namespace SakuraPond;
 
 /// <summary>
 /// The koi in the pond: a handful of fish, each drawn along its own bending
 /// spine (Body.cs), deepest first so a fish near the surface swims over one
-/// lower down.
+/// lower down. Their personalities are dealt here (Core/Minds Traits.Deal),
+/// so the school is a spread of natures and no two fish are near-twins.
 /// </summary>
 internal sealed class KoiSchool
 {
@@ -16,8 +18,9 @@ internal sealed class KoiSchool
     public KoiSchool(Pond pond, int count, Ripples ripples, bool[] where, Random rng, float play = 1, Petals? petals = null)
     {
         _fish = new Koi[Math.Max(0, count)];
+        float[] energy = Traits.Deal(rng, _fish.Length), social = Traits.Deal(rng, _fish.Length), curious = Traits.Deal(rng, _fish.Length);
         for (int i = 0; i < _fish.Length; i++)
-            _fish[i] = new Koi(pond, ripples, where, rng, i, play, petals);
+            _fish[i] = new Koi(pond, ripples, where, rng, i, (energy[i], social[i], curious[i]), play, petals);
         int n = _fish.Length;
         _order = new int[n]; _layer = new int[n]; _depth = new float[n]; _box = new RectangleF[n];
         _layers = new List<Koi>[Math.Max(1, n)];
@@ -44,8 +47,12 @@ internal sealed class KoiSchool
     /// <summary>Each fish's doing this frame, for logs and tests.</summary>
     public IEnumerable<(PointF Head, PointF Tail, string State)> States => _fish.Select(f => (f.Head, f.Tail, f.State));
 
-    /// <summary>Two points along each koi this frame, its head and its middle, screen pixels (the minnows keep clear of them).</summary>
-    public PointF[] Heads => _fish.SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
+    /// <summary>
+    /// Two points along each koi that is near enough the surface to be met by
+    /// anything on it (its head and its middle), screen pixels: the minnows
+    /// and the snake keep clear of them. A fish deep down is out of their reach.
+    /// </summary>
+    public PointF[] Heads => _fish.Where(f => f.Z < 0.45f).SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
 
     // Scratch for Draw, kept between frames so drawing allocates nothing.
     private readonly int[] _order, _layer;
@@ -177,15 +184,15 @@ internal sealed class Koi : Body
         Flee,          // being chased: speed up and swerve away
         Flinch,        // a shadow swept over it (a swallow skimming): a dart away and a dive, then it rests deep
     }
-    private Doing _doing;
-    private float _doingTimer;                            // how long the current doing may last
+    private readonly Mind<Doing> _mind = new();           // the doing now and how long it may last (Core/Minds)
+    private Doing _doing => _mind.Doing;
     private float _targetX, _targetY;                     // what it is investigating, ground pixels
     private bool _targetIsPetal;                          // a petal drifts: the target is refreshed each frame
     private float _hold;                                  // seconds left nosing at the thing it reached (0 = still on the way)
     private Koi? _partner;                                // the fish it follows, chases or flees
     private int _side;                                    // which side of the partner it follows on (+1 or -1)
-    private float _chaseCool;                             // seconds until it may start another chase
-    private float _flinchCool;                            // seconds until a shadow can make it flinch again
+    private readonly Cooldown _chaseCool = new();         // no chase again until this has run out
+    private readonly Cooldown _flinchCool = new();        // no flinch at a shadow again until this has run out
     private float _flinchX, _flinchY;                     // where the shadow was, ground pixels
     private float _stuckFor;                              // seconds its steps have been refused (nosed against something)
 
@@ -198,10 +205,16 @@ internal sealed class Koi : Body
     private readonly PointF[] _trail = new PointF[96];
     private int _trailHead, _trailCount;
 
-    /// <summary>How deep it is now: 0 at the surface, 1 as deep as a fish goes.</summary>
+    /// <summary>How deep it is now: 0 at the surface, 1 as deep as a fish goes (Pond.DepthU below the surface).</summary>
     public float Z { get; private set; }
 
-    public PointF Head => ToScreen(_x, _y);
+    private float _floor = 1;                             // the bed under the whole body, 0 at the bank to 1 at full depth (found as the spine is laid)
+    private float _shadowDx, _shadowDy, _shadowSoft;      // its shadow on the bed: how far down and right of the body, and how blurred (screen pixels)
+    private float _shadowAlpha;                           // how dark that shadow is (0 = the bed is out of sight, no shadow)
+    private bool _asShadow;                               // Colour() is being asked for the shadow, not the fish
+
+    /// <summary>Its nose as drawn, screen pixels (the picture of a deep fish sits lower on the screen than the water above it; see Light.Sink).</summary>
+    public PointF Head => Spine[0];
 
     /// <summary>The middle of its body, screen pixels.</summary>
     public PointF Middle => Spine[8];
@@ -220,11 +233,14 @@ internal sealed class Koi : Body
             float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
             foreach (PointF p in Spine) { x0 = MathF.Min(x0, p.X); y0 = MathF.Min(y0, p.Y); x1 = MathF.Max(x1, p.X); y1 = MathF.Max(y1, p.Y); }
             float m = _wide * 1.3f + _len * 0.25f + _pond.U * 0.01f;      // body width, side fins, soft edge
-            return RectangleF.FromLTRB(x0 - m, y0 - m, x1 + m, y1 + m);
+            // Its shadow on the bed, when there is one, lies down and to the right of the body, blurred.
+            float sx = _shadowAlpha > 0 ? _shadowDx + _shadowSoft : 0, sy = _shadowAlpha > 0 ? _shadowDy + _shadowSoft : 0;
+            return RectangleF.FromLTRB(x0 - m, y0 - m, x1 + m + sx, y1 + m + sy);
         }
     }
 
-    public Koi(Pond pond, Ripples ripples, bool[] where, Random rng, int index, float play = 1, Petals? petals = null) : base(Points)
+    /// <param name="dials">Its personality, each 0 to 1: energy, sociability, curiosity (dealt by KoiSchool so the school is a spread).</param>
+    public Koi(Pond pond, Ripples ripples, bool[] where, Random rng, int index, (float Energy, float Social, float Curious) dials, float play = 1, Petals? petals = null) : base(Points)
     {
         _pond = pond;
         _ripples = ripples;
@@ -235,13 +251,11 @@ internal sealed class Koi : Body
         float u = pond.U;
         _len = u * (0.095f + 0.06f * (float)rng.NextDouble());
         _wide = _len * (0.12f + 0.02f * (float)rng.NextDouble());
-        // The personality dials. Each is rolled on its own, so a fish can be
+        // The personality dials. Each is dealt on its own, so a fish can be
         // lazy and sociable, or energetic and solitary: no two alike.
-        _energy = (float)rng.NextDouble();
-        _social = (float)rng.NextDouble();
-        _curious = (float)rng.NextDouble();
+        (_energy, _social, _curious) = dials;
         _cruise = 0.45f + 0.35f * _energy;                // an energetic fish cruises faster
-        _chaseCool = 30 + 90 * (float)rng.NextDouble();   // nobody chases in the first half minute
+        _chaseCool.Start(30 + 90 * (float)rng.NextDouble());   // nobody chases in the first half minute
         _w1 = 0.11f + 0.12f * (float)rng.NextDouble(); _w2 = 0.31f + 0.2f * (float)rng.NextDouble();
         _p1 = (float)(rng.NextDouble() * MathF.Tau); _p2 = (float)(rng.NextDouble() * MathF.Tau);
         (_palette, _pattern, _fin, _finAlpha, _metal) = Variety(index, rng);
@@ -269,10 +283,15 @@ internal sealed class Koi : Body
         _gulpTimer = 10 + (float)rng.NextDouble() * 60;
         _bumpTimer = 40 + (float)rng.NextDouble() * 200;
         NewGoal();
-        // A straight trail behind it to start.
+        // A straight trail behind it to start, and the spine laid along it, so
+        // Head and the rest mean something before the first frame.
         for (int i = 40; i >= 0; i--)
             Remember(new PointF(_x - MathF.Cos(_heading) * _len * i / 30f, _y - MathF.Sin(_heading) * _len * i / 30f));
+        LaySpine();
     }
+
+    /// <summary>The floor under a screen point, 0 to 1 (a point off the screen counts as its nearest edge pixel: the pond and its bank run on out of view).</summary>
+    private float FloorAt(PointF s) => _pond.Floor[Math.Clamp((int)s.Y, 0, _pond.Height - 1) * _pond.Width + Math.Clamp((int)s.X, 0, _pond.Width - 1)] / 255f;
 
     private float CentreY => _pond.Centre.Y;
     private (float, float) ToGround(float x, float y) => (x, CentreY + (y - CentreY) / Ripples.Squash);
@@ -353,6 +372,7 @@ internal sealed class Koi : Body
             if (other == this) continue;
             float dx = _x - other._x, dy = _y - other._y, d2 = dx * dx + dy * dy, near = (_len + other._len) * 0.55f;
             if (other == _partner) near *= _doing == Doing.Chase ? 0.3f : 0.7f;   // a friend may come closer; a chaser nearly touches
+            near *= MathF.Max(0.3f, 1 - 1.2f * MathF.Abs(Z - other.Z));           // a fish well above or below another passes over it with hardly a swerve
             if (d2 > near * near || d2 < 1) continue;
             float away = MathF.Atan2(dy, dx);
             turn += Wrap(away - _heading) * 0.5f * (1 - MathF.Sqrt(d2) / near);
@@ -430,10 +450,18 @@ internal sealed class Koi : Body
                 _depthTimer = 6 + 10 * (float)_rng.NextDouble();
             }
         }
-        int ix = Math.Clamp((int)here.X, 0, _pond.Width - 1), iy = Math.Clamp((int)here.Y, 0, _pond.Height - 1);
-        float bottom = 0.05f + 0.9f * _pond.Depth[iy * _pond.Width + ix] / 255f;   // shallow water: it cannot be deep
-        float zWant = MathF.Min(_zTarget, bottom);
-        Z += (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping ? 0.6f : 0.18f)));
+        // The bed. A fish may be no deeper than nine tenths of the water under
+        // ANY part of its body (_floor, found as the spine was laid), and no
+        // deeper than the water a body length and a half ahead of its nose, so
+        // it rises up the slope as the bank or a rock comes near, the way a
+        // fish follows the bed, rather than finding itself inside it. The rise
+        // for the bed is brisker than the idle drift up and down; and whatever
+        // the easing says, LaySpine never leaves it below the bed.
+        float ahead = FloorAt(ToScreen(_x + MathF.Cos(_heading) * _len * 1.5f, _y + MathF.Sin(_heading) * _len * 1.5f));
+        float cap = 0.9f * MathF.Min(_floor, ahead);
+        float zWant = MathF.Min(_zTarget, cap);
+        bool forBed = Z > cap - 0.03f;
+        Z += (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping ? 0.6f : forBed ? 0.8f : 0.18f)));
         if (_gulping && Z < 0.05f)
         {
             PointF mouth = Spine[0];
@@ -458,7 +486,7 @@ internal sealed class Koi : Body
         {
             float x = (float)_rng.NextDouble() * _pond.Width, y = (float)_rng.NextDouble() * _pond.Height;
             if (_pond.RoomAt(x, y) < _len * 0.4f) continue;
-            if (deep && tries < 40 && _pond.Depth[(int)y * _pond.Width + (int)x] < 150) continue;
+            if (deep && tries < 40 && _pond.Floor[(int)y * _pond.Width + (int)x] < 150) continue;
             (_goalX, _goalY) = ToGround(x, y);
             break;
         }
@@ -481,9 +509,9 @@ internal sealed class Koi : Body
     /// <summary>Keeps the current doing going, ends it when it is done, and reacts to being chased.</summary>
     private void Think(float dt, Koi[] school)
     {
-        _doingTimer -= dt;
-        _chaseCool -= dt;
-        _flinchCool -= dt;
+        _mind.Tick(dt);
+        _chaseCool.Tick(dt);
+        _flinchCool.Tick(dt);
 
         // Someone is after me: the moment a chaser is close behind, flee (whatever I was doing, except already fleeing).
         if (_doing != Doing.Flee)
@@ -502,14 +530,14 @@ internal sealed class Koi : Body
                     Begin(Doing.Wander);
                 break;
             case Doing.Chase:
-                if (_doingTimer <= 0 || _partner == null) Decide(school);
+                if (_mind.Over || _partner == null) Decide(school);
                 break;
             case Doing.Flinch:
-                if (_doingTimer <= 0) Begin(Doing.Rest);                      // the dart is over: it sulks deep for a while
+                if (_mind.Over) Begin(Doing.Rest);                            // the dart is over: it sulks deep for a while
                 break;
             case Doing.Follow:
                 // Lose interest in time, or when the friend has got well away.
-                if (_doingTimer <= 0 || _partner == null || !Near(_partner, 4f)) Decide(school);
+                if (_mind.Over || _partner == null || !Near(_partner, 4f)) Decide(school);
                 break;
             case Doing.Investigate:
                 if (_targetIsPetal && _petals != null)
@@ -531,10 +559,10 @@ internal sealed class Koi : Body
                     _hold = 1 + 2.5f * (float)_rng.NextDouble();
                     if (_targetIsPetal && !_gulping && !_bumping) { _gulping = true; _zTarget = 0; }
                 }
-                else if (_doingTimer <= 0) Decide(school);
+                else if (_mind.Over) Decide(school);
                 break;
             case Doing.Rest:
-                if (_doingTimer <= 0) Decide(school);
+                if (_mind.Over) Decide(school);
                 break;
             default:
                 _goalTimer -= dt;
@@ -584,58 +612,60 @@ internal sealed class Koi : Body
         // A friend to follow must be near, and a fish to chase nearer still (a
         // chase begun across the pond was over before the chaser got anywhere).
         Koi? friend = Nearest(school, 4f), quarry = Nearest(school, 2.5f);
-        bool chaseOn = quarry != null && _chaseCool <= 0 && !school.Any(k => k._doing is Doing.Chase or Doing.Flee);   // one chase in the pond at a time
+        bool chaseOn = quarry != null && _chaseCool.Ready && !school.Any(k => k._doing is Doing.Chase or Doing.Flee);   // one chase in the pond at a time
         // The dice faces: each doing's weight. Wander is always on the dice.
         float wWander = 1f;
         float wRest = (0.25f + 0.9f * (1 - _energy)) * (_doing == Doing.Rest ? 0.4f : 1f);               // and a rest is less likely straight after a rest
         float wLook = (0.08f + 0.45f * _curious) * _play * (_doing == Doing.Investigate ? 0.4f : 1f);   // less likely straight after a look
         float wFollow = friend != null ? (0.1f + 0.7f * _social) * _play : 0;
         float wChase = chaseOn ? (0.1f + 0.7f * _social * _energy) * _play : 0;
-        float roll = (float)_rng.NextDouble() * (wWander + wRest + wLook + wFollow + wChase);
-        if ((roll -= wChase) < 0) { Begin(Doing.Chase, quarry); return; }
-        if ((roll -= wFollow) < 0) { Begin(Doing.Follow, friend); return; }
-        if ((roll -= wLook) < 0 && PickTarget()) { Begin(Doing.Investigate); return; }
-        if ((roll -= wRest) < 0) { Begin(Doing.Rest); return; }
-        Begin(Doing.Wander);
+        switch (Dice.Pick(_rng, [wChase, wFollow, wLook, wRest, wWander]))
+        {
+            case 0: Begin(Doing.Chase, quarry); break;
+            case 1: Begin(Doing.Follow, friend); break;
+            case 2 when PickTarget(): Begin(Doing.Investigate); break;        // nothing worth a look in reach: it wanders instead
+            case 3: Begin(Doing.Rest); break;
+            default: Begin(Doing.Wander); break;
+        }
     }
 
     /// <summary>Starts a doing: its timer, its partner, and where in the water to be for it.</summary>
     private void Begin(Doing doing, Koi? partner = null)
     {
-        _doing = doing;
         _partner = partner;
         _hold = 0;
         switch (doing)
         {
             case Doing.Chase:
-                _doingTimer = 4 + 5 * (float)_rng.NextDouble();
-                _chaseCool = (60 + 140 * (float)_rng.NextDouble()) / MathF.Max(0.1f, _play);
+                _mind.Begin(doing, 4 + 5 * (float)_rng.NextDouble());
+                _chaseCool.Start((60 + 140 * (float)_rng.NextDouble()) / MathF.Max(0.1f, _play));
                 Depth(0.1f + 0.15f * (float)_rng.NextDouble(), 20);
                 break;
             case Doing.Flee:
-                _doingTimer = 10;
+                _mind.Begin(doing, 10);
                 Depth(0.08f + 0.15f * (float)_rng.NextDouble(), 20);
                 break;
             case Doing.Flinch:
-                _doingTimer = 0.8f + 0.6f * (float)_rng.NextDouble();
-                _flinchCool = 15 + 25 * (float)_rng.NextDouble();
+                _mind.Begin(doing, 0.8f + 0.6f * (float)_rng.NextDouble());
+                _flinchCool.Start(15 + 25 * (float)_rng.NextDouble());
                 Depth(0.6f + 0.3f * (float)_rng.NextDouble(), 30);               // straight down, and it stays down
                 break;
             case Doing.Follow:
-                _doingTimer = 10 + 20 * (float)_rng.NextDouble();
+                _mind.Begin(doing, 10 + 20 * (float)_rng.NextDouble());
                 _side = _rng.Next(2) * 2 - 1;
-                Depth(MathF.Max(0.05f, partner!.Z + 0.1f), _doingTimer);      // a little under the friend
+                Depth(MathF.Max(0.05f, partner!.Z + 0.1f), _mind.Left);        // a little under the friend
                 break;
             case Doing.Investigate:
-                _doingTimer = 25;                                              // give up if it is not reached by then
+                _mind.Begin(doing, 25);                                        // give up if it is not reached by then
                 Depth(0.06f, 30);                                              // right up near the surface, where it can be seen looking
                 break;
             case Doing.Rest:
-                _doingTimer = 8 + 14 * (float)_rng.NextDouble();
+                _mind.Begin(doing, 8 + 14 * (float)_rng.NextDouble());
                 NewGoal(deep: true);
-                Depth(0.55f + 0.3f * (float)_rng.NextDouble(), _doingTimer);
+                Depth(0.55f + 0.3f * (float)_rng.NextDouble(), _mind.Left);
                 break;
             default:
+                _mind.Begin(doing);                                            // a wander ends when its spot is reached (the goal timer, in Think)
                 NewGoal();
                 break;
         }
@@ -746,7 +776,7 @@ internal sealed class Koi : Body
     /// </summary>
     public void Startle(float x, float y)
     {
-        if (_flinchCool > 0 || _doing is Doing.Chase or Doing.Flee or Doing.Flinch) return;
+        if (!_flinchCool.Ready || _doing is Doing.Chase or Doing.Flee or Doing.Flinch) return;
         float bold = (_energy + _social) * 0.5f;
         float reach = _pond.U * (0.06f + 0.16f * (1 - bold));
         PointF here = ToScreen(_x, _y);
@@ -838,6 +868,31 @@ internal sealed class Koi : Body
             float dx = q.X - p.X, dy = q.Y - p.Y, l = MathF.Max(1e-4f, MathF.Sqrt(dx * dx + dy * dy));
             dir[i] = new PointF(dx / l, dy / l);
         }
+        // The bed under the body: the shallowest water under any of its points.
+        // Its depth is capped by that HERE, after Update's easing, so a fish is
+        // never drawn below the bed on any frame, whatever it meant to do.
+        float floor = 1;
+        for (int i = 0; i < 18; i += 3) floor = MathF.Min(floor, FloorAt(ToScreen(mid[i].X, mid[i].Y)));
+        _floor = floor;
+        Z = MathF.Min(Z, 0.9f * floor);
+        // DEPTH ON THE SCREEN. The fish lives at (_x, _y) on the water's plane
+        // and Z below it. We look at the pond at a slant, so the deeper it is,
+        // the lower on the screen its picture sits than the water above it
+        // (Light.Sink, the lift rule run the other way): a fish that rises to
+        // gulp is seen to come UP the screen as well as sharpen.
+        float sink = Z * Pond.DepthU * _pond.U * Light.Sink;
+        // Its shadow on the bed, where the bed shows through the water (the
+        // painter's own rule for how much bed shows at the painted depth):
+        // thrown down and to the right by the gap between the fish and the bed,
+        // as the petals' shadows are by their height, and the blurrier the
+        // bigger that gap. Out in the deep water there is no bed to see it on.
+        float painted = _pond.Depth[Math.Clamp((int)Spine[8].Y, 0, _pond.Height - 1) * _pond.Width + Math.Clamp((int)Spine[8].X, 0, _pond.Width - 1)] / 255f;
+        float clear = 0.85f * MathF.Pow(1 - painted, 1.4f);
+        float gap = MathF.Max(0, floor - Z) * Pond.DepthU * _pond.U;
+        _shadowAlpha = clear > 0.06f ? MathF.Min(0.6f, 0.9f * clear) : 0;       // at half alpha it was lost in the pebbles; a koi's shadow on a clear bed is a bold thing
+        _shadowDx = Light.ShadowX * gap;
+        _shadowDy = (Light.ShadowY + Light.Sink) * gap;
+        _shadowSoft = MathF.Max(1f, gap * 0.15f);
         for (int i = 0; i < Points; i++)
         {
             float s = Along[i];
@@ -847,7 +902,7 @@ internal sealed class Koi : Body
             float cx = mid[i].X + nx * sway, cy = mid[i].Y + ny * sway;
             float hw = _wide * Profile(s);
             PointF l = ToScreen(cx + nx * hw, cy + ny * hw), r = ToScreen(cx - nx * hw, cy - ny * hw);
-            Spine[i] = new PointF((l.X + r.X) / 2, (l.Y + r.Y) / 2);
+            Spine[i] = new PointF((l.X + r.X) / 2, (l.Y + r.Y) / 2 + sink);
             HalfWidth[i] = Dist(l, r) / 2;
         }
     }
@@ -875,10 +930,12 @@ internal sealed class Koi : Body
             // The tail fin: forked (the middle ends sooner), see-through, with rays.
             float m = 1 - av, end = FinEnd - 0.09f * m * MathF.Sqrt(m);
             if (s > end) { r = g = b = 0; alpha = 0; return false; }
+            if (_asShadow) { r = 10; g = 24; b = 24; alpha = _shadowAlpha * 0.5f; return true; }
             (r, g, b) = _fin;
             alpha = _finAlpha * (0.72f + 0.28f * MathF.Cos(v * 15)) * Math.Clamp((end - s) * 30, 0, 1);
             return true;
         }
+        if (_asShadow) { r = 10; g = 24; b = 24; alpha = _shadowAlpha; return true; }   // the shadow: the body's shape in the water's own dark
         // One lookup: the rounding of the body (Round) is already folded into the sheet.
         int vi = Math.Clamp((int)((v + 1) * 0.5f * SkinWide), 0, SkinWide - 1);
         uint c = _skin[Math.Clamp((int)(s * SkinLen), 0, SkinLen - 1) * SkinWide + vi];
@@ -921,6 +978,7 @@ internal sealed class Koi : Body
     {
         float murk = 0.06f + 0.62f * Z;
         float soft = MathF.Max(1f, _pond.U * 0.0012f) * (1 + 3 * Z);
+        if (_shadowAlpha > 0) Shadow(fb);
         // Side fins first, so the body covers where they join it.
         float t = (float)(_time % 100000.0);
         float scull = 0.22f * MathF.Sin(t * 1.4f + _p1) + (_swimming ? 0f : 0.25f);    // gliding: fins out, braking a little
@@ -936,6 +994,22 @@ internal sealed class Koi : Body
             var c = new PointF(e0.X - ey / el * HalfWidth[1] * 0.62f * side, e0.Y + ex / el * HalfWidth[1] * 0.62f * side);
             Oval(fb, _where, c, 0, er, er, 24, 26, 28, 0.95f, murk * 0.7f, _pond.Sun);
         }
+    }
+
+    /// <summary>
+    /// Its shadow on the bed: the same body painted dark and blurred, shifted
+    /// down and to the right (worked out in LaySpine), under the fish so the
+    /// body covers it where they overlap. The spine is moved for the painting
+    /// and moved back; this fish's own spine only, so fish drawn at the same
+    /// time on other cores are not disturbed.
+    /// </summary>
+    private void Shadow(FrameBuffer fb)
+    {
+        for (int i = 0; i < Points; i++) Spine[i] = new PointF(Spine[i].X + _shadowDx, Spine[i].Y + _shadowDy);
+        _asShadow = true;
+        Paint(fb, _where, null, 0, _shadowSoft);
+        _asShadow = false;
+        for (int i = 0; i < Points; i++) Spine[i] = new PointF(Spine[i].X - _shadowDx, Spine[i].Y - _shadowDy);
     }
 
     /// <summary>A pair of side fins at spine point i, swept back from the body by "sweep" radians.</summary>
