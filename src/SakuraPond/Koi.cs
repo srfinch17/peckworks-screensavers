@@ -21,13 +21,17 @@ internal sealed class KoiSchool
         float[] energy = Traits.Deal(rng, _fish.Length), social = Traits.Deal(rng, _fish.Length), curious = Traits.Deal(rng, _fish.Length);
         for (int i = 0; i < _fish.Length; i++)
             _fish[i] = new Koi(pond, ripples, where, rng, i, (energy[i], social[i], curious[i]), play, petals);
-        int n = _fish.Length + MostTurtles;                                // room in the draw order for the turtles too
+        Room(_fish.Length);
+    }
+
+    /// <summary>Scratch for the draw order big enough for n actors (the fish, and the turtles once Draw sees them). Grows once, never per frame.</summary>
+    private void Room(int n)
+    {
+        if (_order.Length >= n) return;
         _order = new int[n]; _layer = new int[n]; _depth = new float[n]; _box = new RectangleF[n];
         _layers = new List<int>[Math.Max(1, n)];
         for (int i = 0; i < _layers.Length; i++) _layers[i] = new List<int>(n);
     }
-
-    private const int MostTurtles = 3;                                      // the "Turtles" knob's top
 
     public void Update(float dt)
     {
@@ -56,11 +60,11 @@ internal sealed class KoiSchool
     /// </summary>
     public PointF[] Heads => _fish.Where(f => f.Z < 0.45f).SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
 
-    // Scratch for Draw, kept between frames so drawing allocates nothing.
-    private readonly int[] _order, _layer;
-    private readonly float[] _depth;
-    private readonly RectangleF[] _box;
-    private readonly List<int>[] _layers;
+    // Scratch for Draw, kept between frames so drawing allocates nothing (see Room).
+    private int[] _order = [], _layer = [];
+    private float[] _depth = [];
+    private RectangleF[] _box = [];
+    private List<int>[] _layers = [];
     private FrameBuffer? _fb;
     private IReadOnlyList<Turtle>? _turtles;
 
@@ -87,8 +91,9 @@ internal sealed class KoiSchool
     {
         int n = _fish.Length;
         IReadOnlyList<Turtle> ts = turtles?.All ?? [];
-        int t = Math.Min(ts.Count, MostTurtles), all = n + t;
+        int t = ts.Count, all = n + t;
         if (all == 0) return;
+        Room(all);
         foreach (Koi k in _fish) k.DrawShadow(fb);
         for (int i = 0; i < n; i++) { _order[i] = i; _depth[i] = -_fish[i].Z; _box[i] = _fish[i].Box; }
         for (int i = 0; i < t; i++) { _order[n + i] = n + i; _depth[n + i] = -ts[i].Z; _box[n + i] = ts[i].Box; }
@@ -483,7 +488,7 @@ internal sealed class Koi : Body
         float zWant = MathF.Min(_zTarget, cap);
         bool forBed = Z > cap - 0.03f;
         float zNext = Z + (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping ? 0.6f : forBed ? 0.8f : 0.18f)));
-        if (zNext < Z)
+        if (zNext < Z && !forBed)
         {
             // Rising moves the picture UP the screen (its sink shrinks). A fish
             // heading DOWN the screen while rising fast would be seen going
@@ -491,7 +496,9 @@ internal sealed class Koi : Body
             // caught an asagi doing just that on a gulp from a deep rest). So the
             // rise is held to half of what the fish's own forward motion down the
             // screen covers in the same time; heading up the screen there is no
-            // limit, the rise only adds to the way it is going.
+            // limit, the rise only adds to the way it is going. A rise the BED
+            // forces is not held back: the bed wins anyway in LaySpine, and
+            // holding it here only turned a smooth rise into a one-frame hop.
             float down = MathF.Max(0.05f, MathF.Sin(_heading) * Ripples.Squash);
             float maxRise = dt * 0.5f * _speed / down / (Pond.DepthU * _pond.U * Light.Sink);
             zNext = MathF.Max(zNext, Z - maxRise);
@@ -939,8 +946,10 @@ internal sealed class Koi : Body
         _shadowAlpha = clear > 0.06f ? MathF.Min(0.6f, 0.9f * clear) * lit : 0;   // at half alpha it was lost in the pebbles; a koi's shadow on a clear bed is a bold thing
         // A shadow that is only just showing (the bed barely visible under deep
         // water) keeps close to its fish: thrown the full gap it would be a faint
-        // stray mark a body length away, with nothing to say whose it was.
-        float hug = MathF.Min(1f, _shadowAlpha / 0.3f);
+        // stray mark a body length away, with nothing to say whose it was. How
+        // close goes by how much bed shows, not by the light: a fish swimming into
+        // a branch's shade keeps its shadow where it was while it fades.
+        float hug = MathF.Min(1f, 3f * clear);
         _shadowDx = Light.ShadowX * gap * hug;
         _shadowDy = (Light.ShadowY + Light.Sink) * gap * hug;
         _shadowSoft = MathF.Max(1f, gap * 0.15f);

@@ -24,11 +24,6 @@ internal sealed class Turtles
     /// <summary>The turtles themselves, for KoiSchool to deal into its depth order (a turtle is drawn between the koi deeper and shallower than it).</summary>
     public IReadOnlyList<Turtle> All => _all;
 
-    /// <summary>Draws them all, in no depth order: only for a pond with no koi (KoiSchool.Draw takes them otherwise).</summary>
-    public void Draw(FrameBuffer fb)
-    {
-        foreach (Turtle t in _all) t.Draw(fb);
-    }
 }
 
 /// <summary>
