@@ -104,6 +104,7 @@ These are in the code comments too; here they are in one place.
 |--------|-------|--------|------------|
 | Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch | being chased, a dragonfly's tap, a swallow's shadow |
 | Lizards (`src/SakuraPond/Lizard.cs`) | bold, energy (sliced, paired) | Hidden, Dash, Freeze, Bask, Drink, Face | a meeting, the snake |
+| Turtles (`src/SakuraPond/Turtle.cs`) | sunny, nerve (dealt) | Cruise, Float, Dive, Approach, Climb, Bask, Slip | the snake's head near a basking turtle |
 | Snake (`src/SakuraPond/Snake.cs`) | bold, nerve (per visit) | Cross, Explore, Hunt, Bask | a touch from a koi, turtle or lizard |
 
 The minnows' school mood (drift, rush, mill) and the dragonflies' doings are simpler clocks

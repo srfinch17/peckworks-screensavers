@@ -88,7 +88,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _koi.Update(dt);
         PointF[] koiHeads = _koi.Heads;
         _minnows.Update(dt, _snake.Live ? [.. koiHeads, _snake.Head] : koiHeads);   // the minnows keep clear of the snake as of a koi
-        _turtles.Update(dt);
+        _turtles.Update(dt, _snake.Live ? _snake.Head : null);   // a basking turtle slips in when the snake comes near
         _petals.Update(dt);
         // The snake is told where everything that could touch it is: koi heads and
         // middles, turtle noses and shells, the nose of every lizard that is out (its spot

@@ -1,4 +1,5 @@
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Minds;
 
 namespace SakuraPond;
 
@@ -10,12 +11,22 @@ internal sealed class Turtles
     public Turtles(Pond pond, int count, Ripples ripples, bool[] where, Random rng)
     {
         _all = new Turtle[Math.Max(0, count)];
-        for (int i = 0; i < _all.Length; i++) _all[i] = new Turtle(pond, ripples, where, rng);
+        // Two dials each, dealt (Core/Minds Traits.Deal) so no two turtles are near-twins: one
+        // loves the sun, one is jumpy. See Turtle for what each one changes.
+        float[] sunny = Traits.Deal(rng, _all.Length), nerve = Traits.Deal(rng, _all.Length);
+        // Where a shadow may land when a turtle is up on a perch: the dry things (the island's
+        // cap, the log), but not under a branch. One sheet shared by all the turtles.
+        bool[] perchMask = new bool[pond.Land.Length];
+        if (_all.Length > 0)
+            for (int i = 0; i < perchMask.Length; i++) perchMask[i] = pond.Land[i] && pond.Open[i];
+        for (int i = 0; i < _all.Length; i++) _all[i] = new Turtle(pond, ripples, where, rng, sunny[i], nerve[i], perchMask);
+        foreach (Turtle t in _all) t.MeetPeers(_all);
     }
 
-    public void Update(float dt)
+    /// <param name="snakeHead">The snake's head if one is out (a basking turtle slips into the water when it comes close), else null.</param>
+    public void Update(float dt, PointF? snakeHead = null)
     {
-        foreach (Turtle t in _all) t.Update(dt);
+        foreach (Turtle t in _all) t.Update(dt, snakeHead);
     }
 
     /// <summary>A point at each turtle's nose and under its shell this frame, screen pixels (the snake keeps clear of them).</summary>
@@ -39,7 +50,48 @@ internal sealed class Turtles
 /// is rigid, so it turns as one piece, in wide slow arcs, by paddling harder
 /// on one side; nothing bends. Every so often it stops, spreads its legs and
 /// just floats at the surface for a while, pokes its nose up for a breath
-/// (one small ring), then paddles off again.
+/// (one small ring), then paddles off again. Now and then it dives to the
+/// bed for a while. And, the thing every turtle in every park does, it
+/// HAULS OUT: it swims up to a rock or a fallen log, climbs onto it, sits
+/// with its legs spread to dry in the sun, and slips back in when it has had
+/// enough (or when something comes too close).
+///
+/// THE MIND (the koi's idea, scaled down; Core/Minds, docs/MINDS.md). Two
+/// personality dials, rolled once, load the dice:
+///   _sunny: how much it loves the sun. A sunny turtle hauls out more often
+///           (its "haul out" face on the dice is bigger and it waits less
+///           between visits) and sits longer, up to a minute; a shy-of-sun one
+///           is out for about twenty seconds, and less often.
+///   _nerve: how jumpy it is. A nervous turtle slips back in when the snake
+///           is still well off (about 0.1u), a calm one lets it get close
+///           (about 0.04u), and the nervous one also cuts its sit short.
+/// One thing at a time (Doing): Cruise, Float (rest and breathe), Dive (down
+/// to the bed for a while), Approach (swim to the water beside a perch),
+/// Climb (haul out), Bask, Slip (off the perch, back into the water).
+/// When a doing ends, Decide() rolls weighted dice for the next. The reflexes
+/// underneath (steer off the bank, the "never stuck" step rule) keep the last
+/// word everywhere except right beside a perch, where the perch itself is the
+/// thing being approached (see Swim).
+///
+/// A PERCH is the island rock's cap or the fallen log. A plan (Plan) is worked
+/// out before any swimming: a point on the water just outside, a second point
+/// further out on the same line (so it arrives pointing the right way), where
+/// the middle of the shell will rest, and which way it will face. A plan is
+/// refused if any of those points is not open water or the perch is wanted
+/// by another turtle, so a turtle never sets off for a place it cannot reach.
+///
+/// HOW IT CLIMBS: the nose goes along a smooth curve (a cubic Bezier: think of
+/// a bent wire) from the water to the resting pose, and the heading is always
+/// along the curve, so it can only ever move nose first. How HIGH each part of
+/// the body is above the water is not a timer, it is READ FROM WHERE THAT PART
+/// IS: Height() is 0 over water and 1 well inside the perch. So the nose rises
+/// first as it reaches the rock, the shell follows, and a slip off is the same
+/// thing run backward, for free. Up is drawn as a lift up the screen and a
+/// small shadow down and right on the perch (the same rule as the petals and
+/// the dragonflies, Light.cs). While any of it is up, it is no longer "in the
+/// water": no haze, no sinking, depth 0, and it is painted against the
+/// whole view (Pond.Open) instead of the water only, because the cap and the
+/// log are not water.
 ///
 /// HOW IT IS DRAWN: along a SPINE like the koi (Body.cs), only the spine is
 /// a straight line from nose to tail that turns as a whole. The colours at
@@ -53,20 +105,55 @@ internal sealed class Turtle : Body
     private const int Points = 14;
     private const int SkinLen = 256, SkinWide = 64;
 
+    /// <summary>What a turtle can be doing. One at a time; Decide() picks the next when the current one ends.</summary>
+    private enum Doing { Cruise, Float, Dive, Approach, Climb, Bask, Slip }
+
+    /// <summary>Which perch it is heading for, sitting on, or leaving.</summary>
+    private enum Perch { None, Island, Log }
+
+    /// <summary>Where a haul-out will happen: all screen pixels except the two headings (ground radians).</summary>
+    private readonly record struct Plan(Perch Kind, PointF Far, PointF Near, PointF Mid, float ComeIn, float Face);
+
     private readonly Pond _pond;
     private readonly Ripples _ripples;
     private readonly bool[] _where;
+    private readonly bool[] _perchMask;                   // dry and in view: where the shadow of a turtle up on a perch may land
     private readonly Random _rng;
     private readonly float _len, _wide;                   // nose to tail tip, and half the shell's width, ground pixels
     private readonly uint[] _skin;
+    private readonly float _logAx, _logAy;                // the log's axis, so Height does not redo the trig 22 times a frame
 
     private float _x, _y, _heading, _speed, _phase, _stroke = 1;   // _stroke: 1 paddling, 0 legs still
-    private float _goalX, _goalY, _goalTimer, _restTimer, _zTarget, _depthTimer;
-    private bool _resting;
+    private float _goalX, _goalY, _goalTimer, _zTarget, _depthTimer, _z;
     private double _time;
 
-    /// <summary>How deep it is: 0 at the surface, 1 as deep as a koi goes. A turtle stays near the top.</summary>
-    public float Z { get; private set; }
+    // ---- THE MIND ----
+    private readonly float _sunny, _nerve;                // the two dials (see the class comment)
+    private readonly Mind<Doing> _mind = new(Doing.Cruise);
+    private readonly Cooldown _hauls = new();             // not another haul-out until this has run out
+    private Doing _doing => _mind.Doing;
+    private Turtle[] _peers = [];
+    private PointF? _snake;                               // the snake's head, if out (last frame's)
+
+    // The haul-out in hand.
+    private Perch _perch;
+    private PointF _far, _near, _sitMid;                  // the far staging point, the near one, and where the shell's middle will rest
+    private float _comeIn, _sitFace;                      // the heading it arrives with, and the one it sits with (ground radians)
+    private float _refused, _replan;                      // seconds in a row the water refused its step (Approach gives up past 1.5), and the wait to re-aim at the island
+    private PointF _b0, _b1, _b2, _b3;                    // the curve of a climb or a slip, screen pixels
+    private float _scriptDur;
+    private bool _ringed;
+    // Sitting still, with a little life: a slow turn of the head and now and then a leg stretched out.
+    private float _align;                                 // the turn still to make around the middle after a climb (a log is climbed square on and then lain along), radians
+    private bool _pivoting;                               // turning on the spot, before a slip, to face the way it will leave
+    private float _exitHeading, _exitAngle;
+    private float _headOff, _turnFrom, _turnTo, _turnT = 1, _turnTimer, _stretch, _stretchT = 1, _stretchTimer;
+
+    private readonly float[] _h = new float[Points];      // how far up (0 to 1) each spine point is this frame
+    private float _out;                                   // the highest of them: 0 = all in the water
+
+    /// <summary>How deep it is: 0 at the surface, 1 as deep as a koi goes. A turtle stays near the top. 0 while any of it is up on a perch.</summary>
+    public float Z => _z * (1 - MathF.Min(1, 4 * _out));
 
     /// <summary>The screen box it can paint in this frame (shell, head, legs and their soft edges), for the shared draw order.</summary>
     public RectangleF Box
@@ -82,18 +169,29 @@ internal sealed class Turtle : Body
     public PointF Nose => Spine[0];
     public PointF Middle => Spine[Points / 2];
 
-    /// <summary>True while it is in the pond (always, so far): it then throws and receives the koi's cross shadows, and is hazed and sunk by its depth.</summary>
-    public bool InWater => true;
+    /// <summary>True while all of it is in the pond: it then throws and receives the koi's cross shadows, and is hazed and sunk by its depth. False the moment any of it is up on a perch.</summary>
+    public bool InWater => _out < 0.001f;
 
-    public Turtle(Pond pond, Ripples ripples, bool[] where, Random rng) : base(Points)
+    /// <summary>What it is doing now, and which perch (if any), for logs and tests (never read by the drawing).</summary>
+    public string State => _mind.ToString();
+    public string PerchName => _perch.ToString();
+
+    /// <summary>The highest part of the body above the water, 0 to 1 (for logs and tests).</summary>
+    public float Height01 => _out;
+
+    public Turtle(Pond pond, Ripples ripples, bool[] where, Random rng, float sunny, float nerve, bool[] perchMask) : base(Points)
     {
         _pond = pond;
         _ripples = ripples;
         _where = where;
+        _perchMask = perchMask;
         _rng = rng;
+        _sunny = sunny;
+        _nerve = nerve;
         _len = pond.U * 0.1f;
         _wide = _len * 0.24f;
         _skin = Skin(rng);
+        if (pond.Log is Log log) { _logAx = MathF.Cos(log.Angle); _logAy = MathF.Sin(log.Angle); }
         for (int i = 0; i < Points; i++) Along[i] = i / (Points - 1f);
 
         for (int tries = 0; tries < 500; tries++)
@@ -105,94 +203,198 @@ internal sealed class Turtle : Body
         }
         _heading = (float)(rng.NextDouble() * MathF.Tau);
         _speed = _len * 0.4f;
-        Z = 0.1f;
-        _zTarget = Z;
+        _z = 0.1f;
+        _zTarget = _z;
         _depthTimer = 5 + 10 * (float)rng.NextDouble();
-        _restTimer = 20 + 40 * (float)rng.NextDouble();
+        _mind.Begin(Doing.Cruise, 15 + 20 * (float)rng.NextDouble());
+        _hauls.Start((5 + 35 * (float)rng.NextDouble()) * (1.3f - _sunny));   // the first visit comes sooner for a sunny one
         NewGoal();
         LaySpine();
     }
+
+    /// <summary>The other turtles, so two never choose the same perch.</summary>
+    public void MeetPeers(Turtle[] all) => _peers = all;
 
     private float CentreY => _pond.Centre.Y;
     private (float, float) ToGround(float x, float y) => (x, CentreY + (y - CentreY) / Ripples.Squash);
     private PointF ToScreen(float gx, float gy) => new(gx, CentreY + (gy - CentreY) * Ripples.Squash);
     private static float Wrap(float a) => MathF.IEEERemainder(a, MathF.Tau);
     private static float Dist(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
+    private static PointF Toward(PointF p, PointF dir, float d) => new(p.X + dir.X * d, p.Y + dir.Y * d);
+    private static float Smooth(float x) { x = Math.Clamp(x, 0, 1); return x * x * (3 - 2 * x); }
 
-    public void Update(float dt)
+    /// <summary>The ground heading (what _heading holds) of a direction drawn on the screen: the slant squashes up and down, so undo that.</summary>
+    private static float GroundHeading(float sx, float sy) => MathF.Atan2(sy / Ripples.Squash, sx);
+
+    /// <summary>The screen direction (a unit vector) of a ground heading.</summary>
+    private static PointF ScreenDir(float heading)
+    {
+        float dx = MathF.Cos(heading), dy = MathF.Sin(heading) * Ripples.Squash, l = MathF.Sqrt(dx * dx + dy * dy);
+        return new PointF(dx / l, dy / l);
+    }
+
+    private bool WaterAt(PointF p)
+    {
+        int ix = (int)p.X, iy = (int)p.Y;
+        return ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Water[iy * _pond.Width + ix];
+    }
+
+    private bool LandAt(PointF p)
+    {
+        int ix = (int)p.X, iy = (int)p.Y;
+        return ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Land[iy * _pond.Width + ix];
+    }
+
+    public void Update(float dt, PointF? snakeHead = null)
     {
         _time += dt;
         float t = (float)(_time % 100000.0);
+        _snake = snakeHead;
+        _mind.Tick(dt);
+        _hauls.Tick(dt);
 
-        // ---- Paddle, or float and rest ----
-        _restTimer -= dt;
-        if (_restTimer <= 0)
+        switch (_doing)
         {
-            _resting = !_resting;
-            if (_resting)
+            case Doing.Climb:
+            case Doing.Slip: Script(dt); break;
+            case Doing.Bask: Sit(dt); break;
+            default: Swim(dt, t); break;
+        }
+
+        // ---- Depth: near the surface, a little deeper now and then (and the whole way down in a Dive) ----
+        if (_doing == Doing.Cruise)
+        {
+            _depthTimer -= dt;
+            if (_depthTimer <= 0)
             {
-                _restTimer = 8 + 14 * (float)_rng.NextDouble();
-                _zTarget = 0;                                           // up to the surface for a breath
-                PointF nose = Spine[0];
-                _ripples.Add(nose.X, nose.Y, 0.5f);
-            }
-            else
-            {
-                _restTimer = 25 + 40 * (float)_rng.NextDouble();
-                NewGoal();
+                _zTarget = 0.03f + 0.3f * (float)_rng.NextDouble();
+                _depthTimer = 8 + 10 * (float)_rng.NextDouble();
             }
         }
-        _stroke += ((_resting ? 0f : 1f) - _stroke) * (1 - MathF.Exp(-dt * 1.5f));
+        PointF here = ToScreen(_x, _y);
+        int ix = Math.Clamp((int)here.X, 0, _pond.Width - 1), iy = Math.Clamp((int)here.Y, 0, _pond.Height - 1);
+        float bottom = 0.05f + 0.9f * _pond.Floor[iy * _pond.Width + ix] / 255f;   // the bed, rocks included (never inside a stone)
+        // Coming up to a perch is quicker than a lazy drift up (it must be at the surface to climb out).
+        float rate = _doing is Doing.Approach or Doing.Climb or Doing.Bask or Doing.Slip ? 1.2f : _doing == Doing.Dive ? 0.45f : 0.3f;
+        _z += (MathF.Min(_zTarget, bottom) - _z) * (1 - MathF.Exp(-dt * rate));
+
+        LaySpine();
+    }
+
+    // ============================== SWIMMING ==============================
+
+    /// <summary>Cruise, Float, Dive and Approach: everything where it is paddling (or floating) in the water.</summary>
+    private void Swim(float dt, float t)
+    {
+        if (_mind.Over)
+        {
+            if (_doing == Doing.Approach) GiveUp(); else Decide();
+        }
+        bool floating = _doing == Doing.Float, approach = _doing == Doing.Approach;
+
+        // ---- Paddle, or float and rest ----
+        _stroke += ((floating ? 0f : 1f) - _stroke) * (1 - MathF.Exp(-dt * 1.5f));
         _phase = (_phase + MathF.Tau * 0.9f * dt * _stroke) % MathF.Tau;
-        // Each pair of legs pushes as it sweeps back: a small surge twice a cycle.
         // Each pair of legs pushes during its quick sweep back (see Stroke); the push is
         // eased in and out, so the surge is a swell, not a kick.
         float push = MathF.Max(Thrust(_phase), Thrust(_phase + MathF.PI));
-        float targetSpeed = _resting ? 0 : _len * 0.5f * (0.65f + 0.7f * push);
-        _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (_resting ? 0.8f : 2.5f)));
+        float targetSpeed = floating ? 0 : _len * 0.5f * (0.65f + 0.7f * push);
+        _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (floating ? 0.8f : 2.5f)));
 
         // ---- Steering: a slow wander, a pull toward its goal, and the bank kept off ----
         PointF here = ToScreen(_x, _y);
-        if (!_resting)
+        bool free = false;       // "free": right beside a perch, where the bank rules would push it away from the very thing it wants
+        if (!floating)
         {
-            float turn = 0.15f * MathF.Sin(t * 0.17f);
-            _goalTimer -= dt;
-            float gdx = _goalX - _x, gdy = _goalY - _y;
-            if (_goalTimer <= 0 || gdx * gdx + gdy * gdy < _len * _len * 4) NewGoal();
-            turn += Wrap(MathF.Atan2(gdy, gdx) - _heading) * 0.3f;
-            float roomAhead = RoomAlong(_heading, _len * 1.6f), roomHere = _pond.RoomAt(here.X, here.Y);
-            float most = 0.35f;
-            if (roomAhead < _len * 0.9f || roomHere < _len * 0.5f)
+            float turn, most = 0.35f;
+            if (approach)
             {
-                // The bank is coming: swing toward more open water, and slow down.
-                PointF open = _pond.OpenWay(here.X, here.Y);
-                if (open.X * open.X + open.Y * open.Y > 1e-6f) turn += Wrap(MathF.Atan2(open.Y, open.X) - _heading) * 2f;
-                most = 1.0f;
-                _speed *= 1 - 0.8f * dt;
+                // The way in is a line from _far to _near, and it must arrive pointing along it. Far out it
+                // simply heads for _far; once close it chases a point a little way AHEAD of itself on that
+                // line (pure pursuit: a dog running at a ball it is lining up with a path), so it
+                // swings onto the line instead of curving past the spot and into the bank.
+                PointF e = new(_near.X - _far.X, _near.Y - _far.Y);
+                float el = MathF.Max(1e-3f, MathF.Sqrt(e.X * e.X + e.Y * e.Y));
+                e = new PointF(e.X / el, e.Y / el);
+                float along = (here.X - _near.X) * e.X + (here.Y - _near.Y) * e.Y;            // negative: still before _near
+                float cross = MathF.Abs(-(here.X - _near.X) * e.Y + (here.Y - _near.Y) * e.X);
+                // "Lined up": close, on the line (not off to one side) and not yet past _near. Only then
+                // does the bank rule stand aside; a turtle that comes at the perch from the side, or past
+                // the end of a log, simply heads for _far first and lines up from there.
+                free = Dist(here, _near) < _len * 3.2f && cross < _len * 1.2f && along < 0.2f * _len;
+                if (!free && _perch == Perch.Island)
+                {
+                    // The island is round, so the best side to come in from is the side the turtle is on NOW.
+                    _replan -= dt;
+                    if (_replan <= 0)
+                    {
+                        _replan = 0.5f;
+                        if (PlanIsland(here, out Plan q)) { _far = q.Far; _near = q.Near; _sitMid = q.Mid; _comeIn = q.ComeIn; _sitFace = q.Face; }
+                    }
+                }
+                PointF aim = free ? Toward(_near, e, along + 0.8f * _len) : _far;
+                (float ax, float ay) = ToGround(aim.X, aim.Y);
+                // On the line, close, pointing the way it should, and up at the surface: climb.
+                if (free && along > -0.5f * _len && cross < 0.45f * _len && MathF.Abs(Wrap(_heading - _comeIn)) < 0.9f && _z < 0.12f)
+                {
+                    BeginClimb(here);
+                    return;
+                }
+                // Far out the pull toward the perch is gentle (0.6, like a cruising goal's 0.3 but keener), so the
+                // bank reflex below can always win: a strong pull and a bank on the shortest way round is a
+                // deadlock (it pushed into the bank for 4 s and gave up). Beside the perch the pull is keen.
+                turn = Wrap(MathF.Atan2(ay - _y, ax - _x) - _heading) * (free ? 1.6f : 0.6f);
+                most = free ? 0.9f : 0.6f;
+                if (!free) turn += BankTurn(here, dt, ref most);
             }
+            else
+            {
+                turn = 0.15f * MathF.Sin(t * 0.17f);
+                _goalTimer -= dt;
+                float gdx = _goalX - _x, gdy = _goalY - _y;
+                if (_goalTimer <= 0 || gdx * gdx + gdy * gdy < _len * _len * 4) NewGoal();
+                turn += Wrap(MathF.Atan2(gdy, gdx) - _heading) * 0.3f;
+                turn += BankTurn(here, dt, ref most);
+            }
+            // The turning circle: a rigid shell turns in an arc, and the middle of it drifts sideways
+            // if the arc is tighter than about 0.6 of a body length (it would then look to be going
+            // tail first). A turn can be no sharper than speed / (0.6 body lengths); never less than
+            // the speed of a slow stroke, so a bank can always be answered.
+            most = MathF.Min(most, MathF.Max(_speed, _len * 0.25f) / ((approach ? 0.85f : 0.6f) * _len));   // a touch wider when lining up on a perch, where the eye is on it
             _heading = Wrap(_heading + Math.Clamp(turn, -most, most) * dt);
         }
         float step = _speed * dt;
         PointF next = ToScreen(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step);
-        float roomNext = _pond.RoomAt(next.X, next.Y);
-        if (roomNext > _len * 0.2f || roomNext >= _pond.RoomAt(here.X, here.Y))   // never stuck: toward more room is always allowed
+        bool ok;
+        if (free) ok = WaterAt(next);              // beside a perch the test is the plain one: is the water there?
+        else
+        {
+            float roomNext = _pond.RoomAt(next.X, next.Y);
+            ok = roomNext > _len * 0.2f || roomNext >= _pond.RoomAt(here.X, here.Y);   // never stuck: toward more room is always allowed
+        }
+        if (ok)
         {
             _x += MathF.Cos(_heading) * step;
             _y += MathF.Sin(_heading) * step;
+            _refused = 0;
         }
-
-        // ---- Depth: near the surface, a little deeper now and then ----
-        _depthTimer -= dt;
-        if (_depthTimer <= 0 && !_resting)
+        else if (approach)
         {
-            _zTarget = 0.03f + 0.3f * (float)_rng.NextDouble();
-            _depthTimer = 8 + 10 * (float)_rng.NextDouble();
+            _refused += dt;
+            if (_refused > 1.5f) GiveUp();         // never stand refused: give the perch up and go back to paddling
         }
-        int ix = Math.Clamp((int)here.X, 0, _pond.Width - 1), iy = Math.Clamp((int)here.Y, 0, _pond.Height - 1);
-        float bottom = 0.05f + 0.9f * _pond.Floor[iy * _pond.Width + ix] / 255f;   // the bed, rocks included (never inside a stone)
-        Z += (MathF.Min(_zTarget, bottom) - Z) * (1 - MathF.Exp(-dt * 0.3f));
+    }
 
-        LaySpine();
+    /// <summary>The bank is coming: how hard to swing toward more open water (0 if it is not), and slow down. "most" is raised to a quicker turn when it is.</summary>
+    private float BankTurn(PointF here, float dt, ref float most)
+    {
+        float roomAhead = RoomAlong(_heading, _len * 1.6f), roomHere = _pond.RoomAt(here.X, here.Y);
+        if (roomAhead >= _len * 0.9f && roomHere >= _len * 0.5f) return 0;
+        PointF open = _pond.OpenWay(here.X, here.Y);
+        most = 1.0f;
+        _speed *= 1 - 0.8f * dt;
+        if (open.X * open.X + open.Y * open.Y > 1e-6f) return Wrap(MathF.Atan2(open.Y, open.X) - _heading) * 2f;
+        return 0;
     }
 
     private void NewGoal()
@@ -215,15 +417,426 @@ internal sealed class Turtle : Body
         return MathF.Min(_pond.RoomAt(end.X, end.Y), _pond.RoomAt(mid.X, mid.Y) * 1.5f);
     }
 
-    /// <summary>A point of the body in screen pixels: s along from the nose (0 to 1), v across (-1 left edge to +1 right edge).</summary>
-    private PointF At(float s, float v)
+    // ============================== THE DICE ==============================
+
+    /// <summary>When a doing ends: roll for the next. Cruise and Float take turns as they always did; Dive and a haul-out are other faces.</summary>
+    private void Decide()
+    {
+        bool fromCruise = _doing == Doing.Cruise;
+        Span<float> w = stackalloc float[4];   // Cruise, Float, Dive, Haul out
+        w[0] = fromCruise ? 0.3f : 3f;
+        w[1] = fromCruise ? 3f : 0f;
+        w[2] = fromCruise ? 1.2f : 0f;
+        w[3] = _hauls.Ready ? 0.8f + 5f * _sunny : 0f;     // a sunny turtle takes every chance
+        switch (Dice.Pick(_rng, w))
+        {
+            case 1:
+                _mind.Begin(Doing.Float, 8 + 14 * (float)_rng.NextDouble());
+                _zTarget = 0;                                           // up to the surface for a breath
+                PointF nose = Spine[0];
+                _ripples.Add(nose.X, nose.Y, 0.5f);
+                break;
+            case 2:
+                _mind.Begin(Doing.Dive, 8 + 12 * (float)_rng.NextDouble());
+                _zTarget = 0.4f + 0.5f * (float)_rng.NextDouble();      // down to the bed (the floor under it caps this)
+                NewGoal();
+                break;
+            case 3:
+                if (HaulOut()) break;
+                _hauls.Start(20);                                       // nothing to climb onto just now: try again later
+                StartCruise();
+                break;
+            default:
+                StartCruise();
+                break;
+        }
+    }
+
+    private void StartCruise()
+    {
+        _mind.Begin(Doing.Cruise, 20 + 30 * (float)_rng.NextDouble());
+        _zTarget = 0.05f + 0.2f * (float)_rng.NextDouble();
+        _depthTimer = 8 + 10 * (float)_rng.NextDouble();
+        NewGoal();
+    }
+
+    // ============================== PERCHES ==============================
+
+    private bool PerchTaken(Perch kind)
+    {
+        foreach (Turtle p in _peers) if (p != this && p._perch == kind) return true;
+        return false;
+    }
+
+    private bool SnakeNear(PointF p) => _snake is PointF s && Dist(s, p) < _pond.U * 0.15f;
+
+    /// <summary>
+    /// Is the straight swim from the nose to the staging point clear of bank and rocks (room for the whole
+    /// shell all the way)? The approach is a straight line, and a straight line across a corner of land
+    /// is a turtle that pushes into the bank for ever, so a perch with the bank in the way is not chosen
+    /// from here; it is chosen later, from wherever the turtle has wandered to.
+    /// </summary>
+    private bool LineClear(PointF nose, PointF far)
+    {
+        const int samples = 16;
+        for (int i = 3; i <= samples; i++)
+        {
+            float k = i / (float)samples;
+            if (_pond.RoomAt(nose.X + (far.X - nose.X) * k, nose.Y + (far.Y - nose.Y) * k) < _len * 0.45f) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Is this a good place for the nose to wait, with the body trailing out behind it away from the perch (dir points away)? Open water all the way, in view, with room.</summary>
+    private bool StageOk(PointF far, PointF near, PointF dir)
+    {
+        float m = _len;
+        if (far.X < m || far.Y < m || far.X > _pond.Width - m || far.Y > _pond.Height - m) return false;
+        if (!WaterAt(far) || !WaterAt(near)) return false;
+        if (!WaterAt(Toward(near, dir, _len * 0.5f)) || !WaterAt(Toward(near, dir, _len * 0.95f))) return false;   // the shell and tail, trailing behind
+        return _pond.RoomAt(far.X, far.Y) > _len * 0.4f;
+    }
+
+    /// <summary>
+    /// The island's cap. It comes in from the side nearest the turtle (then,
+    /// if that side is no good, the sides either way round), to a point just
+    /// outside the cap's rim, and sits with the middle of its shell half a cap
+    /// radius inside the rim, facing the way it came.
+    /// </summary>
+    private bool PlanIsland(PointF nose, out Plan plan)
+    {
+        plan = default;
+        if (_pond.Island is not Island isle || PerchTaken(Perch.Island)) return false;
+        PointF c = isle.Cap;
+        float r = isle.CapRadius, a0 = MathF.Atan2(nose.Y - c.Y, nose.X - c.X);   // from the cap toward the turtle
+        ReadOnlySpan<float> turns = [0, 0.7f, -0.7f, 1.4f, -1.4f, 2.1f, -2.1f, MathF.PI];
+        foreach (float off in turns)
+        {
+            PointF outward = new(MathF.Cos(a0 + off), MathF.Sin(a0 + off));
+            PointF near = Toward(c, outward, r + 0.4f * _len), far = Toward(c, outward, r + 1.6f * _len);
+            if (!StageOk(far, near, outward) || !LineClear(nose, far)) continue;
+            PointF mid = Toward(c, outward, 0.5f * r);
+            float face = GroundHeading(-outward.X, -outward.Y);
+            if (SnakeNear(mid)) return false;
+            plan = new Plan(Perch.Island, far, near, mid, face, face);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The log. It comes in from either side, square on, to the water beside
+    /// the log, climbs onto the middle line and turns to lie ALONG the log.
+    /// For a beached log, the water beside the sitting point is tested too:
+    /// a log lying over the grass is no place to climb out of the pond.
+    /// </summary>
+    private bool PlanLog(PointF nose, out Plan plan)
+    {
+        plan = default;
+        if (_pond.Log is not Log log || PerchTaken(Perch.Log)) return false;
+        PointF axis = new(_logAx, _logAy), perp = new(-_logAy, _logAx);
+        float side0 = (nose.X - log.Centre.X) * perp.X + (nose.Y - log.Centre.Y) * perp.Y >= 0 ? 1 : -1;   // the side the turtle is on first
+        for (int tries = 0; tries < 8; tries++)
+        {
+            PointF m = log.At(0.35f + 0.3f * (float)_rng.NextDouble());
+            if (!LandAt(m) || SnakeNear(m)) continue;                // the sitting point is ON the log, which is land
+            float side = tries % 2 == 0 ? side0 : -side0;
+            PointF outward = new(perp.X * side, perp.Y * side);
+            if (!WaterAt(Toward(m, outward, log.Width * 0.5f + 0.15f * _len))) continue;   // water right beside the log here
+            PointF near = Toward(m, outward, log.Width * 0.5f + 0.4f * _len), far = Toward(m, outward, log.Width * 0.5f + 1.6f * _len);
+            if (!StageOk(far, near, outward) || !LineClear(nose, far)) continue;
+            float sit = _rng.Next(2) == 0 ? 1 : -1;
+            plan = new Plan(Perch.Log, far, near, m, GroundHeading(-outward.X, -outward.Y), GroundHeading(axis.X * sit, axis.Y * sit));
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Chooses a perch by distance and dice and sets off for it. False if there is none to go to.</summary>
+    private bool HaulOut()
+    {
+        PointF nose = ToScreen(_x, _y);
+        bool island = PlanIsland(nose, out Plan pi), log = PlanLog(nose, out Plan pl);
+        Span<float> w = stackalloc float[2];
+        w[0] = island ? 1 / (0.25f + Dist(nose, pi.Mid) / _pond.U) : 0;      // the nearer perch is the likelier
+        w[1] = log ? 1 / (0.25f + Dist(nose, pl.Mid) / _pond.U) : 0;
+        int pick = Dice.Pick(_rng, w);
+        if (pick < 0) return false;
+        Plan p = pick == 0 ? pi : pl;
+        _perch = p.Kind;
+        _far = p.Far; _near = p.Near; _sitMid = p.Mid; _comeIn = p.ComeIn; _sitFace = p.Face;
+        _refused = 0;
+        _zTarget = 0;
+        _mind.Begin(Doing.Approach, 50);                                        // not there in 50 s: give it up
+        return true;
+    }
+
+    private void GiveUp()
+    {
+        _perch = Perch.None;
+        _hauls.Start(25 + 30 * (float)_rng.NextDouble());
+        StartCruise();
+    }
+
+    /// <summary>The screen spot of the nose when the middle of the shell rests at _sitMid, facing the way it climbed (_comeIn).</summary>
+    private PointF SitNose() => NoseFor(_sitMid, _comeIn);
+
+    /// <summary>The nose for a shell whose middle is at the screen point mid and which faces ground heading h.</summary>
+    private PointF NoseFor(PointF mid, float h)
+    {
+        (float mx, float my) = ToGround(mid.X, mid.Y);
+        float m = Along[Points / 2] * _len;
+        return ToScreen(mx + MathF.Cos(h) * m, my + MathF.Sin(h) * m);
+    }
+
+    /// <summary>Lays the climb or slip curve from a to b, leaving a along heading ha and arriving at b along hb.</summary>
+    private void SetCurve(PointF a, float ha, PointF b, float hb)
+    {
+        float k = Dist(a, b) / 3;
+        PointF ta = ScreenDir(ha), tb = ScreenDir(hb);
+        _b0 = a; _b1 = Toward(a, ta, k); _b2 = Toward(b, tb, -k); _b3 = b;
+    }
+
+    private PointF Bezier(float u)
+    {
+        float v = 1 - u, a = v * v * v, b = 3 * v * v * u, c = 3 * v * u * u, d = u * u * u;
+        return new PointF(a * _b0.X + b * _b1.X + c * _b2.X + d * _b3.X, a * _b0.Y + b * _b1.Y + c * _b2.Y + d * _b3.Y);
+    }
+
+    private PointF BezierSlope(float u)
+    {
+        float v = 1 - u;
+        return new PointF(
+            3 * v * v * (_b1.X - _b0.X) + 6 * v * u * (_b2.X - _b1.X) + 3 * u * u * (_b3.X - _b2.X),
+            3 * v * v * (_b1.Y - _b0.Y) + 6 * v * u * (_b2.Y - _b1.Y) + 3 * u * u * (_b3.Y - _b2.Y));
+    }
+
+    /// <summary>It has reached the water beside the perch, pointing the right way: haul out.</summary>
+    private void BeginClimb(PointF nose)
+    {
+        PointF f = SitNose();
+        SetCurve(nose, _heading, f, _comeIn);
+        // Slow enough to read as a climb: about a third of a body length a second, 1.8 to 3 s.
+        _scriptDur = Math.Clamp(Dist(nose, f) * 1.15f / (0.3f * _len), 1.8f, 3f);
+        _zTarget = 0;
+        _ringed = false;
+        _mind.Begin(Doing.Climb, _scriptDur);
+    }
+
+    /// <summary>
+    /// Climb and Slip: the nose follows the curve (_b0 to _b3) and the
+    /// heading follows the curve's slope, so it is always nose first.
+    /// A climb starts at paddling speed and comes to rest on the perch; a slip
+    /// starts from rest and leaves at paddling speed. How high each part is
+    /// is never set here: Height() reads it from where the part is.
+    /// </summary>
+    private void Script(float dt)
+    {
+        bool climb = _doing == Doing.Climb;
+        float p = Math.Clamp(1 - _mind.Left / _scriptDur, 0, 1);
+        // The ease: 1.4p + 0.2p^2 - 0.6p^3 starts at 1.4 times the average speed and ends at rest;
+        // p^2(2 - p) starts at rest and ends at the average speed.
+        float u = climb ? 1.4f * p + 0.2f * p * p - 0.6f * p * p * p : p * p * (2 - p);
+        PointF s = Bezier(u), slope = BezierSlope(u);
+        PointF was = ToScreen(_x, _y);
+        (_x, _y) = ToGround(s.X, s.Y);
+        if (slope.X * slope.X + slope.Y * slope.Y > 1e-6f) _heading = GroundHeading(slope.X, slope.Y);
+        float moved = Dist(was, s) / MathF.Max(dt, 1e-4f);
+        _speed += (moved - _speed) * (1 - MathF.Exp(-dt * 6));
+
+        // Legs: paddling while it swims toward the perch, out and still once it is up; paddling again as it goes in.
+        float want = climb ? (p < 0.7f ? 1f : 0f) : (p > 0.3f ? 1f : 0f);
+        _stroke += (want - _stroke) * (1 - MathF.Exp(-dt * 3));
+        _phase = (_phase + MathF.Tau * 0.9f * dt * _stroke) % MathF.Tau;
+
+        if (!climb && !_ringed && p > 0.55f)
+        {
+            _ringed = true;
+            PointF mid = Spine[Points / 2];
+            _ripples.Add(mid.X, mid.Y, 0.6f);                      // the one ring, as it goes in
+        }
+        if (!_mind.Over) return;
+
+        if (climb)
+        {
+            (_x, _y) = ToGround(_b3.X, _b3.Y);
+            _heading = _comeIn;
+            _align = Wrap(_comeIn - _sitFace);                       // 0 on the island; a quarter turn to go on the log
+            _pivoting = false;
+            _headOff = 0; _turnT = 1; _stretchT = 1; _stretch = 0;
+            _turnTimer = 3 + 5 * (float)_rng.NextDouble();
+            _stretchTimer = 8 + 12 * (float)_rng.NextDouble();
+            float hi = 28 + 32 * _sunny;
+            float seconds = (20 + (hi - 20) * (float)_rng.NextDouble()) * (1.1f - 0.3f * _nerve);   // a sunny one up to a minute; a jumpy one cuts it short
+            _mind.Begin(Doing.Bask, seconds);
+        }
+        else
+        {
+            _perch = Perch.None;                                    // off the perch: free for another turtle
+            _hauls.Start((45 + 60 * (float)_rng.NextDouble()) * (1.5f - _sunny));
+            _mind.Begin(Doing.Dive, 4 + 5 * (float)_rng.NextDouble());   // a short dive, then Decide() sends it cruising
+            _zTarget = 0.25f + 0.3f * (float)_rng.NextDouble();
+            NewGoal();
+        }
+    }
+
+    /// <summary>Bask: still, legs out, with a slow turn of the head now and then and one leg stretched. Slips in when the time is up or the snake comes near.</summary>
+    private void Sit(float dt)
+    {
+        _speed = 0;
+        _stroke += (0 - _stroke) * (1 - MathF.Exp(-dt * 1.5f));
+        _zTarget = 0;
+
+        // A few degrees of head turn over a second or two, about the middle of the shell (so the shell does not slide).
+        _turnTimer -= dt;
+        if (_turnTimer <= 0 && _turnT >= 1 && !_pivoting)
+        {
+            _turnFrom = _headOff;
+            _turnTo = ((float)_rng.NextDouble() - 0.5f) * 0.24f;
+            _turnT = 0;
+            _turnTimer = 6 + 8 * (float)_rng.NextDouble();
+        }
+        if (_turnT < 1)
+        {
+            _turnT = MathF.Min(1, _turnT + dt / 1.8f);
+            _headOff = _turnFrom + (_turnTo - _turnFrom) * Smooth(_turnT);
+        }
+        _stretchTimer -= dt;
+        if (_stretchTimer <= 0 && _stretchT >= 1) { _stretchT = 0; _stretchTimer = 15 + 20 * (float)_rng.NextDouble(); }
+        if (_stretchT < 1) { _stretchT = MathF.Min(1, _stretchT + dt / 2.2f); _stretch = MathF.Sin(MathF.PI * _stretchT); }
+        else _stretch = 0;
+
+        // Turning on the spot, about the middle of the shell (so it does not slide): first the quarter
+        // turn that lays it along the log, later the turn to face the way it will leave.
+        if (_pivoting)
+        {
+            float diff = Wrap(_exitHeading - _sitFace);
+            _sitFace += Math.Clamp(diff, -0.9f * dt, 0.9f * dt);
+        }
+        else if (_align != 0)
+        {
+            float rate = (0.12f + 0.9f * MathF.Min(1, MathF.Abs(_align))) * dt;     // eases out as it comes round
+            _align = MathF.Abs(_align) <= rate ? 0 : _align - MathF.Sign(_align) * rate;
+        }
+        _heading = _sitFace + _align + _headOff;
+        (float mx, float my) = ToGround(_sitMid.X, _sitMid.Y);
+        float m = Along[Points / 2] * _len;
+        _x = mx + MathF.Cos(_heading) * m;
+        _y = my + MathF.Sin(_heading) * m;
+
+        if (_pivoting)
+        {
+            if (MathF.Abs(Wrap(_exitHeading - _sitFace)) < 0.02f) BeginSlip();
+            return;
+        }
+        // A nervous turtle goes in while the snake is still well off; a calm one lets it come close.
+        bool scared = _snake is PointF s && Dist(s, Spine[Points / 2]) < _pond.U * (0.04f + 0.06f * _nerve);
+        if (scared || _mind.Over) StartSlip();
+    }
+
+    /// <summary>
+    /// Off the perch and into the water. Island: forward or to either side
+    /// (up to a right angle); log: off either side. First it turns on the spot
+    /// to face the way out (see Sit), then slides straight in. The exit point
+    /// is far enough out that the whole body ends in the water, and is tested
+    /// the way an approach point is. If every way is blocked it sits a few
+    /// seconds more and tries again.
+    /// </summary>
+    private void StartSlip()
+    {
+        float sa = MathF.Atan2(ScreenDir(_heading).Y, ScreenDir(_heading).X);
+        Span<float> good = stackalloc float[5];
+        int count = 0;
+        ReadOnlySpan<float> offs = [0, 0.8f, -0.8f, MathF.PI / 2, -MathF.PI / 2];
+        foreach (float off in offs)
+        {
+            if (_perch == Perch.Log && MathF.Abs(off) < 1.5f) continue;     // off the SIDES of a log, never over its ends
+            if (ExitOk(sa + off)) good[count++] = sa + off;
+        }
+        if (count == 0) { _mind.Left = 6; return; }                          // blocked: sit on and look again
+        _exitAngle = good[_rng.Next(count)];
+        _exitHeading = GroundHeading(MathF.Cos(_exitAngle), MathF.Sin(_exitAngle));
+        _sitFace = Wrap(_sitFace + _align + _headOff);                        // from now on the pivot starts from where it is facing
+        _align = 0; _headOff = 0; _turnT = 1; _stretchT = 1; _stretch = 0;
+        _pivoting = true;
+    }
+
+    /// <summary>Faced the right way: slide off along a straight line to the exit point.</summary>
+    private void BeginSlip()
+    {
+        _pivoting = false;
+        ExitPoint(_exitAngle, out PointF x);
+        PointF n0 = ToScreen(_x, _y);
+        SetCurve(n0, _heading, x, _exitHeading);
+        _scriptDur = 1.7f;
+        _ringed = false;
+        _mind.Begin(Doing.Slip, _scriptDur);
+    }
+
+    /// <summary>Where the nose ends up on leaving along screen angle qa: far enough out that the tail is clear of the perch too.</summary>
+    private bool ExitPoint(float qa, out PointF x)
+    {
+        PointF q = new(MathF.Cos(qa), MathF.Sin(qa));
+        if (_perch == Perch.Island && _pond.Island is Island isle) { x = Toward(isle.Cap, q, isle.CapRadius + 1.3f * _len); return true; }
+        if (_perch == Perch.Log && _pond.Log is Log log) { x = Toward(_sitMid, q, log.Width * 0.5f + 1.3f * _len); return true; }
+        x = _sitMid;
+        return false;
+    }
+
+    private bool ExitOk(float qa)
+    {
+        PointF q = new(MathF.Cos(qa), MathF.Sin(qa));
+        if (!ExitPoint(qa, out PointF x)) return false;
+        if (x.X < _len || x.Y < _len || x.X > _pond.Width - _len || x.Y > _pond.Height - _len) return false;
+        if (!WaterAt(x) || !WaterAt(Toward(x, q, _len * 0.4f)) || _pond.RoomAt(x.X, x.Y) < _len * 0.3f) return false;
+        // And the way there: where the nose will be once it has turned, then three quarters of the way along, must be in the water.
+        float hq = GroundHeading(q.X, q.Y);
+        PointF n0 = NoseFor(_sitMid, hq);
+        SetCurve(n0, hq, x, hq);
+        return WaterAt(Bezier(0.75f));
+    }
+
+    /// <summary>A point of the body in screen pixels, before it sinks or is lifted: s along from the nose (0 to 1), v across (-1 left edge to +1 right edge).</summary>
+    private PointF Raw(float s, float v)
     {
         float dx = MathF.Cos(_heading), dy = MathF.Sin(_heading);
         // The nose is at (_x, _y) and the body lies BEHIND it, against the heading.
         float k = Scale;
         float gx = _x - dx * s * _len * k - dy * v * _wide * Profile(s) * k, gy = _y - dy * s * _len * k + dx * v * _wide * Profile(s) * k;
-        PointF p = ToScreen(gx, gy);
-        return new PointF(p.X, p.Y + Sink);
+        return ToScreen(gx, gy);
+    }
+
+    /// <summary>A point of the body as it is drawn: down the screen for its depth, up it for its height above the water.</summary>
+    private PointF At(float s, float v)
+    {
+        PointF p = Raw(s, v);
+        return new PointF(p.X, p.Y + Sink - Height(p) * LiftPx);
+    }
+
+    /// <summary>How far a hauled-out turtle is lifted up the screen at full height: 0.012u of height, times the view's lift (Light.Lift).</summary>
+    private float LiftPx => Light.Lift * 0.012f * _pond.U;
+
+    /// <summary>
+    /// How high above the water a point of the body is, 0 to 1, from where it
+    /// is: 0 over water, rising smoothly as it comes over the perch's edge, 1
+    /// well inside. The island's cap is a circle on the screen, and the log a
+    /// long thin box. Nothing when no perch is in hand.
+    /// </summary>
+    private float Height(PointF p)
+    {
+        if (_perch == Perch.Island && _pond.Island is Island isle)
+        {
+            float r = isle.CapRadius;
+            return Smooth((1.25f * r - Dist(p, isle.Cap)) / (0.45f * r));
+        }
+        if (_perch == Perch.Log && _pond.Log is Log log)
+        {
+            float dx = p.X - log.Centre.X, dy = p.Y - log.Centre.Y;
+            float a = dx * _logAx + dy * _logAy, b = -dx * _logAy + dy * _logAx;
+            float inside = MathF.Min(log.Length * 0.5f - MathF.Abs(a), log.Width * 0.5f - MathF.Abs(b));   // pixels inside the nearest edge
+            return Smooth((inside + 0.1f * log.Width) / (0.45f * log.Width));
+        }
+        return 0;
     }
 
     /// <summary>How much smaller it is drawn for its depth, like a koi (KoiSchool.Shrink): we look from a few body lengths up.</summary>
@@ -232,15 +845,21 @@ internal sealed class Turtle : Body
     /// <summary>How far down the screen its picture sits for its depth, like a koi's (Light.Sink). Small: a turtle stays near the top.</summary>
     private float Sink => Z * Pond.DepthU * _pond.U * Light.Sink;
 
-    /// <summary>The straight spine from nose to tail, each pair of edge points squashed to the screen.</summary>
+    /// <summary>The straight spine from nose to tail, each pair of edge points squashed to the screen, each point lifted by its own height.</summary>
     private void LaySpine()
     {
+        float most = 0;
         for (int i = 0; i < Points; i++)
         {
-            PointF l = At(Along[i], -1), r = At(Along[i], 1);
-            Spine[i] = new PointF((l.X + r.X) / 2, (l.Y + r.Y) / 2);
+            PointF l = Raw(Along[i], -1), r = Raw(Along[i], 1);
+            PointF c = new((l.X + r.X) / 2, (l.Y + r.Y) / 2);
+            float h = Height(c);
+            _h[i] = h;
+            if (h > most) most = h;
+            Spine[i] = new PointF(c.X, c.Y + Sink - h * LiftPx);
             HalfWidth[i] = Dist(l, r) / 2;
         }
+        _out = most;
     }
 
     /// <summary>
@@ -332,28 +951,35 @@ internal sealed class Turtle : Body
     /// <param name="mark">If given, set true at every pixel the shell paints (KoiSchool throws the shallower fishes' shadows onto those).</param>
     public void Draw(FrameBuffer fb, bool[]? mark = null)
     {
-        float murk = 0.06f + 0.62f * Z;
+        // Up on a perch it is out of the water: no haze at all, and it is painted wherever the
+        // view is open (the cap and the log are not water, so the water stencil would cut it off).
+        float murk = (0.06f + 0.62f * Z) * (1 - MathF.Min(1, 6 * _out));
         float soft = MathF.Max(1f, _pond.U * 0.0012f) * (1 + 3 * Z);
+        bool[] stencil = _out >= 0.001f ? _pond.Open : _where;
+        if (_out > 0.02f)
+        {
+            // Its shadow on the perch: the sun is up and to the left, so it falls down and to the right
+            // of where the body would touch the perch, by the height (the same rule as the petals).
+            float height = _out * 0.012f * _pond.U;
+            PaintShadow(fb, _perchMask, Light.ShadowX * height, (Light.Lift + Light.ShadowY) * height,
+                0.4f * MathF.Min(1, _out * 2), MathF.Max(1.5f, _pond.U * 0.002f));
+        }
         // Legs first, so the shell covers where they join it.
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
         {
             // Front left with back right, then the other pair: the diagonal pairs share a phase.
             float front = _phase + (side > 0 ? 0 : MathF.PI), rear = _phase + (side > 0 ? MathF.PI : 0);
-            Leg(fb, 0.3f, side, 1.22f - 0.7f * Stroke(front) * _stroke - 0.17f * (1 - _stroke), 0.34f, Thrust(front) * _stroke, murk);
-            Leg(fb, 0.74f, side, 2.36f - 0.5f * Stroke(rear) * _stroke + 0.26f * (1 - _stroke), 0.3f, Thrust(rear) * _stroke, murk);
+            Leg(fb, stencil, 0.3f, side, 1.22f - 0.7f * Stroke(front) * _stroke - 0.17f * (1 - _stroke), 0.34f, Thrust(front) * _stroke, murk);
+            // The stretch (while basking) swings one back leg further back and out.
+            Leg(fb, stencil, 0.74f, side, 2.36f - 0.5f * Stroke(rear) * _stroke + 0.26f * (1 - _stroke) + (side > 0 ? 0.4f * _stretch : 0), 0.3f + (side > 0 ? 0.1f * _stretch : 0), Thrust(rear) * _stroke, murk);
         }
-        Paint(fb, _where, _pond.Sun, murk, soft, _pond.Pixels, mark: mark);
+        Paint(fb, stencil, _pond.Sun, murk, soft, _pond.Pixels, mark: mark);
         // The eyes: a dark dot each side of the head, toward the front.
         float er = MathF.Max(0.8f, _len * 0.014f * Scale);
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
-            Oval(fb, _where, At(0.07f, side * 0.7f), 0, er, er, 20, 24, 16, 0.95f, murk * 0.7f, _pond.Sun, water: _pond.Pixels);
+            Oval(fb, stencil, At(0.07f, side * 0.7f), 0, er, er, 20, 24, 16, 0.95f, murk * 0.7f, _pond.Sun, water: _pond.Pixels);
     }
 
-    /// <summary>
-    /// One leg: a broad flat paddle from under the shell's edge at s, on one
-    /// side, swung out at "angle" from straight ahead (0 = forward, pi =
-    /// backward), with the webbed foot at its end.
-    /// </summary>
     /// <summary>
     /// Where a leg is in its stroke, +1 swept forward to -1 swept back: a
     /// quick sweep back over the first 35% of the cycle (the push), then a
@@ -373,7 +999,12 @@ internal sealed class Turtle : Body
         return p < 0.35f ? MathF.Sin(MathF.PI * p / 0.35f) : 0;
     }
 
-    private void Leg(FrameBuffer fb, float s, int side, float angle, float length, float spread, float murk)
+    /// <summary>
+    /// One leg: a broad flat paddle from under the shell's edge at s, on one
+    /// side, swung out at "angle" from straight ahead (0 = forward, pi =
+    /// backward), with the webbed foot at its end.
+    /// </summary>
+    private void Leg(FrameBuffer fb, bool[] stencil, float s, int side, float angle, float length, float spread, float murk)
     {
         float a = _heading + side * angle;
         float dx = MathF.Cos(a), dy = MathF.Sin(a);
@@ -383,8 +1014,9 @@ internal sealed class Turtle : Body
         float hw = _wide * Profile(s) * 0.8f * k;
         float hx = _x - hdx * s * _len * k - hdy * side * hw, hy = _y - hdy * s * _len * k + hdx * side * hw;
         PointF thigh = ToScreen(hx + dx * l * 0.4f, hy + dy * l * 0.4f), foot = ToScreen(hx + dx * l * 0.85f, hy + dy * l * 0.85f);
-        thigh.Y += Sink; foot.Y += Sink;
-        Oval(fb, _where, thigh, a, l * 0.5f, l * 0.2f, 66, 84, 44, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
-        Oval(fb, _where, foot, a, l * 0.3f, l * (0.13f + 0.08f * spread), 56, 74, 40, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);   // the webbed foot opens on the push, folds on the return
+        // Sunk for its depth in the water, lifted by its own height on a perch (a leg hanging over the edge is lower than the one on the rock).
+        thigh.Y += Sink - Height(thigh) * LiftPx; foot.Y += Sink - Height(foot) * LiftPx;
+        Oval(fb, stencil, thigh, a, l * 0.5f, l * 0.2f, 66, 84, 44, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        Oval(fb, stencil, foot, a, l * 0.3f, l * (0.13f + 0.08f * spread), 56, 74, 40, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);   // the webbed foot opens on the push, folds on the return
     }
 }

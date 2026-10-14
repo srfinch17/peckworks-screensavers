@@ -124,7 +124,11 @@ travelling wave (the cattails and irises sway with it stiffly).
 - A **turtle** (a red-eared slider, the turtle of nearly every park pond in Japan) paddles just
   under the surface, front left leg with back right and then the other pair, with a small surge
   on each stroke, turning as one rigid piece in wide slow arcs. Now and then it stops, spreads
-  its legs and floats, pokes its nose up for a breath (one small ring), then paddles off.
+  its legs and floats, pokes its nose up for a breath (one small ring), then paddles off, or
+  dives to the bed for a while. And it hauls out: it swims up to the island rock or the fallen
+  log, climbs onto it, sits with its legs spread in the sun for 20 to 60 seconds, and slips back
+  in (sooner if the snake comes near). Each turtle has its own dials: how much it loves the sun
+  and how jumpy it is.
 - **Petals** let go of the blossom, sway and tumble down, their shadows sliding in to meet them,
   touch the water with a tiny ring, then float, drifting slowly and gathering against the banks.
 - **Dragonflies** (shiokara tombo, the pale blue dragonfly of Japanese ponds) hover, dart and stop

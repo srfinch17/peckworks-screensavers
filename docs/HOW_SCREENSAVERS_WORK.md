@@ -113,7 +113,7 @@ src/
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
     Minnows.cs                     schools of tiny fish that move as one, and rush to the dragonfly's rings
-    Turtle.cs                      the turtle: paddling, floating, a breath at the surface
+    Turtle.cs                      the turtle: paddling, floating, diving, hauling out to bask
     Petals.cs                      petals falling from the blossom, landing, floating
     Ripples.cs                     rings spreading on the water
     Dragonflies.cs                 hover, dart, perch, dip, and the game with the minnows
@@ -540,6 +540,23 @@ turtle is rigid too, but it lives in the water with the koi, so it uses the same
 as the koi with a STRAIGHT spine that turns as one piece: that way it gets the same haze with
 depth, the same branch shadows and the same squash for free. Its legs are four small ovals
 swinging from under the shell's rim, the diagonal pairs in step, as a pond turtle paddles.
+
+*The turtle has a mind and two places to sit.* Like the koi it runs on the shared `Core/Minds`
+parts: two dials dealt at birth (`_sunny`: how often it hauls out and how long it sits;
+`_nerve`: how soon it slips back in when the snake comes near), a `Doing` (Cruise, Float, Dive,
+Approach, Climb, Bask, Slip) and weighted dice in `Decide()`. A haul-out is PLANNED first (a
+point on open water beside the perch, a second one further out on the same line so it arrives
+pointing the right way, where the shell's middle will rest) and refused if the straight swim in
+is not clear of the bank or another turtle holds the perch. The island cap is approached from
+the side the turtle is on; the log from either side, square on, and the turtle then turns on the
+spot to lie along it. The climb and the slip are a smooth curve for the nose with the heading
+along the curve (so it is always nose first). How high a part of the body is above the water is
+read from WHERE it is (`Height()`: 0 over water, 1 well inside the perch), so the nose rises
+first and a slip is the same thing backward. Up is a lift up the screen plus a small shadow
+down and right on the perch; while any of it is up it is not "in the water" (no haze, depth 0,
+no cross shadows) and is painted against the whole view instead of the water only. Its turning
+circle is kept no tighter than 0.6 body lengths (0.85 while lining up on a perch), or the middle
+of the shell drifts sideways and it reads as going tail first.
 
 *A school moves as one with three rules.* The minnows (`Minnows.cs`) have no leader and no
 choreography. Every frame each fish adds up a few pulls: keep going the way I am going, head for
