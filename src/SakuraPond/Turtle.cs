@@ -896,11 +896,11 @@ internal sealed class Turtle : Body
         return Smooth((on - 1.5f) / 6f);
     }
 
-    /// <summary>How much smaller it is drawn for its depth, like a koi (KoiSchool.Shrink): we look from a few body lengths up.</summary>
-    private float Scale => 1 - KoiSchool.Shrink * Z;
+    /// <summary>How much smaller it is drawn for its depth, like a koi (Light.Scale): we look from a few body lengths up.</summary>
+    private float Scale => Light.Scale(Z);
 
-    /// <summary>How far down the screen its picture sits for its depth, like a koi's (Light.Sink). Small: a turtle stays near the top.</summary>
-    private float Sink => Z * Pond.DepthU * _pond.U * Light.Sink;
+    /// <summary>How far down the screen its picture sits for its depth, like a koi's (Light.Sink). Small while it cruises near the top; a dive takes it down and, past Light.SeeU, out of sight.</summary>
+    private float Sink => Light.SinkPx(Z, _pond.U);
 
     /// <summary>
     /// The straight spine from nose to tail, each pair of edge points squashed
@@ -925,11 +925,20 @@ internal sealed class Turtle : Body
             HalfWidth[i] = Dist(l, r) / 2;
         }
         float shell = shellCount > 0 ? shellSum / shellCount : 0;
+        float dx = MathF.Cos(_heading), dy = MathF.Sin(_heading), k = Scale, zPx = Z * Pond.DepthU * _pond.U;
         for (int i = 0; i < Points; i++)
         {
             if (Along[i] >= 0.22f && Along[i] <= 0.88f) _h[i] = shell;
             Spine[i] = new PointF(mid[i].X, mid[i].Y + Sink - _h[i] * LiftPx);
+            // The same point for touching (Core/Minds Chain): on the ground
+            // plane, before the slant, at its depth. The koi's feelers see it
+            // and KoiSchool pushes a fish out of it; the turtle itself is the
+            // heavier and is never moved.
+            float s = Along[i];
+            Shape.Points[i] = new System.Numerics.Vector3(_x - dx * s * _len * k, _y - dy * s * _len * k, zPx);
+            Shape.Radius[i] = _wide * Profile(s) * k;
         }
+        Shape.Seal();
         _out = most;
     }
 
@@ -1024,7 +1033,8 @@ internal sealed class Turtle : Body
     {
         // Up on a perch it is out of the water: no haze at all, and it is painted wherever the
         // view is open (the cap and the log are not water, so the water stencil would cut it off).
-        float murk = (0.06f + 0.62f * Z) * (1 - MathF.Min(1, 6 * _out));
+        float murk = Light.Murk(Z) * (1 - MathF.Min(1, 6 * _out));
+        if (murk > 0.985f) return;                                               // dived out of sight (Light.SeeU): nothing left to paint
         float soft = MathF.Max(1f, _pond.U * 0.0012f) * (1 + 3 * Z);
         bool[] stencil = _out >= 0.001f ? _pond.Open : _where;
         if (_out > 0.02f)

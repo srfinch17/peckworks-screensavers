@@ -79,8 +79,14 @@ internal sealed class Pond
     /// </summary>
     public required byte[] Floor { get; init; }
 
-    /// <summary>How deep the water is where Floor is 255, in u: what "as deep as a fish goes" means on the screen.</summary>
-    public const float DepthU = 0.12f;
+    /// <summary>
+    /// How deep the water is where Floor is 255, in u: what Z = 1 means for
+    /// everything that swims. Deeper than the depth a thing can be seen at
+    /// (Light.SeeU), so the middle of the pond really hides a fish that dives
+    /// to the bed, the way its painted bed is hidden; near the bank the floor
+    /// is shallow and a fish there is always in sight.
+    /// </summary>
+    public const float DepthU = 0.4f;
 
     /// <summary>How much sun reaches each pixel, 0 to 255 (the branches' shadows are darker).</summary>
     public required byte[] Sun { get; init; }

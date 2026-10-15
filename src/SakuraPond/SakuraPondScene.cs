@@ -85,7 +85,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     {
         float dt = (float)Math.Min(elapsedSeconds, 0.1);
         _wind.Update(dt);                 // first: everything below reads it
-        _koi.Update(dt);
+        _koi.Update(dt, _turtles);        // the fish steer round the turtles, and are pushed out of them if they meet (last frame's turtle spines: near enough)
         PointF[] koiHeads = _koi.Heads;
         _minnows.Update(dt, _snake.Live ? [.. koiHeads, _snake.Head] : koiHeads);   // the minnows keep clear of the snake as of a koi
         _turtles.Update(dt, _snake.Live ? _snake.Head : null);   // a basking turtle slips in when the snake comes near

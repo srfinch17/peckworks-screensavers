@@ -102,7 +102,7 @@ These are in the code comments too; here they are in one place.
 
 | Animal | Dials | Doings | Interrupts |
 |--------|-------|--------|------------|
-| Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch | being chased, a dragonfly's tap, a swallow's shadow |
+| Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch, Shy | being chased, a dragonfly's tap, a swallow's shadow, a bump from another body |
 | Lizards (`src/SakuraPond/Lizard.cs`) | bold, energy (sliced, paired) | Hidden, Dash, Freeze, Bask, Drink, Face | a meeting, the snake |
 | Turtles (`src/SakuraPond/Turtle.cs`) | sunny, nerve (dealt) | Cruise, Float, Dive, Approach, Climb, Bask, Slip | the snake's head near a basking turtle |
 | Snake (`src/SakuraPond/Snake.cs`) | bold, nerve (per visit) | Cross, Explore, Hunt, Bask | a touch from a koi, turtle or lizard |
@@ -125,19 +125,24 @@ rate and a still could not show.
 `Core/Minds` holds the DECIDING half of a mind: the dice, the dials, the timer and the cooldown.
 Those were the same in three animals, so they are written once.
 
-The MOVING half, the steering reflexes under the mind (feelers along the heading, the smallest
-turn that clears a thing, the refused step that forces a turn, the touch test between animals),
-is still written per animal, and that is where every creature bug so far has lived. It is not
-shared yet because each animal reads a different world: a koi asks a coarse "room to swim" grid
-and swims under pads; the snake asks a list of circles and a capsule and goes round pads; a
-lizard asks a land mask and slides along the shore. A stranger giving a new animal a mind from
-this page gets the deciding half for free and must still build the steering, following the rules
-in section 4, and should expect the instruments in section 6 to find its first bugs there.
+The MOVING half is now partly shared too. `Core/Minds/Space.cs` is the steering kit: `Chain` (a
+bendy body's shape for touching), `Feelers.Along` (the room along a straight feeler) and
+`Feelers.Best` (the smallest change of course that has enough room, turning, climbing or diving).
+It knows nothing about ponds: the world is a question each animal answers (section 8 is the
+recipe). What is STILL per animal, and where every creature bug so far has lived: the refused-step
+rule (a step that would end inside something must itself force the avoidance turn), the touch
+cooldown (without it a fish keeping pace re-triggers a bump every frame), and each animal's own
+answer to "how much room is there here?", because each reads a different world: a koi asks land,
+the bed, the surface, a coarse room grid and every other body in the water, and swims under pads;
+the snake asks a list of circles and a capsule and goes round pads; a lizard asks a land mask and
+slides along the shore. Only the koi steer with the kit so far (the turtle supplies a Chain so the koi can feel it; the snake and the lizards
+steer on a flat plane and have not needed it). A stranger giving a new animal a mind gets the
+deciding half and the 3D steering for free, still writes the Room answer and the refused-step
+rule, follows the rules in section 4, and should expect the instruments in section 6 to find the
+first bugs there.
 
-The honest next shared piece is a steering kit (feelers over a mask, the smallest-turn search,
-the refused-step rule, a point-to-spine touch with a `Cooldown`), to be added when the next
-animal needs the same shape as one that exists. Add to `Core/Minds` only what two animals need
-in the same shape; a thing one animal needs stays in that animal.
+Add to `Core/Minds` only what two animals need in the same shape; a thing one animal needs stays
+in that animal.
 
 The first such piece arrived with the turtle: a `Claim`, one thing only one animal may hold (the
 log, the island's cap). The snake's log bask and the turtle's log bask were written by two
@@ -152,3 +157,77 @@ turtle's Approach, once it is lined up beside its perch, swaps the bank reflex a
 to the reflexes and the turtle has to swim right up to it. It is the only place a mind quiets
 a reflex, it holds within about three body lengths of the perch, and a refused step there still
 ends the approach.
+
+## 8. Moving in three dimensions (Core/Minds/Space.cs)
+
+The idea in one picture: an animal is a string of pearls (a `Chain`), and the world is a question
+it can answer ("how much room is there round this point?"). Space.cs knows no pond, no pixels and
+no fish. It uses ONE unit for all three axes (Sakura Pond uses ground pixels, with z the depth in
+pixels, growing downward), so the same pieces would serve birds in the air or fish in a tank.
+
+**Step 1. Give the animal a Chain.** `new Chain(beads)`. Every frame, after the spine is laid,
+fill `Points` (nose first) and `Radius` (half the body's width at each bead), then call `Seal()`
+(it works out the box round the whole chain, the cheap "could these touch at all?" test). In Sakura
+Pond that is `Body.Shape`, filled in `LaySpine` for every animal, koi and turtle alike. Fill it
+from the spine that is DRAWN, with the sway and the perspective shrink in, not from an idealised
+one, or the thing that touches and the thing you see will disagree.
+
+**Step 2. Answer the Room question.** A method of the animal, `float Room(in Vector3 at)`, made
+into a `Feelers.Room` delegate ONCE (a new delegate every frame is garbage). Return 0 for
+"something is here" (land, the bed, the surface, inside another body) and otherwise the distance
+to the nearest thing. Ask the cheap things first. For other animals use
+`otherChain.Near(p, myRadius, roomSoFar)` (the box test) and only then
+`otherChain.Gap(p, myRadius, zStretch)`. See `Koi.RoomAround` for a complete one: land, the bed
+(0.9 of the floor under the point), the surface, the room grid, then every other body.
+
+**Step 3. Call `Feelers.Best` when something is in the way.** `Feelers.Along(room, from, dir, look)`
+samples the room at 0.12, 0.35, 0.65 and 1.0 of the feeler (the near sample is so a small thing
+cannot slip between samples) and returns the least, the near ones counting for more. Use it as the
+TRIGGER ("is there less than half a body length ahead?"). When it fires, call
+`Feelers.Best(room, from, heading, look, enough, step, steps, climb, turnCost, climbCost)`: it
+tries the course as it is, then `steps` headings either side, each one level, climbing and
+diving, and returns the best (heading, climb, room). Keep the heading as a steering pull; keep
+the climb as a depth change per unit forward (the koi stores it as `_dodge`). With a fish ahead at
+nearly its own depth the koi goes over or under; with a bank ahead a climb clears nothing and it
+turns, with no special case for either.
+
+**Step 4. Resolve touches.** The feelers are the plan; the touch is the last resort.
+`Chain.Touch(a, b, out push, out depth)` gives the way to push `a` (and `b` the other way) and how
+far, from the closest points between line pieces; the deepest overlap wins, so two bodies crossing
+come apart where they cross. `KoiSchool.Update` runs two passes over every pair of overlapping
+bodies, moves each half the way out (a turtle is the heavier and is never moved, the fish takes the
+whole push), then calls `Koi.Bumped` on both. A fish not in a chase, flee or flinch shies for a
+second or two (the doing `Shy`), away and up or down as well as aside, on a cooldown.
+
+**The rules learned, all of them from the kit's own self-check or the instruments:**
+- **Do not normalise the feeler's direction.** A climbing course covers the same ground per step
+  and changes depth on top of it, as the animal really moves. A shortened feeler "found" more room
+  beside a wall simply by not reaching it, and a climb appeared to clear a bank.
+- **Stretch the gap up and down in the WORLD, not in the search.** Passing over or under a body
+  needs less clearance than passing beside a bank, so the Room answer counts a gap up or down
+  2.5 times a gap sideways (`Chain.Gap`'s `zStretch`; `Touch` never stretches, bodies meet where
+  they really meet). Then a climbing course simply has more room and wins on that. Scoring climbs
+  by their own smaller "enough" inside `Best` was tried first, and a fish kept diving under another
+  long after it was clear, because the search's idea of clear and the trigger's disagreed.
+- **The trigger and the search must agree on what room is.** Both call the same Room answer, with
+  the same stretch, and the same "enough". Two definitions of clear is a fish that dodges and then
+  keeps dodging.
+- **A recoil, not a jump.** Cap the push per frame to what the animal swims (a body length a
+  second). Shoved out in one frame, fish hopped sideways, which reads as a slide.
+- **Move the whole body.** `Nudge` shifts the trail the spine is laid along, not just the head;
+  moving the head alone left crossed tails crossed for seconds.
+- **A refused push needs a fallback.** An up or down push the bed or the surface refuses is
+  clamped straight back (two fish in the shallows did this 400 frames running); when still inside
+  after a mostly vertical push, push sideways along the line between the middles.
+- **Hold both rise AND sink to a share of the forward motion, by where the nose points on the
+  screen.** Depth moves a picture up and down the screen (`Light.SinkPx`), so a fish rising
+  faster than it swims is seen sliding up the screen whichever way its nose points, and one
+  heading down the screen is seen going backward. The allowed rise is half the forward motion
+  with the nose across the screen, none with the nose straight down it, all of it with the nose
+  straight up it (then the rise only adds to the way it is going); the sink is the mirror. A rise
+  the bed forces is exempt, with the clamp in `LaySpine` having the last word. The first version
+  held only the rise, and only against the down-screen part of the motion: a resting fish with
+  its nose sideways slid up the screen on a slow rise, and one sinking out of sight drifted down
+  it with its nose pointing up.
+- **Test it as a timeline.** Frames with two bodies inside each other, the longest time stuck in
+  a bump, and nose-first over a window that suits the animal (section 6).

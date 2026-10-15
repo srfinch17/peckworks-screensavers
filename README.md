@@ -95,7 +95,11 @@ travelling wave (the cattails and irises sway with it stiffly).
   smaller, hazier, softer and dimmer than one at the top, so when one passes over another you
   can tell from above which is over which, and the near one leaves a soft dark echo of itself
   on the deeper one's back where they overlap. They slip under the lily pads, and now and then
-  come up to gulp at the surface, leaving a ring.
+  come up to gulp at the surface, leaving a ring. The pond is deep enough to hide a fish: the
+  fish swim at any depth the bed allows, go smaller and hazier the deeper they are, and then out
+  of sight. They steer over, under and round each other in three dimensions, and if two do touch
+  they bump (a short recoil, then a shy swim away) rather than pass through. The 3D navigation
+  kit behind this lives in the engine (`Core/Minds/Space.cs`) for other savers to use.
 - **An island rock** stands out in the open water: a boulder that goes down deep, darker and
   bluer the deeper it goes until the water hides it, with a small dry cap breaking the surface.
   The koi swim up and over its shoulders and round the cap. Once in a while one rises slowly until its back brushes the

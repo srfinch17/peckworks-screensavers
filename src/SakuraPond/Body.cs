@@ -1,4 +1,5 @@
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Minds;
 
 namespace SakuraPond;
 
@@ -33,11 +34,23 @@ internal abstract class Body
     /// <summary>The s (how far along) of each spine point.</summary>
     protected readonly float[] Along;
 
+    /// <summary>
+    /// The body's shape for touching and keeping clear (Core/Minds Chain):
+    /// one bead per spine point, in GROUND pixels (x, y as if seen straight
+    /// down, before the slant and the sink) with z the depth in pixels. The
+    /// animal fills it as it lays its spine. The koi ask every other body's
+    /// chain how much room there is, and KoiSchool pushes two apart when they
+    /// overlap, so no two animals in the water are ever drawn through each
+    /// other.
+    /// </summary>
+    public readonly Chain Shape;
+
     protected Body(int points)
     {
         Spine = new PointF[points];
         HalfWidth = new float[points];
         Along = new float[points];
+        Shape = new Chain(points);
     }
 
     /// <summary>

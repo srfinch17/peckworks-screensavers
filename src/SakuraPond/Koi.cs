@@ -1,3 +1,4 @@
+using System.Numerics;
 using Peckworks.Screensavers.Core;
 using Peckworks.Screensavers.Core.Minds;
 
@@ -8,14 +9,20 @@ namespace SakuraPond;
 /// spine (Body.cs), deepest first so a fish near the surface swims over one
 /// lower down. Their personalities are dealt here (Core/Minds Traits.Deal),
 /// so the school is a spread of natures and no two fish are near-twins.
+///
+/// The school also keeps the fish OUT of each other (and out of the turtles):
+/// after every fish has taken its step, any two bodies that overlap in three
+/// dimensions are pushed apart (Core/Minds Chain.Touch) and told they bumped.
+/// The fish steer round each other first (their feelers see every other body,
+/// Koi.RoomAround), so the push is the last resort, for the moment two really
+/// meet; it is what makes "they cannot swim through each other" a fact rather
+/// than a hope.
 /// </summary>
 internal sealed class KoiSchool
 {
     private readonly Koi[] _fish;
     private readonly Pond _pond;
-
-    /// <summary>How much smaller an animal is drawn at full depth (Z = 1): we look from a few body lengths up, so the bed is that much further off than the surface.</summary>
-    public const float Shrink = 0.22f;
+    private Body[] _bodies = [];                          // every body in the water this frame: the fish, then the turtles that are in
 
     /// <summary>Only an animal this much deeper than another receives its shadow: a pair swimming side by side at one depth throw none on each other.</summary>
     private const float ShadowGap = 0.05f;
@@ -41,9 +48,63 @@ internal sealed class KoiSchool
         for (int i = 0; i < _layers.Length; i++) _layers[i] = new List<int>(n);
     }
 
-    public void Update(float dt)
+    /// <param name="turtles">The turtles, so the fish steer round them and are pushed off them (a turtle is the heavier, and is not moved).</param>
+    public void Update(float dt, Turtles? turtles = null)
     {
-        foreach (Koi k in _fish) k.Update(dt, _fish);
+        // The bodies in the water this frame: the fish, and every turtle that is in (not up on a perch).
+        IReadOnlyList<Turtle> ts = turtles?.All ?? [];
+        int n = _fish.Length, count = n;
+        foreach (Turtle t in ts) if (t.InWater) count++;
+        if (_bodies.Length != count) _bodies = new Body[count];
+        for (int i = 0; i < n; i++) _bodies[i] = _fish[i];
+        for (int i = 0, k = n; i < ts.Count; i++) if (ts[i].InWater) _bodies[k++] = ts[i];
+
+        foreach (Koi k in _fish) k.Update(dt, _fish, _bodies);
+
+        // Nobody inside anybody: two fish that overlap are each pushed half
+        // the way out along the line between their closest parts; a fish in a
+        // turtle is pushed the whole way (the turtle is the heavier). Then
+        // both are told, and a shy fish swims off (Koi.Bumped). The push is a
+        // RECOIL, not a jump: no faster than a fish swims (a body length a
+        // second each), so a bump is a bump, two fish meeting and giving way
+        // over a few frames, and their edges may overlap by a few pixels for
+        // a fraction of a second while they do. Shoved out in one frame they
+        // hopped sideways, which the eye reads as a slide. Two passes, since
+        // a fish pushed out of one may be pushed into another (the second
+        // only when the first found a touch).
+        bool touched = false;
+        for (int pass = 0; pass < 2 && (pass == 0 || touched); pass++)
+            for (int i = 0; i < n; i++)
+                for (int j = i + 1; j < count; j++)
+                {
+                    if (!Chain.Touch(_bodies[i].Shape, _bodies[j].Shape, out Vector3 push, out float depth)) continue;
+                    touched = true;
+                    Koi a = _fish[i];
+                    Koi? b = j < n ? _fish[j] : null;
+                    float most = a.Length * dt;                                     // the furthest either may be shoved this frame
+                    Shove(a, b, push, depth, most);
+                    // Still inside each other, and the push was up or down? The bed
+                    // or the surface refused it (two fish crossing in the shallows,
+                    // both on the bed, were shoved apart and clamped straight back
+                    // 400 frames running). Then shove sideways instead, along the
+                    // line between their middles.
+                    if (MathF.Abs(push.Z) > 0.7f && Chain.Touch(_bodies[i].Shape, _bodies[j].Shape, out _, out float left) && left > 1)
+                    {
+                        Vector3 side = a.Centre - (b?.Centre ?? _bodies[j].Shape.Points[_bodies[j].Shape.Points.Length / 2]);
+                        side.Z = 0;
+                        float l = side.Length();
+                        side = l > 1e-3f ? side / l : new Vector3(-MathF.Sin(a.Heading), MathF.Cos(a.Heading), 0);   // middles on one spot: a's own sideways
+                        Shove(a, b, side, left, most);
+                    }
+                    if (pass == 0) { a.Bumped(push); b?.Bumped(-push); }
+                }
+    }
+
+    /// <summary>Pushes a out of b by "depth" along "push", no more than "most" each: half each for two fish, the whole way for a fish in a turtle (b null: the heavier is not moved).</summary>
+    private static void Shove(Koi a, Koi? b, Vector3 push, float depth, float most)
+    {
+        if (b != null) { float d = MathF.Min(most, depth * 0.5f); a.Nudge(push * d); b.Nudge(-push * d); }
+        else a.Nudge(push * MathF.Min(most, depth));
     }
 
     /// <summary>Something tapped the water here (screen pixels): curious fish nearby come to look.</summary>
@@ -66,7 +127,7 @@ internal sealed class KoiSchool
     /// anything on it (its head and its middle), screen pixels: the minnows
     /// and the snake keep clear of them. A fish deep down is out of their reach.
     /// </summary>
-    public PointF[] Heads => _fish.Where(f => f.Z < 0.45f).SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
+    public PointF[] Heads => _fish.Where(f => Light.DepthOf(f.Z) < 0.06f).SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
 
     // Scratch for Draw, kept between frames so drawing allocates nothing (see Room).
     private int[] _order = [], _layer = [];
@@ -205,6 +266,17 @@ internal sealed class KoiSchool
 /// each edge point is squashed to the screen only when drawn. So a koi
 /// swimming toward the top of the screen looks a little shorter than one
 /// swimming sideways, as it should.
+///
+/// THREE DIMENSIONS: the fish is at (_x, _y) on the water's plane and Z below
+/// it (0 the surface, 1 the pond's full depth, Pond.DepthU). It may be at any
+/// depth the bed allows, and the deeper it is the smaller it is drawn
+/// (perspective, Light.Scale), the hazier (Light.Murk) and the lower on the
+/// screen (Light.Sink), until past Light.SeeU it is lost in the water the way
+/// the bed is. It steers in three dimensions too: its feelers (Core/Minds
+/// Feelers) see the bed, the surface and every other body in the water, and
+/// when something is in the way it takes the smallest change of course that
+/// clears it: a turn, a climb over, or a dive under. If two fish still meet,
+/// KoiSchool pushes them apart and each swims shyly off.
 /// </summary>
 internal sealed class Koi : Body
 {
@@ -264,6 +336,7 @@ internal sealed class Koi : Body
         Chase,         // a short burst after another fish
         Flee,          // being chased: speed up and swerve away
         Flinch,        // a shadow swept over it (a swallow skimming): a dart away and a dive, then it rests deep
+        Shy,           // it bumped into another animal: a short swim away from it, up or down as well as aside
     }
     private readonly Mind<Doing> _mind = new();           // the doing now and how long it may last (Core/Minds)
     private Doing _doing => _mind.Doing;
@@ -274,11 +347,22 @@ internal sealed class Koi : Body
     private int _side;                                    // which side of the partner it follows on (+1 or -1)
     private readonly Cooldown _chaseCool = new();         // no chase again until this has run out
     private readonly Cooldown _flinchCool = new();        // no flinch at a shadow again until this has run out
+    private readonly Cooldown _shyCool = new();           // no shying from a bump again until this has run out (two fish side by side touch every frame)
     private float _flinchX, _flinchY;                     // where the shadow was, ground pixels
+    private float _shyX, _shyY;                           // where to swim to get away from the thing it bumped, ground pixels
     private float _stuckFor;                              // seconds its steps have been refused (nosed against something)
+    private float _dodge;                                 // the climb (negative) or dive (positive) its feelers chose this frame, z per unit forward; 0 = holding its depth
+    private Body[] _bodies = [];                          // every body in the water this frame (the school and the turtles), for the feelers
+    private readonly Feelers.Room _room;                  // RoomAround as a delegate, made once (a new one every frame would be garbage)
 
     /// <summary>The doing now, for logs and tests (never read by the drawing).</summary>
     public string State => _doing.ToString();
+
+    /// <summary>Which way it is swimming, ground radians (for a sideways shove when nothing else gives a direction).</summary>
+    public float Heading => _heading;
+
+    /// <summary>Its body length, ground pixels (the school's shove is held to a length a second).</summary>
+    public float Length => _len;
 
     // The trail the head has swum, newest last, in ground pixels. A ring
     // buffer: a fixed row of slots used round and round, so remembering never
@@ -292,7 +376,7 @@ internal sealed class Koi : Body
     private float _floor = 1;                             // the bed under the whole body, 0 at the bank to 1 at full depth (found as the spine is laid)
     private float _shadowDx, _shadowDy, _shadowSoft;      // its shadow on the bed: how far down and right of the body, and how blurred (screen pixels)
     private float _shadowAlpha;                           // how dark that shadow is (0 = the bed is out of sight, no shadow)
-    private float _scale = 1;                             // how much smaller it is drawn for its depth (KoiSchool.Shrink), set as the spine is laid
+    private float _scale = 1;                             // how much smaller it is drawn for its depth (Light.Scale), set as the spine is laid
     private int _blur256, _dim256 = 256;                  // how far its markings are blurred toward _skinBlur, and how much dimmer, both by depth (256ths)
 
     /// <summary>Its nose as drawn, screen pixels (the picture of a deep fish sits lower on the screen than the water above it; see Light.Sink).</summary>
@@ -328,6 +412,7 @@ internal sealed class Koi : Body
         _rng = rng;
         _play = play;
         _petals = petals;
+        _room = RoomAround;
         float u = pond.U;
         _len = u * (0.095f + 0.06f * (float)rng.NextDouble());
         _wide = _len * (0.12f + 0.02f * (float)rng.NextDouble());
@@ -358,7 +443,7 @@ internal sealed class Koi : Body
         _speed = _len * 0.3f;
         _beating = rng.Next(2) == 0;
         _beatTimer = (float)rng.NextDouble() * 2;
-        Z = 0.2f + 0.4f * (float)rng.NextDouble();
+        Z = 0.1f + 0.3f * (float)rng.NextDouble();
         _zTarget = Z;
         _depthTimer = 3 + (float)rng.NextDouble() * 8;
         _gulpTimer = 10 + (float)rng.NextDouble() * 60;
@@ -378,6 +463,12 @@ internal sealed class Koi : Body
     private (float, float) ToGround(float x, float y) => (x, CentreY + (y - CentreY) / Ripples.Squash);
     private PointF ToScreen(float gx, float gy) => new(gx, CentreY + (gy - CentreY) * Ripples.Squash);
 
+    /// <summary>The pond's full depth in pixels: what Z = 1 is in the same unit as the ground plane, so the feelers and the chains can work in three dimensions at once.</summary>
+    private float DepthPx => Pond.DepthU * _pond.U;
+
+    /// <summary>Where it is in three dimensions, ground pixels across and depth in pixels down.</summary>
+    private Vector3 Here => new(_x, _y, Z * DepthPx);
+
     private void Remember(PointF p)
     {
         _trailHead = (_trailHead + 1) % _trail.Length;
@@ -385,9 +476,12 @@ internal sealed class Koi : Body
         _trailCount = Math.Min(_trail.Length, _trailCount + 1);
     }
 
-    public void Update(float dt, Koi[] school)
+    /// <param name="school">The other koi (for the mind: friends, quarry, chasers).</param>
+    /// <param name="bodies">Every body in the water (the school and the turtles that are in): what the feelers must keep clear of.</param>
+    public void Update(float dt, Koi[] school, Body[] bodies)
     {
         _time += dt;
+        _bodies = bodies;
         float t = (float)(_time % 100000.0);
 
         // ---- The mind decides what it is doing ----
@@ -406,7 +500,7 @@ internal sealed class Koi : Body
         }
         // The mind overrules the rhythm: a chase is all beating, a rest is all glide,
         // and a gulp from deep down is a swim up to the surface, not a float up.
-        _swimming = rush || (_beating && !still) || (_gulping && Z > 0.2f);
+        _swimming = rush || (_beating && !still) || (_gulping && Z > 0.2f) || _doing == Doing.Shy;
         float targetSpeed = rush ? _len * _cruise * 1.6f : _swimming ? _len * _cruise : still ? _len * 0.07f : _len * 0.16f;
         _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (rush ? 2.2f : _swimming ? 1.1f : 0.45f)));
         float targetAmp = rush ? _len * 0.11f : _swimming ? _len * 0.085f : _len * 0.022f;
@@ -427,35 +521,44 @@ internal sealed class Koi : Body
             turn += Wrap(MathF.Atan2(gdy, gdx) - _heading) * pull;
         float look = _len * 1.0f + _speed * 1.0f;
         PointF here = ToScreen(_x, _y);
-        float roomAhead = RoomAlong(_heading, look), roomHere = _pond.RoomAt(here.X, here.Y);
+        Vector3 here3 = Here, level = new(MathF.Cos(_heading), MathF.Sin(_heading), 0);
+        // The feelers reach out along the heading in three dimensions, asking
+        // RoomAround at each sample: land, the bed, the surface and every other
+        // body in the water all count (Core/Minds Feelers).
+        float roomAhead = Feelers.Along(_room, in here3, in level, look), roomHere = _pond.RoomAt(here.X, here.Y);
         bool cornered = false;
+        _dodge = 0;
         if (roomAhead < _len * 0.55f || roomHere < _len * 0.35f || _stuckFor > 0)       // a refused step last frame also sends it looking for a way
         {
-            // The bank is coming. Like a person feeling their way: try a few
-            // headings either side, and take the one with the most open water
-            // ahead, preferring a smaller turn when two are about as good.
-            float best = _heading, bestScore = MathF.Min(roomAhead, _len * 0.7f);
-            for (int k = 1; k <= 4; k++)
-                foreach (int side in (ReadOnlySpan<int>)[1, -1])
-                {
-                    float a = _heading + side * k * 0.42f;
-                    // "Enough room" is enough: past a body length more open water
-                    // counts for nothing, so it takes the smallest turn that clears
-                    // the bank and follows the edge, rather than heading for the middle.
-                    float score = MathF.Min(RoomAlong(a, look), _len * 0.7f) - k * _len * 0.08f;
-                    if (score > bestScore) { bestScore = score; best = a; }
-                }
+            // Something is in the way: the bank, a rock, another fish. Like a
+            // person feeling their way: try a few headings either side, each
+            // one level, climbing and diving, and take the one with the most
+            // open water ahead, preferring a smaller change when two are about
+            // as good. "Enough room" is enough: past a body length more open
+            // water counts for nothing, so it takes the smallest turn that
+            // clears the thing and follows its edge, rather than heading for
+            // the middle. A climb or dive costs less than a step of turn and is
+            // judged on less clearance (passing over a back is not passing
+            // beside a bank), so with a fish ahead at nearly its own depth it
+            // goes over or under rather than round; with the bank ahead a climb
+            // clears nothing and it turns. The climb is steep, 0.8 of the
+            // forward motion: a fish's length forward takes it a fish's length
+            // up or down, which from above reads as a brisk swerve over.
+            (float best, float climb, _) = Feelers.Best(_room, in here3, _heading, look, _len * 0.7f, 0.42f, 4, 0.8f, _len * 0.08f, _len * 0.05f);
+            _dodge = climb;
             float urgency = Math.Clamp(1 - MathF.Min(roomAhead, roomHere * 1.5f) / (_len * 0.55f), 0, 1);
             turn += Wrap(best - _heading) * (1f + 3f * urgency);
-            cornered = urgency > 0.5f;
+            cornered = urgency > 0.5f && climb == 0;                                  // a climb or dive is not a corner: no need to slow and swing round
         }
         foreach (Koi other in school)
         {
+            // A gentle lean away from any fish close by, before the feelers need
+            // to act: measured in three dimensions, so a fish well above or below
+            // is as good as far away.
             if (other == this) continue;
-            float dx = _x - other._x, dy = _y - other._y, d2 = dx * dx + dy * dy, near = (_len + other._len) * 0.55f;
+            float dx = _x - other._x, dy = _y - other._y, dz = (Z - other.Z) * DepthPx, d2 = dx * dx + dy * dy + dz * dz, near = (_len + other._len) * 0.55f;
             if (other == _partner) near *= _doing == Doing.Chase ? 0.3f : 0.7f;   // a friend may come closer; a chaser nearly touches
-            near *= MathF.Max(0.3f, 1 - 1.2f * MathF.Abs(Z - other.Z));           // a fish well above or below another passes over it with hardly a swerve
-            if (d2 > near * near || d2 < 1) continue;
+            if (d2 > near * near || dx * dx + dy * dy < 1) continue;
             float away = MathF.Atan2(dy, dx);
             turn += Wrap(away - _heading) * 0.5f * (1 - MathF.Sqrt(d2) / near);
         }
@@ -501,7 +604,11 @@ internal sealed class Koi : Body
         _depthTimer -= dt;
         if (_depthTimer <= 0 && !_gulping && !_bumping)
         {
-            _zTarget = 0.12f + 0.6f * (float)_rng.NextDouble();
+            // The idle up and down keeps to the upper water, where a fish is
+            // seen: clear near the top, hazy at the bottom of this range. Going
+            // deeper than that, down to where it is lost, is a rest's or a
+            // fright's doing (Begin), not the idle drift's.
+            _zTarget = 0.05f + 0.35f * (float)_rng.NextDouble();
             _depthTimer = 6 + 10 * (float)_rng.NextDouble();
         }
         _gulpTimer -= dt;
@@ -543,21 +650,42 @@ internal sealed class Koi : Body
         float cap = 0.9f * MathF.Min(_floor, ahead);
         float zWant = MathF.Min(_zTarget, cap);
         bool forBed = Z > cap - 0.03f;
-        float zNext = Z + (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping ? 0.6f : forBed ? 0.8f : 0.18f)));
+        // Easing toward the depth it wants; or, when the feelers chose a climb
+        // or a dive to clear something, that: z changes by the chosen slope
+        // times the distance swum, so the course is a straight line in three
+        // dimensions, and the easing takes over again once the way is clear.
+        float zNext = _dodge != 0 && !refused ? Z + _dodge * step / DepthPx
+                                              : Z + (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping ? 0.6f : forBed ? 0.8f : 0.18f)));
+        zNext = Math.Clamp(zNext, 0, cap);
         if (zNext < Z && !forBed)
         {
             // Rising moves the picture UP the screen (its sink shrinks). A fish
-            // heading DOWN the screen while rising fast would be seen going
-            // backward, tail first, whichever way its nose pointed (the review
-            // caught an asagi doing just that on a gulp from a deep rest). So the
-            // rise is held to half of what the fish's own forward motion down the
-            // screen covers in the same time; heading up the screen there is no
-            // limit, the rise only adds to the way it is going. A rise the BED
-            // forces is not held back: the bed wins anyway in LaySpine, and
-            // holding it here only turned a smooth rise into a one-frame hop.
-            float down = MathF.Max(0.05f, MathF.Sin(_heading) * Ripples.Squash);
-            float maxRise = dt * 0.5f * _speed / down / (Pond.DepthU * _pond.U * Light.Sink);
+            // rising fast while barely swimming would be seen sliding up the
+            // screen whichever way its nose pointed, and one heading down the
+            // screen going backward, tail first (the review caught an asagi
+            // doing just that on a gulp from a deep rest; a resting fish with
+            // its nose sideways did it on a slow rise). So the rise on screen
+            // is held to a share of the fish's own forward motion: half of it
+            // with the nose across the screen, none at all with the nose
+            // straight down the screen (every pixel of rise would be a pixel
+            // backward), all of it with the nose straight up the screen (the
+            // rise only adds to the way it is going). A rise the BED forces is
+            // not held back: the bed wins anyway in LaySpine, and holding it
+            // here only turned a smooth rise into a one-frame hop.
+            float share = MathF.Max(0.02f, 0.5f * (1 - MathF.Sin(_heading)));
+            float maxRise = dt * share * _speed / (Pond.DepthU * _pond.U * Light.Sink);
             zNext = MathF.Max(zNext, Z - maxRise);
+        }
+        else if (zNext > Z)
+        {
+            // And the mirror of it: sinking moves the picture DOWN the screen
+            // (its sink grows). Held the same way, with the nose straight up the
+            // screen allowing none. Now that the pond is deep enough to lose a
+            // fish in, a resting fish sinking out of sight drifted down the
+            // screen at five pixels a second with its nose pointing up it.
+            float share = MathF.Max(0.02f, 0.5f * (1 + MathF.Sin(_heading)));
+            float maxSink = dt * share * _speed / (Pond.DepthU * _pond.U * Light.Sink);
+            zNext = MathF.Min(zNext, Z + maxSink);
         }
         Z = zNext;
         if (_gulping && Z < 0.05f)
@@ -610,6 +738,7 @@ internal sealed class Koi : Body
         _mind.Tick(dt);
         _chaseCool.Tick(dt);
         _flinchCool.Tick(dt);
+        _shyCool.Tick(dt);
 
         // Someone is after me: the moment a chaser is close behind, flee (whatever I was doing, except already fleeing).
         if (_doing != Doing.Flee)
@@ -660,6 +789,7 @@ internal sealed class Koi : Body
                 else if (_mind.Over) Decide(school);
                 break;
             case Doing.Rest:
+            case Doing.Shy:
                 if (_mind.Over) Decide(school);
                 break;
             default:
@@ -697,6 +827,8 @@ internal sealed class Koi : Body
                 }
             case Doing.Investigate:
                 return (_targetX, _targetY, _hold > 0 ? 0.25f : 0.6f);
+            case Doing.Shy:
+                return (_shyX, _shyY, 0.8f);
             case Doing.Rest:
                 return (_goalX, _goalY, 0.25f);
             default:
@@ -760,7 +892,10 @@ internal sealed class Koi : Body
             case Doing.Rest:
                 _mind.Begin(doing, 8 + 14 * (float)_rng.NextDouble());
                 NewGoal(deep: true);
-                Depth(0.55f + 0.3f * (float)_rng.NextDouble(), _mind.Left);
+                Depth(0.45f + 0.3f * (float)_rng.NextDouble(), _mind.Left);        // deep: from hazy to, at the deep end, out of sight (Light.SeeU)
+                break;
+            case Doing.Shy:
+                _mind.Begin(doing, 1.2f + 0.8f * (float)_rng.NextDouble());        // a short swim away (the place and depth were set by Bumped)
                 break;
             default:
                 _mind.Begin(doing);                                            // a wander ends when its spot is reached (the goal timer, in Think)
@@ -891,6 +1026,77 @@ internal sealed class Koi : Body
         return ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _where[iy * _pond.Width + ix];
     }
 
+    /// <summary>
+    /// The world as the feelers see it (Core/Minds Feelers.Room): how much
+    /// open space there is round a point of the water, in pixels. Nothing on
+    /// land, in the bed or above the surface; otherwise the distance to the
+    /// nearest bank or rock (the room grid), or to the nearest other body in
+    /// the water if that is closer, measured for a ball as wide as this fish
+    /// (so "room" means room for ME). A gap up or down counts two and a half
+    /// times a gap sideways (Chain.Gap's stretch): a fish passes over
+    /// another's back on a fraction of its width, so a body half a width
+    /// below reads as well clear, and the feelers settle on a course over or
+    /// under rather than a wide turn round (and stop diving once they are
+    /// clear: with the gap counted plain, a fish kept diving under a resting
+    /// one for eight seconds, long after it was well below it). The box test
+    /// skips bodies further off than the room already found.
+    /// </summary>
+    private float RoomAround(in Vector3 p)
+    {
+        PointF s = ToScreen(p.X, p.Y);
+        if (OnLand(s)) return 0;
+        if (p.Z < -1 || p.Z > 0.9f * FloorAt(s) * DepthPx) return 0;              // above the water, or in the bed
+        float room = _pond.RoomAt(s.X, s.Y);
+        foreach (Body b in _bodies)
+        {
+            if (b == this || !b.Shape.Near(p, _wide, room)) continue;
+            room = MathF.Min(room, b.Shape.Gap(p, _wide, 2.5f));
+            if (room <= 0) return 0;
+        }
+        return room;
+    }
+
+    /// <summary>
+    /// Moved bodily by KoiSchool, the way a fish is shoved when it meets
+    /// another: across the water and up or down in it, then its spine laid
+    /// again so the drawn frame has it out of the thing it met.
+    /// </summary>
+    public void Nudge(Vector3 by)
+    {
+        // The WHOLE body moves: the trail the spine is laid along shifts with
+        // the head. Moving the head alone left the tail where it was, and two
+        // fish whose tails crossed stayed crossed for seconds while their heads
+        // were pushed apart every frame (241 touching frames in one run).
+        _x += by.X; _y += by.Y;
+        for (int i = 0; i < _trailCount; i++)
+        {
+            int slot = (_trailHead - i + _trail.Length) % _trail.Length;
+            _trail[slot] = new PointF(_trail[slot].X + by.X, _trail[slot].Y + by.Y);
+        }
+        Z = MathF.Max(0, Z + by.Z / DepthPx);
+        LaySpine();
+    }
+
+    /// <summary>Its middle on the ground plane, for a push along the line between two bodies' middles when the touch gives no direction.</summary>
+    public Vector3 Centre => Shape.Points[8];
+
+    /// <summary>
+    /// It bumped into another body in the water, "away" being the way out.
+    /// Unless it is in a chase (then it presses on, the push keeps them
+    /// apart), it shies: a short swim off along "away", and up or down to
+    /// whichever side of the other it was pushed. A cooldown, as two fish
+    /// swimming side by side touch again and again.
+    /// </summary>
+    public void Bumped(Vector3 away)
+    {
+        if (!_shyCool.Ready || _doing is Doing.Chase or Doing.Flee or Doing.Flinch) return;
+        _shyCool.Start(4 + 4 * (float)_rng.NextDouble());
+        float l = MathF.Max(1e-3f, MathF.Sqrt(away.X * away.X + away.Y * away.Y));
+        _shyX = _x + away.X / l * _len * 2; _shyY = _y + away.Y / l * _len * 2;
+        Begin(Doing.Shy);
+        if (MathF.Abs(away.Z) > 0.3f) Depth(Math.Clamp(Z + MathF.Sign(away.Z) * 0.12f, 0, 1), 6);
+    }
+
     /// <summary>Is the other fish within "lengths" of my body length?</summary>
     private bool Near(Koi o, float lengths)
     {
@@ -939,7 +1145,7 @@ internal sealed class Koi : Body
         // fish itself is no smaller: its steering keeps its true length. A fish
         // rising to gulp grows as it comes up, which is part of what "coming
         // up" looks like from above.
-        _scale = 1 - KoiSchool.Shrink * Z;
+        _scale = Light.Scale(Z);
         int slot = _trailHead, left = _trailCount - 1;
         PointF a = new(_x, _y), b = _trail[slot];
         float travelled = 0, segLen = Dist(a, b);
@@ -995,7 +1201,7 @@ internal sealed class Koi : Body
         // the lower on the screen its picture sits than the water above it
         // (Light.Sink, the lift rule run the other way): a fish that rises to
         // gulp is seen to come UP the screen as well as sharpen.
-        float sink = Z * Pond.DepthU * _pond.U * Light.Sink;
+        float sink = Light.SinkPx(Z, _pond.U);
         // Its shadow on the bed, where the bed shows through the water (the
         // painter's own rule for how much bed shows at the painted depth):
         // thrown down and to the right by the gap between the fish and the bed,
@@ -1031,7 +1237,12 @@ internal sealed class Koi : Body
             PointF l = ToScreen(cx + nx * hw, cy + ny * hw), r = ToScreen(cx - nx * hw, cy - ny * hw);
             Spine[i] = new PointF((l.X + r.X) / 2, (l.Y + r.Y) / 2 + sink);
             HalfWidth[i] = Dist(l, r) / 2;
+            // The same point for touching: on the ground plane, at its depth.
+            // ponytail: the chain is the DRAWN body (shrunk by depth), not the true one; two deep fish are both shrunk alike, so they still meet when they look as if they do.
+            Shape.Points[i] = new Vector3(cx, cy, Z * DepthPx);
+            Shape.Radius[i] = hw;
         }
+        Shape.Seal();
     }
 
     /// <summary>
@@ -1146,10 +1357,15 @@ internal sealed class Koi : Body
     /// <param name="mark">If given, set true at every pixel the body paints (KoiSchool throws the shallower fishes' shadows onto those).</param>
     public void Draw(FrameBuffer fb, bool[]? mark = null)
     {
-        float murk = 0.06f + 0.62f * Z;
-        float soft = MathF.Max(1f, _pond.U * 0.0012f) * (1 + 3 * Z);
-        _blur256 = (int)(Math.Clamp(Z * 1.1f, 0, 1) * 256);
-        _dim256 = 256 - (int)(0.3f * Z * 256);
+        // Lost in the water by depth (Light.Murk): past Light.SeeU there is
+        // nothing left of it to paint, and painting it would only wipe the
+        // bed shadows under it with the water's own colour.
+        float murk = Light.Murk(Z);
+        if (murk > 0.985f) return;
+        float lost = Math.Clamp(Light.DepthOf(Z) / Light.SeeU, 0, 1);
+        float soft = MathF.Max(1f, _pond.U * 0.0012f) * (1 + 3 * lost);
+        _blur256 = (int)(Math.Clamp(lost * 1.1f, 0, 1) * 256);
+        _dim256 = 256 - (int)(0.3f * lost * 256);
         // Side fins first, so the body covers where they join it.
         float t = (float)(_time % 100000.0);
         float scull = 0.22f * MathF.Sin(t * 1.4f + _p1) + (_swimming ? 0f : 0.25f);    // gliding: fins out, braking a little

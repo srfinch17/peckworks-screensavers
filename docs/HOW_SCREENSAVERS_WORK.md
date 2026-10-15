@@ -76,6 +76,7 @@ src/
     Sakura/Boat.cs                 the little boat that crosses the water in both sakura scenes
     Sakura/Plants.cs               one Wind for a whole scene; plants as flip-books (tufts, cattails, irises); a Lawn whose carpet slides in the gusts
     Minds/Mind.cs                  the parts every animal mind is built from: dials, weighted dice, one doing at a time, cooldowns (see MINDS.md)
+    Minds/Space.cs                 3D steering: Chain (a body's shape for touching), Feelers (room along a line, the smallest change of course) (see MINDS.md, section 8)
     ChimneySmoke.cs                puffs that rise, cool, spread and thin (Cabin by Stream)
     Photo/PhotoBackdrop.cs         a photo fitted to the screen, plus where its water is
     Photo/WaterRipples.cs          a still brook's reflections, rippling; trout rising
@@ -690,7 +691,36 @@ come up the screen as it sharpens. Where the bed shows through (the shallows, by
 own rule for how much bed shows at a depth), the fish throws a shadow on it: the same body
 painted dark and blurred, down and to the right by the gap between the fish and the bed, the
 blurrier the bigger that gap, under the fish. Fish at very different depths may pass right over
-each other, and a fish deep down is out of reach of the minnows and the snake at the surface.
+each other, and a fish deep down is out of reach of the minnows and the snake (they only see fish
+shallower than 0.06u).
+
+*How deep the pond really is.* The full depth (`Pond.DepthU`) is 0.4u, deep enough that the middle
+of the pond can hide a fish. A fish may be at any depth the bed allows, and three numbers in
+`Light.cs` turn depth into a picture. `EyeU` (0.35u) is how high the eye is above the water: a thing
+under the surface is drawn smaller the further it is from the eye (`Light.Scale`, about six tenths
+of its size at the limit of sight), the way a coin at the bottom of a pool looks smaller than the
+same coin in your hand. `Light.Murk` mixes it toward the water's own colour, a little at the top
+and more and more with depth. `SeeU` (0.26u) is the depth where the murk reaches all the way: past
+it the fish is not painted at all, it is lost in the water until it rises. Deeper also means lower
+on the screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier, lower, and
+then gone.
+
+*Three-dimensional steering and bumping.* The fish steer in all three directions with the engine's
+steering kit (`Core/Minds/Space.cs`). Each animal keeps a `Body.Shape`, a `Chain`: a string of
+beads along its spine, each with a radius, in ground pixels with z the depth in pixels. The fish
+feels ahead with feelers, asking `Koi.RoomAround` "how much room is there here?": it counts land,
+the bed, the surface, the room grid and every other body in the water (koi and turtles). A gap up
+or down counts two and a half times a gap sideways, because swimming over another fish's back
+needs less clearance than swimming beside a bank. When something is in the way the feelers pick the
+smallest change of course: turn, climb over or dive under. Feelers can miss, so as a last resort
+`KoiSchool.Update` finds any two bodies that overlap (`Chain.Touch`) and pushes them apart as a
+recoil, no faster than a body length a second, with a sideways push if the bed or the surface
+refuses an up or down one. A turtle is the heavier and is never moved. Both fish are told, and one
+not in a chase shies away for a second or two (the doing `Shy`). A rise or a sink is held to a share
+of the fish's forward motion, by where its nose points on the screen (half with the nose across the
+screen, none with the nose straight against the way the picture would move), so it is never seen
+sliding backward or sideways. The recipe for giving another animal the same is
+[MINDS.md](MINDS.md), section 8.
 
 *What makes "over" read as over, not through.* Seen from above, two fish crossing at different
 depths are two hazy pictures overlapping, and the eye reads that as one swimming through the
@@ -713,10 +743,10 @@ throws every shallower overlapping animal's shadow onto that stencil only, and w
 drawn at the same time on different cores have boxes that do not touch, so each works its own
 patch. The bed shadow goes by the painter's depth or the floor, whichever is shallower, so a fish
 pushed up over the island's shoulder throws its shadow on the stone. The koi and the turtles are drawn in one depth order, so a
-turtle (which keeps near the top) is painted over the koi below it and under a koi that is gulping
+turtle (usually near the top) is painted over the koi below it and under a koi that is gulping
 above it; the bed shadows are painted first, under every fish, and fade to nothing in a branch's
 shade. The turtle reads the same floor, at its nose only, and sinks on the screen by the same rule;
-it has no whole-body cap because it never goes deep. The floating log is a wall to the koi's
+when it dives it follows the same rules as a koi (smaller, hazier, lower, and out of sight past `Light.SeeU`). The floating log is a wall to the koi's
 steering, not something they swim under: what you may see is a deep fish's sunk picture slipping
 under the log's edge, which is what a log floating over a fish looks like.
 
