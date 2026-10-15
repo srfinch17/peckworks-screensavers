@@ -166,7 +166,7 @@ travelling wave (the cattails and irises sway with it stiffly).
   drifting out on the water when it is not. Bark streaks, cracks, a knot or two, moss on top, and
   the cut end's rings where it faces us.
 
-Settings: draw width (sharpness against smoothness), petals, number of koi (eight by default), how playful the koi are (0 means they only cruise and rest),
+Settings: draw width (sharpness against smoothness), petals, number of koi (ten by default), how playful the koi are (0 means they only cruise and rest),
 number of minnow schools (0 means no game), number of turtles,
 number of dragonflies, how often the swallows visit, how often the snake crosses, how many
 lizards there are (0 to 3), and how often the lizards come out (Lizard visits).

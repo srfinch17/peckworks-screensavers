@@ -225,7 +225,9 @@ second or two (the doing `Shy`), away and up or down as well as aside, on a cool
   heading down the screen is seen going backward. The allowed rise is half the forward motion
   with the nose across the screen, none with the nose straight down it, all of it with the nose
   straight up it (then the rise only adds to the way it is going); the sink is the mirror. A rise
-  the bed forces is exempt, with the clamp in `LaySpine` having the last word. The first version
+  the bed forces is held the same way (with the pond this deep, an exempt bed rise slid a fish
+  50 pixels up the screen in a second); the clamp in `LaySpine` has the last word, and the hop
+  that leaves is a pixel or three a frame. The first version
   held only the rise, and only against the down-screen part of the motion: a resting fish with
   its nose sideways slid up the screen on a slow rise, and one sinking out of sight drifted down
   it with its nose pointing up.

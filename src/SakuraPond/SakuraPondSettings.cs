@@ -13,7 +13,7 @@ public sealed class SakuraPondSettings : ScreensaverSettings
     public SakuraPondSettings() : base("SakuraPond")
     {
         _petals = Add(nameof(PetalPercent), "Petals", 0, 300, 100, "%");
-        _koi = Add(nameof(KoiCount), "Koi", 0, 12, 8);
+        _koi = Add(nameof(KoiCount), "Koi", 0, 14, 10);   // ten since the pond went deep: they have the depth to spread out in
         _koiPlay = Add(nameof(KoiPlayPercent), "Koi play", 0, 300, 100, "%");
         _minnows = Add(nameof(MinnowSchools), "Minnow schools", 0, 4, 2);
         _turtles = Add(nameof(TurtleCount), "Turtles", 0, 3, 1);

@@ -657,7 +657,7 @@ internal sealed class Koi : Body
         float zNext = _dodge != 0 && !refused ? Z + _dodge * step / DepthPx
                                               : Z + (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping ? 0.6f : forBed ? 0.8f : 0.18f)));
         zNext = Math.Clamp(zNext, 0, cap);
-        if (zNext < Z && !forBed)
+        if (zNext < Z)
         {
             // Rising moves the picture UP the screen (its sink shrinks). A fish
             // rising fast while barely swimming would be seen sliding up the
@@ -670,8 +670,14 @@ internal sealed class Koi : Body
             // straight down the screen (every pixel of rise would be a pixel
             // backward), all of it with the nose straight up the screen (the
             // rise only adds to the way it is going). A rise the BED forces is
-            // not held back: the bed wins anyway in LaySpine, and holding it
-            // here only turned a smooth rise into a one-frame hop.
+            // held back too: with the pond this deep, a fish heading for the
+            // bank from deep water rose half the pond's depth in a second and
+            // its picture slid 50 pixels up the screen while it swam the other
+            // way (the biggest slide on the timeline, six times on one fish in
+            // three minutes). The bed still wins in LaySpine, and the hop that
+            // leaves is one to four pixels a frame; a bed steeper than the fish
+            // can climb at its speed is a wall to its feelers (RoomAround), so
+            // it turns or climbs before it is lifted.
             float share = MathF.Max(0.02f, 0.5f * (1 - MathF.Sin(_heading)));
             float maxRise = dt * share * _speed / (Pond.DepthU * _pond.U * Light.Sink);
             zNext = MathF.Max(zNext, Z - maxRise);
