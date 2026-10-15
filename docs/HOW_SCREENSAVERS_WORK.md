@@ -722,6 +722,42 @@ screen, none with the nose straight against the way the picture would move), so 
 sliding backward or sideways. The recipe for giving another animal the same is
 [MINDS.md](MINDS.md), section 8.
 
+*A fish that tilts.* Depth is not one number for the whole fish. The trail the spine is laid along
+remembers how deep the head was at each spot (`_trailZ` beside `_trail`), so each spine point is
+as deep as the head was when it passed there, and `LaySpine` walks the trail in three dimensions.
+A fish that dives is laid down its own slope: head deepest, tail still up near where the dive
+began, and the body covers less ground than its length (foreshortened, the way a pencil pointed at
+you looks short). Everything that goes by depth then goes point by point: the perspective shrink
+(`Light.Scale`), the sink down the screen (`Light.SinkPx`), the murk (`Body.Paint` takes a murk per
+spine point, `murkAt`, and slopes between them), the blur and the dimming of the markings (`Colour`
+reads them by s). So a diving fish is smaller, hazier and lower at the head than at the tail, and
+goes out of sight head first, the tail last; a rising one comes back the other way round. Two
+rules keep it honest. A fish swims along its own length, so only a change of depth it can SWIM
+(no steeper than 0.8 of its forward motion, the dodge's slope) is laid down its course; any change
+beyond that is drifted, level, the whole body together (the trail's depths all move), the way a
+resting koi settles. Without that a resting fish sinking in place was laid nose down at sixty
+degrees. And a fish that is hardly swimming levels out over a second or two (the trail's depths
+ease toward the head's), since a koi hanging in the water hangs level; one hung nose down, half
+out of sight, for eight seconds before that rule. Its `Shape` chain carries the same depths, so
+two fish meet where their tilted bodies really are. A fish none of whose points is in sight
+(`Koi.Visible` false) is left out of `KoiSchool.Draw`'s order altogether: it painted nothing, but
+still made a layer for the cores to wait on and was asked for shadows.
+
+*Three small things a koi does that the eye expects.* Hovering (a rest, nosing at something), the
+side fins are held out and scull BY TURNS, one sweeping back as the other comes forward, the slow
+treading that holds a koi in place; swimming, the pair beat together. The sun gleams along the
+rounded back in one soft warm band (`_gleam256`, `_gleamV` in `Koi.Draw` and `Colour`): down the
+backbone when the fish heads toward or away from the sun, out on the sunward flank when it swims
+across the light, so the gleam slides across its back as it turns; sharpest and brightest on a
+metallic koi, fading with depth. And nothing passes through a floating petal: `Petals.PushAside`
+takes a body's drawn spine and half widths and shoves every petal whose edge is inside the body's
+edge straight out until it clears, with a little speed that way that dies over a second (the
+petal coasts off and slows, as one on water does); against the bank, where straight out is land,
+it slides along the body instead. The snake and a paddling turtle shove with their whole body; a
+koi only with the pieces of it whose back is up at the surface (shallower than about its own half
+width), the rest of it swims under the petals, which are painted over it. A petal pinned between a
+body and the bank with no water either way stays put and is overrun: a few frames in ten thousand.
+
 *What makes "over" read as over, not through.* Seen from above, two fish crossing at different
 depths are two hazy pictures overlapping, and the eye reads that as one swimming through the
 other unless the picture carries the cues a real pond does. Four of them, all in the painter:

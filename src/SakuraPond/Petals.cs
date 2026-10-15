@@ -34,6 +34,8 @@ internal sealed class Petals
     private struct Floating
     {
         public float X, Y, Age, Life;
+        public float R;               // half its size, screen pixels: how close a body may come before it is shoved (PushAside)
+        public float Vx, Vy;          // a shove sent it gliding this fast, screen pixels a second, dying away over a second or so
         public Sprite Look;           // the petal lying flat, made once (see MakeLook)
     }
 
@@ -77,14 +79,22 @@ internal sealed class Petals
         for (int i = 0; i < _fallingCount; i++) _falling.Add(NewFalling(scatter: true));
     }
 
-    private Floating NewFloating(float x, float y, float age = 0, float size = -1, float angle = -1, float pink = -1) => new()
+    private Floating NewFloating(float x, float y, float age = 0, float size = -1, float angle = -1, float pink = -1)
     {
-        X = x, Y = y, Age = age,
-        Life = 180 + 240 * (float)_rng.NextDouble(),
-        Look = MakeLook(size >= 0 ? size : _u * (0.011f + 0.006f * (float)_rng.NextDouble()),
-                        angle >= 0 ? angle : (float)(_rng.NextDouble() * MathF.Tau),
-                        pink >= 0 ? pink : (float)_rng.NextDouble()),
-    };
+        // The dice in the same order as ever (life, then size, angle, pink), so a
+        // seed still gives the scene it gave before this change (old-vs-new timing
+        // on one seed depends on it).
+        float life = 180 + 240 * (float)_rng.NextDouble();
+        if (size < 0) size = _u * (0.011f + 0.006f * (float)_rng.NextDouble());
+        return new()
+        {
+            X = x, Y = y, Age = age, R = size * 0.5f,
+            Life = life,
+            Look = MakeLook(size,
+                            angle >= 0 ? angle : (float)(_rng.NextDouble() * MathF.Tau),
+                            pink >= 0 ? pink : (float)_rng.NextDouble()),
+        };
+    }
 
     /// <summary>
     /// The stamp for a petal lying flat on the water. A floating petal does
@@ -193,8 +203,11 @@ internal sealed class Petals
             float dx = f.X - c.X, dy = (f.Y - c.Y) / Ripples.Squash;
             float r = MathF.Max(1, MathF.Sqrt(dx * dx + dy * dy));
             float swirl = _u * 0.006f;
-            float vx = -dy / r * swirl + breeze * 0.6f, vy = dx / r * swirl * Ripples.Squash;
+            float vx = -dy / r * swirl + breeze * 0.6f + f.Vx, vy = dx / r * swirl * Ripples.Squash + f.Vy;
             float nx = f.X + vx * dt, ny = f.Y + vy * dt;
+            // A shove (PushAside) sent it gliding; it slows over a second or so, as a petal on water does.
+            float slow = MathF.Exp(-dt * 3f);
+            f.Vx *= slow; f.Vy *= slow;
             int ix = (int)nx, iy = (int)ny;
             // It drifts only while there is water ahead; against the bank (or a pad) it stays, the way petals pile up at the edges.
             if (ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Water[iy * _pond.Width + ix])
@@ -239,6 +252,80 @@ internal sealed class Petals
         Floating f = _floating[i];
         f.Life = MathF.Min(f.Life, f.Age + 0.6f);
         _floating[i] = f;
+    }
+
+    /// <summary>
+    /// Something is passing ON the surface: every floating petal in its way
+    /// is shoved aside, out from the body's edge, and sent gliding a little,
+    /// so nothing is ever drawn through a petal. The body is its drawn spine
+    /// (screen pixels, nose first) with half its width at each point. For a
+    /// koi, which mostly swims UNDER the petals, "depth" says how deep each
+    /// point's back is (u): only the pieces up at the surface (shallower than
+    /// "surface") shove; the rest pass beneath, and the petals are painted
+    /// over them.
+    ///
+    /// FEYNMAN VERSION: for each petal, find the nearest piece of the body.
+    /// If the petal's edge is inside the body's edge there, move the petal
+    /// straight out until it just clears, and give it a little speed that way
+    /// (Update lets it coast and slow). Against the bank, where straight out
+    /// is land, it is slid along the body instead; and only if that is land
+    /// too does it stay put.
+    /// </summary>
+    public void PushAside(ReadOnlySpan<PointF> spine, ReadOnlySpan<float> halfWidth, ReadOnlySpan<float> depth = default, float surface = 0)
+    {
+        if (_floating.Count == 0 || spine.Length < 2) return;
+        // The body's box, so most petals are dismissed with four compares.
+        float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue, wide = 0;
+        for (int i = 0; i < spine.Length; i++)
+        {
+            x0 = MathF.Min(x0, spine[i].X); x1 = MathF.Max(x1, spine[i].X);
+            y0 = MathF.Min(y0, spine[i].Y); y1 = MathF.Max(y1, spine[i].Y);
+            wide = MathF.Max(wide, halfWidth[i]);
+        }
+        float margin = wide + _u * 0.012f;
+        for (int k = 0; k < _floating.Count; k++)
+        {
+            Floating f = _floating[k];
+            if (f.X < x0 - margin || f.X > x1 + margin || f.Y < y0 - margin || f.Y > y1 + margin) continue;
+            // The nearest piece of the body, and the body's half width there.
+            float bestD2 = float.MaxValue, px = 0, py = 0, bw = 0, tx = 0, ty = 0;
+            for (int i = 0; i < spine.Length - 1; i++)
+            {
+                if (!depth.IsEmpty && (depth[i] > surface || depth[i + 1] > surface)) continue;   // this piece is down under the petals
+                PointF a = spine[i], b = spine[i + 1];
+                float ex = b.X - a.X, ey = b.Y - a.Y, l2 = ex * ex + ey * ey;
+                float t = l2 > 1e-4f ? Math.Clamp(((f.X - a.X) * ex + (f.Y - a.Y) * ey) / l2, 0, 1) : 0;
+                float qx = a.X + ex * t, qy = a.Y + ey * t;
+                float dx = f.X - qx, dy = f.Y - qy, d2 = dx * dx + dy * dy;
+                if (d2 < bestD2) { bestD2 = d2; px = qx; py = qy; bw = halfWidth[i] + (halfWidth[i + 1] - halfWidth[i]) * t; tx = ex; ty = ey; }
+            }
+            if (bestD2 == float.MaxValue) continue;
+            float want = bw + f.R, d = MathF.Sqrt(bestD2);
+            if (d >= want) continue;
+            // Out from the body's edge; a petal right on the spine goes out sideways.
+            float ox, oy;
+            if (d > 0.5f) { ox = (f.X - px) / d; oy = (f.Y - py) / d; }
+            else { float l = MathF.Max(1e-3f, MathF.Sqrt(tx * tx + ty * ty)); ox = -ty / l; oy = tx / l; }
+            float by = want - d + 0.5f;
+            if (!OnWater(f.X + ox * by, f.Y + oy * by))
+            {
+                // The bank is that way: slide along the body instead, whichever way is water.
+                float l = MathF.Max(1e-3f, MathF.Sqrt(tx * tx + ty * ty)), sx = tx / l, sy = ty / l;
+                if (OnWater(f.X + sx * by, f.Y + sy * by)) { ox = sx; oy = sy; }
+                else if (OnWater(f.X - sx * by, f.Y - sy * by)) { ox = -sx; oy = -sy; }
+                else continue;
+            }
+            f.X += ox * by; f.Y += oy * by;
+            float glide = _u * 0.06f;
+            f.Vx = ox * glide; f.Vy = oy * glide;
+            _floating[k] = f;
+        }
+    }
+
+    private bool OnWater(float x, float y)
+    {
+        int ix = (int)x, iy = (int)y;
+        return ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Water[iy * _pond.Width + ix];
     }
 
     private int Nearest(float x, float y, float within)

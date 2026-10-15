@@ -583,6 +583,12 @@ internal sealed class Snake : Body
         return true;
     }
 
+    /// <summary>The floating petals in its way are shoved aside (Petals.PushAside): it swims ON the water, so nothing of it passes under a petal.</summary>
+    public void PushPetals(Petals petals)
+    {
+        if (_live) petals.PushAside(Drawn, DrawnHalfWidth);
+    }
+
     public void Draw(FrameBuffer fb)
     {
         if (!_live) return;

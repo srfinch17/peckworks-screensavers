@@ -99,7 +99,17 @@ travelling wave (the cattails and irises sway with it stiffly).
   fish swim at any depth the bed allows, go smaller and hazier the deeper they are, and then out
   of sight. They steer over, under and round each other in three dimensions, and if two do touch
   they bump (a short recoil, then a shy swim away) rather than pass through. The 3D navigation
-  kit behind this lives in the engine (`Core/Minds/Space.cs`) for other savers to use.
+  kit behind this lives in the engine (`Core/Minds/Space.cs`) for other savers to use. A diving
+  fish tilts: every point of its body is as deep as its head was when it passed there, so the
+  head goes smaller, hazier and lower on the screen before the tail does, and a fish diving out
+  of sight goes head first, tail last; one hanging still levels out. Hovering, its side fins
+  scull by turns, one sweeping back as the other comes forward, the slow treading that holds a
+  koi in place; swimming, they beat together. The sun gleams along its back, down the backbone
+  when it heads toward or away from the sun and out on the sunward flank as it turns across the
+  light, brightest on the metallic varieties and fading with depth. Nothing in the pond passes
+  through a floating petal: whatever has its back up at the surface (a koi gulping or brushing
+  it, a paddling turtle, the snake) shoves the petals in its way aside, and they glide off and
+  slow; a fish swimming under them leaves them be.
 - **An island rock** stands out in the open water: a boulder that goes down deep, darker and
   bluer the deeper it goes until the water hides it, with a small dry cap breaking the surface.
   The koi swim up and over its shoulders and round the cap. Once in a while one rises slowly until its back brushes the
@@ -143,8 +153,8 @@ travelling wave (the cattails and irises sway with it stiffly).
 - Now and then a **snake** (a shimahebi, the four-lined rat snake) comes out of the grass, swims
   across the pond with its body weaving behind its head and a small wake, and slips away. It is
   not on rails: it feels its way, goes round the lily pads, the rocks, the log, the cattails and
-  the iris clumps rather than over them, and if a koi, a turtle or the lizard touches it, it
-  startles: a burst of speed, a swing away, rings off its head, then it calms. The minnows keep
+  the iris clumps rather than over them, pushes the floating petals out of its way, and if a
+  koi, a turtle or the lizard touches it, it startles: a burst of speed, a swing away, rings off its head, then it calms. The minnows keep
   clear of it as they do of the koi. Each visit is a different snake: it rolls a boldness and a
   nerve, and then chooses what to do by weighted dice, a few things per visit. It may swim out
   to a spot in open water and then another (explore), creep up on a school of minnows and

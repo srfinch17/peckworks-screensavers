@@ -29,6 +29,12 @@ internal sealed class Turtles
         foreach (Turtle t in _all) t.Update(dt, snakeHead);
     }
 
+    /// <summary>Every turtle up at the surface shoves the floating petals in its way aside (Petals.PushAside); a turtle that has dived passes under them.</summary>
+    public void PushPetals(Petals petals)
+    {
+        foreach (Turtle t in _all) if (t.InWater && Light.DepthOf(t.Z) < 0.03f) petals.PushAside(t.Drawn, t.DrawnHalfWidth);
+    }
+
     /// <summary>A point at each turtle's nose and under its shell this frame, screen pixels (the snake keeps clear of them).</summary>
     public PointF[] Spots => _all.SelectMany(t => new[] { t.Nose, t.Middle }).ToArray();
 

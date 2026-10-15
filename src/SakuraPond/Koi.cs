@@ -107,6 +107,12 @@ internal sealed class KoiSchool
         else a.Nudge(push * MathF.Min(most, depth));
     }
 
+    /// <summary>Every fish with its back up at the surface shoves the floating petals in its way aside (Koi.PushPetals).</summary>
+    public void PushPetals(Petals petals)
+    {
+        foreach (Koi k in _fish) k.PushPetals(petals);
+    }
+
     /// <summary>Something tapped the water here (screen pixels): curious fish nearby come to look.</summary>
     public void Notice(float x, float y)
     {
@@ -166,6 +172,11 @@ internal sealed class KoiSchool
     /// animal marks the pixels it painted in _mask as it goes, so the shadow
     /// lands on its body and nowhere else (not on the water beside it, not on
     /// the fish below it, whose own turn had its own shadows).
+    ///
+    /// A fish lost from view (Koi.Visible false: every part of it past
+    /// Light.SeeU) is left out of the order altogether. It paints nothing,
+    /// but in the order it still made a layer of its own for the cores to
+    /// wait on, and threw no shadow for the cost of asking.
     /// </summary>
     public void Draw(FrameBuffer fb, Turtles? turtles = null)
     {
@@ -175,12 +186,19 @@ internal sealed class KoiSchool
         if (all == 0) return;
         Room(all);
         if (_mask.Length != fb.Width * fb.Height) _mask = new bool[fb.Width * fb.Height];
-        foreach (Koi k in _fish) k.DrawShadow(fb);
-        for (int i = 0; i < n; i++) { _order[i] = i; _depth[i] = -_fish[i].Z; _box[i] = _fish[i].Box; }
-        for (int i = 0; i < t; i++) { _order[n + i] = n + i; _depth[n + i] = ts[i].InWater ? -ts[i].Z : 1f; _box[n + i] = ts[i].Box; }   // a turtle out on a perch is not in this order at all (Turtles.DrawOut paints it over the water's surface)
-        Array.Sort(_depth, _order, 0, all);                         // deepest first
+        int m = 0;                                                  // how many are in the order (the fish in view, and the turtles)
+        for (int i = 0; i < n; i++)
+        {
+            _box[i] = _fish[i].Box;
+            if (!_fish[i].Visible) continue;
+            _fish[i].DrawShadow(fb);
+            _order[m] = i; _depth[m++] = -_fish[i].Z;
+        }
+        for (int i = 0; i < t; i++) { _box[n + i] = ts[i].Box; _order[m] = n + i; _depth[m++] = ts[i].InWater ? -ts[i].Z : 1f; }   // a turtle out on a perch is not in this order at all (Turtles.DrawOut paints it over the water's surface)
+        if (m == 0) return;
+        Array.Sort(_depth, _order, 0, m);                           // deepest first
         int layers = 0;
-        for (int a = 0; a < all; a++)
+        for (int a = 0; a < m; a++)
         {
             int ia = _order[a], layer = 0;
             for (int b = 0; b < a; b++)
@@ -194,7 +212,7 @@ internal sealed class KoiSchool
         {
             List<int> group = _layers[l];
             group.Clear();
-            for (int a = 0; a < all; a++) if (_layer[_order[a]] == l) group.Add(_order[a]);
+            for (int a = 0; a < m; a++) if (_layer[_order[a]] == l) group.Add(_order[a]);
             if (group.Count == 1) DrawOne(group[0], fb);
             else Parallel.For(0, group.Count, i => DrawOne(group[i], _fb!));
         }
@@ -228,6 +246,7 @@ internal sealed class KoiSchool
                 for (int k = 0; k < n + _turtles!.Count; k++)
                 {
                     if (k == i) continue;
+                    if (k < n && !_fish[k].Visible) continue;              // lost from view: nothing to throw a shadow
                     float zk = k < n ? _fish[k].Z : _turtles[k - n].Z;
                     if (zk > z - ShadowGap) continue;                      // only those above it
                     if (k >= n && !_turtles[k - n].InWater) continue;      // a turtle out on a rock shades the rock, not the fish
@@ -277,6 +296,13 @@ internal sealed class KoiSchool
 /// when something is in the way it takes the smallest change of course that
 /// clears it: a turn, a climb over, or a dive under. If two fish still meet,
 /// KoiSchool pushes them apart and each swims shyly off.
+///
+/// Every point of the body has its own depth (the tail is as deep as the
+/// head was when it passed there, see LaySpine), so a diving fish TILTS:
+/// smaller, hazier and lower on the screen at the head than at the tail,
+/// and out of sight head first. Up at the surface its back shoves the
+/// floating petals aside (PushPetals): nothing in this pond passes through
+/// anything.
 /// </summary>
 internal sealed class Koi : Body
 {
@@ -364,10 +390,23 @@ internal sealed class Koi : Body
     /// <summary>Its body length, ground pixels (the school's shove is held to a length a second).</summary>
     public float Length => _len;
 
+    /// <summary>Is any part of it still to be seen? False once every point of its body is past Light.SeeU: KoiSchool then leaves it out of the drawing altogether.</summary>
+    public bool Visible => _murkMin <= 0.985f;
+
+    /// <summary>
+    /// The floating petals in the way of its back are shoved aside
+    /// (Petals.PushAside), but only by the pieces of it that are up at the
+    /// surface: its back breaks the surface where it is shallower than about
+    /// its own half width. The rest of it swims under the petals, which are
+    /// painted over it.
+    /// </summary>
+    public void PushPetals(Petals petals) => petals.PushAside(Spine, HalfWidth, _depthAt, 1.2f * _wide / _pond.U);
+
     // The trail the head has swum, newest last, in ground pixels. A ring
     // buffer: a fixed row of slots used round and round, so remembering never
     // allocates memory while the screensaver runs.
     private readonly PointF[] _trail = new PointF[96];
+    private readonly float[] _trailZ = new float[96];     // how deep the head was at each remembered spot (Z), so the body behind it is laid at the depths the head swam
     private int _trailHead, _trailCount;
 
     /// <summary>How deep it is now: 0 at the surface, 1 as deep as a fish goes (Pond.DepthU below the surface).</summary>
@@ -376,8 +415,17 @@ internal sealed class Koi : Body
     private float _floor = 1;                             // the bed under the whole body, 0 at the bank to 1 at full depth (found as the spine is laid)
     private float _shadowDx, _shadowDy, _shadowSoft;      // its shadow on the bed: how far down and right of the body, and how blurred (screen pixels)
     private float _shadowAlpha;                           // how dark that shadow is (0 = the bed is out of sight, no shadow)
-    private float _scale = 1;                             // how much smaller it is drawn for its depth (Light.Scale), set as the spine is laid
-    private int _blur256, _dim256 = 256;                  // how far its markings are blurred toward _skinBlur, and how much dimmer, both by depth (256ths)
+    private float _scale = 1;                             // how much smaller its head is drawn for its depth (Light.Scale), set as the spine is laid
+    private readonly float[] _zAt = new float[Points];    // each spine point's own depth (Z): the head's now, the tail's from when the head was there
+    private readonly float[] _murkAt = new float[Points]; // how lost in the water each point is (Light.Murk of its depth), handed to the painter
+    private readonly float[] _depthAt = new float[Points];// each point's depth in u, for the petals (only the pieces up at the surface shove them)
+    private readonly int[] _blurAt = new int[Points], _dimAt = new int[Points];   // how far its markings are blurred toward _skinBlur, and how much dimmer, at each point (256ths)
+    private readonly int[] _blurBySi = new int[SkinLen], _dimBySi = new int[SkinLen];   // the same, laid out per step of the skin sheet along the body: one read per pixel (Colour runs tens of thousands of times a frame per fish)
+    private readonly int[] _gleamByVi = new int[SkinWide];                            // the gleam's strength per step across the body (256ths), 0 outside its band
+    private float _murkMin = 1;                           // the murk of its clearest point: past 0.985 there is nothing of it to see
+    private float _zTop;                                  // the depth of its shallowest point (the last part to go out of sight)
+    private int _gleam256;                                // the sun's gleam on its back this frame (256ths), fading with depth
+    private float _gleamV, _gleamSharp;                   // where across the body the gleam lies (v, -1 to 1: it slides to the sunward flank as the fish turns), and how narrow
 
     /// <summary>Its nose as drawn, screen pixels (the picture of a deep fish sits lower on the screen than the water above it; see Light.Sink).</summary>
     public PointF Head => Spine[0];
@@ -452,7 +500,7 @@ internal sealed class Koi : Body
         // A straight trail behind it to start, and the spine laid along it, so
         // Head and the rest mean something before the first frame.
         for (int i = 40; i >= 0; i--)
-            Remember(new PointF(_x - MathF.Cos(_heading) * _len * i / 30f, _y - MathF.Sin(_heading) * _len * i / 30f));
+            Remember(new PointF(_x - MathF.Cos(_heading) * _len * i / 30f, _y - MathF.Sin(_heading) * _len * i / 30f), Z);
         LaySpine();
     }
 
@@ -469,10 +517,11 @@ internal sealed class Koi : Body
     /// <summary>Where it is in three dimensions, ground pixels across and depth in pixels down.</summary>
     private Vector3 Here => new(_x, _y, Z * DepthPx);
 
-    private void Remember(PointF p)
+    private void Remember(PointF p, float z)
     {
         _trailHead = (_trailHead + 1) % _trail.Length;
         _trail[_trailHead] = p;
+        _trailZ[_trailHead] = z;
         _trailCount = Math.Min(_trail.Length, _trailCount + 1);
     }
 
@@ -596,9 +645,7 @@ internal sealed class Koi : Body
             _stuckFor += dt;
             if (_stuckFor > 2) { _stuckFor = 0; Begin(Doing.Wander); }
         }
-        PointF last = _trail[_trailHead];
-        if ((last.X - _x) * (last.X - _x) + (last.Y - _y) * (last.Y - _y) > (_len / 40) * (_len / 40))
-            Remember(new PointF(_x, _y));
+        float zBefore = Z;
 
         // ---- Up and down in the water, and the occasional gulp ----
         _depthTimer -= dt;
@@ -704,6 +751,32 @@ internal sealed class Koi : Body
             _zTarget = 0.2f + 0.4f * (float)_rng.NextDouble();
             _depthTimer = 8;
         }
+
+        // ---- The tilt ----
+        // A fish swims along its own length, so a change of depth it SWIMS
+        // is laid down its course: the head goes first and the body follows
+        // down the slope (LaySpine reads the trail's depths). But it cannot
+        // swim its nose steeper than about 0.8 of its forward motion (the
+        // dodge's slope); any change of depth beyond that is not swum but
+        // drifted, level, the whole body together, the way a resting koi
+        // settles. Without this a resting fish sinking in place was laid
+        // nose down at sixty degrees, foreshortened to half its length.
+        // And a fish that is hardly swimming levels out: hanging in the
+        // water it hangs level, as koi do, so a tilt it dived into eases away
+        // over a second or two once it slows (a resting fish once hung nose
+        // down, half out of sight, for eight seconds).
+        float dived = (Z - zBefore) * DepthPx, swum = Math.Clamp(dived, -0.8f * step, 0.8f * step), settled = (dived - swum) / DepthPx;
+        float levelling = 1 - MathF.Exp(-dt * 0.6f * MathF.Max(0, 1 - _speed / (_len * 0.3f)));
+        if (settled != 0 || levelling > 0)
+            for (int i = 0; i < _trailCount; i++)
+            {
+                int slot = (_trailHead - i + _trail.Length) % _trail.Length;
+                float z = _trailZ[slot] + settled;
+                _trailZ[slot] = MathF.Max(0, z + (Z - z) * levelling);
+            }
+        PointF last = _trail[_trailHead];
+        if ((last.X - _x) * (last.X - _x) + (last.Y - _y) * (last.Y - _y) > (_len / 40) * (_len / 40))
+            Remember(new PointF(_x, _y), Z);
 
         LaySpine();
     }
@@ -1073,13 +1146,21 @@ internal sealed class Koi : Body
         // the head. Moving the head alone left the tail where it was, and two
         // fish whose tails crossed stayed crossed for seconds while their heads
         // were pushed apart every frame (241 touching frames in one run).
+        // A push onto a rock's steep flank would lift it by the bed's clamp
+        // in one frame (a nine pixel hop on the timeline, once in thirty
+        // fish-minutes), so the ground part of a push that would is refused
+        // this frame: the other fish still takes its half, and the shy swim
+        // does the rest.
+        if (0.9f * FloorAt(ToScreen(_x + by.X, _y + by.Y)) < Z - 0.02f) { by.X = 0; by.Y = 0; }
         _x += by.X; _y += by.Y;
+        float dz = by.Z / DepthPx;
         for (int i = 0; i < _trailCount; i++)
         {
             int slot = (_trailHead - i + _trail.Length) % _trail.Length;
             _trail[slot] = new PointF(_trail[slot].X + by.X, _trail[slot].Y + by.Y);
+            _trailZ[slot] = MathF.Max(0, _trailZ[slot] + dz);                 // up or down too: the whole body, not a nose-up tilt
         }
-        Z = MathF.Max(0, Z + by.Z / DepthPx);
+        Z = MathF.Max(0, Z + dz);
         LaySpine();
     }
 
@@ -1145,29 +1226,39 @@ internal sealed class Koi : Body
     private void LaySpine()
     {
         // Walk back along the trail, dropping a spine point every so often.
-        // SIZE BY DEPTH: we look at the pond from a few body lengths above it,
-        // so the bed is further from the eye than the surface, and a fish down
-        // there is drawn a little smaller (KoiSchool.Shrink at full depth). The
-        // fish itself is no smaller: its steering keeps its true length. A fish
-        // rising to gulp grows as it comes up, which is part of what "coming
-        // up" looks like from above.
+        // EACH POINT AT ITS OWN DEPTH: the trail remembers how deep the head
+        // was at each spot, so a point of the body is as deep as the head was
+        // when it passed there. A fish that dives is laid down its own slope,
+        // head deepest and tail still up near where the dive began, and all
+        // that goes by depth goes point by point: how small it is drawn
+        // (Light.Scale), how far down the screen it sits (Light.Sink) and how
+        // lost in the water it is (Light.Murk). From above, a diving fish is
+        // smaller, hazier and lower at the head than at the tail, and it goes
+        // out of sight head first, the tail last; a rising one comes back the
+        // other way round. The walk measures the trail in three dimensions,
+        // so a body laid down a slope covers less ground than its length:
+        // foreshortened, the way a pencil pointed at you looks short. The fish
+        // itself is no smaller: its steering keeps its true length.
+        float depthPx = DepthPx, u = _pond.U;
         _scale = Light.Scale(Z);
         int slot = _trailHead, left = _trailCount - 1;
         PointF a = new(_x, _y), b = _trail[slot];
-        float travelled = 0, segLen = Dist(a, b);
+        float za = Z, zb = _trailZ[slot];
+        float travelled = 0, segLen = Dist3(a, za, b, zb, depthPx), want = 0;
         Span<PointF> mid = stackalloc PointF[Points];
         Span<PointF> dir = stackalloc PointF[Points];
         for (int i = 0; i < Points; i++)
         {
-            float want = Along[i] * _len * _scale;
+            // The next piece of body is its true length, shrunk by the perspective at the depth it starts.
+            if (i > 0) want += (Along[i] - Along[i - 1]) * _len * Light.Scale(_zAt[i - 1]);
             while (travelled + segLen < want && left > 0)
             {
                 travelled += segLen;
-                a = b;
+                a = b; za = zb;
                 slot = (slot - 1 + _trail.Length) % _trail.Length;
                 left--;
-                b = _trail[slot];
-                segLen = Dist(a, b);
+                b = _trail[slot]; zb = _trailZ[slot];
+                segLen = Dist3(a, za, b, zb, depthPx);
             }
             float f = segLen > 1e-4f ? (want - travelled) / segLen : 0;
             if (left <= 0 && travelled + segLen < want)
@@ -1175,8 +1266,13 @@ internal sealed class Koi : Body
                 // Ran out of trail (just started): carry on straight back.
                 float ex = segLen > 1e-4f ? (b.X - a.X) / segLen : -MathF.Cos(_heading), ey = segLen > 1e-4f ? (b.Y - a.Y) / segLen : -MathF.Sin(_heading);
                 mid[i] = new PointF(b.X + ex * (want - travelled - segLen), b.Y + ey * (want - travelled - segLen));
+                _zAt[i] = zb;
             }
-            else mid[i] = new PointF(a.X + (b.X - a.X) * f, a.Y + (b.Y - a.Y) * f);
+            else
+            {
+                mid[i] = new PointF(a.X + (b.X - a.X) * f, a.Y + (b.Y - a.Y) * f);
+                _zAt[i] = za + (zb - za) * f;
+            }
         }
         // The direction at each point (nose to tail), for the sideways wave and the edges.
         for (int i = 0; i < Points; i++)
@@ -1193,7 +1289,7 @@ internal sealed class Koi : Body
         float floor = 1;
         for (int i = 0; i < Points; i++)
         {
-            float s = Along[i], hw = _wide * Profile(s) * _scale, nx = -dir[i].Y, ny = dir[i].X;
+            float s = Along[i], hw = _wide * Profile(s) * Light.Scale(_zAt[i]), nx = -dir[i].Y, ny = dir[i].X;
             float sway = _amp * (0.06f + s * s) * MathF.Sin(MathF.Tau * 0.85f * s - _phase);   // the same wave the body is drawn with, below
             float cx = mid[i].X + nx * sway, cy = mid[i].Y + ny * sway;
             floor = MathF.Min(floor, FloorAt(ToScreen(cx, cy)));
@@ -1202,12 +1298,7 @@ internal sealed class Koi : Body
         }
         _floor = floor;
         Z = MathF.Min(Z, 0.9f * floor);
-        // DEPTH ON THE SCREEN. The fish lives at (_x, _y) on the water's plane
-        // and Z below it. We look at the pond at a slant, so the deeper it is,
-        // the lower on the screen its picture sits than the water above it
-        // (Light.Sink, the lift rule run the other way): a fish that rises to
-        // gulp is seen to come UP the screen as well as sharpen.
-        float sink = Light.SinkPx(Z, _pond.U);
+        for (int i = 0; i < Points; i++) _zAt[i] = MathF.Min(_zAt[i], 0.9f * floor);   // no part of it below the bed either
         // Its shadow on the bed, where the bed shows through the water (the
         // painter's own rule for how much bed shows at the painted depth):
         // thrown down and to the right by the gap between the fish and the bed,
@@ -1232,23 +1323,55 @@ internal sealed class Koi : Body
         _shadowDx = Light.ShadowX * gap * hug;
         _shadowDy = (Light.ShadowY + Light.Sink) * gap * hug;
         _shadowSoft = MathF.Max(1f, gap * 0.15f);
+        _murkMin = 1; _zTop = 1;
         for (int i = 0; i < Points; i++)
         {
-            float s = Along[i];
+            float s = Along[i], z = _zAt[i];
             // The swimming wave: tiny at the head, widest at the tail, running from head to tail.
             float sway = _amp * (0.06f + s * s) * MathF.Sin(MathF.Tau * 0.85f * s - _phase);
             float nx = -dir[i].Y, ny = dir[i].X;                 // sideways
             float cx = mid[i].X + nx * sway, cy = mid[i].Y + ny * sway;
-            float hw = _wide * Profile(s) * _scale;
+            float hw = _wide * Profile(s) * Light.Scale(z);
             PointF l = ToScreen(cx + nx * hw, cy + ny * hw), r = ToScreen(cx - nx * hw, cy - ny * hw);
+            // DEPTH ON THE SCREEN. The fish lives at (_x, _y) on the water's
+            // plane and Z below it. We look at the pond at a slant, so the
+            // deeper a point is, the lower on the screen its picture sits than
+            // the water above it (Light.Sink, the lift rule run the other way):
+            // a fish that rises to gulp is seen to come UP the screen as well
+            // as sharpen, and a diving one's head sits lower than its tail.
+            float sink = Light.SinkPx(z, u);
             Spine[i] = new PointF((l.X + r.X) / 2, (l.Y + r.Y) / 2 + sink);
             HalfWidth[i] = Dist(l, r) / 2;
             // The same point for touching: on the ground plane, at its depth.
             // ponytail: the chain is the DRAWN body (shrunk by depth), not the true one; two deep fish are both shrunk alike, so they still meet when they look as if they do.
-            Shape.Points[i] = new Vector3(cx, cy, Z * DepthPx);
+            Shape.Points[i] = new Vector3(cx, cy, z * depthPx);
             Shape.Radius[i] = hw;
+            // How lost in the water this point is, and how blurred and dim its
+            // markings there (Colour reads these by s, the painter by point).
+            float lost = Math.Clamp(Light.DepthOf(z) / Light.SeeU, 0, 1);
+            _murkAt[i] = Light.Murk(z);
+            _depthAt[i] = Light.DepthOf(z);
+            _blurAt[i] = (int)(Math.Clamp(lost * 1.1f, 0, 1) * 256);
+            _dimAt[i] = 256 - (int)(0.3f * lost * 256);
+            if (i < 18) { _murkMin = MathF.Min(_murkMin, _murkAt[i]); _zTop = MathF.Min(_zTop, z); }
         }
         Shape.Seal();
+        // The blur and the dimming per step of the skin sheet, so Colour reads
+        // one number per pixel instead of finding its place between two points.
+        for (int si = 0; si < SkinLen; si++)
+        {
+            float fi = (si + 0.5f) / SkinLen * 17f;
+            int i0 = fi >= 17f ? 16 : (int)fi, fr = (int)((fi - i0) * 256);
+            _blurBySi[si] = _blurAt[i0] + ((_blurAt[i0 + 1] - _blurAt[i0]) * fr >> 8);
+            _dimBySi[si] = _dimAt[i0] + ((_dimAt[i0 + 1] - _dimAt[i0]) * fr >> 8);
+        }
+    }
+
+    /// <summary>The distance between two trail points in three dimensions: across the ground and down, depths turned into pixels.</summary>
+    private static float Dist3(PointF a, float za, PointF b, float zb, float depthPx)
+    {
+        float dz = (zb - za) * depthPx;
+        return MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y) + dz * dz);
     }
 
     /// <summary>
@@ -1280,18 +1403,27 @@ internal sealed class Koi : Body
         }
         // One lookup: the rounding of the body (Round) is already folded into the sheet.
         int vi = Math.Clamp((int)((v + 1) * 0.5f * SkinWide), 0, SkinWide - 1);
-        int at = Math.Clamp((int)(s * SkinLen), 0, SkinLen - 1) * SkinWide + vi;
+        int si = Math.Clamp((int)(s * SkinLen), 0, SkinLen - 1), at = si * SkinWide + vi;
         uint c = _skin[at];
         r = (int)((c >> 16) & 0xFF); g = (int)((c >> 8) & 0xFF); b = (int)(c & 0xFF);
-        if (_blur256 > 0)
+        // The depth at this step along the body (each spine point has its
+        // own, and between two the slope between theirs: a tilted fish), as
+        // a table filled when the spine was laid.
+        int blur = _blurBySi[si];
+        if (blur > 0)
         {
             // Deep down, the markings go soft (a second, blurred sheet mixed in
             // by depth) and the whole fish dimmer: less light reaches it, and
             // less comes back up through the water.
+            int dim = _dimBySi[si];
             uint d = _skinBlur[at];
-            r += ((int)((d >> 16) & 0xFF) - r) * _blur256 >> 8; g += ((int)((d >> 8) & 0xFF) - g) * _blur256 >> 8; b += ((int)(d & 0xFF) - b) * _blur256 >> 8;
-            r = r * _dim256 >> 8; g = g * _dim256 >> 8; b = b * _dim256 >> 8;
+            r += ((int)((d >> 16) & 0xFF) - r) * blur >> 8; g += ((int)((d >> 8) & 0xFF) - g) * blur >> 8; b += ((int)(d & 0xFF) - b) * blur >> 8;
+            r = r * dim >> 8; g = g * dim >> 8; b = b * dim >> 8;
         }
+        // The sun's gleam: a soft warm band along the back (its place and
+        // strength per step across the body, worked out in Draw).
+        int gl = _gleamByVi[vi];
+        if (gl > 0) { r += (255 - r) * gl >> 8; g += (250 - g) * gl >> 8; b += (232 - b) * gl >> 8; }
         alpha = 1;
         return true;
     }
@@ -1363,29 +1495,53 @@ internal sealed class Koi : Body
     /// <param name="mark">If given, set true at every pixel the body paints (KoiSchool throws the shallower fishes' shadows onto those).</param>
     public void Draw(FrameBuffer fb, bool[]? mark = null)
     {
-        // Lost in the water by depth (Light.Murk): past Light.SeeU there is
-        // nothing left of it to paint, and painting it would only wipe the
-        // bed shadows under it with the water's own colour.
-        float murk = Light.Murk(Z);
-        if (murk > 0.985f) return;
-        float lost = Math.Clamp(Light.DepthOf(Z) / Light.SeeU, 0, 1);
+        // Lost in the water by depth (Light.Murk), point by point: once every
+        // part of it is past Light.SeeU there is nothing left to paint, and
+        // painting it would only wipe the bed shadows under it with the
+        // water's own colour. A diving fish goes head first, the tail last.
+        if (!Visible) return;
+        float lost = Math.Clamp(Light.DepthOf(_zTop) / Light.SeeU, 0, 1);       // by its clearest part: the soft edge of a fish half gone is that part's
         float soft = MathF.Max(1f, _pond.U * 0.0012f) * (1 + 3 * lost);
-        _blur256 = (int)(Math.Clamp(lost * 1.1f, 0, 1) * 256);
-        _dim256 = 256 - (int)(0.3f * lost * 256);
-        // Side fins first, so the body covers where they join it.
+        // THE SUN ON ITS BACK. A koi's back is rounded, and the sun (up and to
+        // the left, where the shadows say) gleams off it along one line: down
+        // the backbone when the fish heads toward or away from the sun, out
+        // on the sunward flank when it swims across the sun's light. So as a
+        // fish turns, the gleam slides across its back, which is what a koi
+        // turning under the sun does. Brightest and sharpest on a metallic
+        // koi (its sheen is what the variety is named for), fading with
+        // depth, since less sun reaches it down there and the water softens
+        // what comes back.
+        float toSun = MathF.Atan2(-Light.ShadowY, -Light.ShadowX);
+        float lostHead = Math.Clamp(Light.DepthOf(Z) / Light.SeeU, 0, 1);
+        // (v runs positive to the fish's right, since the painter's pieces run
+        // nose to tail; a first version had the gleam on the shaded flank.)
+        _gleamV = -0.55f * MathF.Sin(_heading - toSun);
+        _gleam256 = (int)((_metal ? 0.4f : 0.16f) * (1 - lostHead) * (1 - lostHead) * 256);
+        _gleamSharp = _metal ? 4f : 2.5f;
+        for (int vi = 0; vi < SkinWide; vi++)
+        {
+            // 1 at the band's middle, gone a little way either side (a bell of two steps).
+            float dv = ((vi + 0.5f) / SkinWide * 2 - 1 - _gleamV) * _gleamSharp, k = 1 - dv * dv;
+            _gleamByVi[vi] = k > 0 ? (int)(k * _gleam256) : 0;
+        }
+        // Side fins first, so the body covers where they join it. Swimming,
+        // the pair beat together; hovering (a rest, nosing at a petal) they
+        // are held out, braking, and scull BY TURNS, one sweeping back as the
+        // other comes forward, the slow treading that holds a koi in place.
         float t = (float)(_time % 100000.0);
-        float scull = 0.22f * MathF.Sin(t * 1.4f + _p1) + (_swimming ? 0f : 0.25f);    // gliding: fins out, braking a little
-        Fins(fb, 4, 0.2f, 0.12f, 0.95f + scull, murk, mark);
-        Fins(fb, 11, 0.11f, 0.065f, 0.75f + scull * 0.5f, murk, mark);
-        Paint(fb, _where, _pond.Sun, murk, soft, _pond.Pixels, mark: mark);
+        float beat = MathF.Sin(t * 1.4f + _p1);
+        float scull = _swimming ? 0.22f * beat : 0.25f, alt = _swimming ? 0 : 0.2f * beat;
+        Fins(fb, 4, 0.2f, 0.12f, 0.95f + scull, alt, mark);
+        Fins(fb, 11, 0.11f, 0.065f, 0.75f + scull * 0.5f, alt * 0.5f, mark);
+        Paint(fb, _where, _pond.Sun, _murkAt[0], soft, _pond.Pixels, mark: mark, murkAt: _murkAt);
         // The eyes: a small dark dot on each side of the head.
         PointF e0 = Spine[1], e1 = Spine[2];
         float ex = e1.X - e0.X, ey = e1.Y - e0.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));
-        float er = MathF.Max(0.8f, _len * 0.017f * _scale);
+        float er = MathF.Max(0.8f, _len * 0.017f * Light.Scale(_zAt[1]));
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
         {
             var c = new PointF(e0.X - ey / el * HalfWidth[1] * 0.62f * side, e0.Y + ex / el * HalfWidth[1] * 0.62f * side);
-            Oval(fb, _where, c, 0, er, er, 24, 26, 28, 0.95f, murk * 0.7f, _pond.Sun, water: _pond.Pixels);
+            Oval(fb, _where, c, 0, er, er, 24, 26, 28, 0.95f, _murkAt[1] * 0.7f, _pond.Sun, water: _pond.Pixels);
         }
     }
 
@@ -1403,18 +1559,19 @@ internal sealed class Koi : Body
         PaintShadow(fb, _where, _shadowDx, _shadowDy, _shadowAlpha, _shadowSoft);
     }
 
-    /// <summary>A pair of side fins at spine point i, swept back from the body by "sweep" radians.</summary>
-    private void Fins(FrameBuffer fb, int i, float len, float wid, float sweep, float murk, bool[]? mark = null)
+    /// <summary>A pair of side fins at spine point i, swept back from the body by "sweep" radians, one side "alt" further back and the other "alt" further forward (the sculling by turns).</summary>
+    private void Fins(FrameBuffer fb, int i, float len, float wid, float sweep, float alt, bool[]? mark = null)
     {
         PointF p = Spine[i], q = Spine[Math.Max(0, i - 1)];
         float back = MathF.Atan2(p.Y - q.Y, p.X - q.X);                         // pointing toward the tail
+        float murk = _murkAt[i], scale = Light.Scale(_zAt[i]);                  // as deep as the body is where they join it
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
         {
-            float a = back - side * (MathF.PI / 2 - sweep);
+            float a = back - side * (MathF.PI / 2 - (sweep + side * alt));
             float nx = MathF.Cos(back + side * -MathF.PI / 2), ny = MathF.Sin(back + side * -MathF.PI / 2);
-            float l = _len * len * _scale;
+            float l = _len * len * scale;
             var c = new PointF(p.X + nx * HalfWidth[i] * 0.8f + MathF.Cos(a) * l * 0.5f, p.Y + ny * HalfWidth[i] * 0.8f + MathF.Sin(a) * l * 0.5f * Ripples.Squash);
-            Oval(fb, _where, c, a, l * 0.5f, _len * wid * 0.5f * _scale, _fin.R, _fin.G, _fin.B, _finAlpha * 0.9f, murk, _pond.Sun, water: _pond.Pixels, mark: mark);
+            Oval(fb, _where, c, a, l * 0.5f, _len * wid * 0.5f * scale, _fin.R, _fin.G, _fin.B, _finAlpha * 0.9f, murk, _pond.Sun, water: _pond.Pixels, mark: mark);
         }
     }
 

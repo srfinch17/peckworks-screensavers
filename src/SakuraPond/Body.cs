@@ -45,6 +45,12 @@ internal abstract class Body
     /// </summary>
     public readonly Chain Shape;
 
+    /// <summary>The spine as drawn this frame, nose first, screen pixels (what shoves the floating petals aside: Petals.PushAside).</summary>
+    public ReadOnlySpan<PointF> Drawn => Spine;
+
+    /// <summary>Half the body's width at each drawn spine point, screen pixels.</summary>
+    public ReadOnlySpan<float> DrawnHalfWidth => HalfWidth;
+
     protected Body(int points)
     {
         Spine = new PointF[points];
@@ -88,8 +94,13 @@ internal abstract class Body
     /// <param name="shadow">0 paints the animal; more paints its shape as a shadow this dark instead (the colours are ignored, the see-through fins stay fainter).</param>
     /// <param name="mark">If given, every pixel painted is set true here (a stencil for what lands ON this body: a shallower fish's shadow).</param>
     /// <param name="clip">If given, nothing outside this screen box is painted.</param>
+    /// <param name="murkAt">
+    /// If given, the murk at each spine point instead of one for the whole
+    /// body (between two points, the slope between theirs): a fish diving
+    /// head first is deeper, so hazier, at the head than at the tail.
+    /// </param>
     protected void Paint(FrameBuffer fb, bool[]? onlyWhere, byte[]? sun, float murk, float soft, uint[]? water = null,
-        float ox = 0, float oy = 0, float shadow = 0, bool[]? mark = null, Rectangle? clip = null)
+        float ox = 0, float oy = 0, float shadow = 0, bool[]? mark = null, Rectangle? clip = null, float[]? murkAt = null)
     {
         int n = Spine.Length, w = fb.Width, h = fb.Height;
         uint[] px = fb.Pixels;
@@ -133,6 +144,7 @@ internal abstract class Body
             int y0 = Math.Max(cy0, (int)by0), y1 = Math.Min(cy1, (int)by1);
             int xMin = Math.Max(cx0, (int)bx0), xMax = Math.Min(cx1, (int)bx1);
             float sA = Along[i], sB = Along[i + 1];
+            int mA = murkAt != null ? (int)(murkAt[i] * 256) : murk256, mB = murkAt != null ? (int)(murkAt[i + 1] * 256) : murk256;
             for (int y = y0; y <= y1; y++)
             {
                 float ry = y + 0.5f - a.Y;
@@ -187,12 +199,13 @@ internal abstract class Body
                         r = r * k >> 8; g = g * k >> 8; bl = bl * k >> 8;
                     }
                     uint bg = px[idx];
-                    if (murk256 > 0)
+                    int m256 = mA + ((mB - mA) * (int)(t * 256) >> 8);     // this piece's murk: the same at both ends, or the slope between them
+                    if (m256 > 0)
                     {
                         // Under water: the deeper, the more the fish takes on the water's own colour.
                         uint wc = water != null ? water[idx] : bg;
                         int wr = (int)((wc >> 16) & 0xFF), wg = (int)((wc >> 8) & 0xFF), wb = (int)(wc & 0xFF);
-                        r += (wr - r) * murk256 >> 8; g += (wg - g) * murk256 >> 8; bl += (wb - bl) * murk256 >> 8;
+                        r += (wr - r) * m256 >> 8; g += (wg - g) * m256 >> 8; bl += (wb - bl) * m256 >> 8;
                     }
                     px[idx] = FrameBuffer.Blend256(bg, r, g, bl, a256);
                 }
