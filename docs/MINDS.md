@@ -112,6 +112,7 @@ These are in the code comments too; here they are in one place.
 | Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt); hunger (a mood) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch, Shy | being chased, a dragonfly's tap, a petal settling (when hungry), a swallow's shadow, a bump from another body |
 | Goldfish (`Koi.cs`, `Koi.Kind.Goldfish`) | the same three dials, dealt over koi and goldfish together | the koi's, with Follow doubled toward another goldfish, no Chase at a koi, a shallower Rest | the koi's, with a flinch reach 1.5 times as far |
 | Lizards (`src/SakuraPond/Lizard.cs`) | bold, energy (sliced, paired) | Hidden, Dash (Roam, Drink, Charge, Flee, Stalk), Freeze, Bask, Drink, Face | a meeting, the snake, a swallow's shadow |
+| Mice (`src/SakuraPond/Mouse.cs`) | timid, greedy (sliced, paired) | Hidden, Scurry, Sniff, SitUp, Groom, Nibble, Drink | the snake's head, a lizard's nose, a swallow's shadow |
 | Turtles (`src/SakuraPond/Turtle.cs`) | sunny, nerve (dealt) | Cruise, Float (and a petal nibble), Dive, Approach, Climb, Bask, Slip | the snake's head near a basking turtle, a body in its way (feelers), a touch (Nudge) |
 | Snake (`src/SakuraPond/Snake.cs`) | bold, nerve (per visit) | Cross, Explore, Hunt, Bask | a touch from a koi, turtle or lizard |
 

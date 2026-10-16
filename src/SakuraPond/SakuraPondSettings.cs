@@ -8,7 +8,7 @@ namespace SakuraPond;
 /// </summary>
 public sealed class SakuraPondSettings : ScreensaverSettings
 {
-    private readonly IntSetting _petals, _koi, _goldfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _drawWidth;
+    private readonly IntSetting _petals, _koi, _goldfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _drawWidth;
 
     public SakuraPondSettings() : base("SakuraPond")
     {
@@ -23,11 +23,15 @@ public sealed class SakuraPondSettings : ScreensaverSettings
         _snake = Add(nameof(SnakePercent), "Snake", 0, 300, 100, "%");
         _lizards = Add(nameof(LizardCount), "Lizards", 0, 3, 2);
         _lizard = Add(nameof(LizardPercent), "Lizard visits", 0, 300, 100, "%");
+        _mice = Add(nameof(MouseCount), "Mice", 0, 3, 1);
         _drawWidth = Add(nameof(DrawWidth), "Draw width", 1600, 3840, 2048, "px");
     }
 
     /// <summary>How many lizards live on the bank (each with its own temper). 0 = none.</summary>
     public int LizardCount => _lizards.Value;
+
+    /// <summary>How many field mice live in the bank's grass (each with its own nerve). 0 = none.</summary>
+    public int MouseCount => _mice.Value;
 
     /// <summary>How often each lizard comes out on the bank. 100 = every couple of minutes, 0 = never.</summary>
     public int LizardPercent => _lizard.Value;

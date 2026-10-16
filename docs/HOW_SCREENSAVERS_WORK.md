@@ -121,6 +121,7 @@ src/
     Swallows.cs                    swooping visits to drink
     Snake.cs                       a snake swimming across, now and then, feeling its way round things
     Lizard.cs                      a lizard dashing about the bank and basking on the rocks, now and then
+    Mouse.cs                       a field mouse scurrying between cover in the grass, hiding from the snake and lizards
     TurningStamp.cs                a picture stamped at any angle (dragonflies, swallows, their shadows)
     Light.cs                       where the sun is and how we look at the pond
     SakuraPondSettings.cs          declares its knobs
@@ -637,6 +638,24 @@ a dragonfly sits on a dry bank rock within reach (dragonflies perch on stones as
 now), a lizard may STALK it, a creep at a wary walk that stops a body length short, at which the
 dragonfly takes off away from it; and a swallow passing low over the bank (`Swallows.Shadow`)
 sends any lizard within 0.12u bolting for cover, not again for ten seconds.
+
+*A field mouse is the lizard's method, made small and shy.* The mouse (`Mouse.cs`, with a `Mice`
+holder like `Lizards`) copies the lizard's shape: a spine laid along the shared `Trail` (14 points,
+the first 8 a plump body and the last 6 a very thin tail), the three shared walking rules in
+`Core/Minds/Ground.cs` for stepping, lines and runs, a land mask asked before every step, a
+faint shadow that is the same body painted dark, and a `Mind` of doings. What makes it a mouse is
+its rhythm and its love of cover. It scurries 0.2 to 0.6 seconds at about three body lengths a
+second, with the tail streaming straight behind (still, the tail lies in a slow lazy curve), then
+stops dead for a sniff (the nose pulled back and forth a hair at about 3 Hz), a sit-up (the body
+15% shorter and the head lifted a few pixels up the screen, its shadow left on the ground, which
+is the gap that reads as height), a groom (a quick sideways shiver of the body) or a nibble. Its
+next spot is chosen by SCORE: lawn is best, the foot of a dry rock or the side of the log is good,
+bare sand is poor and taken only when nothing else is in reach. When the snake's head, a lizard's
+nose or a swallow's shadow comes near it bolts (twice as fast) to the nearest lawn spot further
+from the threat, and on arriving in grass it usually VANISHES there: a 0.3 second fade out,
+hidden for 10 to 40 seconds, a fade back in at the same spot. Two dials, timid and greedy, are
+rolled once and only load the dice. It leaves after 8 to 16 stops, through the screen's edge, and
+only when its whole length, tail included, is off the screen.
 
 *The snake feels its way.* The snake (`Snake.cs`) used to run on rails: a curve planned when it
 set out, so it swam straight over a lily pad as if the pad were a shadow. Now it is steered like

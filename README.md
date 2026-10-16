@@ -185,6 +185,17 @@ travelling wave (the cattails and irises sway with it stiffly).
   when a swallow's shadow sweeps over them, and if
   both are out and meet, they square up nose to nose, then the bolder one charges and the other
   bolts away and leaves. Both run for the nearest edge if the snake comes close.
+- A **field mouse** (akanezumi) lives in the bank's grass. It comes out at the screen's edge for
+  half a minute or so, then goes: a plump brown oval with a round head, two pink-lined round ears,
+  bead eyes, four tiny feet and a thin tail nearly as long as itself. It moves in scurries of a
+  third of a second, tail streaming, and between them stops dead to sniff (the nose twitches), sit
+  up on its haunches, groom (a quick shiver) or nibble with its head down. It keeps to cover: it
+  prefers the grass and the foot of a rock or the log, crosses bare sand only when it must, now and
+  then runs along the log, and goes to the water's edge for one tiny sip. It is prey: the snake's
+  head, a lizard's nose or a swallow's shadow sends it bolting for the nearest grass, where it very
+  often vanishes (a short fade) for 10 to 40 seconds and comes back out at the same spot. Each has
+  two dials rolled once: a TIMID one flees sooner and from further, freezes more and leaves
+  sooner; a GREEDY one stays longer, nibbles more and drinks more.
 - A fallen **log** lies at the lower left, different every time: beached across the water's edge
   with one end in the grass and the other in the shallows when the land is in that corner, or
   drifting out on the water when it is not. Bark streaks, cracks, a knot or two, moss on top, and
@@ -193,7 +204,8 @@ travelling wave (the cattails and irises sway with it stiffly).
 Settings: draw width (sharpness against smoothness), petals, number of koi (ten by default), number of goldfish (three by default), how playful the koi are (0 means they only cruise and rest),
 number of minnow schools (0 means no game), number of turtles,
 number of dragonflies, how often the swallows visit, how often the snake crosses, how many
-lizards there are (0 to 3), and how often the lizards come out (Lizard visits).
+lizards there are (0 to 3), how often the lizards come out (Lizard visits), and how many field
+mice live in the grass (0 to 3).
 
 On a screen wider than the "Draw width" setting (2048 pixels by default) it draws at that width
 and Windows enlarges the picture: the scene is soft and painterly, so the enlarging loses little,

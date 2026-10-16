@@ -49,6 +49,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Petals _petals;
     private readonly Snake _snake;
     private readonly Lizards _lizards;
+    private readonly Mice _mice;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
 
@@ -79,8 +80,9 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _snake = new Snake(_pond, _ripples, settings.MinnowSchools > 0 ? _minnows : null, settings.SnakePercent / 100f, _rng);
         _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng, settings.MinnowSchools > 0 ? _minnows : null, _koi);
         _lizards = new Lizards(_pond, settings.LizardCount, _ripples, settings.LizardPercent / 100f, _rng, _dragonflies);   // a lizard stalks a dragonfly sitting on a rock
+        _mice = new Mice(_pond, settings.MouseCount, _ripples, 1f, _rng);   // field mice in the grass: out for a while, scurrying between cover, hiding from the snake, the lizards and shadows
         _swallows = new Swallows(_pond, _ripples, settings.BirdPercent / 100f, _rng, _koi);   // a skimming swallow's shadow makes the koi flinch
-        _swallows.Shadow = (x, y) => _lizards.Startle(x, y);                                   // and sends the lizards bolting for cover
+        _swallows.Shadow = (x, y) => { _lizards.Startle(x, y); _mice.Startle(x, y); };               // and sends the lizards and mice bolting for cover
     }
 
     public void Update(double elapsedSeconds)
@@ -104,6 +106,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         PointF[] bumpers = [.. koiHeads, .. _turtles.Spots, .. _lizards.Noses];
         _snake.Update(dt, bumpers);
         _lizards.Update(dt, _snake.Live ? _snake.Head : null);   // the lizards run from the snake too
+        _mice.Update(dt, _snake.Live ? _snake.Head : null, _lizards.Noses);   // the mice run from the snake and the lizards too
         _dragonflies.Update(dt);
         _swallows.Update(dt);
         _ripples.Update(dt);
@@ -120,6 +123,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("lawn");
         _lizards.Draw(fb);
         Sections.Mark("lizard");
+        _mice.Draw(fb);
+        Sections.Mark("mice");
         _koi.Draw(fb, _turtles);                  // the koi and the turtles in one depth order (a turtle between the fish deeper and shallower than it)
         Sections.Mark("koi, turtles");
         _minnows.Draw(fb);
