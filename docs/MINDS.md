@@ -204,8 +204,21 @@ into a `Feelers.Room` delegate ONCE (a new delegate every frame is garbage). Ret
 "something is here" (land, the bed, the surface, inside another body) and otherwise the distance
 to the nearest thing. Ask the cheap things first. For other animals use
 `otherChain.Near(p, myRadius, roomSoFar)` (the box test) and only then
-`otherChain.Gap(p, myRadius, zStretch)`. See `Koi.RoomAround` for a complete one: land, the bed
-(0.9 of the floor under the point), the surface, the room grid, then every other body.
+`otherChain.Gap(p, myRadius, zStretch)`. See `Koi.RoomAround` for a complete one: land, the
+surface, the room grid, the bed, then every other body. THE BED IS A GAP, NOT A TEST: return the
+water left under the point (0.9 of the floor, less the point's depth, stretched like the gap to a
+body below) as room, read under a ball as wide as the animal (`Koi.BedUnder`: the point and four
+more most of a half width out; a resting fish drifting along a rock with its nose heading clear
+had its flank ride up the stone unfelt), so a bed rising ahead is felt before any sample is
+inside it. A plain
+"inside or not" test left the animal's depth clamp to do the steering, one floor step a frame,
+which is a hop on the screen (the koi near a rock, the turtle on a dive). And make the animal WANT
+to be a margin above the bed (the koi: 0.3 of its length of water under it; the turtle: 0.35),
+the same gap its feelers call clear, or it sits on the clamp's boundary where its feelers flicker
+between wall and clear. And refuse a step onto a bed with no water for the animal at its depth
+(`Koi.Update`'s step rule), as a step onto land is refused: an animal that cannot rise as fast as
+the bed comes up (a resting fish barely rises at all, by the slide rule) stops at the stone's foot
+and turns, instead of being lifted over it by the clamp in one hop.
 
 **Step 3. Call `Feelers.Best` when something is in the way.** `Feelers.Along(room, from, dir, look)`
 samples the room at 0.12, 0.35, 0.65 and 1.0 of the feeler (the near sample is so a small thing
@@ -243,6 +256,11 @@ second or two (the doing `Shy`), away and up or down as well as aside, on a cool
   second). Shoved out in one frame, fish hopped sideways, which reads as a slide.
 - **Move the whole body.** `Nudge` shifts the trail the spine is laid along, not just the head;
   moving the head alone left crossed tails crossed for seconds.
+- **When every feeler is blocked, the search returns the heading it has, which is no turn.**
+  Its nose in a pocket, with the way out behind it (the search reaches a right angle either
+  side), a koi stood against a rock for forty seconds with every step refused. Test `found <= 0`
+  from `Feelers.Best` and turn toward `Pond.OpenWay` (uphill of the room grid), as the turtle
+  and now the koi do. A push must not put an animal onto land either (`Nudge` tests it).
 - **A refused push needs a fallback.** An up or down push the bed or the surface refuses is
   clamped straight back (two fish in the shallows did this 400 frames running); when still inside
   after a mostly vertical push, push sideways along the line between the middles.

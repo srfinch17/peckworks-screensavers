@@ -585,6 +585,24 @@ internal sealed class Koi : Body
     /// <summary>The floor under a screen point, 0 to 1 (a point off the screen counts as its nearest edge pixel: the pond and its bank run on out of view).</summary>
     private float FloorAt(PointF s) => _pond.Floor[Math.Clamp((int)s.Y, 0, _pond.Height - 1) * _pond.Width + Math.Clamp((int)s.X, 0, _pond.Width - 1)] / 255f;
 
+    /// <summary>
+    /// The shallowest bed under a ball as wide as this fish at a ground point:
+    /// the point and four more most of a half width out. "Room for ME" over the bed,
+    /// the way Chain.Gap measures room for a ball of my width past another
+    /// body. Read at the centre alone, a resting fish drifting ALONG a rock
+    /// with its nose heading clear had its flank ride up the stone's foot
+    /// unfelt, and the clamp lifted it in hops.
+    /// </summary>
+    private float BedUnder(float gx, float gy)
+    {
+        float r = _wide * 0.8f;                                             // _wide is the half width; most of it, the body narrows toward its edge
+        float f = FloorAt(ToScreen(gx, gy));
+        f = MathF.Min(f, FloorAt(ToScreen(gx + r, gy)));
+        f = MathF.Min(f, FloorAt(ToScreen(gx - r, gy)));
+        f = MathF.Min(f, FloorAt(ToScreen(gx, gy + r)));
+        return MathF.Min(f, FloorAt(ToScreen(gx, gy - r)));
+    }
+
     private float CentreY => _pond.Centre.Y;
     private (float, float) ToGround(float x, float y) => (x, CentreY + (y - CentreY) / Ripples.Squash);
     private PointF ToScreen(float gx, float gy) => new(gx, CentreY + (gy - CentreY) * Ripples.Squash);
@@ -680,9 +698,24 @@ internal sealed class Koi : Body
             // clears nothing and it turns. The climb is steep, 0.8 of the
             // forward motion: a fish's length forward takes it a fish's length
             // up or down, which from above reads as a brisk swerve over.
-            (float best, float climb, _) = Feelers.Best(_room, in here3, _heading, look, _len * 0.7f, 0.42f, 4, 0.8f, _len * 0.08f, _len * 0.05f);
+            (float best, float climb, float found) = Feelers.Best(_room, in here3, _heading, look, _len * 0.7f, 0.42f, 4, 0.8f, _len * 0.08f, _len * 0.05f);
             _dodge = climb;
             float urgency = Math.Clamp(1 - MathF.Min(roomAhead, roomHere * 1.5f) / (_len * 0.55f), 0, 1);
+            if (found <= 0)
+            {
+                // EVERY feeler is blocked: its nose is in a pocket (between a
+                // rock and the bank, say) and no course within the search's
+                // reach, a right angle either side, has any room. The search then
+                // hands back the heading it has, which is no turn at all, and with
+                // every step refused the fish stood nose against a rock for forty
+                // seconds (one seed in three). The way out is behind it, and a
+                // fish cannot reverse: so, as the turtle does, it turns toward
+                // more open water by the room grid (uphill of RoomAt), swinging
+                // round in place until a feeler finds water.
+                PointF open = _pond.OpenWay(here.X, here.Y);
+                if (open.X * open.X + open.Y * open.Y > 1e-6f) best = MathF.Atan2(open.Y / Ripples.Squash, open.X);
+                urgency = 1;
+            }
             turn += Wrap(best - _heading) * (1f + 3f * urgency);
             cornered = urgency > 0.5f && climb == 0;                                  // a climb or dive is not a corner: no need to slow and swing round
         }
@@ -727,7 +760,13 @@ internal sealed class Koi : Body
         // (A pocket between two rocks is a tiny hill in the coarse room grid:
         // every step off its top loses a little room, so "only step toward
         // more room" wedged a fish there for minutes, facing open water.)
-        bool refused = OnLand(next) || (roomNext <= _len * 0.15f && roomNext < roomHere && RoomAlong(_heading, _len * 0.5f) <= roomHere);
+        // And a step onto a bed with no water for it at its depth is a step onto
+        // land (nothing clips through anything): the clamp would lift it there
+        // in one hop. A fish that cannot rise as fast as the bed comes up (a
+        // resting one barely rises at all, by the slide rule in HoldDepth)
+        // stops at the stone's foot and turns, instead of being lifted over it.
+        bool refused = OnLand(next) || Z > 0.9f * BedUnder(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step)
+                       || (roomNext <= _len * 0.15f && roomNext < roomHere && RoomAlong(_heading, _len * 0.5f) <= roomHere);
         if (!refused)
         {
             _x += MathF.Cos(_heading) * step;
@@ -791,8 +830,19 @@ internal sealed class Koi : Body
         // the easing says, LaySpine never leaves it below the bed.
         float ahead = FloorAt(ToScreen(_x + MathF.Cos(_heading) * _len * 1.5f, _y + MathF.Sin(_heading) * _len * 1.5f));
         float cap = 0.9f * MathF.Min(_floor, ahead);
-        float zWant = MathF.Min(_zTarget, cap);
-        bool forBed = Z > cap - 0.03f;
+        // It WANTS to be a little above the bed, never on it: three tenths of
+        // its length of water under it, which is the gap its feelers call
+        // clear (RoomAround counts the bed's gap as room, stretched; the
+        // search runs under 0.55 of a length). A fish that wanted the cap
+        // itself sat exactly on the clamp's boundary, where every step along
+        // a rock's flank or a resting drift over an uneven bed moved the cap
+        // by a floor step and the clamp lifted it in two pixel hops (one near
+        // frame in ten), with its feelers reading "wall" and "clear" by turns.
+        // Over a bed of full depth the margin changes nothing (a rest reaches
+        // 0.75 at most); in the shallows it keeps a fish off the bottom.
+        float margin = 0.3f * _len / DepthPx;
+        float zWant = MathF.Min(_zTarget, cap - margin);
+        bool forBed = Z > cap - margin - 0.03f;
         // Easing toward the depth it wants; or, when the feelers chose a climb
         // or a dive to clear something, that: z changes by the chosen slope
         // times the distance swum, so the course is a straight line in three
@@ -1243,8 +1293,25 @@ internal sealed class Koi : Body
     {
         PointF s = ToScreen(p.X, p.Y);
         if (OnLand(s)) return 0;
-        if (p.Z < -1 || p.Z > 0.9f * FloorAt(s) * DepthPx) return 0;              // above the water, or in the bed
-        float room = _pond.RoomAt(s.X, s.Y);
+        if (p.Z < -1) return 0;                                                   // above the water
+        // THE BED IS FELT BEFORE IT IS TOUCHED. The gap down to the bed counts
+        // as room, stretched the same two and a half times as the gap to a body
+        // below (a fish a hand above the bottom is well clear), so a bed rising
+        // ahead (a rock's flank, the bank's slope) shrinks the room along a
+        // level feeler BEFORE any sample is inside it, and the search turns or
+        // climbs early, the way it would for a fish below it. Counted only as
+        // "inside or not", the feelers saw nothing until the fish was on the
+        // bed, and from then on the bed's clamp did the steering (LaySpine):
+        // one floor step up a frame, five times steeper than a fish can climb,
+        // a two pixel hop every few frames with the feelers flickering between
+        // wall and clear on the boundary. The owner's "hearky-jerky motion by
+        // the rock". A bed with no water left over it (the rock's rim, the
+        // bank's edge) is no room at all, at the surface too: before, a fish
+        // at Z 0 over a floor of 0 was "not in the bed" and could be pushed onto
+        // the stone.
+        float bed = (0.9f * BedUnder(p.X, p.Y) * DepthPx - p.Z) * 2.5f;
+        if (bed <= 0) return 0;
+        float room = MathF.Min(_pond.RoomAt(s.X, s.Y), bed);
         // The fish it is chasing is not a wall: counted as one, the feelers
         // steered the chaser ROUND its own quarry (the review watched a koi
         // "chase" a goldfish at full speed while swimming away from it for
@@ -1275,7 +1342,11 @@ internal sealed class Koi : Body
         // fish-minutes), so the ground part of a push that would is refused
         // this frame: the other fish still takes its half, and the shy swim
         // does the rest.
-        if (0.9f * FloorAt(ToScreen(_x + by.X, _y + by.Y)) < Z - 0.02f) { by.X = 0; by.Y = 0; }
+        // And never onto land: the steps a fish swims are refused onto a rock
+        // (Update), but a shove had no such test, and a fish pushed onto a
+        // stone's rim has every step refused from then on.
+        PointF pushed = ToScreen(_x + by.X, _y + by.Y);
+        if (OnLand(pushed) || 0.9f * FloorAt(pushed) < Z - 0.02f) { by.X = 0; by.Y = 0; }
         _x += by.X; _y += by.Y;
         float dz = by.Z / DepthPx;
         // An upward push is held to what the SHALLOWEST remembered point can

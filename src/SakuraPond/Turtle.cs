@@ -281,6 +281,17 @@ internal sealed class Turtle : Body
     /// <summary>The bed under a screen point, 0 to 1 of the pond's full depth, rocks included (a point off the screen counts as its nearest edge pixel).</summary>
     private float FloorAt(PointF s) => _pond.Floor[Math.Clamp((int)s.Y, 0, _pond.Height - 1) * _pond.Width + Math.Clamp((int)s.X, 0, _pond.Width - 1)] / 255f;
 
+    /// <summary>The shallowest bed under a ball as wide as the shell at a ground point (the point and four more most of a half width out): room for ME over the bed, as Koi.BedUnder.</summary>
+    private float BedUnder(float gx, float gy)
+    {
+        float r = _wide * 0.8f;                                             // _wide is the half width; most of it, the body narrows toward its edge
+        float f = FloorAt(ToScreen(gx, gy));
+        f = MathF.Min(f, FloorAt(ToScreen(gx + r, gy)));
+        f = MathF.Min(f, FloorAt(ToScreen(gx - r, gy)));
+        f = MathF.Min(f, FloorAt(ToScreen(gx, gy + r)));
+        return MathF.Min(f, FloorAt(ToScreen(gx, gy - r)));
+    }
+
     /// <summary>The pond's full depth in ground pixels: what Z = 1 is, so the feelers and the chains work in one unit.</summary>
     private float DepthPx => Pond.DepthU * _pond.U;
 
@@ -302,8 +313,17 @@ internal sealed class Turtle : Body
     {
         PointF s = ToScreen(p.X, p.Y);
         if (!WaterAt(s)) return 0;
-        if (p.Z < -1 || p.Z > 0.9f * FloorAt(s) * DepthPx) return 0;
-        float room = _pond.RoomAt(s.X, s.Y);
+        if (p.Z < -1) return 0;
+        // The bed is felt before it is touched, as the koi feel it: the gap
+        // down to it counts as room, stretched two and a half times like the
+        // gap to a body below. Counted only as "inside or not", the feelers
+        // saw nothing until the turtle was on the bed, and from then on every
+        // course was blocked (the review counted a third to a half of dive
+        // frames in the fallback below); now a bed rising ahead is a wall it
+        // feels coming, like the koi do.
+        float bed = (0.9f * BedUnder(p.X, p.Y) * DepthPx - p.Z) * 2.5f;
+        if (bed <= 0) return 0;
+        float room = MathF.Min(_pond.RoomAt(s.X, s.Y), bed);
         foreach (Body b in _bodies)
         {
             if (b == this || !b.Shape.Near(p, _wide, room)) continue;
@@ -371,7 +391,15 @@ internal sealed class Turtle : Body
         // the change is held to what its own forward motion can hide on the
         // screen (Light.HoldDepth), as the koi's is, so a turtle never slides
         // up or down the screen while it floats or dives.
-        float zNext = _dodge != 0 && swimming && _doing != Doing.Float ? _z + _dodge * _speed * dt / DepthPx : _z + (MathF.Min(_zTarget, bottom) - _z) * (1 - MathF.Exp(-dt * rate));
+        // It wants to be a little ABOVE the bed, never on it: a third of a
+        // shell length of water under it, the gap its feelers call clear
+        // (RoomAround counts the bed's gap as room; the search runs under 0.8
+        // of a length). A dive still goes to the bottom of the pond, it just
+        // stops short of the bed by that much, and over a bed that rises
+        // (the bank, a rock's flank) the feelers turn it or lift it before
+        // the clamp ("bottom") ever has to.
+        float margin = 0.35f * _len / DepthPx;
+        float zNext = _dodge != 0 && swimming && _doing != Doing.Float ? _z + _dodge * _speed * dt / DepthPx : _z + (MathF.Min(_zTarget, bottom - margin) - _z) * (1 - MathF.Exp(-dt * rate));
         zNext = Math.Clamp(zNext, 0, bottom);
         // A floating turtle is BUOYANT: it rises to the surface without a stroke,
         // so the hold is given a slow glide's worth of speed instead of its real

@@ -564,9 +564,10 @@ that leads a turn (about half the turn's rate) and looks about while it basks, s
 longer swings for a head turn. Its rate of turn is eased over a sixth of a second (a shell has
 mass): the old bank rule read off the room grid switched on and off from frame to frame and the
 turn rate flipped sign sixty times a second, which the owner saw as "not fluid". It steers with
-the same feelers as the koi (`Core/Minds` Feelers, its own `RoomAround`: the bank, the bed, the
-surface and every body in the water), so it goes over, under or round a fish instead of
-ploughing through it, and its rise and sink obey the koi's rule (`Light.HoldDepth`, shared by
+the same feelers as the koi (`Core/Minds` Feelers, its own `RoomAround`: the bank, the bed as a
+gap felt before it is touched, the surface and every body in the water), so it goes over, under
+or round a fish instead of ploughing through it, keeps a third of a shell length of water under
+it on a dive, and its rise and sink obey the koi's rule (`Light.HoldDepth`, shared by
 both): a change of depth moves the picture up or down the screen, so it is held to what the
 animal's own forward motion can hide. Two turtles that meet are pushed apart half each
 (`Turtle.Nudge`, in the school's touch loop); a koi in a turtle is still the one moved.
@@ -736,7 +737,13 @@ stone standing in the water widens out under the surface like the foot of a hill
 no deeper than nine tenths of the floor under ANY part of its body (the spine is laid, the
 shallowest floor under it found, and the depth capped there and then, so it holds on every
 frame), and it looks a body length and a half ahead so it rises up the slope as the bank or a
-rock comes near, the way a fish follows the bed, rather than finding itself inside it. On the
+rock comes near, the way a fish follows the bed, rather than finding itself inside it. It WANTS
+to be a little above the bed, never on it (three tenths of its length of water under it): a fish
+that aimed for the cap itself sat exactly on the clamp's boundary, and every floor step the bed
+made under it as it drifted along a rock's flank lifted it in a two pixel hop, one near-rock
+frame in ten. The bed is read under a ball as wide as the fish, and a step onto a bed with no
+water for the fish at its depth is refused like a step onto land, so a fish that cannot rise as
+fast as the bed comes up stops at the stone's foot and turns. On the
 screen, depth is drawn the way height is drawn for the petals and the dragonflies, only in
 reverse: we look at the pond at a slant, so the deeper a fish is, the LOWER on the screen its
 picture sits than the water above it (`Light.Sink`, a little less than `Light.Lift` because
@@ -765,8 +772,15 @@ beads along its spine, each with a radius, in ground pixels with z the depth in 
 feels ahead with feelers, asking `Koi.RoomAround` "how much room is there here?": it counts land,
 the bed, the surface, the room grid and every other body in the water (koi and turtles). A gap up
 or down counts two and a half times a gap sideways, because swimming over another fish's back
-needs less clearance than swimming beside a bank. When something is in the way the feelers pick the
-smallest change of course: turn, climb over or dive under. Feelers can miss, so as a last resort
+needs less clearance than swimming beside a bank. The bed counts the same way: the water left
+under a point is room (stretched), so a rock's flank or the bank's slope rising ahead shrinks the
+room along a level feeler BEFORE any sample is inside it, and the fish turns or climbs early.
+(Counted only as "inside or not", the feelers saw nothing until the fish was on the bed, and the
+bed's clamp did the steering in hops.) When something is in the way the feelers pick the
+smallest change of course: turn, climb over or dive under. When EVERY feeler is blocked (its nose
+in a pocket between a rock and the bank; the search reaches a right angle either side and the way
+out is behind it) it turns toward more open water by the room grid, as the turtle does; before
+that fallback a koi stood nose against a rock for forty seconds. Feelers can miss, so as a last resort
 `KoiSchool.Update` finds any two bodies that overlap (`Chain.Touch`) and pushes them apart as a
 recoil, no faster than a body length a second, with a sideways push if the bed or the surface
 refuses an up or down one. A turtle is the heavier and is never moved. Both fish are told, and one
