@@ -151,6 +151,7 @@ internal sealed class Turtle : Body
     private readonly Feelers.Room _room;                  // RoomAround as a delegate, made once
     private float _goalX, _goalY, _goalTimer, _zTarget, _depthTimer, _z;
     private float _nibbleTimer;                           // floating: when it next looks for a petal to nibble
+    private bool _breathed;                               // floating: has it taken this float's breath at the surface yet
     private PointF? _nibble;                              // the petal it is drifting toward, screen pixels
     private double _time;
 
@@ -372,7 +373,20 @@ internal sealed class Turtle : Body
         // up or down the screen while it floats or dives.
         float zNext = _dodge != 0 && swimming ? _z + _dodge * _speed * dt / DepthPx : _z + (MathF.Min(_zTarget, bottom) - _z) * (1 - MathF.Exp(-dt * rate));
         zNext = Math.Clamp(zNext, 0, bottom);
-        _z = swimming ? Light.HoldDepth(_z, zNext, _heading, _speed, dt, _pond.U) : zNext;
+        // A floating turtle is BUOYANT: it rises to the surface without a stroke,
+        // so the hold is given a slow glide's worth of speed instead of its real
+        // (near zero) one, or it could never come up for its breath (on the
+        // timeline a float begun at 0.21 stayed at 0.21 for its whole twenty
+        // seconds). The rise that allows is about a shell length in ten seconds.
+        float held = _doing == Doing.Float ? MathF.Max(_speed, _len * 0.12f) : _speed;
+        _z = swimming ? Light.HoldDepth(_z, zNext, _heading, held, dt, _pond.U) : zNext;
+        if (_doing == Doing.Float && !_breathed && _z < 0.04f)
+        {
+            // The nose breaks the surface: one small ring, when it really gets there (not at the float's start, which could be a shell's depth down).
+            _breathed = true;
+            PointF nose = Spine[0];
+            _ripples.Add(nose.X, nose.Y, 0.5f);
+        }
 
         // The head on its neck: it leads a turn (about half the turn's rate, so
         // the head is already looking round the bend the shell is still
@@ -626,9 +640,8 @@ internal sealed class Turtle : Body
         {
             case 1:
                 _mind.Begin(Doing.Float, 8 + 14 * (float)_rng.NextDouble());
-                _zTarget = 0;                                           // up to the surface for a breath
-                PointF nose = Spine[0];
-                _ripples.Add(nose.X, nose.Y, 0.5f);
+                _zTarget = 0;                                           // up to the surface for a breath (the ring comes when the nose gets there, in Update)
+                _breathed = false;
                 break;
             case 2:
                 _mind.Begin(Doing.Dive, 8 + 12 * (float)_rng.NextDouble());
