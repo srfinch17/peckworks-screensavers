@@ -609,7 +609,7 @@ internal sealed class Koi : Body
         float t = (float)(_time % 100000.0);
 
         // ---- The mind decides what it is doing ----
-        _hunger = MathF.Min(1, _hunger + dt / (150 + 150 * (1 - _energy)));    // famished from fed in two and a half to five minutes
+        _hunger = MathF.Min(1, _hunger + dt / (240 + 240 * (1 - _energy)));    // famished from fed in four to eight minutes (at half that, with the petal cue, the whole pond spent two thirds of its time nosing at petals)
         Think(dt, school);
         bool rush = _doing is Doing.Chase or Doing.Flee or Doing.Flinch;          // flat out
         bool still = _doing == Doing.Rest || (_doing == Doing.Investigate && _hold > 0);   // hanging in the water, nosing at something
@@ -1005,7 +1005,7 @@ internal sealed class Koi : Body
         // The dice faces: each doing's weight. Wander is always on the dice.
         float wWander = 1f;
         float wRest = (0.25f + 0.9f * (1 - _energy)) * (_doing == Doing.Rest ? 0.4f : 1f) * (1.3f - 0.6f * _hunger);   // and a rest is less likely straight after a rest, or when hungry
-        float wLook = (0.08f + 0.45f * _curious) * _play * (_doing == Doing.Investigate ? 0.4f : 1f) * (0.6f + 0.9f * _hunger);   // less likely straight after a look; a hungry fish goes looking
+        float wLook = (0.08f + 0.45f * _curious) * _play * (_doing == Doing.Investigate ? 0.4f : 1f) * (0.75f + 0.5f * _hunger);   // less likely straight after a look; a hungry fish goes looking (a quarter more at most: the look face is already the biggest)
         float wFollow = friend != null ? (0.1f + 0.7f * _social) * _play * (gold && friend._kind == Kind.Goldfish ? 2f : 1f) : 0;   // a goldfish follows a goldfish twice as readily: that is the shoal
         float wChase = chaseOn ? (0.1f + 0.7f * _social * _energy) * _play : 0;
         switch (Dice.Pick(_rng, [wChase, wFollow, wLook, wRest, wWander]))
@@ -1109,7 +1109,7 @@ internal sealed class Koi : Body
         // is near.
         float far = _kind == Kind.Goldfish ? 0.4f : 1f;
         _targetIsPetal = false;
-        if (_petals != null && _rng.NextDouble() < 0.15 + 0.7 * _hunger && _petals.NearestFloating(here.X, here.Y, u * 0.6f * far, out PointF petal) && _pond.RoomAt(petal.X, petal.Y) >= _len * 0.6f)
+        if (_petals != null && _rng.NextDouble() < 0.15 + 0.5 * _hunger && _petals.NearestFloating(here.X, here.Y, u * 0.6f * far, out PointF petal) && _pond.RoomAt(petal.X, petal.Y) >= _len * 0.6f)
         {
             (_targetX, _targetY) = ToGround(petal.X, petal.Y);
             _targetIsPetal = true;
@@ -1161,7 +1161,7 @@ internal sealed class Koi : Body
     public void Notice(float x, float y, bool petal = false)
     {
         if (_doing is Doing.Chase or Doing.Flee) return;
-        float chance = petal ? 0.6f * _hunger * _hunger * _play : 0.25f + 0.7f * _curious * _play;
+        float chance = petal ? 0.3f * _hunger * _hunger * _play : 0.25f + 0.7f * _curious * _play;   // a petal: only a really hungry fish, and not every time (every fish answering every petal made a pond of fish nosing at petals)
         if (_rng.NextDouble() > chance) return;
         PointF here = ToScreen(_x, _y);
         float dx = x - here.X, dy = y - here.Y, reach = _pond.U * (petal ? 0.25f + 0.35f * _hunger : 0.5f) * (_kind == Kind.Goldfish ? 0.5f : 1f);
