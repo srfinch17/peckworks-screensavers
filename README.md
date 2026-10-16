@@ -91,7 +91,9 @@ travelling wave (the cattails and irises sway with it stiffly).
   the pond has a bed that slopes up to the bank and to every rock, a fish is never deeper than
   the water under any part of its body and rises up the slope before the shallows, a deep fish
   sits lower on the screen than the water above it (we look at the pond at a slant) and comes up
-  the screen as it rises, and in the shallows it throws a shadow on the bed. A deep fish is
+  the screen as it rises, and in the shallows it throws a shadow on the bed, a soft echo right
+  under it that fades as it rises off the bed (never thrown far: a shadow a body length away
+  reads as a fish hovering above the water). A deep fish is
   smaller, hazier, softer and dimmer than one at the top, so when one passes over another you
   can tell from above which is over which, and the near one leaves a soft dark echo of itself
   on the deeper one's back where they overlap. They slip under the lily pads, and now and then
@@ -138,8 +140,12 @@ travelling wave (the cattails and irises sway with it stiffly).
   a little later to do it again, taking the schools in turn.
 - A **turtle** (a red-eared slider, the turtle of nearly every park pond in Japan) paddles just
   under the surface, front left leg with back right and then the other pair, with a small surge
-  on each stroke, turning as one rigid piece in wide slow arcs. Now and then it stops, spreads
-  its legs and floats, pokes its nose up for a breath (one small ring), then paddles off, or
+  on each stroke, turning as one rigid piece in wide slow arcs, its head leading each turn on
+  its neck. It steers in three dimensions like the koi: it goes over, under or round a fish in
+  its way, never through one, and its rise and sink are held to what its paddling can hide, so
+  it never slides up or down the screen. Now and then it stops, spreads
+  its legs and floats, pokes its nose up for a breath (one small ring), drifts over to a petal
+  and nibbles it, then paddles off, or
   dives to the bed for a while. And it hauls out: it swims up to the island rock or the fallen
   log, climbs onto it, sits with its legs spread in the sun for fifteen seconds to a minute, and
   slips back in (sooner if the snake comes near, and then on the side away from it). Each turtle has its own dials: how much it loves the sun
@@ -168,7 +174,9 @@ travelling wave (the cattails and irises sway with it stiffly).
   rock to bask, its body and tail throwing an S-wave as it runs and its legs stepping on opposite
   corners, then gone into the grass again. Each has its own temper, rolled once: a BOLD one stays
   out longer, basks longer and wins a standoff, an ENERGETIC one makes longer dashes with shorter
-  rests. They also run to the water's edge and drink (one tiny ring in front of the nose), and if
+  rests. They also run to the water's edge and drink (one tiny ring in front of the nose), creep
+  up on a dragonfly sitting on a bank rock (it takes off a body length short), bolt for cover
+  when a swallow's shadow sweeps over them, and if
   both are out and meet, they square up nose to nose, then the bolder one charges and the other
   bolts away and leaves. Both run for the nearest edge if the snake comes close.
 - A fallen **log** lies at the lower left, different every time: beached across the water's edge

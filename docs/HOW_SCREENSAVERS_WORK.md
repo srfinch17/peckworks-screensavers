@@ -476,7 +476,13 @@ how high each one flies.
 tail, each with how wide the body is there (`Body.cs`). The head swims a path; the body is laid
 along the path the head has already swum, like train carriages following the track, so every
 turn bends the whole body through the curve. A swimming wave runs down the koi's body (the head
-nearly still, the tail swinging widest); the snake's head weaves side to side and the body
+nearly still, the tail swinging widest: a carp swims from the back half, so the wave's width
+grows as the cube of the distance along the body and only two thirds of a wavelength fits on
+it; a wave that grew as the square with nearly a whole wavelength threw the body into an S with a
+second bend at the tail, "a super wiggle like a worm"); and the head's rate of turn is eased
+over an eighth of a second, because the body is laid along the path the head took, and a
+steering sum that flipped sign from frame to frame was laid into that path as kinks. The
+remembered path and the walk back along it are the shared `Core/Minds/Trail.cs`. The snake's head weaves side to side and the body
 follows it point for point, which is how a snake really swims. For every pixel near the spine
 we work out two numbers, how far along the body (s) and how far out to the side (v), and the
 animal says what colour it is there; the markings are stuck to (s, v), so they ride along the
@@ -540,7 +546,18 @@ reading the picture smoothly between its pixels so a slow turn never steps. Neve
 turtle is rigid too, but it lives in the water with the koi, so it uses the same spine drawing
 as the koi with a STRAIGHT spine that turns as one piece: that way it gets the same haze with
 depth, the same branch shadows and the same squash for free. Its legs are four small ovals
-swinging from under the shell's rim, the diagonal pairs in step, as a pond turtle paddles.
+swinging from under the shell's rim, the diagonal pairs in step, as a pond turtle paddles. The
+head and neck are the one part that bends: they turn about the shell's front by a neck angle
+that leads a turn (about half the turn's rate) and looks about while it basks, so the shell no
+longer swings for a head turn. Its rate of turn is eased over a sixth of a second (a shell has
+mass): the old bank rule read off the room grid switched on and off from frame to frame and the
+turn rate flipped sign sixty times a second, which the owner saw as "not fluid". It steers with
+the same feelers as the koi (`Core/Minds` Feelers, its own `RoomAround`: the bank, the bed, the
+surface and every body in the water), so it goes over, under or round a fish instead of
+ploughing through it, and its rise and sink obey the koi's rule (`Light.HoldDepth`, shared by
+both): a change of depth moves the picture up or down the screen, so it is held to what the
+animal's own forward motion can hide. Two turtles that meet are pushed apart half each
+(`Turtle.Nudge`, in the school's touch loop); a koi in a turtle is still the one moved.
 
 *The turtle has a mind and two places to sit.* Like the koi it runs on the shared `Core/Minds`
 parts: two dials dealt at birth (`_sunny`: how often it hauls out and how long it sits;
@@ -601,7 +618,14 @@ a fifth of the screen height, a lizard drops everything and runs for the nearest
 reach over land. Two lessons from the instruments: a lizard that had run up to the shore facing
 the water only ever turned one frame at a time (every step was refused), so it stood for minutes,
 and now it steps off along the shore toward its goal; and "the nearest edge" can be water, so the
-way out is a land pixel on an edge with an all-land line to it, or a hop toward one.
+way out is a land pixel on an edge with an all-land line to it, or a hop toward one. Those three
+walking rules (the step that slides along the edge, the all-ground line, the longest clear run
+away from a threat) are now `Core/Minds/Ground.cs`, written once for anything that walks on a
+surface with an edge, and the lizard's trail is the shared `Trail`. Two more things it does: when
+a dragonfly sits on a dry bank rock within reach (dragonflies perch on stones as well as pads
+now), a lizard may STALK it, a creep at a wary walk that stops a body length short, at which the
+dragonfly takes off away from it; and a swallow passing low over the bank (`Swallows.Shadow`)
+sends any lizard within 0.12u bolting for cover, not again for ten seconds.
 
 *The snake feels its way.* The snake (`Snake.cs`) used to run on rails: a curve planned when it
 set out, so it swam straight over a lily pad as if the pad were a shadow. Now it is steered like
@@ -778,10 +802,16 @@ as a blotch. The school draws each animal with a stencil of the pixels it painte
 throws every shallower overlapping animal's shadow onto that stencil only, and wipes it; animals
 drawn at the same time on different cores have boxes that do not touch, so each works its own
 patch. The bed shadow goes by the painter's depth or the floor, whichever is shallower, so a fish
-pushed up over the island's shoulder throws its shadow on the stone. The koi and the turtles are drawn in one depth order, so a
+pushed up over the island's shoulder throws its shadow on the stone. And the bed shadow STAYS
+UNDER THE FISH: it is held within 0.012u of its fish whatever the gap to the bed, and goes faint
+and soft as that gap grows. Thrown by the true gap (as it first was), a fish half the pond's
+depth above a bed it could still be seen on had a bold crisp shadow a body length away, a second
+dark fish shape, and the gap between a thing and its shadow is this pond's own cue for HEIGHT (a
+petal in the air, a turtle up on a rock), so the owner read it as the fish floating above the
+water. A fish right down on a clear bed still throws the bold close shadow. The koi and the turtles are drawn in one depth order, so a
 turtle (usually near the top) is painted over the koi below it and under a koi that is gulping
 above it; the bed shadows are painted first, under every fish, and fade to nothing in a branch's
-shade. The turtle reads the same floor, at its nose only, and sinks on the screen by the same rule;
+shade. The turtle reads the same floor and sinks on the screen by the same rule;
 when it dives it follows the same rules as a koi (smaller, hazier, lower, and out of sight past `Light.SeeU`). The floating log is a wall to the koi's
 steering, not something they swim under: what you may see is a deep fish's sunk picture slipping
 under the log's edge, which is what a log floating over a fish looks like.

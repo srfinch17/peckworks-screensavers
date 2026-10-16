@@ -40,6 +40,13 @@ people watch for an hour without seeing the same thing twice.
 | `Traits.Deal(rng, n)` | n dials, one per slice, in a random order. | `KoiSchool` deals energy, sociability and curiosity to its eight koi. |
 | `Mind<TDoing>` | One thing at a time, with a timer. `Begin(doing, seconds)`, `Tick(dt)` once a frame, `Over` when the timer has run out, `Left` for "how long still" (an animal may set it to stretch or cut a doing), `End()` to cut it short. | `_mind.Begin(Doing.Rest, 8 + 14 * roll)`; in Think: `if (_mind.Over) Decide();` |
 | `Cooldown` | "Not again for a while". `Start(seconds)`, `Tick(dt)`, `Ready`. | A koi that flinched at a shadow cannot flinch again for fifteen to forty seconds. |
+| `Trail` (Trail.cs) | The path the head has taken, and the walk back along it that lays a body: `Remember`, `RememberIfMoved`, `Straight`, `Shift` (move the whole body), `EaseDepths`, and `Begin(head, z, depthPx, heading)` giving a `Walk` whose `Advance(distance)` returns the point that far behind the head along the path. | The lizard lays its 16 spine points with one `Walk`; the koi's and the snake's hand-written walks are the same algorithm and are the next to move onto it. |
+| `Ground` (Ground.cs) | The three walking rules for anything on a surface with an edge: `Step` (forward, or slide along the edge toward the goal when the way ahead is refused), `LineClear` (is the whole line to a goal ground?), `FleeRun` (the longest clear run away from a point). The surface is a `Solid(x, y)` question the animal answers. | The lizard's steps, roam goals, exits and flights; the mouse is built on the same three. |
+
+A MOOD is a dial that moves: the koi's hunger (0 fed to 1 famished) rises over minutes and drops
+when it eats, and loads the dice exactly as a dial does (the petal faces, the gulp timer, the
+rest face). One number, read wherever a dial is read, and the same fish is a different fish an
+hour on.
 
 Each animal keeps its own `enum Doing { ... }`, its own dials, its own `Decide()` (the faces
 and what loads them), its own `Begin()` (what starting each doing sets: the timer, a goal, a
@@ -102,9 +109,9 @@ These are in the code comments too; here they are in one place.
 
 | Animal | Dials | Doings | Interrupts |
 |--------|-------|--------|------------|
-| Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch, Shy | being chased, a dragonfly's tap, a swallow's shadow, a bump from another body |
-| Lizards (`src/SakuraPond/Lizard.cs`) | bold, energy (sliced, paired) | Hidden, Dash, Freeze, Bask, Drink, Face | a meeting, the snake |
-| Turtles (`src/SakuraPond/Turtle.cs`) | sunny, nerve (dealt) | Cruise, Float, Dive, Approach, Climb, Bask, Slip | the snake's head near a basking turtle |
+| Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt); hunger (a mood) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch, Shy | being chased, a dragonfly's tap, a petal settling (when hungry), a swallow's shadow, a bump from another body |
+| Lizards (`src/SakuraPond/Lizard.cs`) | bold, energy (sliced, paired) | Hidden, Dash (Roam, Drink, Charge, Flee, Stalk), Freeze, Bask, Drink, Face | a meeting, the snake, a swallow's shadow |
+| Turtles (`src/SakuraPond/Turtle.cs`) | sunny, nerve (dealt) | Cruise, Float (and a petal nibble), Dive, Approach, Climb, Bask, Slip | the snake's head near a basking turtle, a body in its way (feelers), a touch (Nudge) |
 | Snake (`src/SakuraPond/Snake.cs`) | bold, nerve (per visit) | Cross, Explore, Hunt, Bask | a touch from a koi, turtle or lizard |
 
 The minnows' school mood (drift, rush, mill) and the dragonflies' doings are simpler clocks
@@ -135,11 +142,17 @@ cooldown (without it a fish keeping pace re-triggers a bump every frame), and ea
 answer to "how much room is there here?", because each reads a different world: a koi asks land,
 the bed, the surface, a coarse room grid and every other body in the water, and swims under pads;
 the snake asks a list of circles and a capsule and goes round pads; a lizard asks a land mask and
-slides along the shore. Only the koi steer with the kit so far (the turtle supplies a Chain so the koi can feel it; the snake and the lizards
-steer on a flat plane and have not needed it). A stranger giving a new animal a mind gets the
-deciding half and the 3D steering for free, still writes the Room answer and the refused-step
-rule, follows the rules in section 4, and should expect the instruments in section 6 to find the
-first bugs there.
+slides along the shore. The koi and the turtle steer with the 3D kit (each with its own Room
+answer); the lizard and the mouse walk with `Ground` (section 9); the snake still steers on its
+own flat plane. A stranger giving a new animal a mind gets the
+deciding half, the trail, the 3D steering and the walking rules for free, still writes the Room
+or Solid answer and the refused-step rule, follows the rules in section 4, and should expect the
+instruments in section 6 to find the first bugs there.
+
+One rule lives in the saver, not the kit, because it is about how THIS pond is drawn:
+`Light.HoldDepth` (Sakura Pond's `Light.cs`) holds any swimmer's rise or sink to what its own
+forward motion can hide on the screen, since depth moves the picture up and down the screen
+there. The koi and the turtle both call it; a saver that draws depth another way writes its own.
 
 Add to `Core/Minds` only what two animals need in the same shape; a thing one animal needs stays
 in that animal.
@@ -245,3 +258,36 @@ second or two (the doing `Shy`), away and up or down as well as aside, on a cool
   lift it more than a little, and the other body still takes its half.
 - **Test it as a timeline.** Frames with two bodies inside each other, the longest time stuck in
   a bump, and nose-first over a window that suits the animal (section 6).
+
+## 9. The trail, and walking on a surface (Core/Minds/Trail.cs, Ground.cs)
+
+**The trail (Trail.cs).** Every bending animal moves the same way: only its head is steered, and
+the body follows the path the head has already taken, like train carriages following the engine.
+`Trail` is that memory (a ring of points, each with a depth) and the walk back along it. Each
+frame: `RememberIfMoved(head, minStep, z)` (a still animal does not fill its memory with one spot),
+then `Begin(head, headZ, depthPx, heading)` gives a `Walk`, and `Advance(distance)` returns the
+point that far behind the head along the path (and its depth), for distances that never decrease.
+Past the end of the trail the body carries straight on back against the heading. `Straight` lays
+a straight trail behind an animal that has just appeared; `Shift` moves every point (a shove
+moves the whole body, or the tail stays crossed with the other fish's for seconds); `EaseDepths`
+drifts and levels the remembered depths (a resting fish levels out). A throwaway check matched
+`Walk` against the lizard's old hand-written loop on 200 random trails before the lizard moved
+onto it, and a pixel diff of the saver before and after was 0 pixels.
+
+**Walking (Ground.cs).** Space.cs is for things in a volume; `Ground` is for a thing on a SURFACE
+with an edge it must not step off (a lizard on a bank, a mouse in the grass). The surface is a
+`Solid(x, y)` question the animal answers from its own mask, in its own unit. Three rules, each
+one a lizard bug first:
+1. `Step(ground, ref x, ref y, ref heading, step, turnErr)`: forward if that is ground; if not,
+   and the goal is mostly behind or to one side, the first of 35, 70, 105, 140 and 170 degrees
+   round toward the goal that is ground, heading turned to match (`Slid`); else `Refused`. The
+   animal decides what a refusal means (a dash ends; a leaving dash marks it stranded).
+2. `LineClear(ground, a, b, every)`: a goal is worth running at only if the whole straight line
+   to it is ground. Testing the midpoint alone let a lizard on a wet rock pick spots across the
+   water and stand refused.
+3. `FleeRun(clear, me, from, stride, most, least)`: the longest clear run away from a point,
+   straight away or within about 90 degrees of it; a run must beat the best by half a stride to
+   replace it, so the straight line wins ties and the animal does not swerve for nothing. Null if
+   nothing reaches `least` (then take the way out of the screen).
+Make the delegates once in the constructor (a new one every frame is garbage), one per unit the
+animal uses (the lizard asks the land in ground units for steps and in screen pixels for lines).
