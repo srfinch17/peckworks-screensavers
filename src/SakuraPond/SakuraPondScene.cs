@@ -73,8 +73,9 @@ internal sealed class SakuraPondScene : IScreensaverScene
 
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _wind, _rng);
         _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng, settings.KoiPlayPercent / 100f, _petals);   // the koi nose at and eat the floating petals
+        _petals.Landed = (x, y) => _koi.Notice(x, y, petal: true);                                                                // and the hungry ones come when one settles
         _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _ripples, _rng);
-        _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng);
+        _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng, _petals);   // a floating turtle nibbles at a petal
         _snake = new Snake(_pond, _ripples, settings.MinnowSchools > 0 ? _minnows : null, settings.SnakePercent / 100f, _rng);
         _lizards = new Lizards(_pond, settings.LizardCount, _ripples, settings.LizardPercent / 100f, _rng);
         _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng, settings.MinnowSchools > 0 ? _minnows : null, _koi);
@@ -88,7 +89,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _koi.Update(dt, _turtles);        // the fish steer round the turtles, and are pushed out of them if they meet (last frame's turtle spines: near enough)
         PointF[] koiHeads = _koi.Heads;
         _minnows.Update(dt, _snake.Live ? [.. koiHeads, _snake.Head] : koiHeads);   // the minnows keep clear of the snake as of a koi
-        _turtles.Update(dt, _snake.Live ? _snake.Head : null);   // a basking turtle slips in when the snake comes near
+        _turtles.Update(dt, _snake.Live ? _snake.Head : null, _koi.Bodies);   // a basking turtle slips in when the snake comes near; a swimming one steers round the fish
         _petals.Update(dt);
         // Nothing passes through a floating petal: whatever has its back up at
         // the surface (a koi gulping or brushing it, a turtle paddling, the

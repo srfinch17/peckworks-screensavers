@@ -8,7 +8,8 @@ internal sealed class Turtles
 {
     private readonly Turtle[] _all;
 
-    public Turtles(Pond pond, int count, Ripples ripples, bool[] where, Random rng)
+    /// <param name="petals">The floating petals, for a floating turtle to nibble at (null: none).</param>
+    public Turtles(Pond pond, int count, Ripples ripples, bool[] where, Random rng, Petals? petals = null)
     {
         _all = new Turtle[Math.Max(0, count)];
         // Two dials each, dealt (Core/Minds Traits.Deal) so no two turtles are near-twins: one
@@ -19,20 +20,21 @@ internal sealed class Turtles
         bool[] perchMask = new bool[pond.Land.Length];
         if (_all.Length > 0)
             for (int i = 0; i < perchMask.Length; i++) perchMask[i] = pond.Land[i] && pond.Open[i];
-        for (int i = 0; i < _all.Length; i++) _all[i] = new Turtle(pond, ripples, where, rng, sunny[i], nerve[i], perchMask);
+        for (int i = 0; i < _all.Length; i++) _all[i] = new Turtle(pond, ripples, where, rng, sunny[i], nerve[i], perchMask, petals);
         foreach (Turtle t in _all) t.MeetPeers(_all);
     }
 
     /// <param name="snakeHead">The snake's head if one is out (a basking turtle slips into the water when it comes close), else null.</param>
-    public void Update(float dt, PointF? snakeHead = null)
+    /// <param name="bodies">Every body in the water this frame (KoiSchool.Bodies: the fish and the turtles), so a turtle's feelers go over, under or round them.</param>
+    public void Update(float dt, PointF? snakeHead = null, Body[]? bodies = null)
     {
-        foreach (Turtle t in _all) t.Update(dt, snakeHead);
+        foreach (Turtle t in _all) t.Update(dt, snakeHead, bodies);
     }
 
     /// <summary>Every turtle up at the surface shoves the floating petals in its way aside (Petals.PushAside); a turtle that has dived passes under them.</summary>
     public void PushPetals(Petals petals)
     {
-        foreach (Turtle t in _all) if (t.InWater && Light.DepthOf(t.Z) < 0.03f) petals.PushAside(t.Drawn, t.DrawnHalfWidth);
+        foreach (Turtle t in _all) if (t.InWater && Light.DepthOf(t.Z) < Koi.PushDepth) petals.PushAside(t.Drawn, t.DrawnHalfWidth);
     }
 
     /// <summary>A point at each turtle's nose and under its shell this frame, screen pixels (the snake keeps clear of them).</summary>
@@ -139,10 +141,21 @@ internal sealed class Turtle : Body
     private readonly float _len, _wide;                   // nose to tail tip, and half the shell's width, ground pixels
     private readonly uint[] _skin;
     private readonly float _logAx, _logAy;                // the log's axis, so Height does not redo the trig 22 times a frame
+    private readonly Petals? _petals;                     // the floating petals, to nibble at while it floats
 
     private float _x, _y, _heading, _speed, _phase, _stroke = 1;   // _stroke: 1 paddling, 0 legs still
+    private float _turnRate;                              // how fast it is turning, radians a second: eased, never set outright (see Swim)
+    private float _neck;                                  // the head's turn on the neck, radians to the left of the shell's heading (it leads a turn; it looks about while basking)
+    private float _dodge;                                 // the climb (negative) or dive (positive) its feelers chose this frame, z per unit forward
+    private Body[] _bodies = [];                          // every body in the water this frame, for the feelers
+    private readonly Feelers.Room _room;                  // RoomAround as a delegate, made once
     private float _goalX, _goalY, _goalTimer, _zTarget, _depthTimer, _z;
+    private float _nibbleTimer;                           // floating: when it next looks for a petal to nibble
+    private PointF? _nibble;                              // the petal it is drifting toward, screen pixels
     private double _time;
+
+    /// <summary>Where the head leaves the shell, as s along the body: the head and neck ahead of this turn on the neck; the shell behind it is rigid.</summary>
+    private const float NeckAt = 0.22f;
 
     // ---- THE MIND ----
     private readonly float _sunny, _nerve;                // the two dials (see the class comment)
@@ -196,13 +209,15 @@ internal sealed class Turtle : Body
     /// <summary>The highest part of the body above the water, 0 to 1 (for logs and tests).</summary>
     public float Height01 => _out;
 
-    public Turtle(Pond pond, Ripples ripples, bool[] where, Random rng, float sunny, float nerve, bool[] perchMask) : base(Points)
+    public Turtle(Pond pond, Ripples ripples, bool[] where, Random rng, float sunny, float nerve, bool[] perchMask, Petals? petals = null) : base(Points)
     {
         _pond = pond;
         _ripples = ripples;
         _where = where;
         _perchMask = perchMask;
         _rng = rng;
+        _petals = petals;
+        _room = RoomAround;
         _sunny = sunny;
         _nerve = nerve;
         _len = pond.U * 0.1f;
@@ -262,12 +277,67 @@ internal sealed class Turtle : Body
         return ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Land[iy * _pond.Width + ix];
     }
 
-    public void Update(float dt, PointF? snakeHead = null)
+    /// <summary>The bed under a screen point, 0 to 1 of the pond's full depth, rocks included (a point off the screen counts as its nearest edge pixel).</summary>
+    private float FloorAt(PointF s) => _pond.Floor[Math.Clamp((int)s.Y, 0, _pond.Height - 1) * _pond.Width + Math.Clamp((int)s.X, 0, _pond.Width - 1)] / 255f;
+
+    /// <summary>The pond's full depth in ground pixels: what Z = 1 is, so the feelers and the chains work in one unit.</summary>
+    private float DepthPx => Pond.DepthU * _pond.U;
+
+    /// <summary>Where its nose is in three dimensions: ground pixels across, depth in pixels down.</summary>
+    private System.Numerics.Vector3 Here => new(_x, _y, _z * DepthPx);
+
+    /// <summary>
+    /// The world as the turtle's feelers see it (Core/Minds Feelers.Room): the
+    /// koi's answer (Koi.RoomAround), for a ball as wide as this shell. Nothing
+    /// on land, in the bed or above the surface; else the room to the nearest
+    /// bank or rock, or to the nearest other body in the water if that is
+    /// closer, a gap up or down counting two and a half times a gap sideways
+    /// (it passes over a fish's back on less clearance than it passes beside
+    /// a bank). Before this a turtle steered round the bank and the other
+    /// turtles only, and ploughed through any koi in its way (the koi was
+    /// shoved out of it, but a shove is a bump, not a course).
+    /// </summary>
+    private float RoomAround(in System.Numerics.Vector3 p)
+    {
+        PointF s = ToScreen(p.X, p.Y);
+        if (!WaterAt(s)) return 0;
+        if (p.Z < -1 || p.Z > 0.9f * FloorAt(s) * DepthPx) return 0;
+        float room = _pond.RoomAt(s.X, s.Y);
+        foreach (Body b in _bodies)
+        {
+            if (b == this || !b.Shape.Near(p, _wide, room)) continue;
+            room = MathF.Min(room, b.Shape.Gap(p, _wide, 2.5f));
+            if (room <= 0) return 0;
+        }
+        return room;
+    }
+
+    /// <summary>
+    /// Moved bodily by KoiSchool when two turtles meet (half the way out each;
+    /// a koi in a turtle is the one moved, the turtle being the heavier). Only
+    /// while it is swimming: a turtle up on a perch, or climbing, is where it
+    /// is. The bed and the surface keep the last word on its depth.
+    /// </summary>
+    public void Nudge(System.Numerics.Vector3 by)
+    {
+        if (!InWater || _doing is Doing.Climb or Doing.Slip or Doing.Bask) return;
+        PointF to = ToScreen(_x + by.X, _y + by.Y);
+        if (WaterAt(to)) { _x += by.X; _y += by.Y; }
+        _z = Math.Clamp(_z + by.Z / DepthPx, 0, 0.05f + 0.9f * FloorAt(ToScreen(_x, _y)));
+        LaySpine();
+    }
+
+    /// <summary>Its body length, ground pixels (the school's shove is held to a length a second).</summary>
+    public float Length => _len;
+
+    /// <param name="bodies">Every body in the water this frame (the koi and the turtles); null when there are none to steer round.</param>
+    public void Update(float dt, PointF? snakeHead = null, Body[]? bodies = null)
     {
         if (_perch == Perch.None) { _pond.IslandPerch.Release(this); _pond.LogPerch.Release(this); }   // a perch is mine only while _perch names it
         _time += dt;
         float t = (float)(_time % 100000.0);
         _snake = snakeHead;
+        _bodies = bodies ?? [];
         _mind.Tick(dt);
         _hauls.Tick(dt);
 
@@ -290,11 +360,26 @@ internal sealed class Turtle : Body
             }
         }
         PointF here = ToScreen(_x, _y);
-        int ix = Math.Clamp((int)here.X, 0, _pond.Width - 1), iy = Math.Clamp((int)here.Y, 0, _pond.Height - 1);
-        float bottom = 0.05f + 0.9f * _pond.Floor[iy * _pond.Width + ix] / 255f;   // the bed, rocks included (never inside a stone)
+        float bottom = 0.05f + 0.9f * FloorAt(here);   // the bed, rocks included (never inside a stone)
         // Coming up to a perch is quicker than a lazy drift up (it must be at the surface to climb out).
         float rate = _doing is Doing.Approach or Doing.Climb or Doing.Bask or Doing.Slip ? 1.2f : _doing == Doing.Dive ? 0.45f : 0.3f;
-        _z += (MathF.Min(_zTarget, bottom) - _z) * (1 - MathF.Exp(-dt * rate));
+        bool swimming = _doing is not (Doing.Climb or Doing.Slip or Doing.Bask);
+        // When the feelers chose a climb or a dive to clear something, the depth
+        // follows that slope for the distance swum (a straight course in three
+        // dimensions); otherwise it eases toward the depth it wants. Either way
+        // the change is held to what its own forward motion can hide on the
+        // screen (Light.HoldDepth), as the koi's is, so a turtle never slides
+        // up or down the screen while it floats or dives.
+        float zNext = _dodge != 0 && swimming ? _z + _dodge * _speed * dt / DepthPx : _z + (MathF.Min(_zTarget, bottom) - _z) * (1 - MathF.Exp(-dt * rate));
+        zNext = Math.Clamp(zNext, 0, bottom);
+        _z = swimming ? Light.HoldDepth(_z, zNext, _heading, _speed, dt, _pond.U) : zNext;
+
+        // The head on its neck: it leads a turn (about half the turn's rate, so
+        // the head is already looking round the bend the shell is still
+        // swinging into) and, while basking, looks about (_headOff). Eased,
+        // so it never flicks.
+        float neckWant = _doing == Doing.Bask ? _headOff * 2f : Math.Clamp(_turnRate * 0.45f, -0.5f, 0.5f);
+        _neck += (neckWant - _neck) * (1 - MathF.Exp(-dt * 4f));
 
         LaySpine();
     }
@@ -322,9 +407,9 @@ internal sealed class Turtle : Body
         // ---- Steering: a slow wander, a pull toward its goal, and the bank kept off ----
         PointF here = ToScreen(_x, _y);
         bool free = false;       // "free": right beside a perch, where the bank rules would push it away from the very thing it wants
+        float turn = 0, most = 0.35f;
         if (!floating)
         {
-            float turn, most = 0.35f;
             if (approach)
             {
                 // The way in is a line from _far to _near, and it must arrive pointing along it. Far out it
@@ -363,7 +448,7 @@ internal sealed class Turtle : Body
                 // deadlock (it pushed into the bank for 4 s and gave up). Beside the perch the pull is keen.
                 turn = Wrap(MathF.Atan2(ay - _y, ax - _x) - _heading) * (free ? 1.6f : 0.6f);
                 most = free ? 0.9f : 0.6f;
-                if (!free) turn += BankTurn(here, dt, ref most);
+                if (!free) Feel(ref turn, ref most, dt);           // the bank, the bed and every other body, on the way to the perch too
             }
             else
             {
@@ -372,7 +457,7 @@ internal sealed class Turtle : Body
                 float gdx = _goalX - _x, gdy = _goalY - _y;
                 if (_goalTimer <= 0 || gdx * gdx + gdy * gdy < _len * _len * 4) NewGoal();
                 turn += Wrap(MathF.Atan2(gdy, gdx) - _heading) * 0.3f;
-                turn += BankTurn(here, dt, ref most);
+                Feel(ref turn, ref most, dt);
             }
             // Room from the other turtles: two shells at one depth must not pass through each
             // other (the koi keep their distance the same way). Measured SHELL to shell (the
@@ -397,8 +482,50 @@ internal sealed class Turtle : Body
             // tail first). A turn can be no sharper than speed / (0.6 body lengths); never less than
             // the speed of a slow stroke, so a bank can always be answered.
             most = MathF.Min(most, MathF.Max(_speed, _len * 0.25f) / ((approach ? 0.85f : 0.6f) * _len));   // a touch wider when lining up on a perch, where the eye is on it
-            _heading = Wrap(_heading + Math.Clamp(turn, -most, most) * dt);
+            turn = Math.Clamp(turn, -most, most);
         }
+        else
+        {
+            // Floating, it does not steer; but a petal within reach is worth a
+            // slow drift over (a slider nibbles at what floats by), and the
+            // turn eases to nothing otherwise.
+            turn = 0;
+            if (_petals != null)
+            {
+                _nibbleTimer -= dt;
+                PointF nose = Spine[0];
+                if (_nibble is PointF np && !_petals.NearestFloating(np.X, np.Y, _len * 0.15f, out _)) _nibble = null;   // it drifted off or sank
+                if (_nibble == null && _nibbleTimer <= 0)
+                {
+                    _nibbleTimer = 2 + 4 * (float)_rng.NextDouble();
+                    if (_petals.NearestFloating(nose.X, nose.Y, _len * 1.5f, out PointF p) && WaterAt(p) && _pond.RoomAt(p.X, p.Y) > _len * 0.3f) _nibble = p;
+                }
+                if (_nibble is PointF target)
+                {
+                    if (Dist(nose, target) < _len * 0.3f)
+                    {
+                        _petals.Take(nose.X, nose.Y, _len * 0.3f);
+                        _ripples.Add(nose.X, nose.Y, 0.3f);
+                        _nibble = null;
+                    }
+                    else
+                    {
+                        (float tx, float ty) = ToGround(target.X, target.Y);
+                        turn = Wrap(MathF.Atan2(ty - _y, tx - _x) - _heading) * 0.8f;
+                        _speed += (_len * 0.18f - _speed) * (1 - MathF.Exp(-dt * 1.5f));   // a slow paddle, legs barely moving
+                    }
+                }
+            }
+            turn = Math.Clamp(turn, -0.4f, 0.4f);
+        }
+        // The turn is never applied raw. The RATE of turn eases toward what the
+        // steering asks over about a sixth of a second: a shell has mass. The
+        // steering's sum (a goal pull, the bank's shove, a shell to keep off)
+        // switched on and off from one frame to the next, and the heading's
+        // rate flipped sign sixty times a second (72 radians a second squared
+        // on the timeline, a jitter the owner saw as "not fluid").
+        _turnRate += (turn - _turnRate) * (1 - MathF.Exp(-dt * 6f));
+        _heading = Wrap(_heading + _turnRate * dt);
         if (floating)
         {
             // A floating turtle does not steer, but it does not let another shell drift into it
@@ -428,23 +555,40 @@ internal sealed class Turtle : Body
             _y += MathF.Sin(_heading) * step;
             _refused = 0;
         }
-        else if (approach)
+        else
         {
+            // A refused step itself sends the feelers looking next frame (_refused > 0);
+            // on an approach, 1.5 s of it gives the perch up: never stand refused.
             _refused += dt;
-            if (_refused > 1.5f) GiveUp();         // never stand refused: give the perch up and go back to paddling
+            if (approach && _refused > 1.5f) GiveUp();
         }
     }
 
-    /// <summary>The bank is coming: how hard to swing toward more open water (0 if it is not), and slow down. "most" is raised to a quicker turn when it is.</summary>
-    private float BankTurn(PointF here, float dt, ref float most)
+    /// <summary>
+    /// The feelers (Core/Minds Feelers) reach out along the heading in three
+    /// dimensions, asking RoomAround at each sample: the bank, the bed, the
+    /// surface and every other body in the water all count. Something in the
+    /// way (or a step refused last frame): the smallest change of course that
+    /// clears it, a turn, a climb over or a dive under, is added to "turn",
+    /// "most" is raised so it can be made, and it slows for a turn (not for a
+    /// climb). A turtle dives shallower than a koi (0.5 of its forward motion
+    /// against 0.8): it is a paddler, not a darter. This replaced a bank-only
+    /// rule read off the room grid, which switched on and off from frame to
+    /// frame and knew nothing of the fish.
+    /// </summary>
+    private void Feel(ref float turn, ref float most, float dt)
     {
-        float roomAhead = RoomAlong(_heading, _len * 1.6f), roomHere = _pond.RoomAt(here.X, here.Y);
-        if (roomAhead >= _len * 0.9f && roomHere >= _len * 0.5f) return 0;
-        PointF open = _pond.OpenWay(here.X, here.Y);
-        most = 1.0f;
-        _speed *= 1 - 0.8f * dt;
-        if (open.X * open.X + open.Y * open.Y > 1e-6f) return Wrap(MathF.Atan2(open.Y, open.X) - _heading) * 2f;
-        return 0;
+        float look = _len * 1.6f;
+        System.Numerics.Vector3 here3 = Here, level = new(MathF.Cos(_heading), MathF.Sin(_heading), 0);
+        float roomAhead = Feelers.Along(_room, in here3, in level, look);
+        _dodge = 0;
+        if (roomAhead >= _len * 0.8f && _refused <= 0) return;
+        (float best, float climb, _) = Feelers.Best(_room, in here3, _heading, look, _len * 0.9f, 0.35f, 4, 0.5f, _len * 0.08f, _len * 0.05f);
+        _dodge = climb;
+        float urgency = Math.Clamp(1 - roomAhead / (_len * 0.8f), 0, 1);
+        turn += Wrap(best - _heading) * (1f + 2f * urgency);
+        most = MathF.Max(most, 0.6f + 0.6f * urgency);
+        if (climb == 0) _speed *= 1 - 0.8f * urgency * dt;
     }
 
     private void NewGoal()
@@ -721,6 +865,7 @@ internal sealed class Turtle : Body
         else
         {
             _perch = Perch.None;                                    // off the perch: free for another turtle
+            _turnRate = 0;                                          // the curve set the heading; the paddling starts from a straight course
             _hauls.Start((45 + 60 * (float)_rng.NextDouble()) * (1.5f - _sunny));
             _mind.Begin(Doing.Dive, 4 + 5 * (float)_rng.NextDouble());   // a short dive, then Decide() sends it cruising
             _zTarget = 0.25f + 0.3f * (float)_rng.NextDouble();
@@ -766,7 +911,8 @@ internal sealed class Turtle : Body
             float rate = (0.12f + 0.9f * MathF.Min(1, MathF.Abs(_align))) * dt;     // eases out as it comes round
             _align = MathF.Abs(_align) <= rate ? 0 : _align - MathF.Sign(_align) * rate;
         }
-        _heading = _sitFace + _align + _headOff;
+        _heading = _sitFace + _align;                                           // the head's look-about (_headOff) is on the neck now (Update), so the shell stays put
+        _turnRate = 0;
         (float mx, float my) = ToGround(_sitMid.X, _sitMid.Y);
         float m = Along[Points / 2] * _len;
         _x = mx + MathF.Cos(_heading) * m;
@@ -816,7 +962,7 @@ internal sealed class Turtle : Body
         }
         _exitAngle = good[best];
         _exitHeading = GroundHeading(MathF.Cos(_exitAngle), MathF.Sin(_exitAngle));
-        _sitFace = Wrap(_sitFace + _align + _headOff);                        // from now on the pivot starts from where it is facing
+        _sitFace = Wrap(_sitFace + _align);                                   // from now on the pivot starts from where it is facing
         _align = 0; _headOff = 0; _turnT = 1; _stretchT = 1; _stretch = 0;
         _pivoting = true;
     }
@@ -856,13 +1002,27 @@ internal sealed class Turtle : Body
         return WaterAt(Bezier(0.75f));
     }
 
-    /// <summary>A point of the body in screen pixels, before it sinks or is lifted: s along from the nose (0 to 1), v across (-1 left edge to +1 right edge).</summary>
+    /// <summary>
+    /// A point of the body on the ground plane (as if seen straight down, before
+    /// the slant, the sink and the lift): s along from the nose (0 to 1), v
+    /// across (-1 left edge to +1 right edge). The nose is at (_x, _y) and the
+    /// shell lies BEHIND it, against the heading; the head and neck (s below
+    /// NeckAt) turn as one piece about the shell's front by the neck angle, so
+    /// the turtle looks round a bend before its shell has swung into it.
+    /// </summary>
+    private (float X, float Y) RawGround(float s, float v)
+    {
+        float dx = MathF.Cos(_heading), dy = MathF.Sin(_heading), k = Scale, across = v * _wide * Profile(s) * k;
+        if (s >= NeckAt) return (_x - dx * s * _len * k - dy * across, _y - dy * s * _len * k + dx * across);
+        float px = _x - dx * NeckAt * _len * k, py = _y - dy * NeckAt * _len * k;              // the shell's front, where the neck leaves it
+        float hx = MathF.Cos(_heading + _neck), hy = MathF.Sin(_heading + _neck), ahead = (NeckAt - s) * _len * k;
+        return (px + hx * ahead - hy * across, py + hy * ahead + hx * across);
+    }
+
+    /// <summary>The same point in screen pixels, before it sinks or is lifted.</summary>
     private PointF Raw(float s, float v)
     {
-        float dx = MathF.Cos(_heading), dy = MathF.Sin(_heading);
-        // The nose is at (_x, _y) and the body lies BEHIND it, against the heading.
-        float k = Scale;
-        float gx = _x - dx * s * _len * k - dy * v * _wide * Profile(s) * k, gy = _y - dy * s * _len * k + dx * v * _wide * Profile(s) * k;
+        (float gx, float gy) = RawGround(s, v);
         return ToScreen(gx, gy);
     }
 
@@ -931,17 +1091,19 @@ internal sealed class Turtle : Body
             HalfWidth[i] = Dist(l, r) / 2;
         }
         float shell = shellCount > 0 ? shellSum / shellCount : 0;
-        float dx = MathF.Cos(_heading), dy = MathF.Sin(_heading), k = Scale, zPx = Z * Pond.DepthU * _pond.U;
+        float k = Scale, zPx = Z * Pond.DepthU * _pond.U;
         for (int i = 0; i < Points; i++)
         {
             if (Along[i] >= 0.22f && Along[i] <= 0.88f) _h[i] = shell;
             Spine[i] = new PointF(mid[i].X, mid[i].Y + Sink - _h[i] * LiftPx);
             // The same point for touching (Core/Minds Chain): on the ground
-            // plane, before the slant, at its depth. The koi's feelers see it
-            // and KoiSchool pushes a fish out of it; the turtle itself is the
-            // heavier and is never moved.
+            // plane, before the slant, at its depth, neck bend included. The
+            // koi's feelers see it and KoiSchool pushes a fish out of it (the
+            // turtle is the heavier); two turtles that meet are each moved
+            // half the way out (Nudge).
             float s = Along[i];
-            Shape.Points[i] = new System.Numerics.Vector3(_x - dx * s * _len * k, _y - dy * s * _len * k, zPx);
+            (float gx, float gy) = RawGround(s, 0);
+            Shape.Points[i] = new System.Numerics.Vector3(gx, gy, zPx);
             Shape.Radius[i] = _wide * Profile(s) * k;
         }
         Shape.Seal();

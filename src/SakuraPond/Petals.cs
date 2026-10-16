@@ -234,7 +234,11 @@ internal sealed class Petals
             _floating[oldest] = o;
         }
         _floating.Add(NewFloating(p.X, p.Y, 0, p.Size, p.Angle, p.Pink));
+        Landed?.Invoke(p.X, p.Y);
     }
+
+    /// <summary>Called with the screen spot where a falling petal has just settled on the water (the hungry koi come to see).</summary>
+    public Action<float, float>? Landed { get; set; }
 
     /// <summary>The nearest floating petal within "within" pixels of (x, y), screen pixels. False if none.</summary>
     public bool NearestFloating(float x, float y, float within, out PointF at)
@@ -244,14 +248,15 @@ internal sealed class Petals
         return best >= 0;
     }
 
-    /// <summary>A koi's mouth closed here: the nearest petal within reach is eaten (it sinks away over a moment).</summary>
-    public void Take(float x, float y, float within)
+    /// <summary>A mouth closed here: the nearest petal within reach is eaten (it sinks away over a moment). True if there was one.</summary>
+    public bool Take(float x, float y, float within)
     {
         int i = Nearest(x, y, within);
-        if (i < 0) return;
+        if (i < 0) return false;
         Floating f = _floating[i];
         f.Life = MathF.Min(f.Life, f.Age + 0.6f);
         _floating[i] = f;
+        return true;
     }
 
     /// <summary>
