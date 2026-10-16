@@ -540,6 +540,17 @@ the same flip-book as a grass tuft (24 pages of lean, each blade bent in three d
 projected with height lifting it up the screen and its shadow thrown onto the water), stamped once
 a frame at the lean the wind gives that spot, and only where no branch is in front.
 
+*A goldfish is a koi with a different nature.* The goldfish (`Koi.Kind.Goldfish`, in `Koi.cs`) swims on exactly the same body, steering,
+mind and depth rules as a koi; only what it IS changes. Its body is small (0.042 to 0.052u against a koi's 0.095 to 0.155u), deep
+(half width about 0.2 of the length: a wakin is nearly an egg) with a round blunt head and a very slim tail stalk, and the tail fin
+fans out wide and long (reaching 1.55 body lengths from the nose, a notch down its middle so it reads as a forked double tail)
+and thins toward its end. The sideways wave in the body stops growing past the fin's first quarter, or the long fin would swing like
+a paddle. Its nature is a handful of numbers read in the same places a koi's are: it beats 1.3 times as fast, cruises a little
+slower in body lengths, keeps to the upper water (a small fish deep down is lost), gulps twice as often, and flinches from further
+off. It follows other goldfish twice as readily and never starts a chase at a koi; an idle wander mostly heads for the neighbourhood of
+another goldfish, which is all the "shoal" there is. A goldfish only goes to look at what is near, because it crosses the pond
+at about a third of a koi's pace, and a faraway petal used to leave it "investigating" four fifths of the time.
+
 *Rigid animals turn as a whole.* A dragonfly or a swallow does not bend, so it is a picture
 painted once (several, for the wingbeat) and stamped at any angle every frame (`TurningStamp.cs`),
 reading the picture smoothly between its pixels so a slow turn never steps. Never flipped. The

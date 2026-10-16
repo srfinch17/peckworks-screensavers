@@ -116,6 +116,12 @@ travelling wave (the cattails and irises sway with it stiffly).
   bluer the deeper it goes until the water hides it, with a small dry cap breaking the surface.
   The koi swim up and over its shoulders and round the cap. Once in a while one rises slowly until its back brushes the
   surface from below, and three thin, slow rings slip off it as it glides on.
+- **Goldfish** (three by default, a "Goldfish" knob from 0 to 6) share the pond with the koi: a short, deep-bodied
+  wakin under half a koi's length, orange-red, red and white, or a pale calico, trailing a long see-through forked tail
+  that flutters behind it. It is the same fish in the same water (same body, steering, depth and bump rules), but it keeps to
+  the sunlit top of the pond, beats quicker, nibbles at the surface twice as often, flinches from a swallow's shadow from further
+  off, follows other goldfish far more readily than a koi, never chases a koi, and idles in the neighbourhood of a shoalmate,
+  so three of them drift about as a loose little shoal.
 - **Each koi has a mind of its own.** Three personality dials are dealt when it is born (spread
   across the school, so near-twins are rare): how
   energetic it is (how much it beats rather than glides, how fast it cruises), how sociable, and
@@ -184,7 +190,7 @@ travelling wave (the cattails and irises sway with it stiffly).
   drifting out on the water when it is not. Bark streaks, cracks, a knot or two, moss on top, and
   the cut end's rings where it faces us.
 
-Settings: draw width (sharpness against smoothness), petals, number of koi (ten by default), how playful the koi are (0 means they only cruise and rest),
+Settings: draw width (sharpness against smoothness), petals, number of koi (ten by default), number of goldfish (three by default), how playful the koi are (0 means they only cruise and rest),
 number of minnow schools (0 means no game), number of turtles,
 number of dragonflies, how often the swallows visit, how often the snake crosses, how many
 lizards there are (0 to 3), and how often the lizards come out (Lizard visits).
