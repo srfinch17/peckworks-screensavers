@@ -155,6 +155,15 @@ One rule lives in the saver, not the kit, because it is about how THIS pond is d
 `Light.HoldDepth` (Sakura Pond's `Light.cs`) holds any swimmer's rise or sink to what its own
 forward motion can hide on the screen, since depth moves the picture up and down the screen
 there. The koi and the turtle both call it; a saver that draws depth another way writes its own.
+ONE EXEMPTION, on purpose: a FLOATING turtle is buoyant and rises at a fixed slow rate (0.03 of
+the pond's depth a second, up to about 5 px a second at 720 lines) whichever way it faces. Held
+to its own forward motion, which is nothing while it floats, it never surfaced (24 floats in 47
+never breathed). The review measured the drift and judged it reads as surfacing, not sliding,
+because the turtle grows and sharpens as it comes up; the koi's rule stands for everything that
+swims. Two known turtle minors remain: a slip off a perch checks its landing only when the exit
+is chosen, so a koi swimming into the spot during the 2 s slide is pushed out of the turtle (2 of
+22 slips); and the see-through tail fin of a koi, outside the bed test and on the straight body
+line, can sit below the bed on 0.03 to 0.05% of frames (the body never).
 
 Add to `Core/Minds` only what two animals need in the same shape; a thing one animal needs stays
 in that animal.

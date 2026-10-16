@@ -147,10 +147,12 @@ travelling wave (the cattails and irises sway with it stiffly).
 - A **turtle** (a red-eared slider, the turtle of nearly every park pond in Japan) paddles just
   under the surface, front left leg with back right and then the other pair, with a small surge
   on each stroke, turning as one rigid piece in wide slow arcs, its head leading each turn on
-  its neck. It steers in three dimensions like the koi: it goes over, under or round a fish in
-  its way, never through one, and its rise and sink are held to what its paddling can hide, so
-  it never slides up or down the screen. Now and then it stops, spreads
-  its legs and floats, pokes its nose up for a breath (one small ring), drifts over to a petal
+  its neck. It steers in three dimensions like the koi: its feelers take it over, under or round
+  a fish in its way, and where the two still meet (about ten times in three minutes) the fish is
+  pushed out of it; its rise and sink while it paddles are held to what the paddling can hide,
+  so it never slides up or down the screen. Now and then it stops, spreads
+  its legs and floats up (a buoyant rise at one slow rate whichever way it faces: it grows and
+  sharpens as it comes, which reads as surfacing), pokes its nose up for a breath (one small ring), drifts over to a petal
   and nibbles it, then paddles off, or
   dives to the bed for a while. And it hauls out: it swims up to the island rock or the fallen
   log, climbs onto it, sits with its legs spread in the sun for fifteen seconds to a minute, and

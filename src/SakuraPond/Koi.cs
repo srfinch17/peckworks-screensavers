@@ -431,6 +431,7 @@ internal sealed class Koi : Body
     private readonly Cooldown _chaseCool = new();         // no chase again until this has run out
     private readonly Cooldown _flinchCool = new();        // no flinch at a shadow again until this has run out
     private readonly Cooldown _shyCool = new();           // no shying from a bump again until this has run out (two fish side by side touch every frame)
+    private readonly Cooldown _fleeCool = new();          // no fresh flee for a moment after one ends (a chaser swinging round would restart it every few seconds)
     private float _flinchX, _flinchY;                     // where the shadow was, ground pixels
     private float _shyX, _shyY;                           // where to swim to get away from the thing it bumped, ground pixels
     private float _stuckFor;                              // seconds its steps have been refused (nosed against something)
@@ -630,6 +631,13 @@ internal sealed class Koi : Body
         // and a gulp from deep down is a swim up to the surface, not a float up.
         _swimming = rush || (_beating && !still) || (_gulping && Z > 0.2f) || _doing == Doing.Shy;
         float targetSpeed = rush ? _len * _cruise * 1.6f : _swimming ? _len * _cruise : still ? _len * 0.07f : _len * 0.16f;
+        // A chaser close to a quarry that is off to one side SLOWS to turn in: at
+        // full burst its turning circle is 40 px wide and a small fish swimming at
+        // a fifth of its speed is never caught, only orbited (the review watched a
+        // koi circle a goldfish for seven seconds). Slowing is what a koi does too:
+        // it closes on a fish with a swing of the body, not a lap.
+        if (_doing == Doing.Chase && _partner != null && Near(_partner, 1.5f) && MathF.Abs(Wrap(MathF.Atan2(_partner._y - _y, _partner._x - _x) - _heading)) > 0.5f)
+            targetSpeed *= 0.45f;
         _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (rush ? 2.2f : _swimming ? 1.1f : 0.45f)));
         float targetAmp = rush ? _len * 0.11f : _swimming ? _len * 0.085f : _len * 0.022f;
         _amp += (targetAmp - _amp) * (1 - MathF.Exp(-dt * 2.5f));
@@ -901,9 +909,12 @@ internal sealed class Koi : Body
         _chaseCool.Tick(dt);
         _flinchCool.Tick(dt);
         _shyCool.Tick(dt);
+        _fleeCool.Tick(dt);
 
         // Someone is after me: the moment a chaser is close behind, flee (whatever I was doing, except already fleeing).
-        if (_doing != Doing.Flee)
+        // Not again within two seconds of a flee ending: a chaser swinging round faced it, then away, then at it
+        // again, and the flee flickered on and off within five seconds (9 restarts in 112 flees).
+        if (_doing != Doing.Flee && _fleeCool.Ready)
             foreach (Koi o in school)
                 if (o != this && o._doing == Doing.Chase && o._partner == this && NearEither(o, 1.6f) && Toward(o, this) > 0.2f)
                 {
@@ -916,7 +927,10 @@ internal sealed class Koi : Body
             case Doing.Flee:
                 // Safe again once the chaser gives up, falls well behind, or is no longer heading at it.
                 if (_partner == null || _partner._doing != Doing.Chase || _partner._partner != this || !NearEither(_partner, 3f) || Toward(_partner, this) < 0)
+                {
+                    _fleeCool.Start(2);
                     Begin(Doing.Wander);
+                }
                 break;
             case Doing.Chase:
                 if (_mind.Over || _partner == null) Decide(school);

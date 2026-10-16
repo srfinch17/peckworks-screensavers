@@ -395,7 +395,10 @@ internal sealed class Turtle : Body
             // running, the rise waits while the water just above is taken.
             if (zNext < _z)
             {
-                System.Numerics.Vector3 above = new(_x, _y, (_z - 0.03f) * DepthPx);
+                // The probe never goes above the surface: RoomAround calls the air "taken"
+                // too, and probed 0.03 above a turtle at 0.026 it held every float four
+                // pixels short of the top for ever (the review's lowest float, every run).
+                System.Numerics.Vector3 above = new(_x, _y, MathF.Max(0, _z - 0.03f) * DepthPx);
                 if (RoomAround(in above) <= 0) zNext = _z;
             }
             _z = Math.Clamp(zNext, _z - most, _z + most);
@@ -560,6 +563,7 @@ internal sealed class Turtle : Body
         // rate flipped sign sixty times a second (72 radians a second squared
         // on the timeline, a jitter the owner saw as "not fluid").
         _turnRate += (turn - _turnRate) * (1 - MathF.Exp(-dt * 6f));
+        float headingBefore = _heading;
         _heading = Wrap(_heading + _turnRate * dt);
         if (floating)
         {
@@ -596,6 +600,15 @@ internal sealed class Turtle : Body
             // on an approach, 1.5 s of it gives the perch up: never stand refused.
             _refused += dt;
             if (approach && _refused > 1.5f) GiveUp();
+            // Turning while refused, it turns ABOUT ITS MIDDLE, not its nose: with the nose
+            // held and the heading swinging, the shell swept 11 to 14 px tail first in a
+            // second (the review's refused-step pivots). The nose is moved so the shell's
+            // middle stays where it was.
+            float m = Along[Points / 2] * _len * Scale;
+            float mx0 = _x - MathF.Cos(headingBefore) * m, my0 = _y - MathF.Sin(headingBefore) * m;
+            float mx1 = _x - MathF.Cos(_heading) * m, my1 = _y - MathF.Sin(_heading) * m;
+            PointF nose = ToScreen(_x + mx0 - mx1, _y + my0 - my1);
+            if (WaterAt(nose)) { _x += mx0 - mx1; _y += my0 - my1; }
         }
     }
 
