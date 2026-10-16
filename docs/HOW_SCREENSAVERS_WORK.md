@@ -781,7 +781,12 @@ remembers how deep the head was at each spot (`_trailZ` beside `_trail`), so eac
 as deep as the head was when it passed there, and `LaySpine` walks the trail in three dimensions.
 A fish that dives is laid down its own slope: head deepest, tail still up near where the dive
 began, and the body covers less ground than its length (foreshortened, the way a pencil pointed at
-you looks short). Everything that goes by depth then goes point by point: the perspective shrink
+you looks short). But the body is STIFF up and down: a carp bends sideways and pitches as one rod,
+so the depth along the body is a straight line from the head's depth to the depth the trail gives
+the base of the tail. Laid point by point from the trail it carried the head's whole history of
+depth, and a fish that had dived and then levelled was drawn with a hump (head level, middle on
+the slope, tail level), which on the screen is a vertical S through the body: the review traced
+95% of the owner's "worm" frames to it. Everything that goes by depth then goes point by point: the perspective shrink
 (`Light.Scale`), the sink down the screen (`Light.SinkPx`), the murk (`Body.Paint` takes a murk per
 spine point, `murkAt`, and slopes between them), the blur and the dimming of the markings (`Colour`
 reads them by s). So a diving fish is smaller, hazier and lower at the head than at the tail, and

@@ -200,7 +200,12 @@ public static class Feelers
     /// length in the plane; its z is the climb per unit forward), "dist"
     /// long along the plane: the least of the samples, the nearer ones
     /// counting for more (a thing close in matters more than the same thing
-    /// at the feeler's end). 0 the moment any sample is blocked.
+    /// at the feeler's end). 0 the moment any sample is blocked. (Scoring a
+    /// far block by its distance instead was tried for the turtle, whose
+    /// courses all read 0 while it dived toward the bed: every koi then
+    /// reacted a body length later and the pond's touches doubled. The
+    /// contract stays; an animal with every course blocked turns toward
+    /// whatever "more room" its own world can name.)
     /// </summary>
     public static float Along(Room room, in Vector3 from, in Vector3 dir, float dist)
     {

@@ -311,9 +311,9 @@ internal sealed class Dragonflies
 
     /// <summary>
     /// Something crept up to (x, y): every dragonfly perched within "within"
-    /// pixels of it takes off at once, darting AWAY from it (a lizard's
-    /// stalk ends this way nine times in ten, which is what makes the stalk
-    /// worth watching).
+    /// pixels of it takes off at once, darting AWAY from it. About half of a
+    /// lizard's stalks end this way (10 of 23 over an hour); the rest creep
+    /// up to a rock the dragonfly has already left.
     /// </summary>
     public void Scare(float x, float y, float within)
     {

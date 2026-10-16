@@ -311,7 +311,14 @@ internal sealed class Petals
             float ox, oy;
             if (d > 0.5f) { ox = (f.X - px) / d; oy = (f.Y - py) / d; }
             else { float l = MathF.Max(1e-3f, MathF.Sqrt(tx * tx + ty * ty)); ox = -ty / l; oy = tx / l; }
-            float by = want - d + 0.5f;
+            // A GLIDE, not a jump: the petal moves out no further than a body
+            // can swim in a frame (about 0.0035u, 2.5 px at 720 lines, over
+            // twice a fleeing koi's speed), so a petal lying on a hazy back that
+            // rises into the shove band slides off over a few frames instead of
+            // popping 11 px to the flank in one (the review counted 90 to 137
+            // single-frame jumps over 2 px per three minutes). A body at the
+            // surface still keeps every petal just ahead of it.
+            float by = MathF.Min(want - d + 0.5f, _u * 0.0035f);
             if (!OnWater(f.X + ox * by, f.Y + oy * by))
             {
                 // The bank is that way: slide along the body instead, whichever way is water.

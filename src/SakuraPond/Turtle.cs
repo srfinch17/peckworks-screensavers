@@ -371,15 +371,36 @@ internal sealed class Turtle : Body
         // the change is held to what its own forward motion can hide on the
         // screen (Light.HoldDepth), as the koi's is, so a turtle never slides
         // up or down the screen while it floats or dives.
-        float zNext = _dodge != 0 && swimming ? _z + _dodge * _speed * dt / DepthPx : _z + (MathF.Min(_zTarget, bottom) - _z) * (1 - MathF.Exp(-dt * rate));
+        float zNext = _dodge != 0 && swimming && _doing != Doing.Float ? _z + _dodge * _speed * dt / DepthPx : _z + (MathF.Min(_zTarget, bottom) - _z) * (1 - MathF.Exp(-dt * rate));
         zNext = Math.Clamp(zNext, 0, bottom);
         // A floating turtle is BUOYANT: it rises to the surface without a stroke,
         // so the hold is given a slow glide's worth of speed instead of its real
         // (near zero) one, or it could never come up for its breath (on the
         // timeline a float begun at 0.21 stayed at 0.21 for its whole twenty
         // seconds). The rise that allows is about a shell length in ten seconds.
-        float held = _doing == Doing.Float ? MathF.Max(_speed, _len * 0.12f) : _speed;
-        _z = swimming ? Light.HoldDepth(_z, zNext, _heading, held, dt, _pond.U) : zNext;
+        if (_doing == Doing.Float)
+        {
+            // A floating turtle carries no dodge (the feelers do not run while it
+            // floats, and a dive slope left over from the last cruise sank it
+            // through its whole float: 9 floats in 47 on the review's timeline),
+            // and it does not obey the heading share: with the nose pointing down
+            // the screen that allowed a rise of 0.0016 a second and it hung hazy
+            // for the whole float (24 floats in 47 never breathed). Buoyancy is
+            // not swimming: it rises, or settles, at one slow rate whichever way
+            // it faces, about a shell length in ten seconds on the screen.
+            _dodge = 0;
+            zNext = Math.Clamp(zNext, 0, bottom);
+            float most = 0.03f * dt;
+            // And it does not float up into a fish resting above it: with no feelers
+            // running, the rise waits while the water just above is taken.
+            if (zNext < _z)
+            {
+                System.Numerics.Vector3 above = new(_x, _y, (_z - 0.03f) * DepthPx);
+                if (RoomAround(in above) <= 0) zNext = _z;
+            }
+            _z = Math.Clamp(zNext, _z - most, _z + most);
+        }
+        else _z = swimming ? Light.HoldDepth(_z, zNext, _heading, _speed, dt, _pond.U) : zNext;
         if (_doing == Doing.Float && !_breathed && _z < 0.04f)
         {
             // The nose breaks the surface: one small ring, when it really gets there (not at the float's start, which could be a shell's depth down).
@@ -597,9 +618,22 @@ internal sealed class Turtle : Body
         float roomAhead = Feelers.Along(_room, in here3, in level, look);
         _dodge = 0;
         if (roomAhead >= _len * 0.8f && _refused <= 0) return;
-        (float best, float climb, _) = Feelers.Best(_room, in here3, _heading, look, _len * 0.9f, 0.35f, 4, 0.5f, _len * 0.08f, _len * 0.05f);
+        (float best, float climb, float found) = Feelers.Best(_room, in here3, _heading, look, _len * 0.9f, 0.35f, 4, 0.5f, _len * 0.08f, _len * 0.05f);
         _dodge = climb;
         float urgency = Math.Clamp(1 - roomAhead / (_len * 0.8f), 0, 1);
+        if (found <= 0)
+        {
+            // Every course is blocked (diving at the bed near the bank, say; the
+            // review counted a third to a half of dive frames): no feeler can
+            // choose, so it turns toward more open water by the room grid and
+            // levels off, the way a slider feels its way off the bottom.
+            PointF here = ToScreen(_x, _y), open = _pond.OpenWay(here.X, here.Y);
+            if (open.X * open.X + open.Y * open.Y > 1e-6f) turn += Wrap(GroundHeading(open.X, open.Y) - _heading) * 2f;
+            _dodge = -0.5f;
+            most = MathF.Max(most, 1.0f);
+            _speed *= 1 - 0.8f * dt;
+            return;
+        }
         turn += Wrap(best - _heading) * (1f + 2f * urgency);
         most = MathF.Max(most, 0.6f + 0.6f * urgency);
         if (climb == 0) _speed *= 1 - 0.8f * urgency * dt;
@@ -635,7 +669,7 @@ internal sealed class Turtle : Body
         w[0] = fromCruise ? 0.3f : 3f;
         w[1] = fromCruise ? 3f : 0f;
         w[2] = fromCruise ? 1.2f : 0f;
-        w[3] = _hauls.Ready ? 0.8f + 5f * _sunny : 0f;     // a sunny turtle takes every chance
+        w[3] = _hauls.Ready && _z < 0.3f ? 0.8f + 5f * _sunny : 0f;     // a sunny turtle takes every chance; from deep water it cruises up first (an approach begun at 0.6 arrived too deep to climb and gave up)
         switch (Dice.Pick(_rng, w))
         {
             case 1:
@@ -1012,7 +1046,13 @@ internal sealed class Turtle : Body
         float hq = GroundHeading(q.X, q.Y);
         PointF n0 = NoseFor(_sitMid, hq);
         SetCurve(n0, hq, x, hq);
-        return WaterAt(Bezier(0.75f));
+        if (!WaterAt(Bezier(0.75f))) return false;
+        // And nobody in the water where it lands: the slip is scripted and the
+        // feelers do not run during it, so a koi under the landing spot was slid
+        // into (13 to 18 px of overlap for six frames on the review's seed 11).
+        (float gx, float gy) = ToGround(x.X, x.Y);
+        (float mx, float my) = ToGround(Bezier(0.75f).X, Bezier(0.75f).Y);
+        return RoomAround(new System.Numerics.Vector3(gx, gy, 0)) > _wide * 0.5f && RoomAround(new System.Numerics.Vector3(mx, my, 0)) > _wide * 0.5f;
     }
 
     /// <summary>

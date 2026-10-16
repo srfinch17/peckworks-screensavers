@@ -169,7 +169,11 @@ internal sealed class Mouse : Body
     /// <summary>The middle of the body (for the instruments' land test).</summary>
     public PointF Middle => Spine[BodyPoints / 2];
     /// <summary>Out and drawn (or fading in or out): not away, not tucked in the grass.</summary>
-    public bool Visible => _doing != Doing.Hidden || (_burrow && _fade > 0.01f);
+    /// <summary>Out of the grass right now (hiding in it does not count, whatever the fade says).</summary>
+    public bool Visible => _doing != Doing.Hidden;
+
+    /// <summary>Anything of it to paint: out, or still fading after it hid.</summary>
+    private bool Painted => _doing != Doing.Hidden || (_burrow && _fade > 0.01f);
     public float Fade => _fade;
     public bool Burrowed => _burrow;
     public float Len => _len;
@@ -269,7 +273,7 @@ internal sealed class Mouse : Body
         // The fade: in 0.3 s toward seen, out 0.3 s toward gone. Away from the screen altogether it is simply gone.
         float fadeTo = _doing == Doing.Hidden ? 0 : 1;
         if (_doing == Doing.Hidden && !_burrow) _fade = 0;
-        else _fade = Math.Clamp(_fade + (fadeTo - _fade >= 0 ? dt : -dt) / 0.3f, 0, 1);
+        else if (_fade != fadeTo) _fade = Math.Clamp(_fade + MathF.Sign(fadeTo - _fade) * dt / 0.3f, 0, 1);   // sign of the gap, never a step when there is none (a step on "equal" blinked a 6% ghost of the mouse every other frame for the whole hide)
         if (_doing == Doing.Hidden)
         {
             if (!_mind.Over) return;
@@ -317,7 +321,7 @@ internal sealed class Mouse : Body
         PointF here = ToScreen(_x, _y);
         if (_leaving && (here.X < -_total || here.Y > _pond.Height + _total || here.X > _pond.Width + _total))
         {
-            _mind.Begin(Doing.Hidden, (12 + 30 * (float)_rng.NextDouble()) / MathF.Max(0.01f, _often));
+            _mind.Begin(Doing.Hidden, (30 + 60 * (float)_rng.NextDouble()) / MathF.Max(0.01f, _often));   // a mouse in the grass is MOSTLY in the grass: out about a third of the time (12 to 42 s between visits, chosen against a visibility count the hide blink had inflated, had it out half of every minute)
             _burrow = false;
             return;
         }
@@ -730,7 +734,7 @@ internal sealed class Mouse : Body
             dir[i] = new PointF(dx / l, dy / l);
         }
         float run = MathF.Min(1, _speed / (_len * 2.5f));
-        float lift = _u * 0.004f * _sit;
+        float lift = _u * 0.008f * _sit;   // at 0.004u (3 px at 720 lines) the sit-up read as a twitch
         for (int i = 0; i < Points; i++)
         {
             float off = 0, hw;
@@ -829,7 +833,7 @@ internal sealed class Mouse : Body
     }
     public void Draw(FrameBuffer fb)
     {
-        if (!Visible || _fade < 0.01f || !OnScreenBox()) return;
+        if (!Painted || _fade < 0.01f || !OnScreenBox()) return;
         float soft = MathF.Max(0.8f, _u * 0.0006f);
         // The shadow: the same body, dark and faint, a little down and to the right of where it
         // lies ON THE GROUND. A raised head (sitting up) is drawn higher, so its shadow is moved

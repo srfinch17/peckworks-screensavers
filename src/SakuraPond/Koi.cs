@@ -105,7 +105,10 @@ internal sealed class KoiSchool
                     // both on the bed, were shoved apart and clamped straight back
                     // 400 frames running). Then shove sideways instead, along the
                     // line between their middles.
-                    if (MathF.Abs(push.Z) > 0.7f && Chain.Touch(_bodies[i].Shape, _bodies[j].Shape, out _, out float left) && left > 1)
+                    // (At "left > 1" a koi at the surface over a slow turtle, whose upward push
+                    // the surface trims to nothing, stayed overlapping by half a pixel for two
+                    // seconds at a time; a quarter pixel sideways a frame is invisible and ends it.)
+                    if (MathF.Abs(push.Z) > 0.7f && Chain.Touch(_bodies[i].Shape, _bodies[j].Shape, out _, out float left) && left > 0.25f)
                     {
                         Vector3 side = a.Centre - (b?.Centre ?? _bodies[j].Shape.Points[_bodies[j].Shape.Points.Length / 2]);
                         side.Z = 0;
@@ -536,7 +539,7 @@ internal sealed class Koi : Body
         _room = RoomAround;
         float u = pond.U;
         _len = gold ? u * (0.042f + 0.01f * (float)rng.NextDouble()) : u * (0.095f + 0.06f * (float)rng.NextDouble());
-        _wide = gold ? _len * (0.19f + 0.02f * (float)rng.NextDouble()) : _len * (0.12f + 0.02f * (float)rng.NextDouble());   // a wakin is deep-bodied
+        _wide = gold ? _len * (0.24f + 0.02f * (float)rng.NextDouble()) : _len * (0.12f + 0.02f * (float)rng.NextDouble());   // a wakin is deep-bodied (at 0.2 it read as a slim koi with a fan tail from above)
         // The personality dials. Each is dealt on its own, so a fish can be
         // lazy and sociable, or energetic and solitary: no two alike.
         (_energy, _social, _curious) = dials;
@@ -796,7 +799,9 @@ internal sealed class Koi : Body
         // with the pond this deep, a fish heading for the bank from deep water
         // rose half the pond's depth in a second and its picture slid 50
         // pixels up the screen while it swam the other way. The bed still wins
-        // in LaySpine, and the hop that leaves is one to four pixels a frame;
+        // in LaySpine, as a level drift of the whole remembered body (measured
+        // at up to 6.7 px a frame at 720 lines on a fin's edge before the fin
+        // was left out of the floor; the body's own hop is a pixel or three);
         // a bed steeper than the fish can climb at its speed is a wall to its
         // feelers (RoomAround), so it turns or climbs before it is lifted.
         Z = Light.HoldDepth(Z, zNext, _heading, _speed, dt, _pond.U);
@@ -804,7 +809,7 @@ internal sealed class Koi : Body
         {
             PointF mouth = Spine[0];
             _ripples.Add(mouth.X, mouth.Y, 1f);
-            if (_petals != null && _petals.Take(mouth.X, mouth.Y, _len * 0.45f)) _hunger = MathF.Max(0, _hunger - 0.45f);   // a petal at its mouth is eaten, and it is that much less hungry
+            if (_petals != null && _petals.Take(mouth.X, mouth.Y, _len * 0.45f)) _hunger = MathF.Max(0, _hunger - 0.3f);    // a petal at its mouth is eaten, and it is that much less hungry (at 0.45 the pond's six to ten petals a minute kept every fish fed; hunger is a slow background dial, not a cycle)
             _gulping = false;
             _gulpTimer = (40 + 60 * (float)_rng.NextDouble()) * (1.3f - 0.7f * _hunger) * _gulpMul;   // a hungry fish is back at the surface sooner (a goldfish, twice as soon)
             _zTarget = MathF.Min(_zCap, 0.2f + 0.4f * (float)_rng.NextDouble());
@@ -909,8 +914,8 @@ internal sealed class Koi : Body
         switch (_doing)
         {
             case Doing.Flee:
-                // Safe again once the chaser gives up or falls well behind.
-                if (_partner == null || _partner._doing != Doing.Chase || _partner._partner != this || !NearEither(_partner, 3f))
+                // Safe again once the chaser gives up, falls well behind, or is no longer heading at it.
+                if (_partner == null || _partner._doing != Doing.Chase || _partner._partner != this || !NearEither(_partner, 3f) || Toward(_partner, this) < 0)
                     Begin(Doing.Wander);
                 break;
             case Doing.Chase:
@@ -1226,9 +1231,14 @@ internal sealed class Koi : Body
         if (OnLand(s)) return 0;
         if (p.Z < -1 || p.Z > 0.9f * FloorAt(s) * DepthPx) return 0;              // above the water, or in the bed
         float room = _pond.RoomAt(s.X, s.Y);
+        // The fish it is chasing is not a wall: counted as one, the feelers
+        // steered the chaser ROUND its own quarry (the review watched a koi
+        // "chase" a goldfish at full speed while swimming away from it for
+        // three seconds). The push keeps them out of each other if they meet.
+        Body? quarry = _doing == Doing.Chase ? _partner : null;
         foreach (Body b in _bodies)
         {
-            if (b == this || !b.Shape.Near(p, _wide, room)) continue;
+            if (b == this || b == quarry || !b.Shape.Near(p, _wide, room)) continue;
             room = MathF.Min(room, b.Shape.Gap(p, _wide, 2.5f));
             if (room <= 0) return 0;
         }
@@ -1254,6 +1264,17 @@ internal sealed class Koi : Body
         if (0.9f * FloorAt(ToScreen(_x + by.X, _y + by.Y)) < Z - 0.02f) { by.X = 0; by.Y = 0; }
         _x += by.X; _y += by.Y;
         float dz = by.Z / DepthPx;
+        // An upward push is held to what the SHALLOWEST remembered point can
+        // take: each depth is clamped at the surface, so a push that took the
+        // head past it and the tail not left a step in the trail (a kink down
+        // the body for seconds; the review's "folded at the middle"). The whole
+        // body moves by one amount or the push is trimmed.
+        if (dz < 0)
+        {
+            float shallowest = Z;
+            for (int i = 0; i < _trailCount; i++) shallowest = MathF.Min(shallowest, _trailZ[(_trailHead - i + _trail.Length) % _trail.Length]);
+            dz = MathF.Max(dz, -shallowest);
+        }
         for (int i = 0; i < _trailCount; i++)
         {
             int slot = (_trailHead - i + _trail.Length) % _trail.Length;
@@ -1387,6 +1408,18 @@ internal sealed class Koi : Body
                 _zAt[i] = za + (zb - za) * f;
             }
         }
+        // A STIFF SPINE IN THE VERTICAL PLANE. The trail's depths say how deep
+        // the head was at each spot, and laid point by point they gave the body
+        // the head's whole HISTORY of depth: a fish that dived and then levelled
+        // was drawn with a hump, head level, middle on the slope, tail level,
+        // which on the screen (depth moves a point up or down it) is a vertical
+        // S through the body. A carp bends sideways; up and down it pitches as
+        // one rod. So the body's depth is a straight line from the head's depth
+        // to the depth the trail gives the base of the tail, and the fin carries
+        // the line on. The review traced 95% of the owner's "worm" frames to the
+        // depth profile along the body; this is what takes it out.
+        float zTail = _zAt[17];
+        for (int i = 0; i < Points; i++) _zAt[i] = MathF.Max(0, Z + (zTail - Z) * Along[i]);
         // The direction at each point (nose to tail), for the sideways wave and the edges.
         for (int i = 0; i < Points; i++)
         {
@@ -1399,19 +1432,47 @@ internal sealed class Koi : Body
         // rises steeply enough that a body's width can span a tenth of it).
         // Its depth is capped by that HERE, after Update's easing, so a fish is
         // never drawn below the bed on any frame, whatever it meant to do.
+        // The bed is read under the BODY (points 0 to 17) along its unswayed
+        // line and both edges, not under the see-through tail fin and not with
+        // the swimming wave in: the fin's swaying edge swept over a stone's rim
+        // every half beat, the floor under it read 0 (a rim is "land"), and the
+        // whole fish was yanked to the surface and let sink back at the tail's
+        // own rhythm, a sawtooth of up to 6.7 px a frame at 720 lines (the
+        // review counted 150 to 413 such yanks per three minutes). The fin
+        // is hidden by the water stencil where it crosses a rim; the body is
+        // what must stay out of the bed.
         float floor = 1;
-        for (int i = 0; i < Points; i++)
+        for (int i = 0; i < 18; i++)
         {
             float s = Along[i], hw = _wide * Profile(s) * Light.Scale(_zAt[i]), nx = -dir[i].Y, ny = dir[i].X;
-            float sway = Sway(s);   // the same wave the body is drawn with, below
-            float cx = mid[i].X + nx * sway, cy = mid[i].Y + ny * sway;
+            float cx = mid[i].X, cy = mid[i].Y;
             floor = MathF.Min(floor, FloorAt(ToScreen(cx, cy)));
             floor = MathF.Min(floor, FloorAt(ToScreen(cx + nx * hw, cy + ny * hw)));
             floor = MathF.Min(floor, FloorAt(ToScreen(cx - nx * hw, cy - ny * hw)));
         }
         _floor = floor;
-        Z = MathF.Min(Z, 0.9f * floor);
-        for (int i = 0; i < Points; i++) _zAt[i] = MathF.Min(_zAt[i], 0.9f * floor);   // no part of it below the bed either
+        // THE CLAMP CAPS THE REMEMBERED BODY TOO. Capping Z and the drawn
+        // points alone left the trail's depths where they were, so the head
+        // remembered the new, shallower depth while the body behind it kept the
+        // old one: a step of depth that then travelled down the body for
+        // seconds as a kink in the drawn outline, a fish "folded at the middle
+        // with a seam". The review found 95% of the owner's "worm" frames were
+        // this depth profile, not the swimming wave. So every remembered depth
+        // deeper than the cap is capped with the head, and nothing is laid down
+        // the course. (Lifting the WHOLE body by the head's lift was tried
+        // first: the tail, already shallower, then rose too, and the fish slid
+        // up the screen.)
+        float cap = 0.9f * floor;
+        if (Z > cap)
+        {
+            Z = cap;
+            for (int i = 0; i < _trailCount; i++)
+            {
+                int at = (_trailHead - i + _trail.Length) % _trail.Length;
+                if (_trailZ[at] > cap) _trailZ[at] = cap;
+            }
+        }
+        for (int i = 0; i < Points; i++) _zAt[i] = MathF.Min(_zAt[i], cap);   // no part of it below the bed either
         // Its shadow on the bed, where the bed shows through the water (the
         // painter's own rule for how much bed shows at the painted depth):
         // thrown down and to the right by the gap between the fish and the bed,

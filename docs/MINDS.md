@@ -244,8 +244,18 @@ second or two (the doing `Shy`), away and up or down as well as aside, on a cool
   with the nose across the screen, none with the nose straight down it, all of it with the nose
   straight up it (then the rise only adds to the way it is going); the sink is the mirror. A rise
   the bed forces is held the same way (with the pond this deep, an exempt bed rise slid a fish
-  50 pixels up the screen in a second); the clamp in `LaySpine` has the last word, and the hop
-  that leaves is a pixel or three a frame. The first version
+  50 pixels up the screen in a second); the clamp in `LaySpine` has the last word, and it caps
+  the REMEMBERED depths with the head (every trail depth deeper than the cap comes up to it),
+  never leaving a step in the trail: capping the head alone left a kink of depth that travelled
+  down the body for seconds. (Lifting the whole body by the head's lift was tried: the tail,
+  already shallower, rose too, and the fish slid up the screen.) The bed is read under the body
+  only, along its unswayed line and both edges, never under the see-through tail fin (whose
+  swaying edge sweeping a stone's rim yanked the whole fish to the surface every half beat). And
+  the body is STIFF IN THE VERTICAL PLANE: its depth is a straight line from the head's depth to
+  the depth the trail gives the base of the tail, so a fish that dived and levelled is a pitched
+  rod, not a vertical S drawn from the head's whole history of depth. The review traced 95% of
+  the owner's "worm" frames to that history; the straight line took the count from 5% of frames
+  to 0.3%. The first version
   held only the rise, and only against the down-screen part of the motion: a resting fish with
   its nose sideways slid up the screen on a slow rise, and one sinking out of sight drifted down
   it with its nose pointing up.
