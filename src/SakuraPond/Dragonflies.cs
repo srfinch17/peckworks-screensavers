@@ -265,10 +265,71 @@ internal sealed class Dragonflies
             var spot = new PointF(pad.Center.X + MathF.Cos(a) * pad.Radius * 0.55f, pad.Center.Y + MathF.Sin(a) * pad.Radius * 0.45f);
             Go(ref f, spot, 0.003f, Doing.Dart);
         }
+        else if (roll < 0.2 && DryRock(out PointF rock))
+            Go(ref f, rock, 0.003f, Doing.Dart);                                                  // a sunny stone on the bank: where a lizard can creep up on it
         else if (roll < 0.24 && f.Kind == 1)
             Go(ref f, RandomNear(f.X, f.Y, 0.04f, 0.1f), f.Height, Doing.Dip);
         else
             Go(ref f, RandomNear(f.X, f.Y, 0.06f, 0.26f), 0.05f + 0.07f * (float)_rng.NextDouble(), Doing.Dart);
+    }
+
+    /// <summary>A spot on top of a dry rock on the bank that is in view (not under the branches), if there is one: a point a little off the stone's middle.</summary>
+    private bool DryRock(out PointF spot)
+    {
+        spot = default;
+        int n = _pond.Rocks.Count;
+        if (n == 0) return false;
+        int start = _rng.Next(n);
+        for (int k = 0; k < n; k++)
+        {
+            BankRock r = _pond.Rocks[(start + k) % n];
+            if (r.InWater || r.Radius < _u * 0.025f) continue;
+            float a = (float)(_rng.NextDouble() * MathF.Tau);
+            var p = new PointF(r.Centre.X + MathF.Cos(a) * r.Radius * 0.3f, r.Centre.Y + MathF.Sin(a) * r.Radius * 0.25f);
+            int ix = (int)p.X, iy = (int)p.Y;
+            if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height || !_pond.Open[iy * _pond.Width + ix]) continue;
+            spot = p;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>The nearest dragonfly sitting (perched, right down) within "within" pixels of (x, y), screen pixels. False if none.</summary>
+    public bool NearestPerched(float x, float y, float within, out PointF at)
+    {
+        at = default;
+        float best = within * within;
+        bool found = false;
+        foreach (ref readonly Fly f in _flies.AsSpan())
+        {
+            if (f.Doing != Doing.Perch || f.Height > 0.01f) continue;
+            float d = (f.X - x) * (f.X - x) + (f.Y - y) * (f.Y - y);
+            if (d < best) { best = d; at = new PointF(f.X, f.Y); found = true; }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Something crept up to (x, y): every dragonfly perched within "within"
+    /// pixels of it takes off at once, darting AWAY from it (a lizard's
+    /// stalk ends this way nine times in ten, which is what makes the stalk
+    /// worth watching).
+    /// </summary>
+    public void Scare(float x, float y, float within)
+    {
+        for (int i = 0; i < _flies.Length; i++)
+        {
+            ref Fly f = ref _flies[i];
+            if (f.Doing != Doing.Perch) continue;
+            float dx = f.X - x, dy = f.Y - y, d = MathF.Sqrt(dx * dx + dy * dy);
+            if (d > within) continue;
+            float ax = d > 1 ? dx / d : 1, ay = d > 1 ? dy / d : 0;
+            float run = _u * (0.15f + 0.15f * (float)_rng.NextDouble());
+            var to = new PointF(f.X + ax * run, f.Y + ay * run * Ripples.Squash);
+            int ix = (int)to.X, iy = (int)to.Y;
+            if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height || !_pond.Water[iy * _pond.Width + ix]) to = RandomNear(f.X, f.Y, 0.12f, 0.3f);
+            Go(ref f, to, 0.06f + 0.06f * (float)_rng.NextDouble(), Doing.Dart);
+        }
     }
 
     private static float Dist(float x0, float y0, float x1, float y1) => MathF.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));

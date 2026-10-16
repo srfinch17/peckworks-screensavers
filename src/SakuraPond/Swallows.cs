@@ -47,6 +47,9 @@ internal sealed class Swallows
     private readonly KoiSchool? _koi;
 
     /// <param name="koi">The koi, told when a bird skims low: a shadow over a fish makes it dart and dive.</param>
+    /// <summary>Called with the screen spot of a low bird's shadow every frame it is low (the lizards and the mice bolt; each has its own cooldown).</summary>
+    public Action<float, float>? Shadow { get; set; }
+
     public Swallows(Pond pond, Ripples ripples, float often, Random rng, KoiSchool? koi = null)
     {
         _koi = koi;
@@ -191,6 +194,7 @@ internal sealed class Swallows
             float wantH = b.Skimming && overWater ? 0.004f : 0.1f + 0.04f * i;
             b.Height += (wantH - b.Height) * (1 - MathF.Exp(-dt * 2.2f));
             if (overWater && b.Height < 0.04f) _koi?.Startle(b.X + b.Height * _u * Light.ShadowX, b.Y + b.Height * _u * Light.ShadowY);   // low enough that its shadow is sharp on the water
+            if (b.Height < 0.06f) Shadow?.Invoke(b.X + b.Height * _u * Light.ShadowX, b.Y + b.Height * _u * Light.ShadowY);              // low over land or water: the small animals on the bank see the shadow sweep
             if (b.Skimming && overWater && b.Height < 0.012f)
             {
                 b.RingTimer -= dt;

@@ -26,7 +26,8 @@ internal sealed class Lizards
     // size (0, 1, 2 ...) is made once and the right one is filled in and handed back.
     private readonly PointF[][] _noseArrays;
 
-    public Lizards(Pond pond, int count, Ripples ripples, float often, Random rng)
+    /// <param name="dragonflies">The dragonflies, for a lizard to stalk when one sits on a bank rock (null: none).</param>
+    public Lizards(Pond pond, int count, Ripples ripples, float often, Random rng, Dragonflies? dragonflies = null)
     {
         _rng = rng;
         int n = Math.Max(0, count);
@@ -43,9 +44,15 @@ internal sealed class Lizards
         {
             float bold = Traits.Slice(rng, i, n, reverse: flip);
             float energy = Traits.Slice(rng, i, n, reverse: !flip);
-            _all[i] = new Lizard(pond, ripples, often, bold, energy, rng);
+            _all[i] = new Lizard(pond, ripples, often, bold, energy, rng, dragonflies);
         }
         foreach (Lizard l in _all) l.Peers = _all;
+    }
+
+    /// <summary>A shadow swept over the bank here (a swallow passing low): every lizard out and near it bolts for cover.</summary>
+    public void Startle(float x, float y)
+    {
+        foreach (Lizard l in _all) l.Startle(x, y);
     }
 
     /// <summary>Moves every lizard on, then looks for a pair that has just come together.</summary>
@@ -138,10 +145,12 @@ internal sealed class Lizard : Body
         Face,      // squaring up to the other lizard in a meeting
     }
     /// <summary>Why a dash is happening. Changes how fast it runs and what is done when it ends.</summary>
-    private enum Aim { Roam, Drink, Charge, Flee }
+    private enum Aim { Roam, Drink, Charge, Flee, Stalk }
 
     private readonly Pond _pond;
     private readonly Ripples _ripples;
+    private readonly Dragonflies? _dragonflies;   // what it stalks when one sits on a rock
+    private readonly Cooldown _frightCool = new();  // not startled by a shadow again until this has run out
     private readonly Random _rng;
     private readonly float _u, _len, _wide, _often;
     private readonly float _bold, _energy;        // the two personality dials, 0 to 1
@@ -159,8 +168,11 @@ internal sealed class Lizard : Body
     private Lizard? _other;                       // the lizard in a meeting with it
     private float _drinkLen;                      // how long this drink lasts in all
     private bool _sipped;                         // the drink's one ring has been made
-    private readonly PointF[] _trail = new PointF[64];
-    private int _trailHead, _trailCount;
+    private readonly Trail _trail = new(64);      // where its head has been (Core/Minds Trail): the body is laid along it
+    // The land, as the shared walking rules ask it (Core/Minds Ground): once in
+    // ground units (for stepping) and once in screen pixels (for lines and runs
+    // over the painted masks). Made once each; a new delegate every frame is garbage.
+    private readonly Ground.Solid _landGround, _landScreen, _clearScreen;
 
     /// <summary>Where its nose is on the screen (for the instruments). Meaningless while hidden.</summary>
     public PointF Nose => Spine[0];
@@ -180,10 +192,11 @@ internal sealed class Lizard : Body
 
     public static float Gap(Lizard a, Lizard b) => Dist(a.Spine[0], b.Spine[0]);
 
-    public Lizard(Pond pond, Ripples ripples, float often, float bold, float energy, Random rng) : base(Points)
+    public Lizard(Pond pond, Ripples ripples, float often, float bold, float energy, Random rng, Dragonflies? dragonflies = null) : base(Points)
     {
         _pond = pond;
         _ripples = ripples;
+        _dragonflies = dragonflies;
         _rng = rng;
         _u = pond.U;
         _often = often;
@@ -191,6 +204,9 @@ internal sealed class Lizard : Body
         _energy = energy;
         _len = _u * 0.09f;                   // nose to tail tip; the tail is well over half of it
         _wide = _len * 0.05f;
+        _landGround = OnLand;
+        _landScreen = LandAt;
+        _clearScreen = ClearAt;
         for (int i = 0; i < Points; i++) Along[i] = i / (Points - 1f);
         _mind.Begin(Doing.Hidden, often > 0 ? (15 + 30 * (float)rng.NextDouble()) / often : Mind<Doing>.Forever);
     }
@@ -210,23 +226,42 @@ internal sealed class Lizard : Body
         return _pond.Land[iy * _pond.Width + ix];
     }
 
-    private bool LandAt(PointF s)
+    private bool LandAt(PointF s) => LandAt(s.X, s.Y);
+
+    private bool LandAt(float sx, float sy)
     {
-        int ix = Math.Clamp((int)s.X, 0, _pond.Width - 1), iy = Math.Clamp((int)s.Y, 0, _pond.Height - 1);
+        int ix = Math.Clamp((int)sx, 0, _pond.Width - 1), iy = Math.Clamp((int)sy, 0, _pond.Height - 1);
         return _pond.Land[iy * _pond.Width + ix];
     }
 
-    private void Remember(PointF p)
+    /// <summary>Land, and (on screen) out from under the branches: where a run is worth making.</summary>
+    private bool ClearAt(float sx, float sy)
     {
-        _trailHead = (_trailHead + 1) % _trail.Length;
-        _trail[_trailHead] = p;
-        _trailCount = Math.Min(_trail.Length, _trailCount + 1);
+        if (!LandAt(sx, sy)) return false;
+        int ix = (int)sx, iy = (int)sy;
+        return ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height || _pond.Open[iy * _pond.Width + ix];
     }
 
     /// <param name="snakeHead">The snake's head in screen pixels while it is swimming, else null.</param>
+    /// <summary>
+    /// A shadow swept over the bank here (screen pixels): a swallow passing
+    /// low. A lizard out within about 0.12u of it bolts for cover the way it
+    /// bolts from the snake, and will not be startled again for ten seconds
+    /// (a bird circling would otherwise keep it bolting every frame).
+    /// </summary>
+    public void Startle(float x, float y)
+    {
+        if (!Visible || _leaving || !_frightCool.Ready || _doing == Doing.Face) return;
+        if (Dist(Spine[0], new PointF(x, y)) > _u * 0.12f) return;
+        _frightCool.Start(10);
+        _other = null;
+        Go(Aim.Flee, FleeGoal(new PointF(x, y)), 2f);
+    }
+
     public void Update(float dt, PointF? snakeHead = null)
     {
         _mind.Tick(dt);
+        _frightCool.Tick(dt);
         if (_doing == Doing.Hidden)
         {
             if (_mind.Over && Appear()) _mind.Begin(Doing.Freeze, 0.5f);
@@ -253,35 +288,24 @@ internal sealed class Lizard : Body
         float step = _speed * dt;
         if (step > 0.01f)
         {
-            float nx = _x + MathF.Cos(_heading) * step, ny = _y + MathF.Sin(_heading) * step;
-            if (OnLand(nx, ny)) { _x = nx; _y = ny; _stranded = false; }
+            // The step, by the shared walking rule (Core/Minds Ground.Step): forward if
+            // that is land; if water is ahead and the goal is mostly behind or off to one
+            // side (it ran up to the shore facing the water and now has to go back), a
+            // step along the shore round toward the goal instead, heading turned to
+            // match. (The first version ended the dash at the water, so it only ever
+            // turned one frame at a time: a lizard faced the water, stood for a minute and
+            // never moved.) Water every way: the dash ends here, and if this was the dash
+            // to leave, it is STRANDED (on a stone out in the water, say, reached by a
+            // drink spot on the stone's dry top) and the next dash must go somewhere it
+            // can walk to. A walk up to the other lizard simply stops.
+            Ground.Stepped took = Ground.Step(_landGround, ref _x, ref _y, ref _heading, step, moving ? turnErr : 0);
+            if (took != Ground.Stepped.Refused) _stranded = false;
             else if (moving)
             {
-                // Water ahead. If the goal is mostly behind or off to one side (it ran up to the shore
-                // facing the water and now has to go back), do not give up: step off along the shore, the
-                // first of 35, 70, 105, 140 and 170 degrees round toward the goal that is land (a lizard
-                // nose-to-water on a straight shore needs nearly a half turn), and carry on that way. (The first version ended the dash here, so it only ever turned one frame at a
-                // time: a lizard faced the water, stood for a minute and never moved.) If the goal IS
-                // ahead, across the water or at the shore, a dash ends here and a walk up to the other stops.
-                bool slid = false;
-                if (MathF.Abs(turnErr) > 0.5f)
-                    for (int k = 1; k <= 5 && !slid; k++)
-                    {
-                        float a = _heading + (turnErr > 0 ? 0.6f : -0.6f) * k;
-                        float sx = _x + MathF.Cos(a) * step, sy = _y + MathF.Sin(a) * step;
-                        if (OnLand(sx, sy)) { _x = sx; _y = sy; _heading = Wrap(a); slid = true; }
-                    }
-                if (!slid)
-                {
-                    // Water every way it tried: the dash ends here. If this was the dash to leave,
-                    // it is STRANDED (on a stone out in the water, say, reached by a drink spot on
-                    // the stone's dry top) and the next dash must go somewhere it can walk to.
-                    if (_doing == Doing.Dash) { _mind.End(); _stranded = _leaving; }
-                    else _approach = false;
-                }
+                if (_doing == Doing.Dash) { _mind.End(); _stranded = _leaving; }
+                else _approach = false;
             }
-            PointF last = _trail[_trailHead];
-            if ((last.X - _x) * (last.X - _x) + (last.Y - _y) * (last.Y - _y) > (_len / 30) * (_len / 30)) Remember(new PointF(_x, _y));
+            _trail.RememberIfMoved(new PointF(_x, _y), _len / 30);
         }
         // Off the screen while leaving: gone until next time.
         PointF here = ToScreen(_x, _y);
@@ -314,8 +338,8 @@ internal sealed class Lizard : Body
             PointF s = new(bottom ? x : (ix == 0 ? -_len * 0.8f : _pond.Width + _len * 0.8f), bottom ? _pond.Height + _len * 0.8f : y);
             (_x, _y) = ToGround(s.X, s.Y);
             _heading = bottom ? -MathF.PI / 2 : (ix == 0 ? 0 : MathF.PI);
-            _speed = 0; _amp = 0; _trailCount = 0; _trailHead = 0;
-            for (int i = 20; i >= 0; i--) Remember(new PointF(_x - MathF.Cos(_heading) * _len * i / 18f, _y - MathF.Sin(_heading) * _len * i / 18f));
+            _speed = 0; _amp = 0;
+            _trail.Straight(new PointF(_x, _y), _heading, _len * 20 / 18f, 20);   // a straight body behind it, so the spine means something before it has moved
             _leaving = false;
             _met = false; _other = null; _aim = Aim.Roam;
             _dashes = 5 + _rng.Next(8) + (int)(_bold * 4);                 // a bold lizard stays out longer
@@ -447,6 +471,13 @@ internal sealed class Lizard : Body
                 _other = null;
                 Stand(0.6f + 0.6f * (float)_rng.NextDouble());
                 return;
+            case Aim.Stalk:
+                // The creep is over: close enough, and the dragonfly takes off (it is
+                // scared from a lizard's length; a dragonfly never waits to be caught).
+                // The lizard stands a moment where the prize was, head up.
+                _dragonflies?.Scare(Spine[0].X, Spine[0].Y, _len * 1.1f);
+                Stand(0.8f + 0.8f * (float)_rng.NextDouble());
+                return;
             case Aim.Flee:
                 Stand(_leaving ? 0.25f : 0.5f + 0.5f * (float)_rng.NextDouble());
                 return;
@@ -509,7 +540,21 @@ internal sealed class Lizard : Body
         float wRock = _doing != Doing.Bask ? 0.3f + 0.5f * _bold : 0;
         float wDrink = canDrink ? (wasDrinking ? 0.1f : 0.35f) : 0;
         float wSeek = company != null ? 0.1f + 0.6f * _bold : 0;
-        int face = Dice.Pick(_rng, [wDrink, wRock, wSeek, wRoam]);
+        // A dragonfly sitting on a rock within reach: a STALK, the most watchable thing a
+        // lizard does (a slow creep, then the dragonfly is gone). Every lizard takes the
+        // chance; a bold one nearly always.
+        PointF perched = default;
+        bool prey = _dragonflies != null && _dragonflies.NearestPerched(here.X, here.Y, _u * 0.4f, out perched) && Dist(perched, here) > _len * 0.8f && LandLine(here, perched);
+        float wStalk = prey ? 1.5f + 2f * _bold : 0;
+        int face = Dice.Pick(_rng, [wDrink, wRock, wSeek, wRoam, wStalk]);
+        if (face == 4)
+        {
+            // Creep up at a wary walk, stopping a body length short (EndDash scares it from there).
+            Go(Aim.Stalk, perched, Dist(here, perched) / (_len * 2.6f * 0.4f) + 1.5f);
+            _pace = 0.4f;
+            _arrive = _len * 0.9f;
+            return;
+        }
         if (face == 0)
         {
             float dist = Dist(here, drinkSpot);
@@ -558,15 +603,8 @@ internal sealed class Lizard : Body
         return null;
     }
 
-    /// <summary>Is the straight line from a to b all land? Checked every few pixels (the way a lizard can actually run).</summary>
-    private bool LandLine(PointF a, PointF b)
-    {
-        float dx = b.X - a.X, dy = b.Y - a.Y, l = MathF.Sqrt(dx * dx + dy * dy);
-        int steps = (int)(l / 4) + 1;
-        for (int i = 1; i <= steps; i++)
-            if (!LandAt(new PointF(a.X + dx * i / steps, a.Y + dy * i / steps))) return false;
-        return true;
-    }
+    /// <summary>Is the straight line from a to b all land? Checked every few pixels (the way a lizard can actually run; Core/Minds Ground.LineClear).</summary>
+    private bool LandLine(PointF a, PointF b) => Ground.LineClear(_landScreen, a, b, 4);
 
     /// <summary>
     /// The way out: a point just past the screen's edge, reached over land. The land is a corner,
@@ -615,32 +653,12 @@ internal sealed class Lizard : Body
     }
 
     /// <summary>
-    /// Where to run to get away from a point: straight away from it if there is land that way, else
-    /// the clearest heading within about 90 degrees of straight away. March along each heading in
-    /// small steps while the ground is land and out from under the branches; take the longest run
-    /// (a slightly shorter one on the straight line wins, so it does not swerve for nothing).
-    /// If nothing is clear for at least a body and a half, take the way out of the screen.
+    /// Where to run to get away from a point: the longest clear run over land
+    /// out from under the branches, straight away from it or near enough
+    /// (Core/Minds Ground.FleeRun). If nothing is clear for at least a body
+    /// and a half, take the way out of the screen.
     /// </summary>
-    private PointF FleeGoal(PointF from)
-    {
-        PointF me = Spine[0];
-        float ax = me.X - from.X, ay = me.Y - from.Y, al = MathF.Max(1e-3f, MathF.Sqrt(ax * ax + ay * ay));
-        float baseA = MathF.Atan2(ay / al, ax / al), bestD = 0, bestA = baseA;
-        for (int k = 0; k < 7; k++)
-        {
-            float off = k == 0 ? 0 : ((k + 1) / 2) * 0.5f * (k % 2 == 1 ? 1 : -1);
-            float a = baseA + off, cos = MathF.Cos(a), sin = MathF.Sin(a), d = 0;
-            for (float t = _len * 0.4f; t <= _len * 6f; t += _len * 0.4f)
-            {
-                var p = new PointF(me.X + cos * t, me.Y + sin * t);
-                if (!LandAt(p) || (OnScreen(p) && !_pond.Open[(int)p.Y * _pond.Width + (int)p.X])) break;
-                d = t;
-            }
-            if (d > bestD + _len * 0.5f) { bestD = d; bestA = a; }
-        }
-        if (bestD < _len * 1.5f) return ExitGoal(ToScreen(_x, _y));
-        return new PointF(me.X + MathF.Cos(bestA) * bestD, me.Y + MathF.Sin(bestA) * bestD);
-    }
+    private PointF FleeGoal(PointF from) => Ground.FleeRun(_clearScreen, Spine[0], from, _len * 0.4f, _len * 6f, _len * 1.5f) ?? ExitGoal(ToScreen(_x, _y));
 
     /// <summary>
     /// A spot to drink at. Walk from where it stands toward the middle of the pond one small step
@@ -667,37 +685,13 @@ internal sealed class Lizard : Body
         return false;
     }
 
-    /// <summary>Lays the spine along the trail with the running wave (the koi's method, with the wave strongest down the tail).</summary>
+    /// <summary>Lays the spine along the trail (Core/Minds Trail: the body follows the path the head took) with the running wave strongest down the tail.</summary>
     private void LaySpine()
     {
-        int slot = _trailHead, left = _trailCount - 1;
-        PointF a = new(_x, _y), b = _trail[slot];
-        float travelled = 0, segLen = Dist(a, b);
         Span<PointF> mid = stackalloc PointF[Points];
         Span<PointF> dir = stackalloc PointF[Points];
-        for (int i = 0; i < Points; i++)
-        {
-            float want = Along[i] * _len;
-            while (travelled + segLen < want && left > 0)
-            {
-                travelled += segLen;
-                a = b;
-                slot = (slot - 1 + _trail.Length) % _trail.Length;
-                left--;
-                b = _trail[slot];
-                segLen = Dist(a, b);
-            }
-            if (left <= 0 && travelled + segLen < want)
-            {
-                float ex = segLen > 1e-4f ? (b.X - a.X) / segLen : -MathF.Cos(_heading), ey = segLen > 1e-4f ? (b.Y - a.Y) / segLen : -MathF.Sin(_heading);
-                mid[i] = new PointF(b.X + ex * (want - travelled - segLen), b.Y + ey * (want - travelled - segLen));
-            }
-            else
-            {
-                float f = segLen > 1e-4f ? (want - travelled) / segLen : 0;
-                mid[i] = new PointF(a.X + (b.X - a.X) * f, a.Y + (b.Y - a.Y) * f);
-            }
-        }
+        Trail.Walk walk = _trail.Begin(new PointF(_x, _y), 0, 0, _heading);
+        for (int i = 0; i < Points; i++) mid[i] = walk.Advance(Along[i] * _len).P;
         for (int i = 0; i < Points; i++)
         {
             PointF p = mid[Math.Max(0, i - 1)], q = mid[Math.Min(Points - 1, i + 1)];
