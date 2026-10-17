@@ -109,12 +109,13 @@ These are in the code comments too; here they are in one place.
 
 | Animal | Dials | Doings | Interrupts |
 |--------|-------|--------|------------|
-| Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt); hunger (a mood) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch, Shy | being chased, a dragonfly's tap, a petal settling (when hungry), a swallow's shadow, a bump from another body |
+| Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt); hunger (a mood) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch, Shy, Leap | being chased, a dragonfly's tap, a petal settling (when hungry), a swallow's shadow, a bump from another body, a neighbour's splash |
 | Goldfish (`Koi.cs`, `Koi.Kind.Goldfish`) | the same three dials, dealt over koi and goldfish together | the koi's, with Follow doubled toward another goldfish, no Chase at a koi, a shallower Rest | the koi's, with a flinch reach 1.5 times as far |
 | Lizards (`src/SakuraPond/Lizard.cs`) | bold, energy (sliced, paired) | Hidden, Dash (Roam, Drink, Charge, Flee, Stalk), Freeze, Bask, Drink, Face | a meeting, the snake, a swallow's shadow |
 | Mice (`src/SakuraPond/Mouse.cs`) | timid, greedy (sliced, paired) | Hidden, Scurry, Sniff, SitUp, Groom, Nibble, Drink | the snake's head, a lizard's nose, a swallow's shadow |
 | Turtles (`src/SakuraPond/Turtle.cs`) | sunny, nerve (dealt) | Cruise, Float (and a petal nibble), Dive, Approach, Climb, Bask, Slip | the snake's head near a basking turtle, a body in its way (feelers), a touch (Nudge) |
 | Snake (`src/SakuraPond/Snake.cs`) | bold, nerve (per visit) | Cross, Explore, Hunt, Bask | a touch from a koi, turtle or lizard |
+| Frogs (`src/SakuraPond/Frog.cs`) | bold, restless (dealt) | Sit (with croak, shift, pivot inside it), Snap, Leap, Swim, Float, Dive, Climb | the snake's head, a koi's head or a turtle near a swimming frog, a lizard's nose near one on a rock or the bank, a swallow's shadow |
 
 The minnows' school mood (drift, rush, mill) and the dragonflies' doings are simpler clocks
 and are not on the shared parts yet; they are the next candidates.
@@ -142,8 +143,9 @@ recipe). What is STILL per animal, and where every creature bug so far has lived
 rule (a step that would end inside something must itself force the avoidance turn), the touch
 cooldown (without it a fish keeping pace re-triggers a bump every frame), and each animal's own
 answer to "how much room is there here?", because each reads a different world: a koi asks land,
-the bed, the surface, a coarse room grid and every other body in the water, and swims under pads;
-the snake asks a list of circles and a capsule and goes round pads; a lizard asks a land mask and
+the bed, the surface, a coarse room grid and every other body in the water (the turtles and the
+swimming snake among them), and swims under pads; the snake asks a list of circles and a capsule
+and goes round pads, and fills its chain so the koi and turtles treat it as solid; a lizard asks a land mask and
 slides along the shore. The koi and the turtle steer with the 3D kit (each with its own Room
 answer); the lizard and the mouse walk with `Ground` (section 9); the snake still steers on its
 own flat plane. A stranger giving a new animal a mind gets the
@@ -235,8 +237,8 @@ turns, with no special case for either.
 `Chain.Touch(a, b, out push, out depth)` gives the way to push `a` (and `b` the other way) and how
 far, from the closest points between line pieces; the deepest overlap wins, so two bodies crossing
 come apart where they cross. `KoiSchool.Update` runs two passes over every pair of overlapping
-bodies, moves each half the way out (a turtle is the heavier and is never moved, the fish takes the
-whole push), then calls `Koi.Bumped` on both. A fish not in a chase, flee or flinch shies for a
+bodies, moves each half the way out (a turtle is the heavier and is never moved, and nor is the
+swimming snake, handed in as a surface body: the fish takes the whole push), then calls `Koi.Bumped` on both. A fish not in a chase, flee or flinch shies for a
 second or two (the doing `Shy`), away and up or down as well as aside, on a cooldown.
 
 **The rules learned, all of them from the kit's own self-check or the instruments:**

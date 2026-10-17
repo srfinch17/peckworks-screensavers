@@ -131,6 +131,18 @@ internal sealed class Snake : Body
     public string State => _live ? $"{_doing}:{_phase}" : "-";
 
     /// <summary>
+    /// Is its body in the water right now (on screen and not up on the log)?
+    /// Then it is SOLID to the koi and the turtles: the scene hands it to
+    /// KoiSchool.Update as a surface body, the koi's feelers read its chain
+    /// (Shape, filled in LaySpine) and steer under or round it, and a fish
+    /// that still meets it is pushed down and out of it. Before this a koi
+    /// could rise straight through the snake's body (the owner's law: nothing
+    /// clips through anything in this universe). The snake is the lighter but
+    /// is never moved by a fish: it answers a touch its own way, by startling.
+    /// </summary>
+    public bool InWater => _live && !(_doing == Doing.Bask && _phase is 1 or 2);
+
+    /// <summary>
     /// A new visit: rolls this snake's two dials, comes in from beyond one edge
     /// of the screen heading roughly for the pond's middle, and picks its
     /// first doing. Where it goes after that is the mind's business.
@@ -538,6 +550,7 @@ internal sealed class Snake : Body
     /// <summary>The spine, laid along the remembered trail, nose first.</summary>
     private void LaySpine(PointF head)
     {
+        float cy = _pond.Centre.Y;
         int slot = _trailHead, left = _trailCount - 1;
         PointF a = head, b = _trail[slot];
         float done = 0, seg = Dist(a, b);
@@ -553,7 +566,16 @@ internal sealed class Snake : Body
             float t = seg > 1e-4f ? Math.Clamp((want - done) / seg, 0, 1) : 0;
             Spine[i] = new PointF(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t);
             HalfWidth[i] = _wide * Profile(Along[i]);
+            // The same point for touching (Core/Minds Chain), on the GROUND
+            // plane: the spine is screen pixels, and the pond is squashed down
+            // the screen by Ripples.Squash, so the ground y is the screen y
+            // stretched back out from the pond's middle (the koi's ToGround).
+            // Its depth is 0: it swims ON the water, so a koi below it reads
+            // the gap up to it as the gap to any body above, stretched.
+            Shape.Points[i] = new System.Numerics.Vector3(Spine[i].X, cy + (Spine[i].Y - cy) / Ripples.Squash, 0);
+            Shape.Radius[i] = HalfWidth[i];
         }
+        Shape.Seal();
     }
 
     /// <summary>

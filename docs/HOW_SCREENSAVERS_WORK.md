@@ -115,6 +115,7 @@ src/
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
     Minnows.cs                     schools of tiny fish that move as one, and rush to the dragonfly's rings
     Turtle.cs                      the turtle: paddling, floating, diving, hauling out to bask
+    Frog.cs                        the frogs: sitting on pads, rocks and the bank, leaping, kicking, floating, diving, climbing out
     Petals.cs                      petals falling from the blossom, landing, floating
     Ripples.cs                     rings spreading on the water
     Dragonflies.cs                 hover, dart, perch, dip, and the game with the minnows
@@ -589,6 +590,30 @@ no cross shadows) and is painted against the whole view instead of the water onl
 circle is kept no tighter than 0.6 body lengths (0.85 while lining up on a perch), or the middle
 of the shell drifts sideways and it reads as going tail first.
 
+*The frogs sit, leap and kick.* A frog (`Frog.cs`, a `Frogs` holder like `Turtles`) is rigid, so
+it has a STRAIGHT spine like the turtle's (the same `Body` drawing: haze by depth, branch shadows,
+squash), with a few small ovals on top: two eyes with a pale rim, four legs, a pale throat. It
+never bends: it turns by hopping round on the spot, or, before a leap, during the crouch. Every
+quick motion is a HOP, a script from its start to its end: a crouch (legs folded, the body swinging
+round to face the way it will go), then a flight at an even speed along the ground with the height a
+parabola, so it lands where its shadow is. Height is a lift up the screen and a shadow down and
+right (`Light.cs`, the same rule as the petals), and the shadow is painted on the pad or the bank
+where it sits and over the water in a leap. The pose is one number, 0 (legs folded in a Z beside the
+body) to 1 (stretched out behind), eased, and the hops and the swimming kick both drive it. A kick
+is a quick push (the legs sweep out and back, the body surges) and a slow glide (they fold forward),
+about one a second. Its mind is on the shared parts (`Core/Minds`): two dials dealt at birth (bold,
+restless), a `Doing` (Sit, Snap, Leap, Swim, Float, Dive, Climb), weighted dice, a cooldown after a
+fright. The PERCHES (a lily pad with bare green leaf to sit on, not its notch or a flower; a dry bank
+rock; a spot on the bank's edge) are found once when the scene is made, and one frog holds one.
+A swim to a perch goes first to a point out in the water in line with it and then in along the line,
+so it arrives pointing at it, and it is never planned across a gap narrower than a frog. In the
+water it is solid to the koi (its `Shape`, a chain of beads, goes into the scene's list of
+surface bodies), it steers round the pads (a pad is a wall to a frog, which swims ON the water, and
+no wall to a koi, which swims under), and a swim whose steps are refused for over a second (wedged
+between pads) ends in a hop to open water. A dive is the koi's depth rule (`Light`): smaller, hazier
+and sunk down the screen, so a pad can cover it. Frogs are built last in the scene, with dice of
+their own, so adding them moved nothing else.
+
 *A school moves as one with three rules.* The minnows (`Minnows.cs`) have no leader and no
 choreography. Every frame each fish adds up a few pulls: keep going the way I am going, head for
 the school's shared target, face the way my neighbours face, keep a little room from the fish
@@ -724,7 +749,20 @@ hard it swims (a chase is all beating, a rest all glide) and how deep it hangs (
 nose at something, deep to rest). Being chased interrupts anything; a dragonfly's tap interrupts a
 curious fish that is not busy. A swallow skimming low is a shadow sweeping over the water, and a
 fish under it flinches: a dart away and a dive, then a sulk deep down (the bolder the fish, the
-closer the shadow has to pass). That is the whole brain: a state machine, three dials, and dice.
+closer the shadow has to pass). Now and then a koi leaps (the doing `Leap`): from an unhurried
+moment in the upper water with open water a few lengths ahead and the whole thing in view, a
+burst flat out to the surface, then half a second in the air on a thrown ball's arc (height = peak
+x 4p(1 - p)), still moving forward at the speed it left with, stiff as a rod, with no steering
+and nothing in the water allowed to touch it. The pond's one rule for height draws it: the body is
+lifted up the screen by `Light.Lift` x height and its shadow falls on the WATER down and right by
+(`ShadowX`, `ShadowY`) x height, so the gap between fish and shadow opens and closes through the
+jump (in the air the far shadow is right: it is what says "out of the water"; under water the
+same far shadow said "floating above it", which is why the bed shadow hugs its fish). It comes
+down with a big ring, a thin ring, a handful of drops on arcs of their own with a tiny ring where
+each lands, the neighbours flinch as from a swallow's shadow, and it dives to get over it. In the
+air it is painted after everything on the water's surface (`KoiSchool.DrawOut`, after the ripples,
+the petals, the snake and a perched turtle), and it shoves no petals until it lands. That is the
+whole brain: a state machine, three dials, and dice.
 The machinery of it (the dice, the dials, the one-doing-at-a-time timer, the cooldowns) is the
 engine's `Core/Minds/Mind.cs`, and the koi, the lizards and the snake all run on it; the recipe
 for giving a new animal a mind, and the rules learned building these three, is
@@ -783,7 +821,9 @@ out is behind it) it turns toward more open water by the room grid, as the turtl
 that fallback a koi stood nose against a rock for forty seconds. Feelers can miss, so as a last resort
 `KoiSchool.Update` finds any two bodies that overlap (`Chain.Touch`) and pushes them apart as a
 recoil, no faster than a body length a second, with a sideways push if the bed or the surface
-refuses an up or down one. A turtle is the heavier and is never moved. Both fish are told, and one
+refuses an up or down one. A turtle is the heavier and is never moved, and neither is the snake
+while it swims (it is in the same list, so a koi steers under or round it and is pushed down and out
+of it if they meet; the snake answers the touch its own way, by startling). Both fish are told, and one
 not in a chase shies away for a second or two (the doing `Shy`). A rise or a sink is held to a share
 of the fish's forward motion, by where its nose points on the screen (half with the nose across the
 screen, none with the nose straight against the way the picture would move), so it is never seen

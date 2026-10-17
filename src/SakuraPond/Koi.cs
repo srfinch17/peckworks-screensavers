@@ -58,15 +58,26 @@ internal sealed class KoiSchool
     }
 
     /// <param name="turtles">The turtles, so the fish steer round them and are pushed off them (a turtle is the heavier, and is not moved).</param>
-    public void Update(float dt, Turtles? turtles = null)
+    /// <param name="surface">
+    /// Anything else in the water this frame that a fish must not pass through
+    /// (the snake, while it is swimming): the fish steer round it by its chain
+    /// and are pushed the whole way out of it when they meet. These bodies are
+    /// never moved by a fish; each answers a touch in its own way (the snake
+    /// startles). The scene keeps one list and refills it, so nothing is
+    /// allocated here per frame.
+    /// </param>
+    public void Update(float dt, Turtles? turtles = null, IReadOnlyList<Body>? surface = null)
     {
-        // The bodies in the water this frame: the fish, and every turtle that is in (not up on a perch).
+        // The bodies in the water this frame: the fish, every turtle that is in (not up on a perch), then the surface bodies.
         IReadOnlyList<Turtle> ts = turtles?.All ?? [];
-        int n = _fish.Length, count = n;
+        IReadOnlyList<Body> extra = surface ?? [];
+        int n = _fish.Length, count = n + extra.Count;
         foreach (Turtle t in ts) if (t.InWater) count++;
         if (_bodies.Length != count) _bodies = new Body[count];
         for (int i = 0; i < n; i++) _bodies[i] = _fish[i];
-        for (int i = 0, k = n; i < ts.Count; i++) if (ts[i].InWater) _bodies[k++] = ts[i];
+        int next = n;
+        for (int i = 0; i < ts.Count; i++) if (ts[i].InWater) _bodies[next++] = ts[i];
+        for (int i = 0; i < extra.Count; i++) _bodies[next++] = extra[i];
 
         foreach (Koi k in _fish) k.Update(dt, _fish, _bodies);
 
@@ -86,12 +97,15 @@ internal sealed class KoiSchool
             for (int i = 0; i < count; i++)
                 for (int j = i + 1; j < count; j++)
                 {
+                    if (i < n && _fish[i].Airborne || j < n && _fish[j].Airborne) continue;   // a fish in the air is in nobody's way, and nothing in the water may jog it
                     if (!Chain.Touch(_bodies[i].Shape, _bodies[j].Shape, out Vector3 push, out float depth)) continue;
                     touched = true;
                     if (i >= n)
                     {
                         // Two turtles: each is moved half the way out, no faster than a shell's length a second.
-                        Turtle ta = (Turtle)_bodies[i], tb = (Turtle)_bodies[j];
+                        // A turtle and the snake, or two surface bodies: neither is moved by this loop
+                        // (the snake startles at a turtle's touch on its own; a turtle steers round the snake by its feelers).
+                        if (_bodies[i] is not Turtle ta || _bodies[j] is not Turtle tb) continue;
                         float d = MathF.Min(ta.Length * dt, depth * 0.5f);
                         ta.Nudge(push * d); tb.Nudge(-push * d);
                         continue;
@@ -129,6 +143,19 @@ internal sealed class KoiSchool
 
     /// <summary>Every body in the water as of this frame's Update (the fish, then the turtles that are in): what the turtles' feelers steer round.</summary>
     public Body[] Bodies => _bodies;
+
+    /// <summary>
+    /// The fish that are IN THE AIR this frame (a leap), and the spray of any
+    /// splash still falling: painted after everything that paints the water's
+    /// surface (the ripples, the floating petals, the snake), since a fish
+    /// clear of the water is above all of it. The scene calls this after
+    /// Turtles.DrawOut.
+    /// </summary>
+    public void DrawOut(FrameBuffer fb)
+    {
+        foreach (Koi k in _fish) if (k.Airborne) k.Draw(fb);
+        foreach (Koi k in _fish) k.DrawSpray(fb);
+    }
 
     /// <summary>Every fish with its back up at the surface shoves the floating petals in its way aside (Koi.PushPetals).</summary>
     public void PushPetals(Petals petals)
@@ -214,7 +241,8 @@ internal sealed class KoiSchool
         {
             _box[i] = _fish[i].Box;
             if (!_fish[i].Visible) continue;
-            _fish[i].DrawShadow(fb);
+            _fish[i].DrawShadow(fb);                                      // on the bed; or, for a fish in the air, on the water
+            if (_fish[i].Airborne) continue;                              // in the air it is over everything on the water: DrawOut paints it
             _order[m] = i; _depth[m++] = -_fish[i].Z;
         }
         for (int i = 0; i < t; i++) { _box[n + i] = ts[i].Box; _order[m] = n + i; _depth[m++] = ts[i].InWater ? -ts[i].Z : 1f; }   // a turtle out on a perch is not in this order at all (Turtles.DrawOut paints it over the water's surface)
@@ -388,6 +416,17 @@ internal sealed class Koi : Body
     private float _bumpTimer, _bumpGap;                    // the back-bump: when next, and the gap between its rings
     private bool _bumping;
     private int _bumpRings;
+    // THE LEAP. Now and then a koi jumps clear of the water (any pond keeper
+    // has seen it: a burst from just under the surface, the fish in the air
+    // for half a second, a splash). _leapTimer counts down to the next try;
+    // in the air _airFor is how long the jump lasts, _airT how far into it
+    // it is, _airPeak how high it goes (u) and _air how high it is right now.
+    // The spray is a few drops thrown up by the splash, each on its own
+    // little arc (screen pixels across, height in u).
+    private float _leapTimer, _air, _airT, _airFor, _airPeak;
+    private readonly Drop[] _drops = new Drop[10];
+    private int _dropCount;
+    private struct Drop { public float X, Y, Vx, Vy, H, Vh; }
     private float _goalX, _goalY, _goalTimer;            // where it is idly heading, ground pixels, and until when
     private double _time;
 
@@ -420,6 +459,7 @@ internal sealed class Koi : Body
         Flee,          // being chased: speed up and swerve away
         Flinch,        // a shadow swept over it (a swallow skimming): a dart away and a dive, then it rests deep
         Shy,           // it bumped into another animal: a short swim away from it, up or down as well as aside
+        Leap,          // a burst up to the surface and a jump clear of the water, a splash, then down again
     }
     private readonly Mind<Doing> _mind = new();           // the doing now and how long it may last (Core/Minds)
     private Doing _doing => _mind.Doing;
@@ -455,6 +495,12 @@ internal sealed class Koi : Body
     /// <summary>Is any part of it still to be seen? False once every point of its body is past Light.SeeU: KoiSchool then leaves it out of the drawing altogether.</summary>
     public bool Visible => _murkMin <= 0.985f;
 
+    /// <summary>Is it in the air right now (a leap)? Then KoiSchool paints it over everything on the water (DrawOut) and nothing in the water may touch it.</summary>
+    public bool Airborne => _airFor > 0;
+
+    /// <summary>How high it is above the water right now, in u (0 in the water), for logs and tests.</summary>
+    public float Height => _air;
+
     /// <summary>
     /// The floating petals in the way of its back are shoved aside
     /// (Petals.PushAside) by every piece of it within PushDepth of the
@@ -465,7 +511,7 @@ internal sealed class Koi : Body
     /// (about a half width down); a crisp fish a little deeper than that with
     /// petals painted across its back read as petals clipping through it.
     /// </summary>
-    public void PushPetals(Petals petals) => petals.PushAside(Spine, HalfWidth, _depthAt, PushDepth);
+    public void PushPetals(Petals petals) { if (_air <= 0) petals.PushAside(Spine, HalfWidth, _depthAt, PushDepth); }   // not from the air: it is over the petals, and shoves them when it lands
 
     /// <summary>How deep a body may be, in u, and still shove the floating petals (Petals.PushAside): a quarter of the pond's full depth, where a fish is still drawn clear and nearly full size.</summary>
     public const float PushDepth = 0.1f;
@@ -574,6 +620,13 @@ internal sealed class Koi : Body
         _depthTimer = 3 + (float)rng.NextDouble() * 8;
         _gulpTimer = (10 + (float)rng.NextDouble() * 60) * _gulpMul;
         _bumpTimer = 40 + (float)rng.NextDouble() * 200;
+        // The first leap comes within a few minutes for an energetic koi, later
+        // for a lazy one; a goldfish never jumps (a goldfish's jump is a flop
+        // the size of a petal, and real ones hardly ever do). Spread by the
+        // dials, not by a fresh roll: one more roll per fish at birth moved
+        // every later roll in the scene, and the same seed painted a different
+        // pond (the same-scene gate read 3% of the frame changed with no frog in it).
+        _leapTimer = gold ? float.MaxValue : (60 + 240 * _social) * (1.4f - 0.8f * _energy);
         NewGoal();
         // A straight trail behind it to start, and the spine laid along it, so
         // Head and the rest mean something before the first frame.
@@ -629,11 +682,34 @@ internal sealed class Koi : Body
         _bodies = bodies;
         _school = school;
         float t = (float)(_time % 100000.0);
+        Spray(dt);
+        if (_airFor > 0) { Fly(dt, school); return; }                            // in the air: no steering, no mind, just the arc
 
         // ---- The mind decides what it is doing ----
         _hunger = MathF.Min(1, _hunger + dt / (240 + 240 * (1 - _energy)));    // famished from fed in four to eight minutes (at half that, with the petal cue, the whole pond spent two thirds of its time nosing at petals)
+        // ---- Now and then, a leap. Only from an unhurried moment (a wander, a
+        // follow, a look on the way) in the upper water, with open water a few
+        // lengths ahead to land in and the whole thing in view (not under the
+        // branches or a pad, where nobody would see it). When the moment is
+        // wrong it tries again in ten seconds.
+        _leapTimer -= dt;
+        if (_leapTimer <= 0)
+        {
+            _leapTimer = 10;
+            // (And with its nose across or up the screen: a rise moves the picture up the
+            // screen, so the slide rule in HoldDepth lets a fish heading DOWN the screen rise
+            // hardly at all, and every burst begun that way gave up; the timeline's first run
+            // had 23 bursts give up for 3 leaps.)
+            if (_doing is Doing.Wander or Doing.Follow or Doing.Investigate && _hold <= 0 && !_gulping && !_bumping && Z < 0.25f && _play > 0 && MathF.Sin(_heading) < 0.2f)
+            {
+                float reach = _len * 3.5f;
+                PointF land = ToScreen(_x + MathF.Cos(_heading) * reach, _y + MathF.Sin(_heading) * reach);
+                if (InWater(ToScreen(_x, _y)) && InWater(land) && RoomAlong(_heading, reach) > _len * 0.6f && FloorAt(land) > 0.5f)
+                    Begin(Doing.Leap);
+            }
+        }
         Think(dt, school);
-        bool rush = _doing is Doing.Chase or Doing.Flee or Doing.Flinch;          // flat out
+        bool rush = _doing is Doing.Chase or Doing.Flee or Doing.Flinch or Doing.Leap;   // flat out
         bool still = _doing == Doing.Rest || (_doing == Doing.Investigate && _hold > 0);   // hanging in the water, nosing at something
 
         // ---- Beat and glide ----
@@ -719,6 +795,11 @@ internal sealed class Koi : Body
             turn += Wrap(best - _heading) * (1f + 3f * urgency);
             cornered = urgency > 0.5f && climb == 0;                                  // a climb or dive is not a corner: no need to slow and swing round
         }
+        // The leap's burst is a climb SWUM at the steepest slope a fish can
+        // swim (the dodge's 0.8), not an easing: eased at the gulp's rate from
+        // a quarter of the way down it took three and a half seconds to reach
+        // the top and the burst timed out first (the first run's timeline).
+        if (_doing == Doing.Leap && _dodge == 0) _dodge = -0.8f;
         foreach (Koi other in school)
         {
             // A gentle lean away from any fish close by, before the feelers need
@@ -848,7 +929,7 @@ internal sealed class Koi : Body
         // times the distance swum, so the course is a straight line in three
         // dimensions, and the easing takes over again once the way is clear.
         float zNext = _dodge != 0 && !refused ? Z + _dodge * step / DepthPx
-                                              : Z + (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping ? 0.6f : forBed ? 0.8f : 0.18f)));
+                                              : Z + (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping || _doing == Doing.Leap ? 0.6f : forBed ? 0.8f : 0.18f)));
         zNext = Math.Clamp(zNext, 0, cap);
         // Rising moves the picture UP the screen and sinking moves it DOWN
         // (Light.Sink), so both are held to a share of the fish's own forward
@@ -964,7 +1045,7 @@ internal sealed class Koi : Body
         // Someone is after me: the moment a chaser is close behind, flee (whatever I was doing, except already fleeing).
         // Not again within two seconds of a flee ending: a chaser swinging round faced it, then away, then at it
         // again, and the flee flickered on and off within five seconds (9 restarts in 112 flees).
-        if (_doing != Doing.Flee && _fleeCool.Ready)
+        if (_doing is not Doing.Flee and not Doing.Leap && _fleeCool.Ready)
             foreach (Koi o in school)
                 if (o != this && o._doing == Doing.Chase && o._partner == this && NearEither(o, 1.6f) && Toward(o, this) > 0.2f)
                 {
@@ -1018,6 +1099,24 @@ internal sealed class Koi : Body
             case Doing.Shy:
                 if (_mind.Over) Decide(school);
                 break;
+            case Doing.Leap:
+                // The burst: flat out toward the surface. Once its back is at the
+                // top AND it is up to speed (a fish that was hanging at a petal
+                // reached the top in a quarter of a second at a glide's pace and
+                // flopped thirteen pixels) it leaves the water, if where it will
+                // come down is open water in view (the burst has carried it on
+                // from where that was first checked, under a branch twice in ten);
+                // if it has not got there in time (held back by the slide rule,
+                // or a wall) the moment has passed.
+                if (Z < 0.03f && _speed >= _len * _cruise * 1.2f)
+                {
+                    float over = _speed * 0.6f;
+                    PointF land = ToScreen(_x + MathF.Cos(_heading) * over, _y + MathF.Sin(_heading) * over);
+                    if (InWater(land) && RoomAlong(_heading, over) > _len * 0.3f) TakeOff();
+                    else { _leapTimer = 30 + 60 * (float)_rng.NextDouble(); Begin(Doing.Wander); }
+                }
+                else if (_mind.Over) { _leapTimer = 30 + 60 * (float)_rng.NextDouble(); Begin(Doing.Wander); }
+                break;
             default:
                 _goalTimer -= dt;
                 float gdx = _goalX - _x, gdy = _goalY - _y;
@@ -1057,6 +1156,8 @@ internal sealed class Koi : Body
                 return (_shyX, _shyY, 0.8f);
             case Doing.Rest:
                 return (_goalX, _goalY, 0.25f);
+            case Doing.Leap:
+                return (_x + MathF.Cos(_heading) * _len * 4, _y + MathF.Sin(_heading) * _len * 4, 0.3f);   // straight on: the burst is a straight run
             default:
                 return (_goalX, _goalY, 0.4f);
         }
@@ -1124,6 +1225,11 @@ internal sealed class Koi : Body
                 break;
             case Doing.Shy:
                 _mind.Begin(doing, 1.2f + 0.8f * (float)_rng.NextDouble());        // a short swim away (the place and depth were set by Bumped)
+                break;
+            case Doing.Leap:
+                _mind.Begin(doing, 3f);                                            // the burst gets this long to reach the top (a swum climb from a quarter down takes about one)
+                _gulping = false; _bumping = false; _bumpRings = 0;
+                Depth(0, 10);
                 break;
             default:
                 _mind.Begin(doing);                                            // a wander ends when its spot is reached (the goal timer, in Think)
@@ -1229,7 +1335,7 @@ internal sealed class Koi : Body
     /// </summary>
     public void Notice(float x, float y, bool petal = false)
     {
-        if (_doing is Doing.Chase or Doing.Flee) return;
+        if (_doing is Doing.Chase or Doing.Flee or Doing.Leap) return;      // (a tap or a petal reached a fish IN THE AIR once and turned its leap into a look, mid-arc)
         float chance = petal ? 0.3f * _hunger * _hunger * _play : 0.25f + 0.7f * _curious * _play;   // a petal: only a really hungry fish, and not every time (every fish answering every petal made a pond of fish nosing at petals)
         if (_rng.NextDouble() > chance) return;
         PointF here = ToScreen(_x, _y);
@@ -1257,7 +1363,7 @@ internal sealed class Koi : Body
     /// </summary>
     public void Startle(float x, float y)
     {
-        if (!_flinchCool.Ready || _doing is Doing.Chase or Doing.Flee or Doing.Flinch) return;
+        if (!_flinchCool.Ready || _doing is Doing.Chase or Doing.Flee or Doing.Flinch || Airborne) return;   // (in the air it cannot flinch; the burst can)
         float bold = (_energy + _social) * 0.5f;
         float reach = _pond.U * (0.06f + 0.16f * (1 - bold)) * (_kind == Kind.Goldfish ? 1.5f : 1f);   // a goldfish is timid: a shadow further off sends it
         PointF here = ToScreen(_x, _y);
@@ -1382,12 +1488,123 @@ internal sealed class Koi : Body
     /// </summary>
     public void Bumped(Vector3 away)
     {
-        if (!_shyCool.Ready || _doing is Doing.Chase or Doing.Flee or Doing.Flinch) return;
+        if (!_shyCool.Ready || _doing is Doing.Chase or Doing.Flee or Doing.Flinch or Doing.Leap) return;   // a leap's burst is not put off by a brush with a neighbour
         _shyCool.Start(4 + 4 * (float)_rng.NextDouble());
         float l = MathF.Max(1e-3f, MathF.Sqrt(away.X * away.X + away.Y * away.Y));
         _shyX = _x + away.X / l * _len * 2; _shyY = _y + away.Y / l * _len * 2;
         Begin(Doing.Shy);
         if (MathF.Abs(away.Z) > 0.3f) Depth(Math.Clamp(Z + MathF.Sign(away.Z) * 0.12f, 0, 1), 6);
+    }
+
+    // ==================== THE LEAP ====================
+    //
+    // FEYNMAN VERSION: a koi jumps the way a thrown ball flies. Its burst
+    // brings it to the surface at speed; then for half a second or so it is in
+    // the air, still moving forward at the speed it left with (nothing in the
+    // air slows it) and going up and then down on a smooth arc (height = peak
+    // x 4p(1 - p), p running 0 to 1 through the jump: 0 at take-off, the peak
+    // at the middle, 0 at the splash). On the screen the pond's one rule for
+    // height does the rest (Light): the body is drawn higher up the screen by
+    // Lift x height, and its shadow falls on the water down and to the right
+    // by (ShadowX, ShadowY) x height, so the gap between fish and shadow opens
+    // through the jump and closes at the splash, which is what reads as "it
+    // left the water" (the same rule a falling petal and a perched turtle
+    // use). A fish in the air is a rod: no swimming wave, no steering, and
+    // nothing in the water may touch or jog it. It lands with a big ring, a
+    // thin ring after, a handful of drops thrown up and falling back (each a
+    // tiny arc of its own, a ring where it lands), and the fish near the
+    // splash flinch from it as they do from a swallow's shadow.
+
+    /// <summary>Its back has reached the surface at speed: into the air.</summary>
+    private void TakeOff()
+    {
+        _airFor = 0.5f + 0.2f * (float)_rng.NextDouble();
+        _airT = 0;
+        _airPeak = (0.035f + 0.03f * (float)_rng.NextDouble()) * (0.7f + 0.3f * _energy);
+        _speed = MathF.Max(_speed, _len * _cruise * 1.5f);
+        _ripples.Add(Spine[12].X, Spine[12].Y, 0.9f);                              // the tail slaps as it leaves
+        _mind.Begin(Doing.Leap, _airFor + 1);
+    }
+
+    /// <summary>One frame in the air: along the arc, forward at the speed it left with, and the splash when it comes down.</summary>
+    private void Fly(float dt, Koi[] school)
+    {
+        _airT += dt;
+        float p = _airT / _airFor;
+        if (p >= 1) { Splash(school); return; }
+        _air = _airPeak * 4 * p * (1 - p);
+        _amp += (_len * 0.015f - _amp) * (1 - MathF.Exp(-dt * 6f));             // stiff in the air
+        _phase = (_phase + MathF.Tau * 0.7f * dt) % MathF.Tau;
+        float step = _speed * dt;
+        _x += MathF.Cos(_heading) * step;
+        _y += MathF.Sin(_heading) * step;
+        Z = 0;
+        PointF last = _trail[_trailHead];
+        if ((last.X - _x) * (last.X - _x) + (last.Y - _y) * (last.Y - _y) > (_len / 40) * (_len / 40))
+            Remember(new PointF(_x, _y), 0);
+        LaySpine();
+    }
+
+    /// <summary>Back in the water: the rings, the spray, the fright it gives its neighbours, and a dive to get over it.</summary>
+    private void Splash(Koi[] school)
+    {
+        _air = 0; _airFor = 0; _airT = 0;
+        LaySpine();
+        PointF at = Spine[6];
+        _ripples.Add(at.X, at.Y, 1.6f);
+        _ripples.Add(Spine[12].X, Spine[12].Y, 0.6f, thin: true);
+        // The spray: eight to ten drops flung up and out from where it hit.
+        _dropCount = 0;
+        int drops = 8 + _rng.Next(3);
+        float u = _pond.U;
+        for (int i = 0; i < drops; i++)
+        {
+            float a = (float)(_rng.NextDouble() * MathF.Tau), v = u * (0.03f + 0.07f * (float)_rng.NextDouble());
+            _drops[_dropCount++] = new Drop
+            {
+                X = at.X + (float)(_rng.NextDouble() - 0.5) * _wide * 2, Y = at.Y + (float)(_rng.NextDouble() - 0.5) * _wide * 2 * Ripples.Squash,
+                Vx = MathF.Cos(a) * v, Vy = MathF.Sin(a) * v * Ripples.Squash,
+                H = 0.004f, Vh = 0.10f + 0.12f * (float)_rng.NextDouble(),
+            };
+        }
+        foreach (Koi o in school) if (o != this) o.Startle(at.X, at.Y);
+        _speed *= 0.7f;
+        _leapTimer = (500 + 600 * (float)_rng.NextDouble()) * (1.4f - 0.8f * _energy) / MathF.Max(0.2f, _play);   // about one leap a minute or two in the whole pond: a highlight, not a habit
+        _gulpTimer = MathF.Max(_gulpTimer, 15);
+        _bumpTimer = MathF.Max(_bumpTimer, 20);
+        Begin(Doing.Wander);
+        Depth(0.2f + 0.2f * (float)_rng.NextDouble(), 8);
+    }
+
+    /// <summary>The drops of a splash on their arcs: up, over, down, and a tiny ring where each one lands.</summary>
+    private void Spray(float dt)
+    {
+        for (int i = 0; i < _dropCount; i++)
+        {
+            ref Drop d = ref _drops[i];
+            d.X += d.Vx * dt; d.Y += d.Vy * dt;
+            d.Vh -= 0.9f * dt;                                                    // gravity, in u a second each second: a drop is up for about a third of a second
+            d.H += d.Vh * dt;
+            if (d.H <= 0)
+            {
+                if (i < 3 && InWater(new PointF(d.X, d.Y))) _ripples.Add(d.X, d.Y, 0.15f, thin: true);
+                _drops[i] = _drops[--_dropCount];
+                i--;
+            }
+        }
+    }
+
+    /// <summary>Paints the spray (KoiSchool.DrawOut): each drop a tiny pale bead lifted up the screen by its height, on the water where it can be seen.</summary>
+    public void DrawSpray(FrameBuffer fb)
+    {
+        if (_dropCount == 0) return;
+        float u = _pond.U, r = MathF.Max(1f, u * 0.0022f);
+        for (int i = 0; i < _dropCount; i++)
+        {
+            ref Drop d = ref _drops[i];
+            var c = new PointF(d.X, d.Y - d.H * Light.Lift * u);
+            Oval(fb, _where, c, 0, r, r, 236, 246, 250, 0.85f, 0, _pond.Sun, water: _pond.Pixels);
+        }
     }
 
     /// <summary>Is the other fish within "lengths" of my body length?</summary>
@@ -1592,6 +1809,21 @@ internal sealed class Koi : Body
         _shadowDx = Light.ShadowX / norm * off;
         _shadowDy = (Light.ShadowY + Light.Sink) / norm * off;
         _shadowSoft = MathF.Max(1f, MathF.Min(gap * 0.2f, 0.012f * _pond.U));
+        // IN THE AIR the shadow is on the WATER, thrown the whole way the sun
+        // would throw it: down and right of the fish by its height (the
+        // petals' rule), and since the fish itself is drawn Lift x height up
+        // the screen from the spot it is over, the shadow sits that much
+        // further down from the drawn body. Here the far shadow is right: it
+        // is the one thing that says "out of the water" (under water a far
+        // shadow said "floating above it", which is why the bed shadow hugs).
+        if (_air > 0)
+        {
+            _shadowAlpha = 0.4f * lit;
+            _shadowDx = Light.ShadowX * _air * u;
+            _shadowDy = (Light.Lift + Light.ShadowY) * _air * u;
+            _shadowSoft = MathF.Max(1f, _air * u * 0.1f);
+        }
+        float airLift = _air * Light.Lift * u, airScale = _air > 0 ? Light.Scale(-_air / Pond.DepthU) : 1;   // in the air it is nearer the eye: a little bigger (Scale run above the water)
         _murkMin = 1; _zTop = 1;
         for (int i = 0; i < Points; i++)
         {
@@ -1600,7 +1832,7 @@ internal sealed class Koi : Body
             float sway = Sway(s);
             float nx = -dir[i].Y, ny = dir[i].X;                 // sideways
             float cx = mid[i].X + nx * sway, cy = mid[i].Y + ny * sway;
-            float hw = _wide * Profile(s) * Light.Scale(z);
+            float hw = _wide * Profile(s) * Light.Scale(z) * airScale;
             PointF l = ToScreen(cx + nx * hw, cy + ny * hw), r = ToScreen(cx - nx * hw, cy - ny * hw);
             // DEPTH ON THE SCREEN. The fish lives at (_x, _y) on the water's
             // plane and Z below it. We look at the pond at a slant, so the
@@ -1608,7 +1840,7 @@ internal sealed class Koi : Body
             // the water above it (Light.Sink, the lift rule run the other way):
             // a fish that rises to gulp is seen to come UP the screen as well
             // as sharpen, and a diving one's head sits lower than its tail.
-            float sink = Light.SinkPx(z, u);
+            float sink = Light.SinkPx(z, u) - airLift;                       // and UP the screen by its height when it is in the air
             Spine[i] = new PointF((l.X + r.X) / 2, (l.Y + r.Y) / 2 + sink);
             HalfWidth[i] = Dist(l, r) / 2;
             // The same point for touching: on the ground plane, at its depth.

@@ -133,7 +133,12 @@ travelling wave (the cattails and irises sway with it stiffly).
   the pond at a time, and a curious fish answers a dragonfly's tap far more often than a dull one.
   When a swallow skims low over a fish, its shadow makes the fish dart away and dive, and it sulks
   deep for a while; a bold fish (energetic and sociable) barely notices, a timid one flinches at a
-  shadow some way off. The lizards and the snake think the same way, on the same shared parts
+  shadow some way off. And now and then a koi LEAPS: a burst up from an unhurried cruise, half a
+  second clear of the water (it rises up the screen with its shadow left on the water, the way
+  a falling petal or a perched turtle shows its height), a splash of rings and flung drops, and
+  the fish nearby flinch from it; then it dives to get over itself. About one a minute or two
+  somewhere in the pond, more from an energetic fish, never from a goldfish. The lizards and the snake think
+  the same way, on the same shared parts
   (`Core/Minds`); how to give any animal in any saver a mind is [docs/MINDS.md](docs/MINDS.md).
 - Two **schools of minnows**, a dozen or so tiny fish each, hang just under the surface and move
   as one: all facing the same way, fidgeting in little darts, flashing silver when the whole
@@ -158,6 +163,20 @@ travelling wave (the cattails and irises sway with it stiffly).
   log, climbs onto it, sits with its legs spread in the sun for fifteen seconds to a minute, and
   slips back in (sooner if the snake comes near, and then on the side away from it). Each turtle has its own dials: how much it loves the sun
   and how jumpy it is.
+- **Frogs** (tonosama-gaeru, the Japanese pond frog) sit on the lily pads, the dry bank rocks and
+  the bank's edge, olive green with brown blotches and a pale line down the back, two bulging
+  eyes on top of the head. A frog sits still for half a minute at a time, its pale throat
+  fluttering and now and then swelling in a croak (no sound), with the odd shuffle or hop round
+  on the spot to face the water; a bold one snaps at a dragonfly that settles close. Then it
+  leaps: a crouch, the hind legs snapping out behind, an arc a few body lengths long with its
+  shadow left behind on the pad and then the water (the gap is the height), and a splash. It
+  swims with frog kicks (a quick push that surges the body, then a slow glide with the legs
+  folding forward), floats with its legs hanging, steers round pads and the bank, and climbs
+  out onto another pad or the bank with a short hop and turns to face the water. Frightened by
+  the snake, a koi's head, a turtle, a lizard or a swallow's shadow, a sitting frog leaps in and a
+  swimming one dives (hazy and smaller as it goes down, back up with a tiny ring). A frog in the
+  water is solid to the koi (they steer round it and a fish that meets it is pushed out) and
+  shoves the floating petals aside. Each frog has its own two dials: how bold and how restless.
 - **Petals** let go of the blossom, sway and tumble down, their shadows sliding in to meet them,
   touch the water with a tiny ring, then float, drifting slowly and gathering against the banks.
 - **Dragonflies** (shiokara tombo, the pale blue dragonfly of Japanese ponds) hover, dart and stop
@@ -168,7 +187,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   across the pond with its body weaving behind its head and a small wake, and slips away. It is
   not on rails: it feels its way, goes round the lily pads, the rocks, the log, the cattails and
   the iris clumps rather than over them, pushes the floating petals out of its way, and if a
-  koi, a turtle or the lizard touches it, it startles: a burst of speed, a swing away, rings off its head, then it calms. The minnows keep
+  koi, a turtle or the lizard touches it, it startles: a burst of speed, a swing away, rings off its head, then it calms. The koi and
+  turtles treat its body as solid (they steer under or round it, and a fish that meets it is pushed out), and the minnows keep
   clear of it as they do of the koi. Each visit is a different snake: it rolls a boldness and a
   nerve, and then chooses what to do by weighted dice, a few things per visit. It may swim out
   to a spot in open water and then another (explore), creep up on a school of minnows and
@@ -204,7 +224,7 @@ travelling wave (the cattails and irises sway with it stiffly).
   the cut end's rings where it faces us.
 
 Settings: draw width (sharpness against smoothness), petals, number of koi (ten by default), number of goldfish (three by default), how playful the koi are (0 means they only cruise and rest),
-number of minnow schools (0 means no game), number of turtles,
+number of minnow schools (0 means no game), number of turtles, number of frogs (two by default),
 number of dragonflies, how often the swallows visit, how often the snake crosses, how many
 lizards there are (0 to 3), how often the lizards come out (Lizard visits), and how many field
 mice live in the grass (0 to 3).

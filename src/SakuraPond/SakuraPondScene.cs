@@ -50,8 +50,10 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Snake _snake;
     private readonly Lizards _lizards;
     private readonly Mice _mice;
+    private readonly Frogs _frogs;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
+    private readonly List<Body> _surface = new();   // what else is solid in the water this frame (the snake, while it swims), refilled per frame, never reallocated
 
     public SakuraPondScene(int width, int height, SakuraPondSettings settings)
     {
@@ -82,14 +84,23 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _lizards = new Lizards(_pond, settings.LizardCount, _ripples, settings.LizardPercent / 100f, _rng, _dragonflies);   // a lizard stalks a dragonfly sitting on a rock
         _mice = new Mice(_pond, settings.MouseCount, _ripples, 1f, _rng);   // field mice in the grass: out for a while, scurrying between cover, hiding from the snake, the lizards and shadows
         _swallows = new Swallows(_pond, _ripples, settings.BirdPercent / 100f, _rng, _koi);   // a skimming swallow's shadow makes the koi flinch
-        _swallows.Shadow = (x, y) => { _lizards.Startle(x, y); _mice.Startle(x, y); };               // and sends the lizards and mice bolting for cover
+        // The frogs come last, with dice of their own, so adding them moved nothing else in the scene (every other animal's
+        // placement and every later roll is what it was without them).
+        _frogs = new Frogs(_pond, settings.FrogCount, _ripples, _waterInView, new Random(unchecked(_pond.Pads.Count * 7919 + (_pond.Pads.Count > 0 ? (int)_pond.Pads[0].Center.X * 31 + (int)_pond.Pads[0].Center.Y : 0) + width)), _dragonflies);
+        _swallows.Shadow = (x, y) => { _lizards.Startle(x, y); _mice.Startle(x, y); _frogs.Startle(x, y); };   // and sends the lizards, mice and frogs bolting for cover
     }
 
     public void Update(double elapsedSeconds)
     {
         float dt = (float)Math.Min(elapsedSeconds, 0.1);
         _wind.Update(dt);                 // first: everything below reads it
-        _koi.Update(dt, _turtles);        // the fish steer round the turtles, and are pushed out of them if they meet (last frame's turtle spines: near enough)
+        // The fish steer round the turtles and the swimming snake, and are pushed out of
+        // them if they meet (last frame's spines: near enough). The snake is solid too:
+        // before this a koi could rise straight through it.
+        _surface.Clear();
+        if (_snake.InWater) _surface.Add(_snake);
+        _frogs.AddSwimmers(_surface);              // and the frogs that are in the water (last frame's, as the snake's is)
+        _koi.Update(dt, _turtles, _surface);
         PointF[] koiHeads = _koi.Heads;
         _minnows.Update(dt, _snake.Live ? [.. koiHeads, _snake.Head] : koiHeads);   // the minnows keep clear of the snake as of a koi
         _turtles.Update(dt, _snake.Live ? _snake.Head : null, _koi.Bodies);   // a basking turtle slips in when the snake comes near; a swimming one steers round the fish
@@ -100,13 +111,16 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _koi.PushPetals(_petals);
         _turtles.PushPetals(_petals);
         _snake.PushPetals(_petals);
+        _frogs.PushPetals(_petals);
         // The snake is told where everything that could touch it is: koi heads and
         // middles, turtle noses and shells, the nose of every lizard that is out (its spot
         // from last frame; they are updated after, which is close enough for a touch).
-        PointF[] bumpers = [.. koiHeads, .. _turtles.Spots, .. _lizards.Noses];
+        PointF[] turtleSpots = _turtles.Spots;
+        PointF[] bumpers = [.. koiHeads, .. turtleSpots, .. _lizards.Noses];
         _snake.Update(dt, bumpers);
         _lizards.Update(dt, _snake.Live ? _snake.Head : null);   // the lizards run from the snake too
         _mice.Update(dt, _snake.Live ? _snake.Head : null, _lizards.Noses);   // the mice run from the snake and the lizards too
+        _frogs.Update(dt, _snake.Live ? _snake.Head : null, koiHeads, turtleSpots, _lizards.Noses);   // the frogs leap or dive from all of them
         _dragonflies.Update(dt);
         _swallows.Update(dt);
         _ripples.Update(dt);
@@ -126,6 +140,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _mice.Draw(fb);
         Sections.Mark("mice");
         _koi.Draw(fb, _turtles);                  // the koi and the turtles in one depth order (a turtle between the fish deeper and shallower than it)
+        _frogs.DrawUnder(fb);                     // a frog that has dived is under the surface: over the fish deeper than it, under the minnows
         Sections.Mark("koi, turtles");
         _minnows.Draw(fb);
         Sections.Mark("minnows");
@@ -134,7 +149,9 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _petals.DrawFloating(fb);
         Sections.Mark("petals afloat");
         _snake.Draw(fb);
+        _frogs.Draw(fb);                          // frogs at the surface, in the air or on a pad: over the ripples and the floating petals
         _turtles.DrawOut(fb);                     // a turtle up on the island or the log: over the ripples, the floating petals and the snake, which all paint the water under its overhanging shell
+        _koi.DrawOut(fb);                         // a koi in the air (a leap) and the spray of its splash: over everything on the water too
         Sections.Mark("snake");
         _cattails.Draw(fb);
         _irises.Draw(fb);
