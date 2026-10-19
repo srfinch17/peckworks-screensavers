@@ -499,6 +499,7 @@ internal sealed class Snake : Body
         if (_fed || _strikes >= 2 || (_lizards == null && _mice == null)) return;
         if (!(_doing is Doing.Cross or Doing.Explore or Doing.Hunt || (_doing == Doing.Bask && _phase == 0))) return;
         PointF head = Spine[0];
+        if (head.X < 0 || head.Y < 0 || head.X >= _pond.Width || head.Y >= _pond.Height) return;   // a meeting is on the picture (a lizard at the edge was snatched from nothing)
         float reach = _u * 0.14f;
         for (int pass = 0; pass < 2; pass++)
         {
@@ -595,7 +596,7 @@ internal sealed class Snake : Body
             _mouth = 1 + 0.5f * Ease((_phaseT / CockFor - 0.5f) * 2);
             if (_phaseT < CockFor) return;
             IPrey? p = _target;
-            if (p == null || !p.Huntable || Dist(Spine[0], p.PreyNose) > _u * 0.13f)
+            if (p == null || !p.Huntable || Dist(Spine[0], p.PreyNose) > _u * 0.13f || Spine[0].X < 0 || Spine[0].Y < 0 || Spine[0].X >= _pond.Width || Spine[0].Y >= _pond.Height)
             {
                 // It has gone while the snake was drawing back: nothing to strike at.
                 _poseK = 0; _pullK = 0; _mouth = 1; _strikes--;

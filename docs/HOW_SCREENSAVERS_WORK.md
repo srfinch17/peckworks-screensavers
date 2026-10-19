@@ -621,7 +621,11 @@ read them like rocks. The snake does the same in return (points along the ducks'
 in its own clearance test, and a touch from one startles it), a swimming frog dives from any part of
 a duck, and a duck that something at the surface still gets onto (the snake swimming into a waiting
 hen, a frog crawling under her: feelers only keep a duck off things while it moves) recoils off it
-along the line between their closest parts, onto open water only. A duck's shadow is painted only on
+along the line between their closest parts, onto open water only (a turtle up at the surface counts
+too; and when the two closest pieces cross exactly the chain test answers straight up, so the push is
+then sideways along the line between the two middles, the koi school's own fallback). Pairs that may
+still touch for a moment, each on purpose or by nobody's rule: a frog and the snake, the snake and the
+turtle (neither moves for the other), a duckling and a floating frog. A duck's shadow is painted only on
 water in view, like every other shadow: painted on all water, it showed as a grey duck, wings and
 all, lying on the blossom wherever the duck itself was hidden under a branch. The two
 adults of a pair are solid to each other (overlapping bodies are pushed half the way apart along the
@@ -833,9 +837,10 @@ third of the spine, the koi's chain is untouched), then the head shoots to the p
 seconds with the mouth open (the head's drawn width x1.5). The outcome is rolled at the launch (50
 percent, plus or minus 15 for the snake's boldness and the prey's agility, held to 25..80); the snake
 tells the prey through `IPrey.Strike`. A catch freezes the prey where it is until the jaws arrive. A
-miss makes it dodge in the same frame: the lizard flings its whole body 0.04u sideways in 0.15 s (the
-trail is shifted with the head, as a shove moves a koi: moving the nose alone left the body on its old
-line, folded, with the jaws on its hips), the mouse jumps 0.025u up and 0.03u aside in 0.3 s the same
+miss makes it dodge in the same frame: the lizard turns and flings itself 0.04u sideways in 0.15 s (the
+heading swings toward the escape at 10 rad/s, the body bends after the head and the trail is carried half
+the way: moving the nose alone left the body on its old line, folded, with the jaws on its hips, and
+carrying the whole trail slid it tail first like a stick), the mouse jumps 0.025u up and 0.03u aside in 0.3 s the same
 way (drawn lifted by `Light.Lift` x height, shadow left on the ground and slid down and right by the
 height, the way petals are), and the jaws of a miss stop three tenths short of where the nose was, and never nearer than 0.025u to
 the line the body lay along (a strike from behind or beside found the body between the jaws and the nose). SWALLOW: `IPrey.Hold` puts the prey's nose at the

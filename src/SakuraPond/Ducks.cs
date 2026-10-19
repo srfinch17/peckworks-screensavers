@@ -551,11 +551,11 @@ internal sealed class Ducks
         // hop). The second duck only aims for a place beside the first, and when the first stopped the second was told to
         // stop wherever it was, which was often on top of her: a hen under a drake with only her head showing for whole
         // seconds at a time.
-        if (_adults.Length > 1 && Peckworks.Screensavers.Core.Minds.Chain.Touch(_adults[0].Shape, _adults[1].Shape, out System.Numerics.Vector3 push, out float depth))
+        if (_adults.Length > 1 && Overlap(_adults[0].Shape, _adults[1].Shape, _adults[0].X, _adults[0].Y, _adults[0].Heading, out float px, out float py, out float depth))
         {
             float d = MathF.Min(_adults[0].Len * dt, depth * 0.5f);
-            _adults[0].Shove(push.X * d, push.Y * d);
-            _adults[1].Shove(-push.X * d, -push.Y * d);
+            _adults[0].Shove(px * d, py * d);
+            _adults[1].Shove(-px * d, -py * d);
         }
         // And every duck is solid to the snake and the frogs the same way. Its feelers keep a duck off them only while it moves;
         // a snake swimming into a waiting hen, or a frog crawling under her, got onto her and nothing moved either. Now the duck
@@ -564,8 +564,16 @@ internal sealed class Ducks
             foreach (Body b in surface)
             {
                 if (b is Duck || b is Duckling) continue;
-                foreach (Duck a in _adults) if (Recoil(a.Shape, b.Shape, a.Len, dt, out float sx, out float sy)) a.Shove(sx, sy);
-                foreach (Duckling k in _kids) if (Recoil(k.Shape, b.Shape, k.Len, dt, out float sx, out float sy)) k.Shove(sx, sy);
+                foreach (Duck a in _adults) if (Recoil(a.Shape, b.Shape, a.X, a.Y, a.Heading, a.Len, dt, out float sx, out float sy)) a.Shove(sx, sy);
+                foreach (Duckling k in _kids) if (Recoil(k.Shape, b.Shape, k.X, k.Y, k.Heading, k.Len, dt, out float sx, out float sy)) k.Shove(sx, sy);
+            }
+        // And off a turtle up at the surface (the surface list holds no turtles; two ducklings sat on a slider that surfaced under the line).
+        if (turtles != null)
+            foreach (Turtle t in turtles)
+            {
+                if (!t.InWater || t.Z >= 0.12f) continue;
+                foreach (Duck a in _adults) if (Recoil(a.Shape, t.Shape, a.X, a.Y, a.Heading, a.Len, dt, out float sx, out float sy)) a.Shove(sx, sy);
+                foreach (Duckling k in _kids) if (Recoil(k.Shape, t.Shape, k.X, k.Y, k.Heading, k.Len, dt, out float sx, out float sy)) k.Shove(sx, sy);
             }
 
         // ---- the line behind her ----
@@ -591,7 +599,8 @@ internal sealed class Ducks
         _beadList.Clear();
         foreach (Duck a in _adults) if (a.OnScreen) { ReadOnlySpan<PointF> dr = a.Drawn; for (int i = 0; i < dr.Length; i += 2) _beadList.Add(dr[i]); }
         foreach (Duckling d in _kids) if (d.OnScreen) { ReadOnlySpan<PointF> dr = d.Drawn; for (int i = 0; i < dr.Length; i += 2) _beadList.Add(dr[i]); }
-        _beads = _beadList.ToArray();
+        if (_beads.Length != _beadList.Count) _beads = new PointF[_beadList.Count];   // reused between frames: a fresh array every frame was a collection every few seconds
+        _beadList.CopyTo(_beads);
 
         // ---- the visit is over when every middle is beyond the screen again ----
         bool anyIn = false;
@@ -659,13 +668,35 @@ internal sealed class Ducks
     }
 
     /// <summary>When the first duck stands still for a dabble, a preen, a flap or a wait, the second stands with her; when she moves off, so does it.</summary>
+    /// <summary>
+    /// Do two bodies overlap, and which way (on the ground) does "mine" go to get off "other"? Chain.Touch answers straight UP
+    /// when the two closest pieces cross exactly (there is no direction between coincident points), and every duck lies at
+    /// the surface, so a push read in X and Y alone was nothing at the deepest overlap there is: a drake swam straight across
+    /// the hen. Then the push is sideways, along the line between the two middles (or across my own heading if those coincide),
+    /// the koi school's own fallback.
+    /// </summary>
+    private static bool Overlap(Peckworks.Screensavers.Core.Minds.Chain mine, Peckworks.Screensavers.Core.Minds.Chain other, float myX, float myY, float heading, out float px, out float py, out float depth)
+    {
+        px = py = 0;
+        if (!Peckworks.Screensavers.Core.Minds.Chain.Touch(mine, other, out System.Numerics.Vector3 p, out depth)) return false;
+        px = p.X; py = p.Y;
+        if (MathF.Abs(p.Z) > 0.7f || px * px + py * py < 0.1f)
+        {
+            System.Numerics.Vector3 om = other.Points[other.Points.Length / 2];
+            float dx = myX - om.X, dy = myY - om.Y, l = MathF.Sqrt(dx * dx + dy * dy);
+            if (l > 1e-3f) { px = dx / l; py = dy / l; }
+            else { px = -MathF.Sin(heading); py = MathF.Cos(heading); }
+        }
+        return true;
+    }
+
     /// <summary>How far to push "mine" off "other" this frame, if they overlap: the whole overlap, no faster than two body lengths a second.</summary>
-    private static bool Recoil(Peckworks.Screensavers.Core.Minds.Chain mine, Peckworks.Screensavers.Core.Minds.Chain other, float len, float dt, out float sx, out float sy)
+    private static bool Recoil(Peckworks.Screensavers.Core.Minds.Chain mine, Peckworks.Screensavers.Core.Minds.Chain other, float myX, float myY, float heading, float len, float dt, out float sx, out float sy)
     {
         sx = sy = 0;
-        if (!Peckworks.Screensavers.Core.Minds.Chain.Touch(mine, other, out System.Numerics.Vector3 p, out float depth)) return false;
+        if (!Overlap(mine, other, myX, myY, heading, out float px, out float py, out float depth)) return false;
         float d = MathF.Min(len * 2f * dt, depth);
-        sx = p.X * d; sy = p.Y * d;
+        sx = px * d; sy = py * d;
         return true;
     }
 
@@ -810,23 +841,28 @@ internal sealed class Ducks
                 // Two BODIES that overlap (the chains, as the koi test each other: a duckling is four times longer than it is
                 // wide, so a disc round each middle let two in a line lie on each other by half a body) are each pushed half
                 // the way out along the line between their closest parts, no faster than a recoil.
-                if (!Peckworks.Screensavers.Core.Minds.Chain.Touch(a.Shape, b.Shape, out System.Numerics.Vector3 pv, out float depth)) continue;
+                if (!Overlap(a.Shape, b.Shape, a.X, a.Y, a.Heading, out float pvx, out float pvy, out float depth)) continue;
                 float push = MathF.Min(a.Len * 2.5f * dt, depth * 0.5f);
-                a.Shove(pv.X * push, pv.Y * push);
-                b.Shove(-pv.X * push, -pv.Y * push);
+                a.Shove(pvx * push, pvy * push);
+                b.Shove(-pvx * push, -pvy * push);
             }
             if (a.Doing == KDoing.Bunch) continue;
+            // Off a grown duck's head and body: every point of the duckling against the adult's points 0 to 11 as discs (the
+            // tail tip stays free: the line's first slot sits just behind it). The old test, the duckling's middle against the
+            // body points only, let one following close ride up her flank or sit under her chin with no push. Two ground discs
+            // never push straight up; two coincident points push along the line between the middles.
             foreach (Duck m in _adults)
-                for (int s = 5; s < 12; s++)
-                {
-                    System.Numerics.Vector3 c = m.Shape.Points[s];
-                    float r = m.Shape.Radius[s] + a.Radius * 0.85f;
-                    float dx = a.X - c.X, dy = a.Y - c.Y, d = MathF.Sqrt(dx * dx + dy * dy);
-                    if (d >= r) continue;
-                    if (d < 1e-3f) { dx = 1; dy = 0; d = 1; }
-                    float push = MathF.Min(a.Len * 3f * dt, r - d);
-                    a.Shove(dx / d * push, dy / d * push);
-                }
+                for (int q = 0; q < a.Shape.Points.Length; q++)
+                    for (int s = 0; s < 12; s++)
+                    {
+                        System.Numerics.Vector3 p = a.Shape.Points[q], c = m.Shape.Points[s];
+                        float r = m.Shape.Radius[s] + a.Shape.Radius[q];
+                        float dx = p.X - c.X, dy = p.Y - c.Y, d = MathF.Sqrt(dx * dx + dy * dy);
+                        if (d >= r) continue;
+                        if (d < 1e-3f) { dx = a.X - m.X; dy = a.Y - m.Y; d = MathF.Sqrt(dx * dx + dy * dy); if (d < 1e-3f) { dx = 1; dy = 0; d = 1; } }
+                        float push = MathF.Min(a.Len * 3f * dt, r - d);
+                        a.Shove(dx / d * push, dy / d * push);
+                    }
         }
     }
 

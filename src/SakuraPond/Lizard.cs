@@ -497,10 +497,12 @@ internal sealed class Lizard : Body, IPrey
         if (_dodgeDX != 0 || _dodgeDY != 0)
         {
             float nx = _x + _dodgeDX * step, ny = _y + _dodgeDY * step;
-            // The WHOLE body goes (the trail is moved with the head, as a shove moves a koi's): moving the nose alone left the
-            // body on its old line, so the lizard snapped into a right angle and the jaws still closed on its hips.
-            if (OnLand(nx, ny)) { _trail.Shift(nx - _x, ny - _y); _x = nx; _y = ny; }
-            _heading = Wrap(_heading + Math.Clamp(Wrap(MathF.Atan2(_dodgeDY, _dodgeDX) - _heading), -4f * dt, 4f * dt));
+            // It turns as it flings: the heading swings toward the escape fast (10 rad/s), the head is remembered on the trail so
+            // the body bends after it, and the trail is carried half the way with it. Moving the nose alone left the body on its
+            // old line (a right angle in one frame); carrying the whole trail slid the lizard tail first, straight as a stick.
+            if (OnLand(nx, ny)) { _trail.Shift((nx - _x) * 0.5f, (ny - _y) * 0.5f); _x = nx; _y = ny; }
+            _trail.RememberIfMoved(new PointF(_x, _y), _len / 30);
+            _heading = Wrap(_heading + Math.Clamp(Wrap(MathF.Atan2(_dodgeDY, _dodgeDX) - _heading), -10f * dt, 10f * dt));
         }
         _speed = sp;
         _gait = (_gait + MathF.Tau * 9f * dt) % MathF.Tau;

@@ -845,7 +845,7 @@ internal sealed class Mouse : Body, IPrey
             int ix = (int)s.X, iy = (int)s.Y;
             if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height) continue;
             int i = iy * _pond.Width + ix;
-            if (!_pond.Grassy[i] || !_pond.Open[i] || Dist(s, from) < now + _len * 0.5f) continue;
+            if (!_pond.Grassy[i] || !_pond.Open[i] || Dist(s, from) < MathF.Max(now + _len * 0.5f, _u * 0.12f)) continue;   // and never a hole beside the jaws: the cover is picked at the jump, before the lunge moves the head a head's length (one mouse hid 8 px from the open mouth)
             if (DistToLine(from, here, s) < _u * 0.05f) continue;           // never THROUGH what it is running from (a mouse ran across the jaws to its cover)
             if (d < bestD && Ground.LineClear(_landScreen, here, s, 3)) { bestD = d; best = s; }
         }

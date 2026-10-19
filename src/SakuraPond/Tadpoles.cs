@@ -475,13 +475,13 @@ internal sealed class Tadpole : Body
     }
 
     /// <summary>A froglet's rule: free water (a pad, a rock, the log, land are walls) or, once hemmed in, anything but land. Off the screen is free: the pond goes on.</summary>
-    private bool CanSwim(float gx, float gy)
+    private bool CanSwim(float gx, float gy, bool deep = false)
     {
         PointF s = Minnow.ToScreen(_pond, gx, gy);
         int ix = (int)s.X, iy = (int)s.Y;
         if (s.X < 0 || s.Y < 0 || ix >= _pond.Width || iy >= _pond.Height) return true;
         int i = iy * _pond.Width + ix;
-        return _deep ? !_pond.Land[i] : _pond.Water[i] && !_pond.Land[i];
+        return _deep || deep ? !_pond.Land[i] : _pond.Water[i] && !_pond.Land[i];
     }
 
     /// <summary>Is the way ahead on this heading standable, for a tadpole (nose and halfway to reach)?</summary>
@@ -1025,12 +1025,15 @@ internal sealed class Tadpole : Body
             if (_stuck > 0.5f)
             {
                 float best = 0, bx = 0, by = 0;
-                for (int k = 0; k < 8; k++)
-                {
-                    float a = k * MathF.PI / 4, cx = MathF.Cos(a), cy = MathF.Sin(a), score = 0;
-                    for (int m = 1; m <= 3; m++) if (CanSwim(X + cx * _bl * 0.3f * m, Y + cy * _bl * 0.3f * m)) score++; else break;
-                    if (score > best) { best = score; bx = cx; by = cy; }
-                }
+                // Open water first; when no direction starts on it (a pocket between a pad's rim and the log, where the froglet's
+                // own pixel is a pad: two sat there 57 and 44 s on a portrait screen) the deep rule, anything but land.
+                for (int pass = 0; pass < 2 && best == 0; pass++)
+                    for (int k = 0; k < 8; k++)
+                    {
+                        float a = k * MathF.PI / 4, cx = MathF.Cos(a), cy = MathF.Sin(a), score = 0;
+                        for (int m = 1; m <= 3; m++) if (CanSwim(X + cx * _bl * 0.3f * m, Y + cy * _bl * 0.3f * m, pass == 1)) score++; else break;
+                        if (score > best) { best = score; bx = cx; by = cy; }
+                    }
                 if (best > 0) { X += bx * _bl * 0.3f; Y += by * _bl * 0.3f; }
                 _stuck = 0;
             }
