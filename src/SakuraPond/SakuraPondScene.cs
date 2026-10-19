@@ -132,14 +132,14 @@ internal sealed class SakuraPondScene : IScreensaverScene
         // from last frame; they are updated after, which is close enough for a touch).
         PointF[] turtleSpots = _turtles.Spots;
         PointF[] bumpers = [.. koiHeads, .. turtleSpots, .. _lizards.Noses];
-        _snake.Update(dt, bumpers);
+        _snake.Update(dt, bumpers, _lizards, _mice);   // and who it may meet on the bank: it can stalk and eat a lizard or a mouse
         _lizards.Update(dt, _snake.Live ? _snake.Head : null);   // the lizards run from the snake too
         _mice.Update(dt, _snake.Live ? _snake.Head : null, _lizards.Noses);   // the mice run from the snake and the lizards too
         _frogs.Update(dt, _snake.Live ? _snake.Head : null, duckHeads.Length > 0 ? [.. koiHeads, .. duckHeads] : koiHeads, turtleSpots, _lizards.Noses);   // the frogs leap or dive from all of them (a duck's head counts as a koi's: a swimming frog dives from it)
         PointF[] bedThreats = [.. koiHeads, .. turtleSpots, .. duckHeads];
         _tadpoles.Update(dt, _snake.Live ? [.. bedThreats, _snake.Head] : bedThreats);   // the tadpoles scatter from all of them
         _crayfish.Update(dt, bedThreats);                                                 // the crayfish flips backward from a fish or a turtle over it
-        _ducks.Update(dt, _snake.Live ? _snake.Head : null);
+        _ducks.Update(dt, _snake.Live ? _snake.Head : null, _turtles.All, _surface);   // the ducks feel round the turtle's shell, the snake's body and the swimming frogs
         _dragonflies.Update(dt);
         _swallows.Update(dt);
         _ripples.Update(dt);

@@ -9,10 +9,20 @@ namespace SakuraPond;
 /// the animals themselves.) Unlike the lizards, mice never meet or fight, so
 /// this class only has to hand each mouse the news: where the snake's head is,
 /// where the lizards' noses are, and "a shadow just swept over here".
+///
+/// AND THE SNAKE'S MEAL, the lizards' way (see Lizards in Lizard.cs): a mouse the
+/// snake eats is gone for good, its slot stays empty for 120 to 300 seconds, then
+/// a NEW mouse (new dials, from this wrapper's own dice) comes in from the edge.
 /// </summary>
 internal sealed class Mice
 {
     private readonly Mouse[] _all;
+    private readonly Random _own;                  // the wrapper's own dice: never the scene's
+    private readonly Pond _pond;
+    private readonly Ripples _ripples;
+    private readonly float _often;
+    private readonly float[] _wait;                // per slot: seconds until a new mouse (0: the slot's mouse is alive)
+    public int Respawns;
     // The same trick as Lizards.Noses: one array of each possible size made once,
     // so asking "who is out?" every frame makes no garbage for the collector.
     private readonly PointF[][] _noseArrays;
@@ -20,7 +30,10 @@ internal sealed class Mice
     public Mice(Pond pond, int count, Ripples ripples, float often, Random rng)
     {
         int n = Math.Max(0, count);
+        _pond = pond; _ripples = ripples; _often = often;
+        _own = new Random(unchecked(pond.Width * 6151 + pond.Height * 92821 + count * 37 + 11));
         _all = new Mouse[n];
+        _wait = new float[n];
         _noseArrays = new PointF[n + 1][];
         for (int k = 0; k <= n; k++) _noseArrays[k] = new PointF[k];
         // PERSONALITY, rolled once, the lizards' way: each dial inside its own slice of
@@ -45,8 +58,27 @@ internal sealed class Mice
     /// <param name="lizardNoses">The nose of every lizard that is out (screen pixels).</param>
     public void Update(float dt, PointF? snakeHead, PointF[] lizardNoses)
     {
-        foreach (Mouse m in _all) m.Update(dt, snakeHead, lizardNoses);
+        for (int i = 0; i < _all.Length; i++)
+        {
+            if (_all[i].Dead)
+            {
+                // Eaten. Wait 120 to 300 s, then a new mouse takes the slot and comes in from the edge.
+                if (_wait[i] <= 0) _wait[i] = 120 + 180 * (float)_own.NextDouble();
+                _wait[i] -= dt;
+                if (_wait[i] <= 0)
+                {
+                    _wait[i] = 0;
+                    _all[i] = new Mouse(_pond, _ripples, _often, Traits.Roll(_own), Traits.Roll(_own), _own, firstWait: 0.5f);
+                    Respawns++;
+                }
+            }
+            else _all[i].Update(dt, snakeHead, lizardNoses);
+        }
     }
+
+    /// <summary>How many slots there are (the settings' count), and the mouse in each as something the snake may eat.</summary>
+    public int Count => _all.Length;
+    public IPrey this[int i] => _all[i];
 
     /// <summary>The nose of each mouse that is out right now, screen pixels. Never allocates.</summary>
     public PointF[] Noses
@@ -116,8 +148,21 @@ internal sealed class Mice
 /// again. Whatever the mind decides, the shared walking rules (Core/Minds
 /// Ground) still ask the land mask before every step, so a mouse can never step
 /// onto water.
+///
+/// WHEN THE SNAKE COMES. Like the lizard (Lizard.cs) it only runs if it has SEEN the
+/// snake: ahead or beside it within its reach (0.13u to 0.21u, a timid mouse sees
+/// further), or on top of it (0.04u) from any side, never while it nibbles or drinks
+/// with its head down. Some of those that see it SIT UP instead and watch, and stay
+/// up until the snake is within 0.03u or about eight seconds are gone. When the
+/// snake strikes (IPrey.Strike): a strike that is going to land holds the mouse where
+/// it is; its nose goes to the snake's jaws, it kicks and the tail whips, and it is
+/// pulled in nose first, ears and eyes going in with the head, tail last, then it is
+/// GONE (Dead). A strike that is going to miss makes the mouse JUMP straight up at
+/// the instant of the launch (0.025u high in 0.3 s, drawn lifted up the screen with
+/// its shadow left on the ground, as a petal's height is), land to the side, and bolt
+/// for the grass the way it bolts from any snake.
 /// </summary>
-internal sealed class Mouse : Body
+internal sealed class Mouse : Body, IPrey
 {
     private const int Points = 14;
     private const int BodyPoints = 8;             // spine points 0 to 7 are the body, 8 to 13 the tail
@@ -131,6 +176,8 @@ internal sealed class Mouse : Body
         Groom,     // still, a quick shiver
         Nibble,    // still, head down, chewing
         Drink,     // at the water's edge, nose to the water
+        Jump,      // straight up out of the way of a strike (0.3 s), then it bolts
+        Caught,    // in the snake's jaws: moved only by the snake (Hold), swallowed nose first, then Dead
     }
     /// <summary>Why a scurry is happening. Changes how fast it runs and what is done when it ends.</summary>
     private enum Aim { Roam, Forage, Drink, Flee }
@@ -150,6 +197,11 @@ internal sealed class Mouse : Body
     private Aim _aim;
     private bool _leaving, _shadowPass, _burrow;
     private bool _stranded;                           // its scurry to leave was stopped by water at once: go somewhere reachable first
+    private bool _dead;                               // eaten: gone for good (the Mice wrapper brings a new one later)
+    private bool _snakeSeen, _sitOnSnake;             // it has noticed the snake (once per approach), and chose to sit up and watch rather than run
+    private float _heldT, _jumpT, _jumpH, _jumpDX, _jumpDY;   // seconds in the jaws; the jump's clock, its height now (pixels) and its sideways direction (ground, unit)
+    private PointF _jumpFrom;                         // where the snake was when it struck (the mouse bolts from there)
+    private int _inside;                              // how many spine points are inside the snake's mouth (not drawn)
     private float _drinkLen;                          // how long this drink lasts in all
     private bool _sipped;                             // the drink's one ring has been made
     private readonly Trail _trail = new(96);          // where its head has been (Core/Minds Trail): the body and tail are laid along it
@@ -185,7 +237,8 @@ internal sealed class Mouse : Body
     public bool StillByDesign => _doing is Doing.Sniff or Doing.SitUp or Doing.Groom or Doing.Nibble or Doing.Drink or Doing.Hidden;
     public bool OnGrass => GrassyAt(ToScreen(_x, _y));
 
-    public Mouse(Pond pond, Ripples ripples, float often, float timid, float greedy, Random rng) : base(Points)
+    /// <param name="firstWait">Seconds before its first appearance (a mouse that replaces an eaten one comes at once); null: the usual wait.</param>
+    public Mouse(Pond pond, Ripples ripples, float often, float timid, float greedy, Random rng, float? firstWait = null) : base(Points)
     {
         _pond = pond;
         _ripples = ripples;
@@ -205,7 +258,98 @@ internal sealed class Mouse : Body
         _clearScreen = ClearAt;
         // s along the whole animal (Colour is asked in these), measured from the nose.
         for (int i = 0; i < Points; i++) Along[i] = DistanceAlong(i, _len) / _total;
-        _mind.Begin(Doing.Hidden, often > 0 ? (4 + 12 * (float)rng.NextDouble()) / often : Mind<Doing>.Forever);
+        _mind.Begin(Doing.Hidden, firstWait ?? (often > 0 ? (4 + 12 * (float)rng.NextDouble()) / often : Mind<Doing>.Forever));
+    }
+
+    // ==================== THE SNAKE'S PREY (IPrey) ====================
+
+    /// <summary>Eaten: it is gone for good.</summary>
+    public bool Dead => _dead;
+    public bool Huntable => Visible && !_dead && _doing is not (Doing.Caught or Doing.Jump) && !_leaving && !(_doing == Doing.Scurry && _aim == Aim.Flee) && OnScreen(Spine[0]);
+    public PointF PreyNose => Spine[0];
+    public bool Out => Visible && !_dead;
+    public bool Stalked { get; set; }
+    public float Agility => 1 - _timid;           // a nervous mouse is already jumpy: it dodges worse
+    public float MealSize => 0.5f;
+    public float PreyLength => _total;
+
+    /// <summary>The snake has launched its strike. A catch: stay put, wait for the jaws. A miss: JUMP this instant.</summary>
+    public void Strike(PointF from, PointF at, bool caught)
+    {
+        _speed = 0; _sit = 0; _shake = 0;
+        if (caught)
+        {
+            _mind.Begin(Doing.Caught, Mind<Doing>.Forever); _heldT = 0; _inside = 0; _fade = 1;
+            return;
+        }
+        // THE JUMP: straight up (0.025u), carried 0.03u to the side (to whichever side is land) while it is in the air.
+        (float fx, float fy) = ToGround(from.X, from.Y);
+        float vx = _x - fx, vy = _y - fy, vl = MathF.Sqrt(vx * vx + vy * vy);
+        if (vl < 1e-3f) { vx = MathF.Cos(_heading); vy = MathF.Sin(_heading); vl = 1; }
+        vx /= vl; vy /= vl;
+        float reach = _u * 0.03f;
+        _jumpDX = 0; _jumpDY = 0;
+        foreach (int side in (ReadOnlySpan<int>)[1, -1])
+        {
+            float cx = -vy * side * 0.9f + vx * 0.45f, cy = vx * side * 0.9f + vy * 0.45f, cl = MathF.Sqrt(cx * cx + cy * cy);
+            cx /= cl; cy /= cl;
+            if (OnLand(_x + cx * reach, _y + cy * reach) && OnLand(_x + cx * reach * 0.5f, _y + cy * reach * 0.5f)) { _jumpDX = cx; _jumpDY = cy; break; }
+        }
+        _jumpFrom = from; _jumpT = 0; _jumpH = 0;
+        _mind.Begin(Doing.Jump, Mind<Doing>.Forever);
+    }
+
+    /// <summary>
+    /// In the jaws. Its nose goes AT the jaws, its body is laid out along the snake's direction (ground
+    /// units), it kicks and the tail whips by "thrash"; the first "swallowed" share of its length is inside
+    /// the snake (those spine points crowd together in the mouth and are not drawn), the rest squeezed a
+    /// little where they go in. Exactly the lizard's (Lizard.Hold) with a mouse's body.
+    /// </summary>
+    public void Hold(PointF jaws, float screenDir, float swallowed, float thrash, float dt)
+    {
+        _heldT += dt; _fade = 1; _jumpH = 0;
+        _gait = (_gait + MathF.Tau * 12f * dt) % MathF.Tau;          // the feet kick
+        _speed = _len * 2.5f * MathF.Min(1, thrash / 2f);
+        (float jx, float jy) = ToGround(jaws.X, jaws.Y);
+        float dx = MathF.Cos(screenDir), dy = MathF.Sin(screenDir) / Ripples.Squash, dl = MathF.Sqrt(dx * dx + dy * dy);
+        dx /= dl; dy /= dl;
+        float nx = -dy, ny = dx;
+        float cut = swallowed * _total;
+        int k = 0;
+        while (k < Points && DistanceAlong(k, _len) <= cut) k++;
+        _inside = k;
+        float wave = _heldT * 44f;
+        for (int i = 0; i < Points; i++)
+        {
+            float s = Along[i];
+            float d = DistanceAlong(i, _len) - cut;
+            float cx, cy, hw;
+            if (i < k)
+            {
+                float back = 0.25f * (k - i);
+                cx = jx - dx * back; cy = jy - dy * back;
+                hw = 0.3f;
+            }
+            else
+            {
+                float sway = _len * 0.06f * thrash * (0.15f + 0.85f * s) * MathF.Sin(MathF.Tau * 1.3f * s - wave) * MathF.Min(1, d / (_len * 0.3f));
+                cx = jx + dx * d + nx * sway; cy = jy + dy * d + ny * sway;
+                float squeeze = MathF.Min(1, 0.4f + d / (_len * 0.3f));
+                hw = i < BodyPoints ? _half * Profile(i / (BodyPoints - 1f)) * squeeze : MathF.Max(0.5f, _half * 0.12f * (1 - 0.6f * ((i - (BodyPoints - 1)) / (Points - BodyPoints + 1f))));
+            }
+            PointF l = ToScreen(cx + nx * hw, cy + ny * hw), r = ToScreen(cx - nx * hw, cy - ny * hw);
+            Spine[i] = new PointF((l.X + r.X) / 2, (l.Y + r.Y) / 2);
+            HalfWidth[i] = MathF.Max(0.15f, Dist(l, r) / 2);
+            _liftPx[i] = 0;
+        }
+        Spine[0] = jaws;
+    }
+
+    /// <summary>All of it has gone in. Gone for good: the wrapper brings a new mouse to the slot later.</summary>
+    public void Finish()
+    {
+        _dead = true; _inside = 0; _leaving = false; _burrow = false; _fade = 0; Stalked = false;
+        _mind.Begin(Doing.Hidden, Mind<Doing>.Forever);
     }
 
     /// <summary>How far point i is behind the nose when the body is "bodyLen" long: the body's points are spread evenly over it, the tail's over the tail's length.</summary>
@@ -260,7 +404,7 @@ internal sealed class Mouse : Body
     /// </summary>
     public void Startle(float x, float y)
     {
-        if (_doing == Doing.Hidden || _leaving || !_frightCool.Ready) return;
+        if (_doing is Doing.Hidden or Doing.Caught or Doing.Jump || _dead || _leaving || !_frightCool.Ready) return;
         if (Dist(Spine[0], new PointF(x, y)) > _u * 0.15f * (0.8f + 0.4f * _timid)) return;
         _frightCool.Start(6);
         Flee(new PointF(x, y), "shadow");
@@ -268,8 +412,11 @@ internal sealed class Mouse : Body
 
     public void Update(float dt, PointF? snakeHead, PointF[] lizardNoses)
     {
+        if (_dead) return;
         _mind.Tick(dt);
         _frightCool.Tick(dt);
+        if (_doing == Doing.Caught) return;                  // the snake moves it (Hold)
+        if (_doing == Doing.Jump) { JumpStep(dt); return; }
         // The fade: in 0.3 s toward seen, out 0.3 s toward gone. Away from the screen altogether it is simply gone.
         float fadeTo = _doing == Doing.Hidden ? 0 : 1;
         if (_doing == Doing.Hidden && !_burrow) _fade = 0;
@@ -280,7 +427,7 @@ internal sealed class Mouse : Body
             if (_burrow)
             {
                 // Out of the grass at the very spot it went in.
-                _burrow = false;
+                _burrow = false; _snakeSeen = false;
                 Emerged++;
                 _mind.Begin(Doing.Sniff, 0.5f + (float)_rng.NextDouble());
             }
@@ -337,6 +484,33 @@ internal sealed class Mouse : Body
         LaySpine();
     }
 
+    /// <summary>
+    /// The jump: 0.3 s up and down (height 0.025u at the top, the path 4p(1-p)), carried 0.03u sideways onto
+    /// land, the legs going. The body is drawn lifted up the screen by the height and its shadow stays on the
+    /// ground, thrown a little down and right as a petal's is (Draw). On the landing it bolts for the grass.
+    /// </summary>
+    private void JumpStep(float dt)
+    {
+        _jumpT += dt;
+        float p = Math.Clamp(_jumpT / 0.3f, 0f, 1f);
+        _jumpH = _u * 0.025f * 4 * p * (1 - p);
+        if (_jumpDX != 0 || _jumpDY != 0)
+        {
+            float step = _u * 0.03f / 0.3f * dt;
+            float nx = _x + _jumpDX * step, ny = _y + _jumpDY * step;
+            if (OnLand(nx, ny)) { _x = nx; _y = ny; }
+            _trail.RememberIfMoved(new PointF(_x, _y), _len / 30);
+        }
+        _speed = _len * 2.5f;
+        _gait = (_gait + MathF.Tau * 12f * dt) % MathF.Tau;
+        LaySpine();
+        if (p >= 1)
+        {
+            _jumpH = 0;
+            Flee(_jumpFrom, "snake");
+        }
+    }
+
     /// <summary>Comes out at the screen's edge on the land (the bottom or the side), facing in. False if no spot was found.</summary>
     private bool Appear()
     {
@@ -352,7 +526,7 @@ internal sealed class Mouse : Body
             PointF s = new(bottom ? x : (ix == 0 ? -_len * 0.3f : _pond.Width + _len * 0.3f), bottom ? _pond.Height + _len * 0.3f : y);
             (_x, _y) = ToGround(s.X, s.Y);
             _heading = bottom ? -MathF.PI / 2 : (ix == 0 ? 0 : MathF.PI);
-            _speed = 0; _sit = 0; _shake = 0; _burrow = false;
+            _speed = 0; _sit = 0; _shake = 0; _burrow = false; _snakeSeen = false; _inside = 0; _jumpH = 0;
             _trail.Straight(new PointF(_x, _y), _heading, _total * 1.2f, 40);   // a straight animal behind it, so the spine means something before it has moved
             _leaving = false;
             _aim = Aim.Roam;
@@ -387,8 +561,25 @@ internal sealed class Mouse : Body
         // jitter the lizard's first version had.)
         if (!_leaving && !(_doing == Doing.Scurry && _aim == Aim.Flee))
         {
-            float snakeReach = _u * 0.2f * (0.8f + 0.5f * _timid), lizardReach = _u * 0.08f * (0.8f + 0.6f * _timid);
-            if (snakeHead is PointF sh && Dist(Spine[0], sh) < snakeReach) { Flee(sh, "snake"); return; }
+            float snakeReach = _u * (Stalked ? 0.1f : 0.16f) * (0.8f + 0.5f * _timid), lizardReach = _u * 0.08f * (0.8f + 0.6f * _timid);
+            if (snakeHead is PointF sh)
+            {
+                // It only runs if it has SEEN the snake (see the class comment); some that see it sit up and watch instead.
+                float sd = Dist(Spine[0], sh);
+                if (sd < snakeReach && NoticesSnake(sh, sd))
+                {
+                    if (!_snakeSeen)
+                    {
+                        _snakeSeen = true;
+                        _sitOnSnake = sd > _u * 0.045f && _rng.NextDouble() < 0.5 + 0.3 * _timid;
+                        if (_sitOnSnake) { _mind.Begin(Doing.SitUp, 4 + 4 * (float)_rng.NextDouble()); return; }
+                    }
+                    else if (_sitOnSnake && _doing == Doing.SitUp && !_mind.Over && sd > _u * 0.03f) return;   // still sitting up, watching
+                    Flee(sh, "snake"); return;
+                }
+                if (sd > _u * 0.3f) _snakeSeen = false;
+            }
+            else _snakeSeen = false;
             foreach (PointF ln in lizardNoses)
                 if (Dist(Spine[0], ln) < lizardReach) { Flee(ln, "lizard"); return; }
         }
@@ -409,6 +600,16 @@ internal sealed class Mouse : Body
                 if (_mind.Over) EndScurry();
                 break;
         }
+    }
+
+    /// <summary>Does it see the snake? On top of it (0.04u) always; otherwise only if its head is up and the snake is ahead of it or beside it, not behind.</summary>
+    private bool NoticesSnake(PointF sh, float d)
+    {
+        if (d < _u * 0.04f) return true;
+        if (_doing is Doing.Nibble or Doing.Drink) return false;
+        PointF n = Spine[0], b = Spine[1];
+        float hx = n.X - b.X, hy = n.Y - b.Y;
+        return hx * (sh.X - n.X) + hy * (sh.Y - n.Y) > -0.3f * MathF.Sqrt(hx * hx + hy * hy) * d;
     }
 
     /// <summary>Starts a scurry toward a screen point: the aim, and how fast it runs. It may take at most half as long again as the trip needs.</summary>
@@ -758,7 +959,7 @@ internal sealed class Mouse : Body
             HalfWidth[i] = Dist(l, r) / 2;
             // Sitting up lifts the head most and the shoulders a little (the rump stays on the ground).
             float w = i == 0 ? 1f : i == 1 ? 0.8f : i == 2 ? 0.45f : i == 3 ? 0.15f : 0f;
-            _liftPx[i] = lift * w;
+            _liftPx[i] = lift * w + Light.Lift * _jumpH;      // sitting up lifts the head; a jump lifts all of it
             Spine[i] = new PointF(Spine[i].X, Spine[i].Y - _liftPx[i]);
         }
         // The nose twitch: a hair of pull back toward the body, fast. Pulled BACK only, so the nose never leaves the land the trail has walked.
@@ -838,16 +1039,18 @@ internal sealed class Mouse : Body
         // The shadow: the same body, dark and faint, a little down and to the right of where it
         // lies ON THE GROUND. A raised head (sitting up) is drawn higher, so its shadow is moved
         // back DOWN by the same lift: the gap between the head and its shadow is what reads as height.
-        float sx = _u * 0.0016f, sy = _u * 0.002f;
+        // In a jump the shadow stays on the ground but slides down and right with the height, as a petal's does.
+        float sx = _u * 0.0016f + Light.ShadowX * _jumpH, sy = _u * 0.002f + Light.ShadowY * _jumpH;
         for (int i = 0; i < Points; i++) Spine[i] = new PointF(Spine[i].X + sx, Spine[i].Y + sy + _liftPx[i]);
         _shadowPass = true;
         Paint(fb, _pond.Open, null, 0, soft * 1.3f);
         _shadowPass = false;
         for (int i = 0; i < Points; i++) Spine[i] = new PointF(Spine[i].X - sx, Spine[i].Y - sy - _liftPx[i]);
         // Feet first (the body covers their roots): front pair at the shoulders, hind pair at the hips, opposite corners in step.
-        Feet(fb, 2, 0);
-        Feet(fb, 5, MathF.PI);
+        if (_inside <= 2) Feet(fb, 2, 0);
+        if (_inside <= 5) Feet(fb, 5, MathF.PI);
         Paint(fb, _pond.Open, _pond.Sun, 0, soft);
+        if (_inside > 0) return;                                           // its head is in the snake: no ears or eyes to show
         // The ears: round, a brown rim with a smaller pink middle, either side of the head.
         PointF e0 = Spine[0], e1 = Spine[1];
         float ex = e1.X - e0.X, ey = e1.Y - e0.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));

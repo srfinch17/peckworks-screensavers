@@ -114,8 +114,11 @@ src/
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
     Minnows.cs                     schools of tiny fish that move as one, and rush to the dragonfly's rings
+    Tadpoles.cs                    clutches of tadpoles in the shallows that grow legs and leave as froglets
+
     Turtle.cs                      the turtle: paddling, floating, diving, hauling out to bask
     Frog.cs                        the frogs: sitting on pads, rocks and the bank, leaping, kicking, floating, diving, climbing out
+    Crayfish.cs                    a crayfish that comes out from under a bank rock, walks the shallow bed, feeds, and flips backward from a fish
     Petals.cs                      petals falling from the blossom, landing, floating
     Ripples.cs                     rings spreading on the water
     Dragonflies.cs                 hover, dart, perch, dip, and the game with the minnows
@@ -590,6 +593,39 @@ no cross shadows) and is painted against the whole view instead of the water onl
 circle is kept no tighter than 0.6 body lengths (0.85 while lining up on a perch), or the middle
 of the shell drifts sideways and it reads as going tail first.
 
+*The ducks paddle, dabble and herd.* A duck (`Ducks.cs`: `Ducks` is the visitor and director, `Duck` a
+grown duck, `Duckling` a fluff ball) is rigid, so it has a STRAIGHT spine like the turtle's, laid out
+from the middle of its body (so turning on the spot swings the bill and tail round the middle) with a
+neck whose three points swing about the body's front: the head leads a turn and looks about up to 60
+degrees without the body following, and turns right back over the shoulder to preen. The body is
+painted by `Body` from colours baked once per species and sex (the folded wings are two darker
+panels with a pale line between, the rump and tail dark); the head, bill, eyes and the species'
+marks (the mandarin drake's sails, the teal's green eye patch) are ovals on top, at the head's own
+height. Height is the pond's usual lift up the screen with a shadow that hugs the bird (a shadow
+thrown far from its caster reads as lift): back 0.01u, head 0.03u, a dabble lifts the tail end and
+sinks the head, a flap lifts the whole bird and stamps two pictures of the open wings
+(`TurningStamp`, made once at start-up). Its mind is the shared kit (`Core/Minds`): two dials per
+visit (calm, fussy), a `Doing` (Cruise, Look, Dabble, Preen, Flap, Wait, Herd), weighted dice; the
+steering is the snake's (feelers from just past the bill over the pads, rocks, log, reeds and the
+bank, the smallest turn that clears, a refused step forces the turn) with an eased turn rate. The
+ducklings do not steer by themselves: each chases a point on the mother's trail (`Trail`) a set way
+back, the line closing up when she stops, feeling the way as she does. The cute things are the
+director's: a weighted dice picks one (never two at once, the last one much less likely), sets the
+ducklings' doings and runs it a phase at a time. A straggler (more than 0.15u from her and more
+than 0.07u behind its place) makes her stop and look back until it is in place. A duck is solid to
+the koi (its `Chain` is in the scene's surface list, never moved by a fish) and shoves the floating
+petals aside. Nothing moves a duck, so a duck must go round whatever else is at the surface: the
+turtle's shell (while it is up near the surface) and the beads of the snake's body and of every
+swimming frog are handed to the duck's world every frame as circles, and its feelers and step rule
+read them like rocks. The two
+adults of a pair are solid to each other (overlapping bodies are pushed half the way apart along the
+line between their closest parts, no faster than a body length a second: the second duck used to
+stop wherever it was when the first stopped, often on top of her). And the duck's world knows that
+the land goes on beyond the screen's edge: a point off the picture reads the last pixel on the
+picture in its row or column, water beside water, land beside the land corner. The first version
+called everything off the screen water, and a drake skirted the bank along that strip into the
+bottom corner, where the bank meets both edges, and sat in the grass for the rest of the run.
+
 *The frogs sit, leap and kick.* A frog (`Frog.cs`, a `Frogs` holder like `Turtles`) is rigid, so
 it has a STRAIGHT spine like the turtle's (the same `Body` drawing: haze by depth, branch shadows,
 squash), with a few small ovals on top: two eyes with a pale rim, four legs, a pale throat. It
@@ -629,6 +665,30 @@ is the two halves meeting: a dragonfly asks where the nearest school is, flies o
 low tapping the water three times (three small rings), and the taps call the school; then it darts
 off far and its timer runs before it plays again, taking the schools in turn.
 
+*Tadpoles hang, burst and grow up.* A clutch (`Tadpoles.cs`: `Tadpoles` holds clutches, a `Clutch`
+is the cluster, a `Tadpole` is one animal and, later, the froglet it becomes) lives in water shallow
+enough that the bed shows, near the cattails. Unlike the minnows they have no flocking: no
+alignment (they do not face one way), only a gentle pull to the cluster's middle, a little room
+between neighbours, and each one's own temper (how often it bursts, how far from the middle it likes
+to be, whether it grazes at a rock, the bank or a pad). Each is a bending body on a short trail like
+the minnow, but the body is a stiff lump and only the tail waves (a slow small wave when sculling,
+ten beats a second in a burst). A tadpole that is nearly still cannot change shape by moving, since
+the spine is laid along where the head has been, so it swings its whole body round a point in the
+middle of the body (a rigid pivot) before a burst, curling the tail into a C; a moving one turns by
+bending. It hangs at 0.9 of the bed's depth under its nose, drawn shrunk, hazed and sunk by that
+depth as the koi are, with a small shadow hugging it on the bed; a spot where the bed is too
+deep to show is refused like land, and so is a heading whose bed rises so fast that the lift would
+cancel a burst down the screen (the first timeline showed bursts that went nowhere). Growing up is
+slow and one at a time: buds, hind legs, forelegs, the tail shrinking to a third, then a froglet
+with the frog's look at a smaller size that rises to the surface and kicks (a push of a quarter
+second, a glide) toward whichever screen edge has the fewest non-water pixels on the way,
+shoving petals aside, and is removed when it leaves the screen. When the cluster has thinned to
+three a new hatch of half-size tadpoles appears at the cattails or a pad's rim. THE POND'S LAW
+(nothing clips): tadpoles and froglets are far too small to be solid to a fish or a pad, so they
+pass under every koi, pad and turtle and flee them (they are not in the scene's surface list);
+they never enter land, rock or the shade of a branch; a froglet at the surface is solid to the
+floating petals only.
+
 *A lizard on land is the koi's method on the ground.* The lizard (`Lizard.cs`) is the same
 bending spine, its head leading and its body and long tail laid along the trail behind it, with
 a running S-wave that grows down the tail and dies away when it stops, and four legs as small
@@ -664,6 +724,32 @@ a dragonfly sits on a dry bank rock within reach (dragonflies perch on stones as
 now), a lizard may STALK it, a creep at a wary walk that stops a body length short, at which the
 dragonfly takes off away from it; and a swallow passing low over the bank (`Swallows.Shadow`)
 sends any lizard within 0.12u bolting for cover, not again for ten seconds.
+
+*A crayfish walks on the bed and escapes backward.* The crayfish (`Crayfish.cs`, a wrapper like
+`Lizards` holding one `CrayfishBody`) is a rigid shell on a straight spine (the turtle's way), with
+the abdomen's curl in a tail flip drawn as a shortening of everything behind the carapace. Its
+legs, two long antennae, two claws (arm, palm and two fingers that open) and eyes are small
+ovals and lines laid on that body, each driven by a pose that is eased frame by frame: claws held
+ahead, raised and wide (threat), closed (flip), or one reaching to the mouth (feed); the legs'
+phase runs with its signed speed, so they ripple forward when it walks and backward when it backs
+up, and freeze when it stops. It turns by pivoting about the middle of the shell, never about the
+nose (turning about the nose swept the middle across a lily pad with no step ever tested).
+Where it lives is worked out once, when the scene is made: from the middle of each bank rock and
+the log it looks outward for the first open water, lays the body down under the stone, and keeps
+the place only if the whole body is on non-water pixels there (so it simply is not drawn, which is
+what "under the rock" looks like), the bed shows a little way out (0.02u to 0.12u deep), and a
+dozen free walks lead away from the doorway. The picture is only drawn on open water, so a claw,
+the head and then the tail appear at the stone's edge as it comes out. On the bed its Z is the
+floor under its middle (never deeper than it), so it is sunk down the screen, hazed toward the
+water and shrunk exactly as a koi at that depth; a step to a pixel that is not open water, or
+where the haze would pass 0.65, is refused. It is solid to nothing: a koi is kept a margin of
+water above the bed by its own rules, so every fish passes over it, and the crayfish reacts
+instead. A koi, turtle or duck within 0.09u (a bold crayfish: 0.06u) sends it flipping backward
+two or three times, 0.1u in 0.15 s each with a 0.4 s pause (a flip that would end on a refused
+pixel stops short), swinging round first if the threat is behind; a bold one with the threat
+ahead raises its claws first and flips only if it comes within 0.05u. Four seconds between scares.
+Then it holds still with the claws up for a second or two, walks home and slides back under the
+stone. A visit is 30 to 95 s of activity every two to five minutes (the "Crayfish" knob).
 
 *A field mouse is the lizard's method, made small and shy.* The mouse (`Mouse.cs`, with a `Mice`
 holder like `Lizards`) copies the lizard's shape: a spine laid along the shared `Trail` (14 points,
@@ -722,6 +808,40 @@ lying on or leaving it, and is to every other doing. All of this only chooses a 
 the feelers, the "never stuck" rule and the startle (which ends a hunt or a lie) still have the
 last word. The weave's width is eased from one doing's value to the next, so the head never jumps
 sideways when the doing changes.
+
+*Five skins and a hunt.* Each visit wears one of five skins (`Snake.Colour(s, v)`: a shimahebi,
+aodaisho, yamakagashi, hibakari or karasuhebi), picked from the two dials already rolled at the door
+(`(bold*1000 + 7*nerve*1000) mod 5`), never from a new roll, because one extra roll there would move
+every later roll in the scene and the owner compares builds at one seed. The marks are looked up from
+(s, v) with a sine or two, so they ride along as the body bends. The same trick gives the snake its
+own dice for the hunt (a `Random` seeded from the dials), so a meeting never touches the scene's dice
+either. THE HUNT has four new doings. A lizard or mouse that is out, within 0.14u of the head and
+ahead of it (75 degrees), while the head is on the land or within 0.03u of it, is a MEETING; the snake
+rolls once per animal per visit whether to go for it (40 to 80 percent by boldness) and then Stalk
+creeps at a third of a cruise with the weave at a quarter, the feelers still on. The stalk is dropped
+if the prey's nose gets further than 0.2u (it ran or hid; counted as abandoned). At 0.05u it Strikes:
+the neck is drawn back into an S for a third of a second (a drawing-only offset laid over the front
+third of the spine, the koi's chain is untouched), then the head shoots to the prey's nose in 0.12
+seconds with the mouth open (the head's drawn width x1.5). The outcome is rolled at the launch (50
+percent, plus or minus 15 for the snake's boldness and the prey's agility, held to 25..80); the snake
+tells the prey through `IPrey.Strike`. A catch freezes the prey where it is until the jaws arrive. A
+miss makes it dodge in the same frame: the lizard flings itself 0.04u sideways in 0.15 s, the mouse
+jumps 0.025u straight up in 0.3 s (drawn lifted by `Light.Lift` x height, shadow left on the ground and
+slid down and right by the height, the way petals are). SWALLOW: `IPrey.Hold` puts the prey's nose at the
+jaws every frame, lays its body out in front of the snake (turned toward land if the straight way is
+water) and thrashes it, hard for a second; then the swallowed share grows over 3 to 5 s: those spine
+points crowd together inside the mouth and are not drawn, and the legs, ears and eyes of the animal are
+skipped as they go in. When all of it is in, the animal is Dead, and a BULGE (the half-width x1.33
+for a lizard, x1.5 for a mouse, over a tenth of the length) travels from behind the head to the middle
+of the body over 20 to 30 s and then shrinks over 25 s; it is a drawn width only, the chain is unchanged.
+A fed snake is slow (x0.6), hunts no more, is much more inclined to bask on the log and only flinches
+at a touch. MISS: the head is back to its width at once with a small kick of the neck, a second of
+looking about, three seconds' chase at 1.3 times its cruise, and it gives up. Lizards and mice see the
+snake only from ahead or the side (and not at all while basking, drinking or nibbling, until it is
+0.07u away); about half of those that see it freeze (a lizard) or sit up (a mouse) rather than run, and
+stay so until the snake is within 0.04u, so a hunt can find prey that does not run. The `Lizards` and
+`Mice` wrappers hold the slots: an eaten animal's slot stays empty for 120 to 300 s, then a new animal
+with new dials, rolled from the wrapper's own dice, comes in from the edge.
 
 *The fallen log* (`ShorePainter.Log`) is painted once, like a rock, with the same lighting rules:
 a soft shadow down and right, the body shaded across its width so it reads as round, long wavy

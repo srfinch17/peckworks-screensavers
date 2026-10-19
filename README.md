@@ -177,14 +177,53 @@ travelling wave (the cattails and irises sway with it stiffly).
   swimming one dives (hazy and smaller as it goes down, back up with a tiny ring). A frog in the
   water is solid to the koi (they steer round it and a fish that meets it is pushed out) and
   shoves the floating petals aside. Each frog has its own two dials: how bold and how restless.
+- **Tadpoles** hang in a loose cluster over the bed in the warm shallows near the cattails, tails
+  sculling lazily, some grazing at a rock's flank, the bank or a pad's rim. Now and then one bursts
+  (curls into a C, whips its tail and shoots a few body lengths, then stops dead); anything big
+  coming near scatters them and they drift back together. One at a time, minutes apart, one grows
+  up: buds, hind legs, forelegs, the tail shrinking, then a froglet that rises, swims off with frog
+  kicks across open water (shoving petals aside) and leaves the screen for good. When the cluster
+  has thinned, a new hatch of tiny ones appears at the cattails or a pad's rim. The knob "Tadpole
+  clutches" (0 to 3, default 1) sets how many clusters. Tadpoles are too small to be solid to
+  anything: they pass under fish and pads and flee them; a froglet at the surface is solid to petals.
+- A **crayfish** (amerika-zarigani, the red swamp crayfish of every Japanese ditch) lives under a
+  bank rock or the log and now and then comes out into the shallows where the bed shows: it edges
+  out claws first, walks slowly on eight legs rippling in a wave, antennae waving, stops to feed
+  (a claw reaching to the mouth over and over), puts both claws up in a threat, backs up a little,
+  and, when a koi or a turtle passes over, escapes with the tail flip: the abdomen snaps under and
+  it shoots backward two or three times, then sits with its claws up and walks home and slides
+  back under the stone. It is drawn on the bed (sunk, hazed and shrunk like the fish above it)
+  and is solid to nothing: everything swims over it. Each visit has its own two dials, how bold
+  and how hungry. The "Crayfish" knob sets how often it comes out (0 for never).
+- **Ducks** swim by now and then: usually a mother with three to six ducklings, sometimes a drake and
+  a hen, sometimes a lone drake, of one of four species (the eastern spot-billed duck, mallard,
+  mandarin, common teal), each with its own colours seen from above (the mandarin drake's two
+  orange sails, the mallard drake's green head and white neck ring). A duck comes in from beyond one
+  edge over water, crosses by a few stops in open water, and leaves beyond another, in a minute or
+  two. It paddles with its head rocking in time and a V of rings off its breast, looks about (the
+  head turns, the body does not), dabbles (tips up, head under, tail clear of the water), preens
+  (head back over the shoulder), flaps (wings flung wide three times, a little spray, a tail wag),
+  and stops and looks back for a straggler. The ducklings follow her trail in a line (two abreast
+  when there are many), and now and then one of them does something cute, never two at once: one
+  lags to peck at something and scrambles to catch up, two bump and spin, one rides on her back and
+  slides off with a plop, one pecks a petal, one dabbles where the minnows flash, all dabble bottoms
+  up, all bunch under her chin, or she flaps and they scatter and come back. If the snake comes near
+  she herds them away. Every duck and duckling is solid to the koi, shoves the floating petals
+  aside, and is a head the minnows, tadpoles and frogs keep clear of; a duck goes round the turtle,
+  the snake's body and a swimming frog, and the two adults of a pair keep off each other. The "Ducks" setting scales
+  how often they come (100% is every four to eight minutes).
 - **Petals** let go of the blossom, sway and tumble down, their shadows sliding in to meet them,
   touch the water with a tiny ring, then float, drifting slowly and gathering against the banks.
 - **Dragonflies** (shiokara tombo, the pale blue dragonfly of Japanese ponds) hover, dart and stop
   dead, perch on lily pads, and the golden female dips to touch her tail to the water.
 - **Swallows** visit to drink: low, fast, sweeping curves with bursts of wingbeats and swept-back
   glides, skimming the surface with a line of rings, their shadows racing below them.
-- Now and then a **snake** (a shimahebi, the four-lined rat snake) comes out of the grass, swims
-  across the pond with its body weaving behind its head and a small wake, and slips away. It is
+- Now and then a **snake** (one of five Japanese kinds, a different one each visit: the shimahebi,
+  olive with four dark stripes; the aodaisho, plain green with faint blotches and a pale head; the
+  yamakagashi, a checker of black and orange-red blotches with a yellow collar; the hibakari, plain
+  brown with a cream line along the neck; the karasuhebi, near black with a blue sheen down the
+  back) comes out of the grass, swims across the pond with its body weaving behind its head and a
+  small wake, and slips away. It is
   not on rails: it feels its way, goes round the lily pads, the rocks, the log, the cattails and
   the iris clumps rather than over them, pushes the floating petals out of its way, and if a
   koi, a turtle or the lizard touches it, it startles: a burst of speed, a swing away, rings off its head, then it calms. The koi and
@@ -196,7 +235,14 @@ travelling wave (the cattails and irises sway with it stiffly).
   afloat, swim to the log's end, climb on, lie along it for 10 to 30 seconds in a gentle S and
   slip off the far end (bask). A bold snake hunts and basks more and calms sooner; a nervous one
   just crosses, startles at a longer reach and stays frightened longer. It always ends by
-  leaving across the far side.
+  leaving across the far side. And on the bank it HUNTS: a lizard or a mouse that comes face to face
+  with it (within 0.14u, ahead of it, while it is on the bank or at the water's edge) may be
+  stalked at a creep, then it draws its neck back into an S and strikes. Sometimes it lands: the
+  prey thrashes in the jaws, goes in head first over a few seconds, and a lump the size of the
+  meal travels down the snake and fades; sometimes the prey was already gone (a lizard flings
+  itself aside, a mouse jumps straight up) and the jaws close on nothing. A snake strikes at most
+  twice a visit, and one that has eaten is slow and would sooner bask. An eaten animal is replaced
+  by a new one (new temper) two to five minutes later.
 - Two **lizards** (kanahebi, the Japanese grass lizard with the very long tail) each come out on
   the bank every couple of minutes: a dash, dead still, another dash, over the grass and up onto a
   rock to bask, its body and tail throwing an S-wave as it runs and its legs stepping on opposite
@@ -206,7 +252,10 @@ travelling wave (the cattails and irises sway with it stiffly).
   up on a dragonfly sitting on a bank rock (it takes off a body length short), bolt for cover
   when a swallow's shadow sweeps over them, and if
   both are out and meet, they square up nose to nose, then the bolder one charges and the other
-  bolts away and leaves. Both run for the nearest edge if the snake comes close.
+  bolts away and leaves. If the snake comes close they run for the nearest edge, but only if
+  they have SEEN it: one that was basking, drinking or facing away is caught up with, and some
+  freeze instead of running. A strike that lands holds the lizard in the snake's jaws; one that
+  misses makes it fling itself sideways in a single leap.
 - A **field mouse** (akanezumi) lives in the bank's grass. It comes out at the screen's edge for
   half a minute or so, then goes: a plump brown oval with a round head, two pink-lined round ears,
   bead eyes, four tiny feet and a thin tail nearly as long as itself. It moves in scurries of a
@@ -226,8 +275,10 @@ travelling wave (the cattails and irises sway with it stiffly).
 Settings: draw width (sharpness against smoothness), petals, number of koi (ten by default), number of goldfish (three by default), how playful the koi are (0 means they only cruise and rest),
 number of minnow schools (0 means no game), number of turtles, number of frogs (two by default),
 number of dragonflies, how often the swallows visit, how often the snake crosses, how many
-lizards there are (0 to 3), how often the lizards come out (Lizard visits), and how many field
-mice live in the grass (0 to 3).
+lizards there are (0 to 3), how often the lizards come out (Lizard visits), how many field
+mice live in the grass (0 to 3), how many clutches of tadpoles wriggle in the shallows (0 to 3,
+one by default), how often the crayfish comes out from under its rock, and how often a duck
+family swims by.
 
 On a screen wider than the "Draw width" setting (2048 pixels by default) it draws at that width
 and Windows enlarges the picture: the scene is soft and painterly, so the enlarging loses little,

@@ -16,11 +16,24 @@ namespace SakuraPond;
 /// its next dash or two. A meeting happens at most once per visit, so it
 /// never turns into a loop of chasing. This class only spots the moment and
 /// tells the pair; each lizard's own mind does the facing, charging and fleeing.
+///
+/// AND THE SNAKE'S MEAL. A lizard the snake eats is gone for good. The count in
+/// the settings is the number of SLOTS: a slot whose lizard was eaten stays empty
+/// for 120 to 300 seconds, then a NEW lizard (new dials, rolled from this
+/// wrapper's own dice so the scene's are never touched) takes it and comes in
+/// from the edge of the screen the way any lizard does.
 /// </summary>
 internal sealed class Lizards
 {
     private readonly Lizard[] _all;
     private readonly Random _rng;
+    private readonly Random _own;                  // the wrapper's own dice (new lizards' dials, the wait): never the scene's
+    private readonly Pond _pond;
+    private readonly Ripples _ripples;
+    private readonly float _often;
+    private readonly Dragonflies? _dragonflies;
+    private readonly float[] _wait;                // per slot: seconds until a new lizard (0: the slot's lizard is alive)
+    public int Respawns;
     // The snake wants the noses of whichever lizards are out. Building a new array
     // every frame would be garbage for the collector, so one array of each possible
     // size (0, 1, 2 ...) is made once and the right one is filled in and handed back.
@@ -30,8 +43,11 @@ internal sealed class Lizards
     public Lizards(Pond pond, int count, Ripples ripples, float often, Random rng, Dragonflies? dragonflies = null)
     {
         _rng = rng;
+        _pond = pond; _ripples = ripples; _often = often; _dragonflies = dragonflies;
+        _own = new Random(unchecked(pond.Width * 7919 + pond.Height * 104729 + count * 31 + 5));
         int n = Math.Max(0, count);
         _all = new Lizard[n];
+        _wait = new float[n];
         _noseArrays = new PointF[n + 1][];
         for (int k = 0; k <= n; k++) _noseArrays[k] = new PointF[k];
         // PERSONALITY, rolled once. Dice alone could give two near-twins, and then the
@@ -55,11 +71,33 @@ internal sealed class Lizards
         foreach (Lizard l in _all) l.Startle(x, y);
     }
 
+    /// <summary>How many slots there are (the settings' count), and the lizard in each as something the snake may eat.</summary>
+    public int Count => _all.Length;
+    public IPrey this[int i] => _all[i];
+
+    /// <summary>For the instruments: the lizards themselves (a slot's object changes when a new lizard takes it).</summary>
+    public IReadOnlyList<Lizard> All => _all;
+
     /// <summary>Moves every lizard on, then looks for a pair that has just come together.</summary>
     /// <param name="snakeHead">Where the snake's head is (screen pixels) while it is swimming; null when it is not out.</param>
     public void Update(float dt, PointF? snakeHead)
     {
-        foreach (Lizard l in _all) l.Update(dt, snakeHead);
+        for (int i = 0; i < _all.Length; i++)
+        {
+            if (_all[i].Dead)
+            {
+                // Eaten. Wait 120 to 300 s, then a new lizard takes the slot and comes in from the edge.
+                if (_wait[i] <= 0) _wait[i] = 120 + 180 * (float)_own.NextDouble();
+                _wait[i] -= dt;
+                if (_wait[i] <= 0)
+                {
+                    _wait[i] = 0;
+                    _all[i] = new Lizard(_pond, _ripples, _often, Traits.Roll(_own), Traits.Roll(_own), _own, _dragonflies, firstWait: 0.2f) { Peers = _all };
+                    Respawns++;
+                }
+            }
+            else _all[i].Update(dt, snakeHead);
+        }
         for (int i = 0; i < _all.Length; i++)
             for (int j = i + 1; j < _all.Length; j++)
             {
@@ -131,8 +169,22 @@ internal sealed class Lizards
 /// that comes out of it, and the snake coming too close (run for the nearest
 /// edge). Whatever the mind decides, the steering below still asks the land
 /// mask before every step, so a lizard can never step onto water.
+///
+/// WHEN THE SNAKE COMES. A lizard has eyes on the sides of its head, so it sees the
+/// snake coming from ahead and to the side from 0.16u away, but NOT from behind, and
+/// not at all (until it is 0.04u away) while it basks or drinks with its head down.
+/// Having seen it, about two thirds of the lizards FREEZE (a lizard trusts its stillness and
+/// stays frozen until the snake is within 0.03u or about six seconds have passed);
+/// the rest run for the edge. One that did not see it, or froze, can be caught up
+/// with. When the snake strikes (IPrey.Strike): if the strike is going to land the
+/// lizard stays where it is and is HELD (Caught): its nose at the snake's jaws,
+/// its body out in front, thrashing (the tail whips), then pulled in nose first,
+/// the front legs and eyes going in with the head, the tail last and still
+/// twitching, and then it is GONE (Dead). If the strike is going to miss, the lizard
+/// DODGES at the instant of the launch: it flings itself sideways 0.04u in 0.15 s
+/// (to whichever side is land), then runs for the way out like any frightened lizard.
 /// </summary>
-internal sealed class Lizard : Body
+internal sealed class Lizard : Body, IPrey
 {
     private const int Points = 16;
     private enum Doing
@@ -143,6 +195,8 @@ internal sealed class Lizard : Body
         Bask,      // lying flat on a rock
         Drink,     // standing at the water's edge, nose to the water
         Face,      // squaring up to the other lizard in a meeting
+        Dodge,     // flung sideways out of the way of a strike (0.15 s), then it runs
+        Caught,    // in the snake's jaws: moved only by the snake (Hold), swallowed nose first, then Dead
     }
     /// <summary>Why a dash is happening. Changes how fast it runs and what is done when it ends.</summary>
     private enum Aim { Roam, Drink, Charge, Flee, Stalk }
@@ -164,6 +218,10 @@ internal sealed class Lizard : Body
     private bool _leaving, _shadowPass;
     private bool _stranded;                       // its dash to leave was stopped by water at once: walk somewhere reachable first
     private bool _met;                            // has it had its meeting this visit?
+    private bool _dead;                           // eaten: gone for good (the Lizards wrapper brings a new one later)
+    private bool _snakeSeen, _freezeOnSnake;      // it has noticed the snake (once per approach), and chose to freeze rather than run
+    private float _heldT, _dodgeDX, _dodgeDY;     // seconds in the jaws; the dodge's direction (ground, unit)
+    private int _inside;                          // how many spine points are inside the snake's mouth (not drawn)
     private bool _approach, _isWinner;            // in a meeting: still walking up to the other / the bolder one
     private Lizard? _other;                       // the lizard in a meeting with it
     private float _drinkLen;                      // how long this drink lasts in all
@@ -188,11 +246,12 @@ internal sealed class Lizard : Body
     public Lizard[] Peers { get; set; } = [];
 
     /// <summary>Free to be drawn into a meeting: out, on screen, not leaving, not already met, not squaring up.</summary>
-    public bool CanMeet => Visible && !_leaving && !_met && _doing != Doing.Face && OnScreen(Spine[0]);
+    public bool CanMeet => Visible && !_leaving && !_met && _doing is not (Doing.Face or Doing.Caught or Doing.Dodge) && OnScreen(Spine[0]);
 
     public static float Gap(Lizard a, Lizard b) => Dist(a.Spine[0], b.Spine[0]);
 
-    public Lizard(Pond pond, Ripples ripples, float often, float bold, float energy, Random rng, Dragonflies? dragonflies = null) : base(Points)
+    /// <param name="firstWait">Seconds before its first appearance (a lizard that replaces an eaten one comes at once); null: the usual wait.</param>
+    public Lizard(Pond pond, Ripples ripples, float often, float bold, float energy, Random rng, Dragonflies? dragonflies = null, float? firstWait = null) : base(Points)
     {
         _pond = pond;
         _ripples = ripples;
@@ -208,7 +267,105 @@ internal sealed class Lizard : Body
         _landScreen = LandAt;
         _clearScreen = ClearAt;
         for (int i = 0; i < Points; i++) Along[i] = i / (Points - 1f);
-        _mind.Begin(Doing.Hidden, often > 0 ? (15 + 30 * (float)rng.NextDouble()) / often : Mind<Doing>.Forever);
+        _mind.Begin(Doing.Hidden, firstWait ?? (often > 0 ? (15 + 30 * (float)rng.NextDouble()) / often : Mind<Doing>.Forever));
+    }
+
+    // ==================== THE SNAKE'S PREY (IPrey) ====================
+
+    /// <summary>Eaten: it is gone for good.</summary>
+    public bool Dead => _dead;
+    public bool Huntable => Visible && !_dead && _doing is not (Doing.Caught or Doing.Dodge) && !_leaving && !(_doing == Doing.Dash && _aim == Aim.Flee) && OnScreen(Spine[0]);
+    public PointF PreyNose => Spine[0];
+    public bool Out => Visible && !_dead;
+    public bool Stalked { get; set; }
+    public float Agility => _bold;
+    public float MealSize => 0.33f;
+    public float PreyLength => _len;
+
+    /// <summary>The snake has launched its strike. A catch: stay put, wait for the jaws. A miss: DODGE this instant.</summary>
+    public void Strike(PointF from, PointF at, bool caught)
+    {
+        _other = null; _approach = false;
+        _speed = 0;
+        if (caught)
+        {
+            _mind.Begin(Doing.Caught, Mind<Doing>.Forever); _heldT = 0; _inside = 0;
+            return;
+        }
+        // THE DODGE. Straight away from the snake is where it would be chased; sideways is where it is not.
+        // Try one side then the other for land to land on; with neither, straight away, and with that no good, it just bolts.
+        (float fx, float fy) = ToGround(from.X, from.Y);
+        float vx = _x - fx, vy = _y - fy, vl = MathF.Sqrt(vx * vx + vy * vy);
+        if (vl < 1e-3f) { vx = MathF.Cos(_heading); vy = MathF.Sin(_heading); vl = 1; }
+        vx /= vl; vy /= vl;
+        float reach = _u * 0.04f;
+        float dirX = vx, dirY = vy;
+        bool found = false;
+        foreach (int side in (ReadOnlySpan<int>)[1, -1])
+        {
+            float cx = -vy * side * 0.9f + vx * 0.45f, cy = vx * side * 0.9f + vy * 0.45f, cl = MathF.Sqrt(cx * cx + cy * cy);
+            cx /= cl; cy /= cl;
+            if (OnLand(_x + cx * reach, _y + cy * reach) && OnLand(_x + cx * reach * 0.5f, _y + cy * reach * 0.5f)) { dirX = cx; dirY = cy; found = true; break; }
+        }
+        if (!found && !OnLand(_x + vx * reach, _y + vy * reach)) { dirX = 0; dirY = 0; }
+        _dodgeDX = dirX; _dodgeDY = dirY;
+        if (dirX != 0 || dirY != 0) _heading = Wrap(_heading + Math.Clamp(Wrap(MathF.Atan2(dirY, dirX) - _heading), -1.2f, 1.2f));   // the twist of a fling
+        _mind.Begin(Doing.Dodge, 0.15f);
+    }
+
+    /// <summary>
+    /// In the jaws. Its nose is put AT the jaws, its body is laid out along the snake's direction
+    /// (ground units: the pond is squashed down the screen), the tail whips by "thrash"; the first
+    /// "swallowed" share of its length is inside the snake: those spine points are crowded together
+    /// in the mouth (and not drawn: the snake's head is over them), the rest are squeezed a little
+    /// where they go in.
+    /// </summary>
+    public void Hold(PointF jaws, float screenDir, float swallowed, float thrash, float dt)
+    {
+        _heldT += dt;
+        _gait = (_gait + MathF.Tau * 9f * dt) % MathF.Tau;           // the legs kick
+        _phase = _gait;
+        _speed = _len * 2f * MathF.Min(1, thrash / 2f);
+        (float jx, float jy) = ToGround(jaws.X, jaws.Y);
+        float dx = MathF.Cos(screenDir), dy = MathF.Sin(screenDir) / Ripples.Squash, dl = MathF.Sqrt(dx * dx + dy * dy);
+        dx /= dl; dy /= dl;
+        float nx = -dy, ny = dx;
+        float cut = swallowed * _len;
+        int k = 0;
+        while (k < Points && Along[k] * _len <= cut) k++;
+        _inside = k;
+        float wave = _heldT * 40f;
+        for (int i = 0; i < Points; i++)
+        {
+            float s = Along[i];
+            float d = s * _len - cut;
+            float cx, cy, hw;
+            if (i < k)
+            {
+                // Inside the mouth: crowded behind the jaws, hidden by the head.
+                float back = 0.25f * (k - i);
+                cx = jx - dx * back; cy = jy - dy * back;
+                hw = 0.3f;
+            }
+            else
+            {
+                // Outside: laid along the direction, the thrash growing from nothing at the jaws to a whip at the tail.
+                float sway = _wide * 1.3f * thrash * (0.1f + 0.9f * s) * MathF.Sin(MathF.Tau * 1.6f * s - wave) * MathF.Min(1, d / (_len * 0.15f));
+                cx = jx + dx * d + nx * sway; cy = jy + dy * d + ny * sway;
+                hw = _wide * Profile(s) * MathF.Min(1, 0.4f + d / (_len * 0.2f));
+            }
+            PointF l = ToScreen(cx + nx * hw, cy + ny * hw), r = ToScreen(cx - nx * hw, cy - ny * hw);
+            Spine[i] = new PointF((l.X + r.X) / 2, (l.Y + r.Y) / 2);
+            HalfWidth[i] = MathF.Max(0.15f, Dist(l, r) / 2);
+        }
+        Spine[0] = jaws;                                                // exactly at the jaws, whatever the rounding did
+    }
+
+    /// <summary>All of it has gone in. Gone for good: the wrapper brings a new lizard to the slot later.</summary>
+    public void Finish()
+    {
+        _dead = true; _inside = 0; _leaving = false; Stalked = false;
+        _mind.Begin(Doing.Hidden, Mind<Doing>.Forever);
     }
 
     private float CentreY => _pond.Centre.Y;
@@ -251,7 +408,7 @@ internal sealed class Lizard : Body
     /// </summary>
     public void Startle(float x, float y)
     {
-        if (!Visible || _leaving || !_frightCool.Ready || _doing == Doing.Face) return;
+        if (!Visible || _dead || _leaving || !_frightCool.Ready || _doing is Doing.Face or Doing.Caught or Doing.Dodge) return;
         if (Dist(Spine[0], new PointF(x, y)) > _u * 0.12f) return;
         _frightCool.Start(10);
         _other = null;
@@ -260,8 +417,11 @@ internal sealed class Lizard : Body
 
     public void Update(float dt, PointF? snakeHead = null)
     {
+        if (_dead) return;
         _mind.Tick(dt);
         _frightCool.Tick(dt);
+        if (_doing == Doing.Caught) return;                  // the snake moves it (Hold)
+        if (_doing == Doing.Dodge) { DodgeStep(dt); return; }
         if (_doing == Doing.Hidden)
         {
             if (_mind.Over && Appear()) _mind.Begin(Doing.Freeze, 0.5f);
@@ -324,6 +484,28 @@ internal sealed class Lizard : Body
         LaySpine();
     }
 
+    /// <summary>The fling: 0.04u in 0.15 s along the dodge direction (only onto land), the legs going; then it runs for the way out.</summary>
+    private void DodgeStep(float dt)
+    {
+        float sp = _u * 0.04f / 0.15f, step = sp * dt;
+        if (_dodgeDX != 0 || _dodgeDY != 0)
+        {
+            float nx = _x + _dodgeDX * step, ny = _y + _dodgeDY * step;
+            if (OnLand(nx, ny)) { _x = nx; _y = ny; }
+            _trail.RememberIfMoved(new PointF(_x, _y), _len / 30);
+        }
+        _speed = sp;
+        _gait = (_gait + MathF.Tau * 9f * dt) % MathF.Tau;
+        _phase = _gait;
+        _amp += (_wide * 1.6f - _amp) * (1 - MathF.Exp(-dt * 20));
+        LaySpine();
+        if (_mind.Over)
+        {
+            _leaving = true; _dashes = 0;
+            Go(Aim.Flee, ExitGoal(ToScreen(_x, _y)), 4f);
+        }
+    }
+
     /// <summary>Comes out at the screen's edge on the land (the bottom or the side), facing in. False if no spot was found.</summary>
     private bool Appear()
     {
@@ -340,7 +522,7 @@ internal sealed class Lizard : Body
             _heading = bottom ? -MathF.PI / 2 : (ix == 0 ? 0 : MathF.PI);
             _speed = 0; _amp = 0;
             _trail.Straight(new PointF(_x, _y), _heading, _len * 20 / 18f, 20);   // a straight body behind it, so the spine means something before it has moved
-            _leaving = false;
+            _leaving = false; _snakeSeen = false; _inside = 0;
             _met = false; _other = null; _aim = Aim.Roam;
             _dashes = 5 + _rng.Next(8) + (int)(_bold * 4);                 // a bold lizard stays out longer
             LaySpine();
@@ -367,14 +549,29 @@ internal sealed class Lizard : Body
     {
         // The snake is close: no thinking, just run for the nearest edge and hide. (Even
         // mid-meeting: the other lizard sees the meeting is off, in ThinkFace.)
-        if (snakeHead is PointF sh && !_leaving && Dist(Spine[0], sh) < _u * 0.2f)
+        // It only runs if it has SEEN the snake (see the class comment): from ahead or the side within 0.16u (only 0.1u if the snake is creeping up on it), or from
+        // behind or with its head down only when the snake is on top of it (0.04u). Two thirds of those that see it freeze.
+        if (snakeHead is PointF sh && !_leaving)
         {
-            _other = null;
-            _leaving = true;
-            _dashes = 0;
-            Go(Aim.Flee, ExitGoal(ToScreen(_x, _y)), 4f);
-            return;
+            float sd = Dist(Spine[0], sh);
+            if (sd < _u * (Stalked ? 0.1f : 0.16f) && NoticesSnake(sh, sd))
+            {
+                if (!_snakeSeen)
+                {
+                    _snakeSeen = true;
+                    _freezeOnSnake = sd > _u * 0.045f && _rng.NextDouble() < 0.65;
+                    if (_freezeOnSnake) { _other = null; _mind.Begin(Doing.Freeze, 4 + 4 * (float)_rng.NextDouble()); return; }
+                }
+                else if (_freezeOnSnake && _doing == Doing.Freeze && !_mind.Over && sd > _u * 0.03f) return;   // still frozen, still hoping
+                _other = null;
+                _leaving = true;
+                _dashes = 0;
+                Go(Aim.Flee, ExitGoal(ToScreen(_x, _y)), 4f);
+                return;
+            }
+            if (sd > _u * 0.3f) _snakeSeen = false;
         }
+        else if (snakeHead == null) _snakeSeen = false;
         switch (_doing)
         {
             case Doing.Freeze:
@@ -393,6 +590,16 @@ internal sealed class Lizard : Body
                 if (_mind.Over) EndDash();
                 break;
         }
+    }
+
+    /// <summary>Does it see the snake? On top of it (0.04u) always; otherwise only if awake with its head up and the snake is ahead of it or beside it, not behind.</summary>
+    private bool NoticesSnake(PointF sh, float d)
+    {
+        if (d < _u * 0.04f) return true;
+        if (_doing is Doing.Bask or Doing.Drink) return false;
+        PointF n = Spine[0], b = Spine[1];
+        float hx = n.X - b.X, hy = n.Y - b.Y;
+        return hx * (sh.X - n.X) + hy * (sh.Y - n.Y) > -0.3f * MathF.Sqrt(hx * hx + hy * hy) * d;   // within about 107 degrees of straight ahead
     }
 
     /// <summary>Squaring up: walk toward the other's nose until about 0.7 body lengths apart, hold still facing it, then (when the stand-off ends) charge or flee.</summary>
@@ -750,9 +957,10 @@ internal sealed class Lizard : Body
         _shadowPass = false;
         for (int i = 0; i < Points; i++) Spine[i] = new PointF(Spine[i].X - sx, Spine[i].Y - sy);
         // Legs first (the body covers their roots): front pair at the shoulders, hind pair at the hips, opposite corners in step.
-        Legs(fb, 2, 0.17f, 0.06f, 0);
-        Legs(fb, 6, 0.2f, 0.065f, MathF.PI);
+        if (_inside <= 2) Legs(fb, 2, 0.17f, 0.06f, 0);
+        if (_inside <= 6) Legs(fb, 6, 0.2f, 0.065f, MathF.PI);
         Paint(fb, _pond.Open, _pond.Sun, 0, soft);
+        if (_inside > 0) return;                                          // its head is in the snake: no eyes to show
         // Two tiny dark eyes.
         PointF e0 = Spine[0], e1 = Spine[1];
         float ex = e1.X - e0.X, ey = e1.Y - e0.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));

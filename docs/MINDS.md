@@ -111,10 +111,12 @@ These are in the code comments too; here they are in one place.
 |--------|-------|--------|------------|
 | Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt); hunger (a mood) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch, Shy, Leap | being chased, a dragonfly's tap, a petal settling (when hungry), a swallow's shadow, a bump from another body, a neighbour's splash |
 | Goldfish (`Koi.cs`, `Koi.Kind.Goldfish`) | the same three dials, dealt over koi and goldfish together | the koi's, with Follow doubled toward another goldfish, no Chase at a koi, a shallower Rest | the koi's, with a flinch reach 1.5 times as far |
-| Lizards (`src/SakuraPond/Lizard.cs`) | bold, energy (sliced, paired) | Hidden, Dash (Roam, Drink, Charge, Flee, Stalk), Freeze, Bask, Drink, Face | a meeting, the snake, a swallow's shadow |
-| Mice (`src/SakuraPond/Mouse.cs`) | timid, greedy (sliced, paired) | Hidden, Scurry, Sniff, SitUp, Groom, Nibble, Drink | the snake's head, a lizard's nose, a swallow's shadow |
+| Lizards (`src/SakuraPond/Lizard.cs`) | bold, energy (sliced, paired) | Hidden, Dash (Roam, Drink, Charge, Flee, Stalk), Freeze, Bask, Drink, Face, Dodge, Caught | a meeting, the snake (only if it is seen: ahead or beside, or on top of it), a strike (dodge or held), a swallow's shadow |
+| Mice (`src/SakuraPond/Mouse.cs`) | timid, greedy (sliced, paired) | Hidden, Scurry, Sniff, SitUp, Groom, Nibble, Drink, Jump, Caught | the snake's head (only if seen), a strike (a jump or held), a lizard's nose, a swallow's shadow |
 | Turtles (`src/SakuraPond/Turtle.cs`) | sunny, nerve (dealt) | Cruise, Float (and a petal nibble), Dive, Approach, Climb, Bask, Slip | the snake's head near a basking turtle, a body in its way (feelers), a touch (Nudge) |
-| Snake (`src/SakuraPond/Snake.cs`) | bold, nerve (per visit) | Cross, Explore, Hunt, Bask | a touch from a koi, turtle or lizard |
+| Snake (`src/SakuraPond/Snake.cs`) | bold, nerve (per visit; the skin and the hunt's own dice come from them) | Cross, Explore (and Prowl toward prey on the bank), Hunt, Bask, Stalk, Strike, Swallow, Miss | a touch from a koi, turtle or lizard (not in a strike or a swallow, a fed snake only flinches) |
+| Crayfish (`src/SakuraPond/Crayfish.cs`) | bold, hungry (rolled per visit) | Hidden, Emerge, Walk, Feed, Threat, Back, Pivot, Flip, Hold, Retreat | a koi, turtle or duck over it (within 0.09u, bold 0.06u) |
+| Ducks (`src/SakuraPond/Ducks.cs`) | calm, fussy (per visit); a duckling has none, the director picks for it | Cruise, Look, Dabble, Preen, Flap, Wait, Herd (duckling: Follow, Lag, Scramble, Bump, Ride, Peck, Chase, Dabble, Bunch, Scatter) | the snake's head near the mother (Herd), a straggler (Wait), the family's cute-thing dice (one at a time) |
 | Frogs (`src/SakuraPond/Frog.cs`) | bold, restless (dealt) | Sit (with croak, shift, pivot inside it), Snap, Leap, Swim, Float, Dive, Climb | the snake's head, a koi's head or a turtle near a swimming frog, a lizard's nose near one on a rock or the bank, a swallow's shadow |
 
 The minnows' school mood (drift, rush, mill) and the dragonflies' doings are simpler clocks

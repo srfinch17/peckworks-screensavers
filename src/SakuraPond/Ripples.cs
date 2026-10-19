@@ -34,6 +34,17 @@ internal sealed class Ripples
 
     public const float Squash = 0.86f;   // how much flatter than round a circle on the water looks from here
 
+    /// <summary>
+    /// Is the pond close to its cap? Decorations that ring the water all the
+    /// time (a duck's wake, the fizz of ducklings' feet) ask this and skip a
+    /// ring when it is true, so that the rings that mean something (a koi's
+    /// gulp, a dragonfly's tap, a petal landing, a frog's splash) always find
+    /// a slot. One adult duck's wake alone would otherwise hold eighteen of
+    /// the thirty-two slots, and a drake and a hen together would refuse every
+    /// other ring in the pond for the whole of their visit.
+    /// </summary>
+    public bool Crowded => _rings.Count >= Most - 12;
+
     // The ring's profile across its crest, worked out once: at distance d
     // from the crest (in band widths, negative inside) the light lift is
     // exp(-d^2) - 0.8 * exp(-(d + 1.6)^2), a bright crest with a dark trough
