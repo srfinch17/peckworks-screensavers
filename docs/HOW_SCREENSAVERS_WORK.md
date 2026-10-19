@@ -617,7 +617,13 @@ the koi (its `Chain` is in the scene's surface list, never moved by a fish) and 
 petals aside. Nothing moves a duck, so a duck must go round whatever else is at the surface: the
 turtle's shell (while it is up near the surface) and the beads of the snake's body and of every
 swimming frog are handed to the duck's world every frame as circles, and its feelers and step rule
-read them like rocks. The two
+read them like rocks. The snake does the same in return (points along the ducks' bodies are circles
+in its own clearance test, and a touch from one startles it), a swimming frog dives from any part of
+a duck, and a duck that something at the surface still gets onto (the snake swimming into a waiting
+hen, a frog crawling under her: feelers only keep a duck off things while it moves) recoils off it
+along the line between their closest parts, onto open water only. A duck's shadow is painted only on
+water in view, like every other shadow: painted on all water, it showed as a grey duck, wings and
+all, lying on the blossom wherever the duck itself was hidden under a branch. The two
 adults of a pair are solid to each other (overlapping bodies are pushed half the way apart along the
 line between their closest parts, no faster than a body length a second: the second duck used to
 stop wherever it was when the first stopped, often on top of her). And the duck's world knows that
@@ -815,9 +821,11 @@ aodaisho, yamakagashi, hibakari or karasuhebi), picked from the two dials alread
 every later roll in the scene and the owner compares builds at one seed. The marks are looked up from
 (s, v) with a sine or two, so they ride along as the body bends. The same trick gives the snake its
 own dice for the hunt (a `Random` seeded from the dials), so a meeting never touches the scene's dice
-either. THE HUNT has four new doings. A lizard or mouse that is out, within 0.14u of the head and
-ahead of it (75 degrees), while the head is on the land or within 0.03u of it, is a MEETING; the snake
-rolls once per animal per visit whether to go for it (40 to 80 percent by boldness) and then Stalk
+either. A snake between visits is drawn out by prey: its clock runs twice as fast while a lizard
+or a mouse is out. THE HUNT has four new doings. A lizard or mouse that is out, within 0.14u of the head and
+ahead of it (75 degrees), while the head is on the land or within 0.03u of it, is a MEETING; a snake
+that happened on the animal rolls once per animal per visit whether to go for it (50 to 90 percent by
+boldness), one that went to look at it (a prowl, from 0.9u) goes for it without a roll, and then Stalk
 creeps at a third of a cruise with the weave at a quarter, the feelers still on. The stalk is dropped
 if the prey's nose gets further than 0.2u (it ran or hid; counted as abandoned). At 0.05u it Strikes:
 the neck is drawn back into an S for a third of a second (a drawing-only offset laid over the front
@@ -825,9 +833,12 @@ third of the spine, the koi's chain is untouched), then the head shoots to the p
 seconds with the mouth open (the head's drawn width x1.5). The outcome is rolled at the launch (50
 percent, plus or minus 15 for the snake's boldness and the prey's agility, held to 25..80); the snake
 tells the prey through `IPrey.Strike`. A catch freezes the prey where it is until the jaws arrive. A
-miss makes it dodge in the same frame: the lizard flings itself 0.04u sideways in 0.15 s, the mouse
-jumps 0.025u straight up in 0.3 s (drawn lifted by `Light.Lift` x height, shadow left on the ground and
-slid down and right by the height, the way petals are). SWALLOW: `IPrey.Hold` puts the prey's nose at the
+miss makes it dodge in the same frame: the lizard flings its whole body 0.04u sideways in 0.15 s (the
+trail is shifted with the head, as a shove moves a koi: moving the nose alone left the body on its old
+line, folded, with the jaws on its hips), the mouse jumps 0.025u up and 0.03u aside in 0.3 s the same
+way (drawn lifted by `Light.Lift` x height, shadow left on the ground and slid down and right by the
+height, the way petals are), and the jaws of a miss stop three tenths short of where the nose was, and never nearer than 0.025u to
+the line the body lay along (a strike from behind or beside found the body between the jaws and the nose). SWALLOW: `IPrey.Hold` puts the prey's nose at the
 jaws every frame, lays its body out in front of the snake (turned toward land if the straight way is
 water) and thrashes it, hard for a second; then the swallowed share grows over 3 to 5 s: those spine
 points crowd together inside the mouth and are not drawn, and the legs, ears and eyes of the animal are

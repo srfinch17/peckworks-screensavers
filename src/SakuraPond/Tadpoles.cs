@@ -968,9 +968,9 @@ internal sealed class Tadpole : Body
         }
         else { _dive -= dt; if (_dive <= 0) State = Z > 0.03f ? TadState.Rise : TadState.Swim; }
 
-        // ---- Hemmed in: after 60 s dive and swim deeper for the edge (pads are no wall under the water); after 90 s, gone under the murk ----
+        // ---- Hemmed in: after 60 s dive and swim deeper for the edge (pads are no wall under the water); after four minutes, gone (a last resort: at 90 s one was deleted in plain sight) ----
         if (_age > 60 && !_deep) { _deep = true; PlanGoal(-1); }
-        if (_age > 90) { Leaving = Exit.Murk; return; }
+        if (_age > 240) { Leaving = Exit.Murk; return; }
 
         // ---- Heading: toward the goal, round whatever is ahead ----
         float want = MathF.Atan2(_gy - Y, _gx - X);
@@ -1016,8 +1016,25 @@ internal sealed class Tadpole : Body
         // ---- Move: a step into land or a pad is refused (and the heading turns away next frame) ----
         float step = Speed * dt;
         float nx = X + MathF.Cos(Heading) * step, ny = Y + MathF.Sin(Heading) * step;
-        if (CanSwim(nx, ny)) { X = nx; Y = ny; }
-        else { Speed = 0; _stuck += dt; _side = -_side; _refusedT = 1; _refusedH = Heading; }
+        if (CanSwim(nx, ny)) { X = nx; Y = ny; _stuck = 0; }
+        else
+        {
+            Speed = 0; _stuck += dt; _side = -_side; _refusedT = 1; _refusedH = Heading;
+            // Wedged (half a second of refused steps: one sat 60 s between a pad's rim and the log on a portrait screen): the
+            // ducklings' eight-way rescue, a nudge of a third of a body toward the most open of eight directions.
+            if (_stuck > 0.5f)
+            {
+                float best = 0, bx = 0, by = 0;
+                for (int k = 0; k < 8; k++)
+                {
+                    float a = k * MathF.PI / 4, cx = MathF.Cos(a), cy = MathF.Sin(a), score = 0;
+                    for (int m = 1; m <= 3; m++) if (CanSwim(X + cx * _bl * 0.3f * m, Y + cy * _bl * 0.3f * m)) score++; else break;
+                    if (score > best) { best = score; bx = cx; by = cy; }
+                }
+                if (best > 0) { X += bx * _bl * 0.3f; Y += by * _bl * 0.3f; }
+                _stuck = 0;
+            }
+        }
         _refusedT -= dt;
         PointF last = _trail[_trailHead];
         float stepLen = Len / 10;

@@ -221,6 +221,8 @@ internal sealed class Lizard : Body, IPrey
     private bool _dead;                           // eaten: gone for good (the Lizards wrapper brings a new one later)
     private bool _snakeSeen, _freezeOnSnake;      // it has noticed the snake (once per approach), and chose to freeze rather than run
     private float _heldT, _dodgeDX, _dodgeDY;     // seconds in the jaws; the dodge's direction (ground, unit)
+    private PointF _dodgeFrom;                     // where the strike came from (screen): the fling's run goes away from it
+    private PointF? _snakeNow;                     // the snake's head this frame (the run keeps off where it IS, not where it struck from)
     private int _inside;                          // how many spine points are inside the snake's mouth (not drawn)
     private bool _approach, _isWinner;            // in a meeting: still walking up to the other / the bolder one
     private Lizard? _other;                       // the lizard in a meeting with it
@@ -276,6 +278,7 @@ internal sealed class Lizard : Body, IPrey
     public bool Dead => _dead;
     public bool Huntable => Visible && !_dead && _doing is not (Doing.Caught or Doing.Dodge) && !_leaving && !(_doing == Doing.Dash && _aim == Aim.Flee) && OnScreen(Spine[0]);
     public PointF PreyNose => Spine[0];
+    public PointF PreyTail => Spine[Points - 1];
     public bool Out => Visible && !_dead;
     public bool Stalked { get; set; }
     public float Agility => _bold;
@@ -301,15 +304,17 @@ internal sealed class Lizard : Body, IPrey
         float reach = _u * 0.04f;
         float dirX = vx, dirY = vy;
         bool found = false;
-        foreach (int side in (ReadOnlySpan<int>)[1, -1])
-        {
-            float cx = -vy * side * 0.9f + vx * 0.45f, cy = vx * side * 0.9f + vy * 0.45f, cl = MathF.Sqrt(cx * cx + cy * cy);
-            cx /= cl; cy /= cl;
-            if (OnLand(_x + cx * reach, _y + cy * reach) && OnLand(_x + cx * reach * 0.5f, _y + cy * reach * 0.5f)) { dirX = cx; dirY = cy; found = true; break; }
-        }
+        foreach (float k in (ReadOnlySpan<float>)[1f, 0.5f])                  // the full reach to either side, then half of it (a corner of the land)
+            foreach (int side in (ReadOnlySpan<int>)[1, -1])
+            {
+                if (found) break;
+                float cx = -vy * side * 0.9f + vx * 0.45f, cy = vx * side * 0.9f + vy * 0.45f, cl = MathF.Sqrt(cx * cx + cy * cy);
+                cx /= cl; cy /= cl;
+                if (OnLand(_x + cx * reach * k, _y + cy * reach * k) && OnLand(_x + cx * reach * k * 0.5f, _y + cy * reach * k * 0.5f)) { dirX = cx; dirY = cy; found = true; }
+            }
         if (!found && !OnLand(_x + vx * reach, _y + vy * reach)) { dirX = 0; dirY = 0; }
-        _dodgeDX = dirX; _dodgeDY = dirY;
-        if (dirX != 0 || dirY != 0) _heading = Wrap(_heading + Math.Clamp(Wrap(MathF.Atan2(dirY, dirX) - _heading), -1.2f, 1.2f));   // the twist of a fling
+        _dodgeDX = dirX; _dodgeDY = dirY; _dodgeFrom = from;
+        // It turns toward where it is flinging itself as it goes (DodgeStep, eased): a twist of 1.2 rad in one frame folded it into a right angle.
         _mind.Begin(Doing.Dodge, 0.15f);
     }
 
@@ -427,6 +432,7 @@ internal sealed class Lizard : Body, IPrey
             if (_mind.Over && Appear()) _mind.Begin(Doing.Freeze, 0.5f);
             return;
         }
+        _snakeNow = snakeHead;
         Think(snakeHead);
 
         // ---- Steering toward the goal, turning on a circle no tighter than about half its body ----
@@ -491,8 +497,10 @@ internal sealed class Lizard : Body, IPrey
         if (_dodgeDX != 0 || _dodgeDY != 0)
         {
             float nx = _x + _dodgeDX * step, ny = _y + _dodgeDY * step;
-            if (OnLand(nx, ny)) { _x = nx; _y = ny; }
-            _trail.RememberIfMoved(new PointF(_x, _y), _len / 30);
+            // The WHOLE body goes (the trail is moved with the head, as a shove moves a koi's): moving the nose alone left the
+            // body on its old line, so the lizard snapped into a right angle and the jaws still closed on its hips.
+            if (OnLand(nx, ny)) { _trail.Shift(nx - _x, ny - _y); _x = nx; _y = ny; }
+            _heading = Wrap(_heading + Math.Clamp(Wrap(MathF.Atan2(_dodgeDY, _dodgeDX) - _heading), -4f * dt, 4f * dt));
         }
         _speed = sp;
         _gait = (_gait + MathF.Tau * 9f * dt) % MathF.Tau;
@@ -502,7 +510,7 @@ internal sealed class Lizard : Body, IPrey
         if (_mind.Over)
         {
             _leaving = true; _dashes = 0;
-            Go(Aim.Flee, ExitGoal(ToScreen(_x, _y)), 4f);
+            Go(Aim.Flee, FleeGoal(_snakeNow ?? _dodgeFrom), 4f);       // the longest clear run AWAY from the jaws (an exit may lie past the snake)
         }
     }
 

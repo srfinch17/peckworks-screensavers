@@ -114,6 +114,10 @@ internal sealed class Snake : Body
     // the cattail clump, the iris clumps) plus the log as a thick line.
     private readonly PointF[] _obsCentre;
     private readonly float[] _obsRadius;
+    // MOVING things it keeps off as it swims: the ducks' bodies this frame, as circles (the scene sets them before Update).
+    // A duck's own feelers keep it off the snake only while the duck moves; this keeps the snake off a duck that sits still.
+    private readonly float[] _mvX = new float[160], _mvY = new float[160], _mvR = new float[160];
+    private int _mvN;
     private readonly Log? _log;
     private readonly Minnows? _minnows;                    // what it may hunt (null when there are no schools)
 
@@ -283,11 +287,16 @@ internal sealed class Snake : Body
         float wProwl = meal != null ? 1.2f + 2f * _bold : 0;
         if (_fed)
         {
-            // A snake that has eaten would sooner lie in the sun, or go.
-            wHunt = 0; wExplore *= 0.3f; wBask *= 3; wCross *= 1.5f;
+            // A snake that has eaten would sooner lie in the sun, or swim about a while with its meal on show (an Explore goal is
+            // open water in view, walled in by the picture's edge); it crosses out later. A crossing straight from the land corner
+            // hugged the bottom edge BELOW the picture for twenty seconds on three swallows of four, the bulge out of sight.
+            if (_exploreLeft <= 0) _exploreLeft = 1;                           // one more look round, meal on show, even if its list was spent
+            wHunt = 0; wExplore = 3f * (0.7f + 0.5f * (1 - _nerve)); wBask *= 3; wCross *= 0.3f;
         }
         if (_alive > 200) wExplore = wHunt = wBask = wProwl = 0;    // a long visit ends now
-        switch (Dice.Pick(_rng, [wHunt, wBask, wExplore, wCross, wProwl]))
+        int pick = Dice.Pick(_rng, [wHunt, wBask, wExplore, wCross, wProwl]);
+        if (_fed && pick == 3 && _alive <= 200 && BeginExplore()) return;   // a fed snake keeps its meal on show: it explores before it crosses (the roll is made all the same)
+        switch (pick)
         {
             case 0: BeginHunt(school!.Value); break;
             case 1: BeginBask(); break;
@@ -301,15 +310,21 @@ internal sealed class Snake : Body
     private void BeginProwl(PointF prey)
     {
         _goal = prey; _prowls++; Note("prowl");
-        _mind.Begin(Doing.Explore, 30); _phase = 1;
+        // Long enough to get there at a prowl's pace (1.7 cruises) plus a quarter minute to look about: at a flat 30 s, a prowl
+        // begun from the far side of the pond ran out with the snake still half way.
+        float seconds = MathF.Min(75f, 15f + Dist(new PointF(_x, _y), prey) / MathF.Max(1e-3f, _cruise * 1.7f));
+        _mind.Begin(Doing.Explore, seconds); _phase = 1;
     }
 
     /// <summary>Leave: toward a point well beyond the far side of the screen, as seen from here through the pond's middle.</summary>
     private void BeginCross()
     {
-        _mind.Begin(Doing.Cross); _phase = 0;
+        _mind.Begin(Doing.Cross); _phase = 0; Note("cross");
         PointF c = _pond.Centre;
-        float b = Dist(new PointF(_x, _y), c) > _u * 0.15f ? MathF.Atan2(c.Y - _y, c.X - _x) + ((float)_rng.NextDouble() - 0.5f) * 1.2f : (float)(_rng.NextDouble() * MathF.Tau);
+        // A fed snake goes straight through the middle: with the usual spread it left along the bottom edge from the land
+        // corner, the bulge below the picture for most of the next minute. (The roll is made either way: the dice must not move.)
+        float spread = ((float)_rng.NextDouble() - 0.5f) * (_fed ? 0f : 1.2f);
+        float b = Dist(new PointF(_x, _y), c) > _u * 0.15f ? MathF.Atan2(c.Y - _y, c.X - _x) + spread : (float)(_rng.NextDouble() * MathF.Tau);
         PointF to = OffScreen(b);
         // The goal sits a good way past the far edge, so the snake is well
         // out of sight (and over) before it could ever reach it and turn back.
@@ -326,7 +341,7 @@ internal sealed class Snake : Body
             if (!_pond.Water[i] || !_pond.Open[i] || _pond.RoomAt(x, y) < _u * 0.05f || Clear(x, y) < _u * 0.06f) continue;
             if (Dist(new PointF(x, y), new PointF(_x, _y)) < _u * 0.25f) continue;       // not just next door
             _goal = new PointF(x, y);
-            _mind.Begin(Doing.Explore, 45); _phase = 0; _exploreLeft--;
+            _mind.Begin(Doing.Explore, 45); _phase = 0; _exploreLeft--; Note("explore");
             return true;
         }
         return false;
@@ -346,7 +361,7 @@ internal sealed class Snake : Body
     {
         Log log = _pond.Log!.Value;
         _pond.LogPerch.Take(this);
-        _basked = true; _mind.Begin(Doing.Bask, 60); _phase = 0;
+        _basked = true; _mind.Begin(Doing.Bask, 60); _phase = 0; Note("bask");
         _logDir = Dist(new PointF(_x, _y), log.At(0)) <= Dist(new PointF(_x, _y), log.At(1)) ? 1 : -1;
         _goal = LogPoint(log, -(log.Length * 0.5f + _u * 0.14f), 0);
     }
@@ -474,9 +489,10 @@ internal sealed class Snake : Body
 
     /// <summary>
     /// Looks for a meeting: a lizard or mouse that is out, within 0.14u of the head and within
-    /// 75 degrees of where the snake is going, while the snake is on or beside the bank. Each
-    /// animal gets ONE roll per visit; a yes starts the stalk. A bold snake says yes more often
-    /// (40 percent for the nervous, up to 80 for the bold).
+    /// 75 degrees of where the snake is going, while the snake is on or beside the bank. An animal
+    /// the snake happens on gets ONE roll per visit (50 percent for the nervous, up to 90 for the
+    /// bold); one the snake went to LOOK at (a prowl) is stalked without a roll: the prowl's own
+    /// dice were the roll. At 40 to 80 and one roll each the owner saw about one strike an hour.
     /// </summary>
     private void Scan()
     {
@@ -495,10 +511,11 @@ internal sealed class Snake : Body
                 if (Dist(head, nose) > reach) continue;
                 if (MathF.Abs(Wrap(MathF.Atan2(nose.Y - head.Y, nose.X - head.X) - _heading)) > 1.309f) continue;   // within 75 degrees of its heading
                 if (!NearLand(head)) continue;
-                if (WasRolled(p)) continue;
-                if (_rolledCount < _rolled.Length) _rolled[_rolledCount++] = p;
+                bool prowling = _doing == Doing.Explore && _phase == 1;
+                if (WasRolled(p) && !prowling) continue;
+                if (_rolledCount < _rolled.Length && !WasRolled(p)) _rolled[_rolledCount++] = p;
                 Meetings++;
-                if (_huntRng.NextDouble() >= 0.4 + 0.4 * _bold) { Note("meet:no"); continue; }
+                if (!prowling && _huntRng.NextDouble() >= 0.5 + 0.4 * _bold) { Note("meet:no"); continue; }
                 _target = p; Stalks++; p.Stalked = true;
                 _mind.Begin(Doing.Stalk, 25); _phase = 0; _goal = nose; _stalkT = 0;
                 _speed = MathF.Min(_speed, _cruise * 0.5f);      // the creep begins at once (a prowl is brisk, and the speed only eases down slowly)
@@ -509,7 +526,7 @@ internal sealed class Snake : Body
     }
 
     /// <summary>
-    /// A snake swimming by notices a lizard or mouse out on the bank within 0.6u and may turn to go and
+    /// A snake swimming by notices a lizard or mouse out on the bank within 0.9u and may turn to go and
     /// look (a prowl): one roll per animal per visit, 50 percent for the nervous to 100 for the bold. This is
     /// what makes a meeting likely at all: left to chance the snake's crossings pass the little corner of
     /// land a few times an hour.
@@ -525,7 +542,7 @@ internal sealed class Snake : Body
             for (int i = 0; i < n; i++)
             {
                 IPrey p = pass == 0 ? _lizards![i] : _mice![i];
-                if (!p.Huntable || Dist(head, p.PreyNose) > _u * 0.6f) continue;
+                if (!p.Huntable || Dist(head, p.PreyNose) > _u * 0.9f) continue;
                 bool seen = false;
                 for (int k = 0; k < _lookedCount; k++) if (ReferenceEquals(_looked[k], p)) { seen = true; break; }
                 if (seen) continue;
@@ -590,9 +607,20 @@ internal sealed class Snake : Body
             float chance = Math.Clamp(0.5f + 0.15f * (2 * _bold - 1) - 0.15f * (2 * p.Agility - 1), 0.25f, 0.8f);
             _won = _huntRng.NextDouble() < chance;
             _lastNose = p.PreyNose;
+            PointF lastTail = p.PreyTail;                // the body as it lay, read before the dodge moves it
             p.Stalked = false;
             p.Strike(Spine[0], _lastNose, _won);       // a miss: the prey dodges THIS frame; a catch: it freezes where it is
-            _lungeFrom = new PointF(_x, _y); _lungeTo = _lastNose;
+            _lungeFrom = new PointF(_x, _y);
+            if (_won) _lungeTo = _lastNose;             // a catch: the jaws go to the nose
+            else
+            {
+                // A miss: the jaws snap shut short of the animal, seven tenths of the way to where its nose was and never nearer
+                // than 0.025u to the line its body lay along (the prey throws itself aside, but jaws that arrived on the spot
+                // closed on its body, and a strike from behind or beside found the body between the jaws and the nose).
+                float along = 0.7f;
+                while (along > 0.2f && DistToLine(new PointF(_x + (_lastNose.X - _x) * along, _y + (_lastNose.Y - _y) * along), _lastNose, lastTail) < _u * 0.025f) along -= 0.05f;
+                _lungeTo = new PointF(_x + (_lastNose.X - _x) * along, _y + (_lastNose.Y - _y) * along);
+            }
             _heading = MathF.Atan2(_lastNose.Y - Spine[0].Y, _lastNose.X - Spine[0].X);
             _phase = 1; _phaseT = 0; StrikeCount++;
             Note(_won ? "launch:catch" : "launch:miss");
@@ -747,6 +775,14 @@ internal sealed class Snake : Body
     }
 
     private static float Dist(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
+
+    /// <summary>How far point p is from the line piece a to b.</summary>
+    private static float DistToLine(PointF p, PointF a, PointF b)
+    {
+        float ex = b.X - a.X, ey = b.Y - a.Y, e2 = ex * ex + ey * ey;
+        float t = e2 < 1e-6f ? 0 : Math.Clamp(((p.X - a.X) * ex + (p.Y - a.Y) * ey) / e2, 0, 1);
+        return Dist(p, new PointF(a.X + ex * t, a.Y + ey * t));
+    }
     private static float Wrap(float a) => MathF.IEEERemainder(a, MathF.Tau);
 
     private void Remember(PointF p)
@@ -761,6 +797,13 @@ internal sealed class Snake : Body
     /// nearest obstacle, in pixels (negative inside one). The log counts as
     /// a thick line: the distance to its centre line, less half its width.
     /// </summary>
+    /// <summary>What the snake must swim round this frame besides the scenery: points along the ducks' bodies, screen pixels, each a circle of "radius". Set before Update; an empty span clears it.</summary>
+    public void Avoid(ReadOnlySpan<PointF> beads, float radius)
+    {
+        _mvN = Math.Min(beads.Length, _mvX.Length);
+        for (int i = 0; i < _mvN; i++) { _mvX[i] = beads[i].X; _mvY[i] = beads[i].Y; _mvR[i] = radius; }
+    }
+
     private float Clear(float px, float py)
     {
         float best = _u;
@@ -768,6 +811,27 @@ internal sealed class Snake : Body
         {
             float dx = px - _obsCentre[i].X, dy = py - _obsCentre[i].Y;
             best = MathF.Min(best, MathF.Sqrt(dx * dx + dy * dy) - _obsRadius[i]);
+        }
+        for (int i = 0; i < _mvN; i++)
+        {
+            float dx = px - _mvX[i], dy = py - _mvY[i];
+            best = MathF.Min(best, MathF.Sqrt(dx * dx + dy * dy) - _mvR[i]);
+        }
+        // An exploring snake stays on the picture: beyond the edge counts as a wall while its head is on the picture (a fed
+        // snake crawled along below the bottom edge for twenty seconds with its bulge out of sight). A crossing is meant to
+        // leave, and a prowl (phase 1) is not walled either: the prey sits on the land corner by the picture's edge, and with
+        // the wall up no prowl on two natural seeds got within 0.3u of it.
+        // On a crossing the same, for every edge but the one the goal lies beyond: a crossing begun at the land corner went round
+        // the bank rocks, under the bottom edge, and ran east BELOW the picture for a thousand pixels, the goal's pull too weak
+        // to bend it back. The exit edge stays open, so the crossing can leave.
+        if ((_doing == Doing.Explore && _phase == 0 || _doing == Doing.Cross) && _x >= 0 && _y >= 0 && _x < _pond.Width && _y < _pond.Height)
+        {
+            float wall = _u;
+            if (!(_doing == Doing.Cross && _goal.X < 0)) wall = MathF.Min(wall, px);
+            if (!(_doing == Doing.Cross && _goal.X >= _pond.Width)) wall = MathF.Min(wall, _pond.Width - px);
+            if (!(_doing == Doing.Cross && _goal.Y < 0)) wall = MathF.Min(wall, py);
+            if (!(_doing == Doing.Cross && _goal.Y >= _pond.Height)) wall = MathF.Min(wall, _pond.Height - py);
+            best = MathF.Min(best, wall - _u * 0.03f);
         }
         if (_log is Log log && !(_doing == Doing.Bask && _phase >= 1))   // a snake climbing on, lying on or slipping off the log does not mind it
         {
@@ -790,7 +854,9 @@ internal sealed class Snake : Body
     private float ClearAlong(float a, float dist)
     {
         float dx = MathF.Cos(a), dy = MathF.Sin(a), best = _u;
-        foreach (float f in (ReadOnlySpan<float>)[0.08f, 0.2f, 0.35f, 0.55f, 0.78f, 1f])
+        // The first sample is the very next step (0.02 of the look, about five pixels): the head once sat on the rim of a small
+        // stone with every step refused, because the first sample at 0.08 landed beyond the stone and called the heading clear.
+        foreach (float f in (ReadOnlySpan<float>)[0.02f, 0.08f, 0.2f, 0.35f, 0.55f, 0.78f, 1f])
             best = MathF.Min(best, Clear(_x + dx * dist * f, _y + dy * dist * f));
         return best;
     }
@@ -804,7 +870,9 @@ internal sealed class Snake : Body
         if (!_live || _doing != Doing.Bask) _pond.LogPerch.Release(this);   // the log is only the snake's while it is basking (or on its way to)
         if (!_live)
         {
-            _next -= dt;
+            // Drawn out by prey: while a lizard or a mouse is out on the bank the wait for the next visit runs twice as
+            // fast (a snake comes to where there is something to eat). Without it, most prowls arrived after the prey had gone.
+            _next -= dt * (NearestPrey() != null ? 2f : 1f);
             if (_next <= 0 && _often > 0) { Begin(); _next = (150 + 150 * (float)_rng.NextDouble()) / _often; }
             return;
         }
@@ -858,6 +926,9 @@ internal sealed class Snake : Body
                    : _doing == Doing.Stalk ? 0.4f : _doing == Doing.Miss ? 1.3f : _doing == Doing.Explore && _phase == 1 ? 1.7f : 1f;
         if (_fed) pace *= 0.6f;
         float wantSpeed = striking ? _u * 0.18f : _cruise * pace * (1 + 2.2f * fear);
+        // The chase after a miss holds off at 0.08u from the prey's nose (the prey is faster, and its tail is between its nose and
+        // the jaws: without this the jaws ran onto a fleeing lizard's tail with nothing happening, a bite that was not one).
+        if (_doing == Doing.Miss && _phase == 1 && _target != null && Dist(Spine[0], _target.PreyNose) < _u * 0.08f) wantSpeed = 0;
         _speed += (wantSpeed - _speed) * (1 - MathF.Exp(-dt * (striking ? 14f : fear > 0 ? 6f : 1.2f)));   // a lunge gets up to speed almost at once
         // Holding still for a strike, a mouthful or the look-about after a miss: not a crawl, a stop.
         if (_doing is Doing.Strike or Doing.Swallow || (_doing == Doing.Miss && _phase == 0)) _speed = 0;
@@ -885,13 +956,35 @@ internal sealed class Snake : Body
         if (clearAhead < margin)
         {
             float best = _heading, bestScore = MathF.Min(clearAhead, margin * 2);
-            for (int k = 1; k <= 5; k++)
+            // The whole circle, not a hundred degrees either side: in a dead end among the bank rocks (after a catch on the land)
+            // every near heading is blocked, and a search that stops there returns the heading it has and the snake stands on
+            // the stone for as long as the run lasts. The turn penalty still prefers the smallest turn that clears.
+            for (int k = 1; k <= 9; k++)
                 foreach (int side in (ReadOnlySpan<int>)[1, -1])
                 {
                     float a = _heading + side * k * 0.35f;
                     float score = MathF.Min(ClearAlong(a, look), margin * 2) - k * margin * 0.15f;
                     if (score > bestScore) { bestScore = score; best = a; }
                 }
+            if (bestScore <= 0)
+            {
+                // Nothing clears within the look (deep among the bank rocks every long line hits a stone or the edge): look again
+                // at a third of the distance, and failing that go uphill on the clearance itself. Without this the snake stood on
+                // the bank, every step refused, for the rest of a run.
+                for (int k = 0; k <= 9; k++)
+                    foreach (int side in (ReadOnlySpan<int>)[1, -1])
+                    {
+                        float a = _heading + side * k * 0.35f;
+                        float score = MathF.Min(ClearAlong(a, look * 0.3f), margin * 2) - k * margin * 0.15f;
+                        if (score > bestScore) { bestScore = score; best = a; }
+                        if (k == 0) break;
+                    }
+                if (bestScore <= 0)
+                {
+                    float gx = Clear(_x + 2, _y) - Clear(_x - 2, _y), gy = Clear(_x, _y + 2) - Clear(_x, _y - 2);
+                    if (MathF.Abs(gx) + MathF.Abs(gy) > 1e-4f) best = MathF.Atan2(gy, gx);
+                }
+            }
             float urgency = Math.Clamp(1 - clearAhead / margin, 0, 1);
             turn += Wrap(best - _heading) * (1.5f + 3f * urgency);
             most = MathF.Max(most, 2.2f);
@@ -902,7 +995,21 @@ internal sealed class Snake : Body
         float step = _speed * dt;
         float nx = _x + MathF.Cos(_heading) * step, ny = _y + MathF.Sin(_heading) * step;
         float clearNext = Clear(nx, ny);
-        _blocked = !(clearNext > 0 || clearNext >= Clear(_x, _y));   // never stuck: a step toward more room is always allowed
+        float clearHere = Clear(_x, _y);
+        _blocked = !(clearNext > 0 || clearNext >= clearHere);   // never stuck: a step toward more room is always allowed
+        if (clearHere < 0 && !(_doing is Doing.Strike or Doing.Swallow or Doing.Stalk or Doing.Miss) && !(_doing == Doing.Bask && _phase >= 1))
+        {
+            // INSIDE something (a bank rock's circle, entered on a stalk or a strike through its margin): the head walks straight
+            // out, uphill on its own clearance, the goal's pull set aside until it is clear. With the pull still turning the head
+            // back toward the rock every frame it jittered two pixels in a pocket between two stones for nineteen minutes.
+            float gx = Clear(_x + 2, _y) - Clear(_x - 2, _y), gy = Clear(_x, _y + 2) - Clear(_x, _y - 2), gl = MathF.Sqrt(gx * gx + gy * gy);
+            if (gl > 1e-4f)
+            {
+                _heading = MathF.Atan2(gy, gx);
+                nx = _x + gx / gl * step; ny = _y + gy / gl * step;
+                _blocked = false;
+            }
+        }
         if (!_blocked)
         {
             _x = nx; _y = ny;
@@ -1103,7 +1210,7 @@ internal sealed class Snake : Body
                         if (f > 0.12f && f < 0.88f)
                         {
                             bool black = (((cell + (v > 0 ? 1 : 0)) & 1) == 0);
-                            (int tr, int tg, int tb) = black ? (24, 24, 22) : (212, 78, 34);
+                            (int tr, int tg, int tb) = black ? (24, 24, 22) : (178, 96, 60);   // rust, not toy coral-snake orange
                             r += (int)((tr - r) * fade); g += (int)((tg - g) * fade); b += (int)((tb - b) * fade);
                         }
                     }
@@ -1167,6 +1274,9 @@ internal interface IPrey
 
     /// <summary>Where its nose is, screen pixels.</summary>
     PointF PreyNose { get; }
+
+    /// <summary>Where the end of its tail is, screen pixels: with the nose, the line its body lies along.</summary>
+    PointF PreyTail { get; }
 
     /// <summary>Out of the grass and on the screen (even if running): false once it has hidden, left or been eaten.</summary>
     bool Out { get; }

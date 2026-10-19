@@ -210,7 +210,9 @@ travelling wave (the cattails and irises sway with it stiffly).
   up, all bunch under her chin, or she flaps and they scatter and come back. If the snake comes near
   she herds them away. Every duck and duckling is solid to the koi, shoves the floating petals
   aside, and is a head the minnows, tadpoles and frogs keep clear of; a duck goes round the turtle,
-  the snake's body and a swimming frog, and the two adults of a pair keep off each other. The "Ducks" setting scales
+  the snake's body and a swimming frog, the snake swims round the ducks and is startled by a touch
+  from one, a swimming frog dives from any part of a duck, a duck that the snake or a frog still
+  gets onto recoils off it, and the two adults of a pair keep off each other. The "Ducks" setting scales
   how often they come (100% is every four to eight minutes).
 - **Petals** let go of the blossom, sway and tumble down, their shadows sliding in to meet them,
   touch the water with a tiny ring, then float, drifting slowly and gathering against the banks.

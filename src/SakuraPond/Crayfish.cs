@@ -31,6 +31,9 @@ internal sealed class Crayfish
     /// <summary>What kind of hiding place it found ("rock", "log" or "none"), for the instruments.</summary>
     public string Home => _animal?.HomeKind ?? "none";
 
+    /// <summary>Its middle, screen pixels, while it is out (the tadpoles flee it); null under its stone.</summary>
+    public PointF? Spot => _animal != null && _animal.Out ? _animal.Spot : null;
+
     /// <param name="threats">Screen points of what sends it flipping backward: koi heads and middles, turtle noses and shells, the ducks' heads.</param>
     public void Update(float dt, PointF[] threats) => _animal?.Update(dt, threats);
 
@@ -130,6 +133,7 @@ internal sealed class CrayfishBody : Body
     private float _p0x, _p0y, _outHeading, _hx, _hy;   // hidden spot (nose), the way out, and where the nose is when Emerge ends
     public string HomeKind => _homeKind;
     public bool Out => _doing != Doing.Hidden;
+    public PointF Spot => ToScreen(_x, _y);
     // ---- walking ----
     private float _gx, _gy;                      // the Walk goal (for the nose)
     private float _fromX, _fromY, _toX, _toY, _moveT;   // an Emerge or the last slide home: a straight run from-to
@@ -673,7 +677,8 @@ internal sealed class CrayfishBody : Body
                 for (int k = 0; k < n; k++)
                 {
                     float nx = _x + mx / n, ny = _y + my / n;
-                    if (!FreeStep(nx, ny, _heading, true)) { _flipStopped = true; break; }
+                    PointF sc = ToScreen(nx, ny);
+                    if (!FreeStep(nx, ny, _heading, true) || sc.X < _len || sc.X > _pond.Width - _len || sc.Y < _len || sc.Y > _pond.Height - _len) { _flipStopped = true; break; }   // and never off the picture (one flipped until its tail was off the left edge)
                     _x = nx; _y = ny;
                 }
             }
@@ -835,10 +840,11 @@ internal sealed class CrayfishBody : Body
         float cr, cg, cb;
         if (s < 0.5f)
         {
-            // The carapace: deep red, a darker ridge down the middle, a groove across at the neck, pale speckles.
-            cr = 150; cg = 40; cb = 30;
+            // The carapace: dark brick (a real one is rust and brick, not scarlet: the first was a scarlet stick figure), an
+            // olive-brown ridge down the middle, a groove across at the neck, pale speckles.
+            cr = 124; cg = 48; cb = 32;
             float ridge = Math.Clamp((0.16f - av) * 6, 0, 1);
-            cr -= 40 * ridge; cg -= 10 * ridge; cb -= 6 * ridge;
+            cr += (74 - cr) * 0.6f * ridge; cg += (62 - cg) * 0.6f * ridge; cb += (34 - cb) * 0.6f * ridge;
             float groove = Math.Clamp(1 - MathF.Abs(s - 0.33f) * 70, 0, 1) * 0.5f;
             cr -= 50 * groove; cg -= 14 * groove; cb -= 10 * groove;
             // Pale speckles: a cheap hash of the cell (s, v) falls in, two in thirty-two cells (sines per pixel cost more than the whole body).
@@ -848,7 +854,7 @@ internal sealed class CrayfishBody : Body
         {
             // The abdomen: six plates, a dark seam at each joint, the plate's edges a touch paler.
             float u = (s - 0.5f) / 0.4f * 6f, f = u - MathF.Floor(u);
-            cr = 142; cg = 38; cb = 28;
+            cr = 116; cg = 46; cb = 30;
             float seam = Math.Clamp(1 - MathF.Abs(f - 0.05f) * 9, 0, 1);
             cr -= 60 * seam; cg -= 16 * seam; cb -= 12 * seam;
             float edge = Math.Clamp((av - 0.7f) * 3, 0, 1);
@@ -858,7 +864,7 @@ internal sealed class CrayfishBody : Body
         {
             // The tail fan: lobes with dark lines between, paler at the edges.
             float line = Math.Clamp(1 - MathF.Abs(MathF.Sin(2.5f * MathF.PI * v)) * 7, 0, 1) * 0.5f;
-            cr = 168; cg = 56; cb = 42;
+            cr = 130; cg = 52; cb = 38;
             float pale = Math.Clamp((s - 0.93f) * 12, 0, 1) * 0.6f + Math.Clamp((av - 0.6f) * 2, 0, 1) * 0.4f;
             cr += 46 * pale; cg += 56 * pale; cb += 50 * pale;
             cr -= 50 * line; cg -= 14 * line; cb -= 10 * line;
@@ -944,13 +950,13 @@ internal sealed class CrayfishBody : Body
                 float a = _heading + MathF.PI - side * (0.35f - 0.1f * j + 0.3f * MathF.Sin(ph + 1.3f * j));
                 px += MathF.Cos(a) * _len * 0.5f * k; py += MathF.Sin(a) * _len * 0.5f * k;
                 PointF next = D(px, py);
-                Stroke(fb, prev, next, 150, 54, 40, 0.85f - 0.15f * j, th, murk);
+                Stroke(fb, prev, next, 120, 50, 36, 0.85f - 0.15f * j, th, murk);
                 prev = next;
             }
             // The short feeler ahead of the nose.
             float aa = _heading + side * (0.25f + 0.15f * MathF.Sin(ph * 1.5f));
             PointF f0 = D(_x, _y), f1 = D(_x + MathF.Cos(aa) * _len * 0.2f, _y + MathF.Sin(aa) * _len * 0.2f);
-            Stroke(fb, f0, f1, 170, 66, 50, 0.8f, th, murk);
+            Stroke(fb, f0, f1, 130, 62, 46, 0.8f, th, murk);
         }
     }
 
@@ -984,17 +990,17 @@ internal sealed class CrayfishBody : Body
             float hw = _len * Profile(0.14f);
             float sx = _x - c * _len * 0.14f - s * side * hw * 0.9f, sy = _y - s * _len * 0.14f + c * side * hw * 0.9f;
             float aa = _heading + side * _cArm[cl], armLen = _len * 0.22f * ext;
-            OvalG(fb, sx + MathF.Cos(aa) * armLen * 0.5f, sy + MathF.Sin(aa) * armLen * 0.5f, aa, armLen * 0.5f, _len * 0.04f, 148, 42, 30, 1f, murk);
+            OvalG(fb, sx + MathF.Cos(aa) * armLen * 0.5f, sy + MathF.Sin(aa) * armLen * 0.5f, aa, armLen * 0.5f, _len * 0.04f, 118, 46, 32, 1f, murk);
             float ex = sx + MathF.Cos(aa) * armLen, ey = sy + MathF.Sin(aa) * armLen;
             float ap = _heading + side * _cPin[cl], palm = _len * 0.11f * ext;
             float pcx = ex + MathF.Cos(ap) * palm * 0.5f, pcy = ey + MathF.Sin(ap) * palm * 0.5f;
-            OvalG(fb, pcx, pcy, ap, palm * 0.5f, _len * 0.055f, 158, 46, 34, 1f, murk);
+            OvalG(fb, pcx, pcy, ap, palm * 0.5f, _len * 0.055f, 126, 50, 34, 1f, murk);
             OvalG(fb, pcx, pcy, ap, _len * 0.012f, _len * 0.012f, 214, 150, 126, 0.8f, murk);       // a pale bump
             float bx = ex + MathF.Cos(ap) * palm, by = ey + MathF.Sin(ap) * palm, fl = _len * 0.13f * ext;
             for (int j = -1; j <= 1; j += 2)
             {
                 float af = ap + j * _cOpen[cl] * 0.5f;
-                OvalG(fb, bx + MathF.Cos(af) * fl * 0.5f, by + MathF.Sin(af) * fl * 0.5f, af, fl * 0.5f, _len * 0.022f, 170, 54, 40, 1f, murk);
+                OvalG(fb, bx + MathF.Cos(af) * fl * 0.5f, by + MathF.Sin(af) * fl * 0.5f, af, fl * 0.5f, _len * 0.022f, 132, 54, 38, 1f, murk);
             }
         }
     }

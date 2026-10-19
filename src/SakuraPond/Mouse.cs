@@ -201,6 +201,8 @@ internal sealed class Mouse : Body, IPrey
     private bool _snakeSeen, _sitOnSnake;             // it has noticed the snake (once per approach), and chose to sit up and watch rather than run
     private float _heldT, _jumpT, _jumpH, _jumpDX, _jumpDY;   // seconds in the jaws; the jump's clock, its height now (pixels) and its sideways direction (ground, unit)
     private PointF _jumpFrom;                         // where the snake was when it struck (the mouse bolts from there)
+    private PointF? _snakeNow;                        // the snake's head this frame (the run for cover keeps off where it IS, not where it struck from)
+    private PointF? _avoidHead;                       // while running from a strike: the jaws are not ground (the walking rule slid a mouse along the shore into them)
     private int _inside;                              // how many spine points are inside the snake's mouth (not drawn)
     private float _drinkLen;                          // how long this drink lasts in all
     private bool _sipped;                             // the drink's one ring has been made
@@ -267,6 +269,7 @@ internal sealed class Mouse : Body, IPrey
     public bool Dead => _dead;
     public bool Huntable => Visible && !_dead && _doing is not (Doing.Caught or Doing.Jump) && !_leaving && !(_doing == Doing.Scurry && _aim == Aim.Flee) && OnScreen(Spine[0]);
     public PointF PreyNose => Spine[0];
+    public PointF PreyTail => Spine[Points - 1];
     public bool Out => Visible && !_dead;
     public bool Stalked { get; set; }
     public float Agility => 1 - _timid;           // a nervous mouse is already jumpy: it dodges worse
@@ -289,12 +292,15 @@ internal sealed class Mouse : Body, IPrey
         vx /= vl; vy /= vl;
         float reach = _u * 0.03f;
         _jumpDX = 0; _jumpDY = 0;
-        foreach (int side in (ReadOnlySpan<int>)[1, -1])
-        {
-            float cx = -vy * side * 0.9f + vx * 0.45f, cy = vx * side * 0.9f + vy * 0.45f, cl = MathF.Sqrt(cx * cx + cy * cy);
-            cx /= cl; cy /= cl;
-            if (OnLand(_x + cx * reach, _y + cy * reach) && OnLand(_x + cx * reach * 0.5f, _y + cy * reach * 0.5f)) { _jumpDX = cx; _jumpDY = cy; break; }
-        }
+        foreach (float k in (ReadOnlySpan<float>)[1f, 0.5f])                  // the full reach to either side, then half of it (a corner of the land)
+            foreach (int side in (ReadOnlySpan<int>)[1, -1])
+            {
+                if (_jumpDX != 0 || _jumpDY != 0) break;
+                float cx = -vy * side * 0.9f + vx * 0.45f, cy = vx * side * 0.9f + vy * 0.45f, cl = MathF.Sqrt(cx * cx + cy * cy);
+                cx /= cl; cy /= cl;
+                if (OnLand(_x + cx * reach * k, _y + cy * reach * k) && OnLand(_x + cx * reach * k * 0.5f, _y + cy * reach * k * 0.5f)) { _jumpDX = cx; _jumpDY = cy; }
+            }
+        if (_jumpDX == 0 && _jumpDY == 0 && OnLand(_x + vx * reach, _y + vy * reach)) { _jumpDX = vx; _jumpDY = vy; }   // no land to either side: straight away from the jaws (a jump straight up came down on them)
         _jumpFrom = from; _jumpT = 0; _jumpH = 0;
         _mind.Begin(Doing.Jump, Mind<Doing>.Forever);
     }
@@ -367,6 +373,7 @@ internal sealed class Mouse : Body, IPrey
     private bool OnLand(float gx, float gy)
     {
         PointF s = ToScreen(gx, gy);
+        if (_avoidHead is PointF jaws && Dist(s, jaws) < _u * 0.04f) return false;
         int ix = Math.Clamp((int)s.X, 0, _pond.Width - 1), iy = Math.Clamp((int)s.Y, 0, _pond.Height - 1);
         return _pond.Land[iy * _pond.Width + ix];
     }
@@ -434,6 +441,7 @@ internal sealed class Mouse : Body, IPrey
             else if (Appear()) GoIn();
             return;
         }
+        _snakeNow = snakeHead;
         Think(snakeHead, lizardNoses);
         if (_doing == Doing.Hidden) return;       // Think just tucked it into the grass
 
@@ -498,8 +506,7 @@ internal sealed class Mouse : Body, IPrey
         {
             float step = _u * 0.03f / 0.3f * dt;
             float nx = _x + _jumpDX * step, ny = _y + _jumpDY * step;
-            if (OnLand(nx, ny)) { _x = nx; _y = ny; }
-            _trail.RememberIfMoved(new PointF(_x, _y), _len / 30);
+            if (OnLand(nx, ny)) { _trail.Shift(nx - _x, ny - _y); _x = nx; _y = ny; }   // the whole mouse jumps: the trail goes with the head (moving the nose alone left the body in the jaws)
         }
         _speed = _len * 2.5f;
         _gait = (_gait + MathF.Tau * 12f * dt) % MathF.Tau;
@@ -507,7 +514,7 @@ internal sealed class Mouse : Body, IPrey
         if (p >= 1)
         {
             _jumpH = 0;
-            Flee(_jumpFrom, "snake");
+            Flee(_snakeNow ?? _jumpFrom, "snake");
         }
     }
 
@@ -627,6 +634,7 @@ internal sealed class Mouse : Body, IPrey
     {
         Flights++;
         LastFlightFrom = why;
+        _avoidHead = why == "snake" ? from : null;
         Go(Aim.Flee, CoverGoal(from), 2.2f);
     }
 
@@ -634,7 +642,7 @@ internal sealed class Mouse : Body, IPrey
     private void EndScurry()
     {
         Aim was = _aim;
-        _aim = Aim.Roam;
+        _aim = Aim.Roam; _avoidHead = null;
         float gdx = _goalX - _x, gdy = _goalY - _y, gd = MathF.Sqrt(gdx * gdx + gdy * gdy);
         PointF here = ToScreen(_x, _y);
         switch (was)
@@ -816,6 +824,14 @@ internal sealed class Mouse : Body, IPrey
     /// straight away (Core/Minds Ground.FleeRun). Failing that, the way out of
     /// the screen, and it leaves.
     /// </summary>
+    /// <summary>How far point p is from the line piece a to b.</summary>
+    private static float DistToLine(PointF p, PointF a, PointF b)
+    {
+        float ex = b.X - a.X, ey = b.Y - a.Y, e2 = ex * ex + ey * ey;
+        float t = e2 < 1e-6f ? 0 : Math.Clamp(((p.X - a.X) * ex + (p.Y - a.Y) * ey) / e2, 0, 1);
+        return Dist(p, new PointF(a.X + ex * t, a.Y + ey * t));
+    }
+
     private PointF CoverGoal(PointF from)
     {
         PointF here = ToScreen(_x, _y);
@@ -830,10 +846,12 @@ internal sealed class Mouse : Body, IPrey
             if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height) continue;
             int i = iy * _pond.Width + ix;
             if (!_pond.Grassy[i] || !_pond.Open[i] || Dist(s, from) < now + _len * 0.5f) continue;
+            if (DistToLine(from, here, s) < _u * 0.05f) continue;           // never THROUGH what it is running from (a mouse ran across the jaws to its cover)
             if (d < bestD && Ground.LineClear(_landScreen, here, s, 3)) { bestD = d; best = s; }
         }
         if (best is PointF cover) return cover;
-        PointF? run = Ground.FleeRun(_clearScreen, Spine[0], from, _len * 0.4f, _len * 6f, _len * 1.5f);
+        PointF? run = Ground.FleeRun(_clearScreen, Spine[0], from, _len * 0.4f, _len * 6f, _len * 1.5f)
+                   ?? Ground.FleeRun(_clearScreen, Spine[0], from, _len * 0.4f, _len * 3f, _len * 0.5f);   // or a short one (a corner of the land): an exit route may cross the jaws
         if (run is PointF r) return r;
         _leaving = true;
         _stops = 0;

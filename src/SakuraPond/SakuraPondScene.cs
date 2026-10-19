@@ -96,7 +96,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         int salt = unchecked(_pond.Pads.Count * 7919 + (_pond.Pads.Count > 0 ? (int)_pond.Pads[0].Center.X * 31 + (int)_pond.Pads[0].Center.Y : 0) + width);
         _tadpoles = new Tadpoles(_pond, settings.TadpoleClutches, _ripples, _waterInView, new Random(unchecked(salt + 101)), _petals);
         _crayfish = new Crayfish(_pond, _ripples, settings.CrayfishPercent / 100f, new Random(unchecked(salt + 202)));
-        _ducks = new Ducks(_pond, _ripples, settings.DuckPercent / 100f, new Random(unchecked(salt + 303)), _petals, settings.MinnowSchools > 0 ? _minnows : null);
+        _ducks = new Ducks(_pond, _ripples, settings.DuckPercent / 100f, new Random(unchecked(salt + 303)), _petals, settings.MinnowSchools > 0 ? _minnows : null, _waterInView);
     }
 
     public void Update(double elapsedSeconds)
@@ -131,13 +131,18 @@ internal sealed class SakuraPondScene : IScreensaverScene
         // middles, turtle noses and shells, the nose of every lizard that is out (its spot
         // from last frame; they are updated after, which is close enough for a touch).
         PointF[] turtleSpots = _turtles.Spots;
-        PointF[] bumpers = [.. koiHeads, .. turtleSpots, .. _lizards.Noses];
+        PointF[] duckBeads = _ducks.Beads;                     // every other point along every duck and duckling on the picture (empty when none)
+        PointF[] bumpers = [.. koiHeads, .. turtleSpots, .. _lizards.Noses, .. duckBeads];   // a touch from any of them startles the snake
+        _snake.Avoid(duckBeads, _pond.U * 0.02f);             // and it swims round the ducks as it does round the rocks (nothing moves a duck)
         _snake.Update(dt, bumpers, _lizards, _mice);   // and who it may meet on the bank: it can stalk and eat a lizard or a mouse
         _lizards.Update(dt, _snake.Live ? _snake.Head : null);   // the lizards run from the snake too
         _mice.Update(dt, _snake.Live ? _snake.Head : null, _lizards.Noses);   // the mice run from the snake and the lizards too
-        _frogs.Update(dt, _snake.Live ? _snake.Head : null, duckHeads.Length > 0 ? [.. koiHeads, .. duckHeads] : koiHeads, turtleSpots, _lizards.Noses);   // the frogs leap or dive from all of them (a duck's head counts as a koi's: a swimming frog dives from it)
-        PointF[] bedThreats = [.. koiHeads, .. turtleSpots, .. duckHeads];
-        _tadpoles.Update(dt, _snake.Live ? [.. bedThreats, _snake.Head] : bedThreats);   // the tadpoles scatter from all of them
+        _frogs.Update(dt, _snake.Live ? _snake.Head : null, duckBeads.Length > 0 ? [.. koiHeads, .. duckBeads] : koiHeads, turtleSpots, _lizards.Noses);   // the frogs leap or dive from all of them (any part of a duck counts as a koi's head: a swimming frog dives from it and never lands on one)
+        PointF[] bedThreats = [.. _koi.BedHeads, .. turtleSpots, .. duckHeads];   // every koi whatever its depth: the fish passing over the shallows are the ones the bed animals must fear
+        PointF[] tadThreats = bedThreats;
+        if (_snake.Live) tadThreats = [.. tadThreats, _snake.Head];
+        if (_crayfish.Spot is PointF crayAt) tadThreats = [.. tadThreats, crayAt];   // the one animal that eats them
+        _tadpoles.Update(dt, tadThreats);                                              // the tadpoles scatter from all of them
         _crayfish.Update(dt, bedThreats);                                                 // the crayfish flips backward from a fish or a turtle over it
         _ducks.Update(dt, _snake.Live ? _snake.Head : null, _turtles.All, _surface);   // the ducks feel round the turtle's shell, the snake's body and the swimming frogs
         _dragonflies.Update(dt);
@@ -160,9 +165,9 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("mice");
         _crayfish.Draw(fb);                       // on the bed of the shallows: under every fish
         Sections.Mark("crayfish");
+        _tadpoles.DrawUnder(fb);                  // the tadpoles, just over the bed in the shallows, and a froglet still under the surface: under every fish (drawn after the koi, a clutch sat on the back of a fish passing over it)
         _koi.Draw(fb, _turtles);                  // the koi and the turtles in one depth order (a turtle between the fish deeper and shallower than it)
         _frogs.DrawUnder(fb);                     // a frog that has dived is under the surface: over the fish deeper than it, under the minnows
-        _tadpoles.DrawUnder(fb);                  // the tadpoles, just over the bed in the shallows, and a froglet still under the surface
         Sections.Mark("koi, turtles");
         _minnows.Draw(fb);
         Sections.Mark("minnows");

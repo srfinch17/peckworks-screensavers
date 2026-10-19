@@ -185,6 +185,12 @@ internal sealed class KoiSchool
     /// </summary>
     public PointF[] Heads => _fish.Where(f => Light.DepthOf(f.Z) < 0.06f).SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
 
+    /// <summary>
+    /// The same two points of EVERY koi, whatever its depth: for the animals on the bed (the tadpoles, the crayfish). A fish
+    /// over the shallows is never deeper than the shallows, so the surface test above ruled out exactly the fish passing over them.
+    /// </summary>
+    public PointF[] BedHeads => _fish.SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
+
     // Scratch for Draw, kept between frames so drawing allocates nothing (see Room).
     private int[] _order = [], _layer = [];
     private float[] _depth = [];

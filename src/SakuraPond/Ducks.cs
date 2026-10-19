@@ -229,16 +229,22 @@ internal sealed class Roster
                 else if (s < 0.38f) c = Mix(yellow, back, 0.5f + 0.5f * Smooth((s - 0.30f) / 0.08f));
                 else
                 {
-                    // The back: dark brown, shading softly to yellow down the flanks and at the rump (down, not a hard rim).
-                    c = Mix(back, yellow, Smooth((av - 0.62f) / 0.34f) * 0.9f);
-                    c = Mix(c, yellow, Smooth((s - 0.88f) / 0.1f) * 0.8f);
+                    // The back: dark brown all the way to the edge (flanks shading to yellow were a yellow RIM round a dark oval,
+                    // and the duckling read as a beetle), with the four yellow patches a real duckling has on its back: one at the
+                    // base of each wing stub and one each side of the rump. The very edge a little lighter: down catching the light.
+                    float wing = MathF.Max(0, 1 - Near(s, av, 0.50f, 0.58f) / 0.011f), rump = MathF.Max(0, 1 - Near(s, av, 0.86f, 0.50f) / 0.009f);
+                    c = Mix(back, yellow, Smooth(MathF.Max(wing, rump)) * 0.85f);
+                    c = Mix(c, C(110, 86, 48), Smooth((av - 0.80f) / 0.2f) * 0.35f);
                 }
-                float dome = 0.7f + 0.3f * MathF.Sqrt(MathF.Max(0, 1 - v * v));
+                float dome = 0.8f + 0.2f * MathF.Sqrt(MathF.Max(0, 1 - v * v));       // a soft dome, not a glossy shell
                 c = (c.R * dome, c.G * dome, c.B * dome);
                 skin[si * Look.SkinWide + vi] = Pack(c);
             }
         return skin;
     }
+
+    /// <summary>Squared distance on the skin sheet from (s, av) to a spot, with "s" scaled so a patch comes out round on a body longer than it is wide.</summary>
+    private static float Near(float s, float av, float s0, float av0) { float ds = (s - s0) * 2.4f, dv = av - av0; return ds * ds + dv * dv; }
 
     /// <summary>The colours a wing is painted in: its main feathers, the band along its trailing edge, and the pale tips.</summary>
     public static (Color Main, Color Band, Color Edge) WingColours(Style st) => st switch
@@ -379,14 +385,24 @@ internal sealed class Ducks
     /// <summary>How many of each cute thing this visit has had (for the log and the tests; index by the Cute enum).</summary>
     public readonly int[] CuteCounts = new int[9];
 
-    public Ducks(Pond pond, Ripples ripples, float often, Random rng, Petals petals, Minnows? minnows)
+    public Ducks(Pond pond, Ripples ripples, float often, Random rng, Petals petals, Minnows? minnows, bool[] view)
     {
         _pond = pond; _ripples = ripples; _often = Math.Max(0, often); _rng = rng; _petals = petals; _minnows = minnows; _u = pond.U;
         if (_often <= 0) return;
-        _world = new DuckWorld(pond);
+        _world = new DuckWorld(pond, view);
         _solidFn = _world.SolidG;
         _roster = new Roster(pond.U);              // the pictures are painted once, here, never during a visit
         _next = 20 + 40 * (float)rng.NextDouble();
+        // And the CODE is compiled now too, on a helper thread, not on the first visit's first frame: the JIT compiling every
+        // duck method at once there cost that frame 16 ms more than its neighbours (720p), a hitch just as the family arrived.
+        System.Threading.Tasks.Task.Run(static () =>
+        {
+            const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static
+                | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+            foreach (Type t in new[] { typeof(Ducks), typeof(Duck), typeof(Duckling), typeof(DuckWorld), typeof(Look), typeof(TurningStamp) })
+                foreach (System.Reflection.MethodInfo m in t.GetMethods(all))
+                    if (!m.IsAbstract && !m.ContainsGenericParameters) System.Runtime.CompilerServices.RuntimeHelpers.PrepareMethod(m.MethodHandle);
+        });
     }
 
     /// <summary>Is a duck family on the water right now?</summary>
@@ -394,6 +410,11 @@ internal sealed class Ducks
 
     /// <summary>The head of every duck and duckling on the water, screen pixels (the minnows, tadpoles and frogs keep clear of them). Empty when none.</summary>
     public PointF[] Heads => _visiting ? _heads : NoHeads;
+
+    /// <summary>Every other point along every duck and duckling on the picture, screen pixels: what the snake swims round and is startled by, and what a swimming frog dives from. Empty when none.</summary>
+    public PointF[] Beads => _visiting ? _beads : NoHeads;
+    private PointF[] _beads = NoHeads;
+    private readonly List<PointF> _beadList = new(160);
 
     /// <summary>For logs and tests.</summary>
     public IReadOnlyList<Duck> Adults => _adults;
@@ -536,6 +557,16 @@ internal sealed class Ducks
             _adults[0].Shove(push.X * d, push.Y * d);
             _adults[1].Shove(-push.X * d, -push.Y * d);
         }
+        // And every duck is solid to the snake and the frogs the same way. Its feelers keep a duck off them only while it moves;
+        // a snake swimming into a waiting hen, or a frog crawling under her, got onto her and nothing moved either. Now the duck
+        // recoils off whatever is on it, along the line between their closest parts, onto open water only.
+        if (surface != null)
+            foreach (Body b in surface)
+            {
+                if (b is Duck || b is Duckling) continue;
+                foreach (Duck a in _adults) if (Recoil(a.Shape, b.Shape, a.Len, dt, out float sx, out float sy)) a.Shove(sx, sy);
+                foreach (Duckling k in _kids) if (Recoil(k.Shape, b.Shape, k.Len, dt, out float sx, out float sy)) k.Shove(sx, sy);
+            }
 
         // ---- the line behind her ----
         _trail!.RememberIfMoved(new PointF(leader.X, leader.Y), 0.004f * _u);
@@ -557,11 +588,15 @@ internal sealed class Ducks
         int n = 0;
         foreach (Duck a in _adults) _heads[n++] = a.HeadSpot;
         foreach (Duckling d in _kids) _heads[n++] = d.HeadSpot;
+        _beadList.Clear();
+        foreach (Duck a in _adults) if (a.OnScreen) { ReadOnlySpan<PointF> dr = a.Drawn; for (int i = 0; i < dr.Length; i += 2) _beadList.Add(dr[i]); }
+        foreach (Duckling d in _kids) if (d.OnScreen) { ReadOnlySpan<PointF> dr = d.Drawn; for (int i = 0; i < dr.Length; i += 2) _beadList.Add(dr[i]); }
+        _beads = _beadList.ToArray();
 
         // ---- the visit is over when every middle is beyond the screen again ----
         bool anyIn = false;
-        foreach (Duck a in _adults) anyIn |= Inside(a.Centre);
-        foreach (Duckling d in _kids) anyIn |= Inside(d.Centre);
+        foreach (Duck a in _adults) anyIn |= Inside(a.Centre, a.Len * 0.6f);
+        foreach (Duckling d in _kids) anyIn |= Inside(d.Centre, d.Len * 0.6f);
         if (anyIn) _entered = true;
         // Over when every middle is beyond the screen again; or when the mother has been gone ten seconds (anyone still straggling is swimming on after her).
         float u = _u;
@@ -596,7 +631,8 @@ internal sealed class Ducks
         }
     }
 
-    private bool Inside(PointF p) => p.X >= 0 && p.X < _world!.W && p.Y >= 0 && p.Y < _world.H;
+    /// <summary>Is the point on the picture, or within "m" of it (a body whose middle is just past the edge still has half of itself on the picture: ending the visit then cut it off in one frame)?</summary>
+    private bool Inside(PointF p, float m = 0) => p.X >= -m && p.X < _world!.W + m && p.Y >= -m && p.Y < _world.H + m;
 
     private void AdvanceWaypoint(Duck leader)
     {
@@ -623,6 +659,16 @@ internal sealed class Ducks
     }
 
     /// <summary>When the first duck stands still for a dabble, a preen, a flap or a wait, the second stands with her; when she moves off, so does it.</summary>
+    /// <summary>How far to push "mine" off "other" this frame, if they overlap: the whole overlap, no faster than two body lengths a second.</summary>
+    private static bool Recoil(Peckworks.Screensavers.Core.Minds.Chain mine, Peckworks.Screensavers.Core.Minds.Chain other, float len, float dt, out float sx, out float sy)
+    {
+        sx = sy = 0;
+        if (!Peckworks.Screensavers.Core.Minds.Chain.Touch(mine, other, out System.Numerics.Vector3 p, out float depth)) return false;
+        float d = MathF.Min(len * 2f * dt, depth);
+        sx = p.X * d; sy = p.Y * d;
+        return true;
+    }
+
     private static void Mirror(Duck leader, Duck f)
     {
         bool still = leader.Now is Duck.Doing.Dabble or Duck.Doing.Preen or Duck.Doing.Flap or Duck.Doing.Wait;
@@ -1183,6 +1229,7 @@ internal sealed class Ducks
 internal sealed class DuckWorld
 {
     public readonly Pond Pond;
+    public readonly bool[] View;                   // water that no branch hides: where a shadow may be painted (painted on ALL water, a duck hidden under the blossom showed as a grey duck, wings and all, lying on the flowers)
     public readonly float U, CY;
     public readonly int W, H;
 
@@ -1195,9 +1242,9 @@ internal sealed class DuckWorld
     private readonly bool _hasLog;
     private readonly float _ax, _ay, _bx, _by, _lhw;   // the log: a thick line from a to b, half-thickness lhw
 
-    public DuckWorld(Pond pond)
+    public DuckWorld(Pond pond, bool[] view)
     {
-        Pond = pond; U = pond.U; CY = pond.Centre.Y; W = pond.Width; H = pond.Height;
+        Pond = pond; View = view; U = pond.U; CY = pond.Centre.Y; W = pond.Width; H = pond.Height;
         var cx = new List<float>(); var cy = new List<float>(); var cr = new List<float>();
         void Add(PointF screen, float radius)
         {
@@ -1254,7 +1301,7 @@ internal sealed class DuckWorld
     /// The distance from a ground point to the edge of the nearest round thing
     /// or the log (negative inside it); U if nothing is near.
     /// </summary>
-    public float Clear(float gx, float gy)
+    public float Clear(float gx, float gy, bool moving = true)
     {
         float best = U;
         for (int i = 0; i < _cx.Length; i++)
@@ -1263,7 +1310,7 @@ internal sealed class DuckWorld
             float d = MathF.Sqrt(dx * dx + dy * dy) - _cr[i];
             if (d < best) best = d;
         }
-        for (int i = 0; i < _mn; i++)
+        for (int i = 0; moving && i < _mn; i++)
         {
             float dx = gx - _mx[i], dy = gy - _my[i];
             float d = MathF.Sqrt(dx * dx + dy * dy) - _mr[i];
@@ -1304,6 +1351,9 @@ internal sealed class DuckWorld
 
     /// <summary>Is this ground point somewhere a swimmer may be (water, and outside every round thing)?</summary>
     public bool SolidG(float gx, float gy) => WaterG(gx, gy) && Clear(gx, gy) > 0;
+
+    /// <summary>The same against the fixed world only: for a shove OFF something in the moving list (tested against that list too, every push off the snake was refused, since the duck was still inside it).</summary>
+    public bool SolidFixedG(float gx, float gy) => WaterG(gx, gy) && Clear(gx, gy, moving: false) > 0;
 
     // ------------------------------------------------------------------ where to come in, where to go
 
@@ -1483,7 +1533,7 @@ internal sealed class Duck : Body
     /// <summary>A push from the other adult of a pair (ground px), taken only onto open water.</summary>
     public void Shove(float sx, float sy)
     {
-        if (_w.SolidG(X + sx, Y + sy)) { X += sx; Y += sy; }
+        if (_w.SolidFixedG(X + sx, Y + sy)) { X += sx; Y += sy; }
     }
 
     /// <summary>Is any of it on the picture?</summary>
@@ -1963,19 +2013,19 @@ internal sealed class Duck : Body
             float h = MathF.Max(0, _h[i]);
             Spine[i] = new PointF(_g[i].X + Light.ShadowX * h * _u, _g[i].Y + Light.ShadowY * h * _u);
         }
-        PaintShadow(fb, _pond.Water, 0, 0, 0.30f, Soft * 1.5f);
+        PaintShadow(fb, _w.View, 0, 0, 0.30f, Soft * 1.5f);
         for (int i = 0; i < Points; i++) Spine[i] = _lifted[i];
         if (_headAlpha > 0.05f)
         {
             float hh = MathF.Max(0, _h[2]) * _u;
             PointF hs = new(_g[2].X + Light.ShadowX * hh, _g[2].Y + Light.ShadowY * hh);
             float ang = MathF.Atan2(Spine[0].Y - Spine[3].Y, Spine[0].X - Spine[3].X);
-            Oval(fb, _pond.Water, hs, ang, Len * 0.09f, Len * 0.072f, 8, 22, 22, 0.20f * _headAlpha, 0, null, false);
+            Oval(fb, _w.View, hs, ang, Len * 0.09f, Len * 0.072f, 8, 22, 22, 0.20f * _headAlpha, 0, null, false);
         }
         if (_flapK > 0.05f)
         {
             float hh = (HeightOfBack) * _u;
-            Look.WingOut.Draw(fb, _g[MidAt].X + Light.ShadowX * hh, _g[MidAt].Y + Light.ShadowY * hh, Heading, 1f, Ripples.Squash, 0.22f * _flapK * (0.4f + 0.6f * _wingK), Color.FromArgb(10, 24, 24), _pond.Water);
+            Look.WingOut.Draw(fb, _g[MidAt].X + Light.ShadowX * hh, _g[MidAt].Y + Light.ShadowY * hh, Heading, 1f, Ripples.Squash, 0.22f * _flapK * (0.4f + 0.6f * _wingK), Color.FromArgb(10, 24, 24), _w.View);
         }
     }
 
@@ -2336,7 +2386,7 @@ internal sealed class Duckling : Body
     /// <summary>Moves it by a shove (two ducklings kept apart; the mother's flank).</summary>
     public void Shove(float sx, float sy)
     {
-        if (_w.SolidG(X + sx, Y + sy)) { X += sx; Y += sy; }
+        if (_w.SolidFixedG(X + sx, Y + sy)) { X += sx; Y += sy; }
     }
 
     /// <summary>Per frame, after the steering: the mind's clock, the body's animation, the fizz of rings, and the spine laid out.</summary>
@@ -2410,7 +2460,7 @@ internal sealed class Duckling : Body
             float h = MathF.Max(0, _h[i]);
             Spine[i] = new PointF(_g[i].X + Light.ShadowX * h * _u, _g[i].Y + Light.ShadowY * h * _u);
         }
-        PaintShadow(fb, _pond.Water, 0, 0, 0.28f, Soft * 1.4f);
+        PaintShadow(fb, _w.View, 0, 0, 0.28f, Soft * 1.4f);
         for (int i = 0; i < Points; i++) Spine[i] = _lifted[i];
     }
 
