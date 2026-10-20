@@ -36,7 +36,7 @@ namespace SakuraPond;
 ///   BENDING: the body is a spine laid along the trail the head has swum, with the tail's wave
 ///   running along it; it turns by bending (and by a rigid pivot when it is nearly still),
 ///   never by flipping a sprite.
-///   MOVES LIKE THE ANIMAL: hang, scull, burst and stop dead; a froglet kicks and glides.
+///   MOVES LIKE THE ANIMAL: hang, scull, burst and coast to a stop; a froglet kicks and glides.
 ///
 /// WHAT IS SOLID (the pond's law: nothing clips through anything): a tadpole and a froglet are
 /// far too small to be solid to a fish, so they pass under every koi, pad and turtle and
@@ -1063,7 +1063,7 @@ internal sealed class Tadpole : Body
     private void UpdateTadpole(float dt, float homeX, float homeY, Tadpole[] all, float[] threats, int threatCount)
     {
         // Out over deep water a tadpole is less easily startled and runs less far: only a fish within 0.055u sends it off
-        // (0.09u in the shallows), and it bolts at seven body lengths a second, not ten. The open water is full of fish, and
+        // (0.09u in the shallows), and it bolts at five body lengths a second, not six. The open water is full of fish, and
         // a cloud that ran from every one of them at full tilt (30 percent of its frames) was strewn all over the pond.
         float len = Len, scare = _u * (_wide ? 0.055f : 0.09f);
         _stateT -= dt;
@@ -1109,7 +1109,7 @@ internal sealed class Tadpole : Body
             if (!float.IsNaN(free))
             {
                 _fleeDir = free;
-                if (State != TadState.Flee) { State = TadState.Flee; _freq = 10; }
+                if (State != TadState.Flee) { State = TadState.Flee; _freq = 7; }
                 _stateT = MathF.Max(_stateT, 0.45f);
                 _burstTimer = MathF.Max(_burstTimer, 1.5f);
             }
@@ -1120,8 +1120,11 @@ internal sealed class Tadpole : Body
             case TadState.Flee:
                 {
                     float err = Turn(_fleeDir, 30f, dt);
-                    Speed = MathF.Abs(err) < 1.2f ? len * (_wide ? 7f : 10f) : 0;
-                    if (_stateT <= 0) { State = TadState.Hang; _stateT = 0.5f + 1.5f * R(); Speed = 0; }
+                    // Six body lengths a second (five out over deep water): a scare was ten, and a tadpole darting at that
+                    // pace and stopping dead read as a mosquito skating on the surface ("the tadpoles swim a little bit too
+                    // fast ... like mosquitos").
+                    Speed = MathF.Abs(err) < 1.2f ? len * (_wide ? 5f : 6f) : 0;
+                    if (_stateT <= 0) { State = TadState.Hang; _stateT = 0.5f + 1.5f * R(); }     // the speed is left to bleed off in Hang: a coast
                     break;
                 }
             case TadState.Windup:
@@ -1130,14 +1133,16 @@ internal sealed class Tadpole : Body
                     float err = Turn(_fleeDir, 16f, dt);
                     Speed = 0;
                     _curl = Math.Clamp(err * 0.6f, -0.7f, 0.7f);
-                    if (MathF.Abs(err) < 0.12f || _stateT <= 0) { State = TadState.Burst; _stateT = 0.3f; _freq = 10; }
+                    if (MathF.Abs(err) < 0.12f || _stateT <= 0) { State = TadState.Burst; _stateT = 0.5f; _freq = 7; }
                     break;
                 }
             case TadState.Burst:
                 {
-                    Speed = len * 10f;
+                    // Five body lengths a second for half a second (was ten for a third: the mosquito), so a burst still
+                    // covers about two and a half lengths and is seen to go somewhere, at a pace the eye reads as a swim.
+                    Speed = len * 5f;
                     _curl = 0;
-                    if (_stateT <= 0) { State = TadState.Hang; _stateT = 0.4f + 1.6f * R(); Speed = 0; }
+                    if (_stateT <= 0) { State = TadState.Hang; _stateT = 0.4f + 1.6f * R(); }     // the speed is left to bleed off in Hang: a coast, not a stop dead
                     break;
                 }
             case TadState.Graze:
@@ -1175,7 +1180,7 @@ internal sealed class Tadpole : Body
         float wantAmp, wantFreq;
         switch (State)
         {
-            case TadState.Burst: case TadState.Flee: wantAmp = 0.30f; wantFreq = 10; break;
+            case TadState.Burst: case TadState.Flee: wantAmp = 0.26f; wantFreq = 7; break;      // a 10 Hz flick read as an insect's buzz
             case TadState.Windup: wantAmp = 0.05f; wantFreq = 4; break;
             case TadState.Scull: wantAmp = 0.11f; wantFreq = 2.6f; break;
             case TadState.Graze: wantAmp = 0.07f + 0.1f * Math.Clamp(MathF.Sin(_bobT * MathF.Tau / 0.9f), 0, 1); wantFreq = 3f; break;
@@ -1257,7 +1262,7 @@ internal sealed class Tadpole : Body
         // A burst, when its timer says so and it is not busy.
         if (_burstTimer <= 0 && State != TadState.Graze)
         {
-            _burstTimer = _burstEvery * (0.6f + 0.8f * R()) * (_wide ? 0.4f : 1f);      // out over deep water, bursts come two and a half times as often: the way home is a few short dashes
+            _burstTimer = _burstEvery * (0.6f + 0.8f * R()) * (_wide ? 0.5f : 1f);      // out over deep water, bursts come twice as often: the way home is a few short dashes
             float want = (hd > _roam && R() < 0.7f) ? MathF.Atan2(hdy, hdx) + (R() - 0.5f) * 1.2f : R() * MathF.Tau;
             float free = FreeHeading(want, len * 4.5f, 0.8f);   // a burst is picked to be SEEN going somewhere: the lift of a shoaling bed may cancel at most a fifth of it (at 0.9 bursts fell to 0.5 a minute by steep banks)
             if (!float.IsNaN(free))
@@ -1297,15 +1302,16 @@ internal sealed class Tadpole : Body
             }
             Turn(free, 3f, dt);
             float pace = 0.3f + 0.9f * Math.Clamp((hd - _roam) / (_u * 0.05f), 0, 1);   // lazy near its place, quicker the further it has been scattered
-            if (_wide) pace += 1.8f * Math.Clamp((hd - _u * 0.1f) / (_u * 0.1f), 0, 1);   // and out over deep water, a purposeful three body lengths a second when 0.2u or more behind
+            if (_wide) pace += 0.8f * Math.Clamp((hd - _u * 0.1f) / (_u * 0.1f), 0, 1);   // and out over deep water, a purposeful two body lengths a second when 0.2u or more behind
             float target = len * pace;
             Speed += (target - Speed) * (1 - MathF.Exp(-dt * 4f));
             if (d < len * 0.4f || _stateT <= 0) { State = TadState.Hang; _stateT = 1.5f + 3 * R(); }
             return;
         }
 
-        // Hanging: the speed bleeds off at once; the body bobs a little on its tail.
-        Speed += (0 - Speed) * (1 - MathF.Exp(-dt * 10f));
+        // Hanging: the speed bleeds off over a quarter of a second (a coast to a stop, not a stop dead: the dead stop
+        // after a dart was half of the mosquito look); the body bobs a little on its tail.
+        Speed += (0 - Speed) * (1 - MathF.Exp(-dt * 4f));
         if (Speed < 0.02f * len) Speed = 0;
         _noScull -= dt;
         // Under the petal heap (a flee or a burst can end there) it is out of sight, so it moves on like one that is far from home.

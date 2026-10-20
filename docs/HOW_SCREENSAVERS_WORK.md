@@ -695,7 +695,10 @@ alignment (they do not face one way), only a gentle pull to the cluster's middle
 between neighbours, and each one's own temper (how often it bursts, how far from the middle it likes
 to be, whether it grazes at a rock, the bank or a pad). Each is a bending body on a short trail like
 the minnow, but the body is a stiff lump and only the tail waves (a slow small wave when sculling,
-ten beats a second in a burst). A tadpole that is nearly still cannot change shape by moving, since
+seven beats a second in a burst). A burst is five body lengths a second for half a second and the speed then bleeds
+off over a quarter of a second, a coast to a stop: at ten lengths a second, switched off dead, with the tail at ten
+beats, a tadpole read as a mosquito skating on the water (his note after twenty-one, 2026-10-20). A tadpole that is
+nearly still cannot change shape by moving, since
 the spine is laid along where the head has been, so it swings its whole body round a point in the
 middle of the body (a rigid pivot) before a burst, curling the tail into a C; a moving one turns by
 bending. It hangs at 0.9 of the bed's depth under its nose, drawn shrunk, hazed and sunk by that
@@ -726,8 +729,8 @@ middle tadpole of those not scared falls 0.06u to 0.14u behind, so the cloud arr
 arrival it stands still until that middle tadpole is within 0.07u, and only then is the move over. While
 it lasts (`Tadpole.Transit`) tadpoles may step over water too deep to see the bed in, which no tadpole
 otherwise does (`OkFloor`), and there they hang at `Tadpole.DeepZ` (0.3: the sunlit upper water, hazy
-but seen); out over deep water they are also less easily startled (0.055u, not 0.09u) and bolt at seven
-body lengths a second, veer a little toward home when they bolt, and burst and scull home faster, because
+but seen); out over deep water they are also less easily startled (0.055u, not 0.09u) and bolt at five
+body lengths a second (six in the shallows), veer a little toward home when they bolt, and burst twice as often and scull home at two lengths a second, because
 the open water is full of koi (without that, 30 percent of a migrating cloud's frames were flights and the
 cloud was strewn across the pond). A straggler left out in deep water afterwards swims back by the
 old rules. The pond is deep: the bed is lost in the haze 0.12u off the bank, so the island can only be
