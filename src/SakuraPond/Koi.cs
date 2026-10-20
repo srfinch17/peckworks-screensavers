@@ -164,6 +164,9 @@ internal sealed class KoiSchool
     }
 
     /// <summary>Something tapped the water here (screen pixels): curious fish nearby come to look. With petal, a petal settled there: hungry fish come to eat it.</summary>
+    /// <summary>The pond's tadpoles: a fish that happens upon one may chase and eat it. Set once by the scene.</summary>
+    public Tadpoles? Prey { set { foreach (Koi k in _fish) k.Prey = value; } }
+
     public void Notice(float x, float y, bool petal = false)
     {
         foreach (Koi k in _fish) k.Notice(x, y, petal);
@@ -475,7 +478,10 @@ internal sealed class Koi : Body
         Flinch,        // a shadow swept over it (a swallow skimming): a dart away and a dive, then it rests deep
         Shy,           // it bumped into another animal: a short swim away from it, up or down as well as aside
         Leap,          // a burst up to the surface and a jump clear of the water, a splash, then down again
+        Snatch,        // it came upon a tadpole or froglet and singled it out: a few seconds' chase, and a gulp if the mouth gets there
     }
+    private readonly Snatch _snatch;                      // the chance meal in hand (Tadpoles.cs): who it is after, how long it will bother, when it may look again
+    internal Tadpoles? Prey { get; set; }                 // the tadpoles of the pond (set by the school once the scene has made them; null in a pond without any)
     private readonly Mind<Doing> _mind = new();           // the doing now and how long it may last (Core/Minds)
     private Doing _doing => _mind.Doing;
     private float _targetX, _targetY;                     // what it is investigating, ground pixels
@@ -605,7 +611,8 @@ internal sealed class Koi : Body
         // The personality dials. Each is dealt on its own, so a fish can be
         // lazy and sociable, or energetic and solitary: no two alike.
         (_energy, _social, _curious) = dials;
-        _cruise = gold ? 0.4f + 0.3f * _energy : 0.45f + 0.35f * _energy;   // an energetic fish cruises faster (a goldfish a little slower, in its own body lengths: it is a small fish)
+        _cruise = gold ? 0.4f + 0.3f * _energy : 0.45f + 0.35f * _energy;
+        _snatch = new Snatch(gold ? "goldfish" : "koi", HashCode.Combine((int)(_energy * 1e6f), (int)(_social * 1e6f), (int)(_curious * 1e6f), index));   // an energetic fish cruises faster (a goldfish a little slower, in its own body lengths: it is a small fish)
         _chaseCool.Start(30 + 90 * (float)rng.NextDouble());   // nobody chases in the first half minute
         _w1 = 0.11f + 0.12f * (float)rng.NextDouble(); _w2 = 0.31f + 0.2f * (float)rng.NextDouble();
         _p1 = (float)(rng.NextDouble() * MathF.Tau); _p2 = (float)(rng.NextDouble() * MathF.Tau);
@@ -724,7 +731,7 @@ internal sealed class Koi : Body
             }
         }
         Think(dt, school);
-        bool rush = _doing is Doing.Chase or Doing.Flee or Doing.Flinch or Doing.Leap;   // flat out
+        bool rush = _doing is Doing.Chase or Doing.Flee or Doing.Flinch or Doing.Leap or Doing.Snatch;   // flat out
         bool still = _doing == Doing.Rest || (_doing == Doing.Investigate && _hold > 0);   // hanging in the water, nosing at something
 
         // ---- Beat and glide ----
@@ -1056,6 +1063,15 @@ internal sealed class Koi : Body
         _flinchCool.Tick(dt);
         _shyCool.Tick(dt);
         _fleeCool.Tick(dt);
+        _snatch.Tick(dt);
+
+        // A tadpole or froglet in sight while it idles: it may single one out. Only from a wander or a look
+        // (never from a rest, a chase, a flee, a leap), only when the mouth is free, and not for minutes after
+        // the last (hit or miss): the fish are many and the clutch is small; a curious, energetic fish is the
+        // likelier to bother. It sees about 0.12u round its nose (a tadpole is a dark fleck a tenth of its length).
+        if (Prey != null && _doing is Doing.Wander or Doing.Investigate && !_gulping && !_bumping && !Airborne
+            && _snatch.Look(Prey, Head, _pond.U * 0.12f, 0.05f + 0.2f * _curious * _energy, dt, 6f, 180 + 300 * (1 - _energy), surfaceOnly: false))
+            Begin(Doing.Snatch);
 
         // Someone is after me: the moment a chaser is close behind, flee (whatever I was doing, except already fleeing).
         // Not again within two seconds of a flee ending: a chaser swinging round faced it, then away, then at it
@@ -1114,6 +1130,13 @@ internal sealed class Koi : Body
             case Doing.Shy:
                 if (_mind.Over) Decide(school);
                 break;
+            case Doing.Snatch:
+                // The chase: flat out at the prey's nose, down to its depth (the bed's clamp keeps the fish off the
+                // shallows' floor; the tadpole hangs a little over it, so the mouth comes within reach). Eaten when the
+                // mouth is within a quarter of a length of it; given up when the patience runs out or it got away.
+                if (!_snatch.Chase(Prey!, Head, _len * 0.25f)) Begin(Doing.Wander);
+                else { _zTarget = MathF.Min(_zCap, _snatch.Prey.Z); _depthTimer = 5; }
+                break;
             case Doing.Leap:
                 // The burst: flat out toward the surface. Once its back is at the
                 // top AND it is up to speed (a fish that was hanging at a petal
@@ -1147,6 +1170,8 @@ internal sealed class Koi : Body
         {
             case Doing.Chase:
                 return (_partner!._x, _partner._y, 1.1f);
+            case Doing.Snatch:
+                return (_snatch.Prey.X, _snatch.Prey.Y, 1.2f);                 // the prey's nose, ground pixels: it moves, so this is read afresh every frame
             case Doing.Flee:
                 {
                     // Straight away from the chaser, a few body lengths ahead of me.
@@ -1206,10 +1231,14 @@ internal sealed class Koi : Body
     /// <summary>Starts a doing: its timer, its partner, and where in the water to be for it.</summary>
     private void Begin(Doing doing, Koi? partner = null)
     {
+        if (_doing == Doing.Snatch && doing != Doing.Snatch) _snatch.Abandon();   // a flee, a flinch, a bump: the meal is forgotten (and it rests from it as from a miss)
         _partner = partner;
         _hold = 0;
         switch (doing)
         {
+            case Doing.Snatch:
+                _mind.Begin(doing, 6.5f);                                          // a little longer than the chase's own patience: the chase ends itself
+                break;
             case Doing.Chase:
                 _mind.Begin(doing, 4 + 5 * (float)_rng.NextDouble());
                 _chaseCool.Start((60 + 140 * (float)_rng.NextDouble()) / MathF.Max(0.1f, _play));

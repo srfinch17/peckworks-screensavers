@@ -43,8 +43,53 @@ internal sealed class Tadpoles
     private float[] _threats = new float[64];     // the threats in GROUND pixels, x y x y ... (grows once if ever needed)
     private int _threatCount;
     private readonly Pond _pond;
+    private readonly Ripples _ripples;
 
     internal Clutch[] Clutches => _clutches;
+
+    /// <summary>How many have been eaten, over every clutch (for logs and tests).</summary>
+    public int Eaten { get { int n = 0; foreach (Clutch c in _clutches) n += c.Eaten; return n; } }
+
+    /// <summary>
+    /// A predator looks about: the nearest living tadpole or froglet within
+    /// seePx of its mouth (screen pixels) that can be seen on the picture and
+    /// is not already being chased by another animal. Null when there is none.
+    /// This is all a predator ever gets to know: nothing in the pond goes
+    /// LOOKING for the tadpoles (his rule: only an animal that happens to be
+    /// near them, and sees them, singles one out). surfaceOnly: only what is
+    /// up near the top (a frog on its pad can only take what comes to the
+    /// surface; a fish reaches the bed). ok: the animal's own extra test (a
+    /// crayfish wants a clear walk to it).
+    /// </summary>
+    public Tadpole? Spot(PointF mouth, float seePx, bool surfaceOnly = false, Func<Tadpole, bool>? ok = null)
+    {
+        Tadpole? best = null;
+        float bestD2 = seePx * seePx;
+        foreach (Clutch c in _clutches)
+            foreach (Tadpole t in c.Fish)
+            {
+                if (!t.Alive || t.Hunter != null || t.Leaving != Tadpole.Exit.None) continue;
+                if (surfaceOnly && !(t.Stage == 4 || t.Z < 0.08f)) continue;
+                PointF n = t.Nose;
+                float dx = n.X - mouth.X, dy = n.Y - mouth.Y, d2 = dx * dx + dy * dy;
+                if (d2 >= bestD2 || !t.Visible() || (ok != null && !ok(t))) continue;
+                bestD2 = d2; best = t;
+            }
+        return best;
+    }
+
+    /// <summary>
+    /// A predator's mouth has closed on it: it is gone this frame (the clutch
+    /// counts it, and hatches more when the cluster has thinned, as it does
+    /// for a froglet that swims away). A small ring where it was taken near
+    /// the surface: the gulp or the snap that took it stirs the water.
+    /// </summary>
+    public void Eat(Tadpole t)
+    {
+        if (!t.Alive) return;
+        t.Leaving = Tadpole.Exit.Eaten;
+        if (t.Z < 0.12f) { PointF n = t.Nose; _ripples.Add(n.X, n.Y, t.Stage == 4 ? 0.3f : 0.18f); }
+    }
 
     /// <param name="where">Water in view: where a tadpole is painted.</param>
     /// <param name="stand">Where a tadpole may BE: water in view less the zone of the petals heaped against the bank (the scene makes
@@ -52,6 +97,7 @@ internal sealed class Tadpoles
     public Tadpoles(Pond pond, int clutches, Ripples ripples, bool[] where, bool[] stand, Random rng, Petals petals)
     {
         _pond = pond;
+        _ripples = ripples;
         _clutches = new Clutch[Math.Max(0, clutches)];
         for (int i = 0; i < _clutches.Length; i++) _clutches[i] = new Clutch(pond, ripples, where, stand, rng);
     }
@@ -126,7 +172,7 @@ internal sealed class Clutch
     private float _homeSettle;                        // after a hatch the home glides to its new place (never a jump)
 
     // Things the checks count (the build's instrument reads them).
-    internal int Started, Finished, LeftAtEdge, DivedOut, Murked, Hatches, HatchedTotal;
+    internal int Started, Finished, LeftAtEdge, DivedOut, Murked, Hatches, HatchedTotal, Eaten;
 
     public Clutch(Pond pond, Ripples ripples, bool[] where, bool[] stand, Random rng)
     {
@@ -300,7 +346,9 @@ internal sealed class Clutch
                 {
                     case Tadpole.Exit.Edge: LeftAtEdge++; if (t.Dived) DivedOut++; break;
                     case Tadpole.Exit.Murk: Murked++; break;
+                    case Tadpole.Exit.Eaten: Eaten++; break;
                 }
+                t.Hunter = null;
                 if (t == _changing) { Finished++; _changing = null; _changeTimer = 60 + 120 * (float)_rng.NextDouble(); }
                 t.Alive = false;
             }
@@ -367,7 +415,7 @@ internal enum TadState { Hang, Scull, Windup, Burst, Flee, Graze, Rise, Swim, Di
 /// </summary>
 internal sealed class Tadpole : Body
 {
-    public enum Exit { None, Edge, Murk }
+    public enum Exit { None, Edge, Murk, Eaten }
 
     private const int Points = 7;                  // nose, middle, tail root, then four down the tail
     private const int TrailLen = 24;
@@ -392,6 +440,8 @@ internal sealed class Tadpole : Body
 
     // ---- identity of this life (set in Birth) ----
     public bool Alive;
+    /// <summary>The animal chasing it just now (one at a time: two koi after one tadpole would both "catch" it), or null.</summary>
+    public Snatch? Hunter;
     public int Stage;                              // 0 tadpole, 1 buds, 2 hind legs, 3 forelegs, 4 froglet
     public TadState State;
     public Exit Leaving;
@@ -471,7 +521,7 @@ internal sealed class Tadpole : Body
         _seed = _rng.Next();
         _grow = hatchling ? 0.5f : 1f;
         Stage = 0; _meta = 0; _frog = 0; _stub = 0; _tailAlpha = 1; _legScale = 0;
-        State = TadState.Hang; Leaving = Exit.None;
+        State = TadState.Hang; Leaving = Exit.None; Hunter = null;
         X = x; Y = y; Heading = heading; Speed = 0;
         _stateT = 0.5f + 3 * R();
         _burstTimer = 1 + _burstEvery * R();
@@ -1399,5 +1449,103 @@ internal sealed class Tadpole : Body
         PointF sh = new(Lerp(tail.X, nose.X, 0.66f) + ox * HalfWidth[1] * 0.7f, Lerp(tail.Y, nose.Y, 0.66f) + oy * HalfWidth[1] * 0.7f);
         float f = Lerp(0.17f, -0.02f, p) * L, o = Lerp(0.10f, 0.02f, p) * L;
         Limb(fb, stencil, sh, new PointF(sh.X + fx * f + ox * o, sh.Y + fy * f + oy * o), L * 0.05f, (int)Lerp(70, 112, _frog), (int)Lerp(66, 134, _frog), (int)Lerp(34, 62, _frog), murk);
+    }
+}
+
+/// <summary>
+/// One predator's chance meal: a tadpole or froglet it happened to come upon,
+/// singled out, chased for a few seconds and eaten if its mouth gets there,
+/// or given up. His rule: "animals that happen to be near tadpoles or froglets
+/// will sometimes single out one and chase it and eat it. animals will not
+/// seek out the tadpoles though, only if they happen to be near each other
+/// and the animal sees the tadpoles."
+///
+/// Every animal that eats them (a koi, a turtle, a frog, the snake, a duck,
+/// the crayfish) owns one of these and asks it three things each frame: may
+/// I start (Look: is there one in sight, am I rested from the last, do the
+/// dice say now), where is it now (Prey), have I got it or lost it (Chase).
+/// It never steers the animal: each steers itself toward the prey in its own
+/// way (a koi by its goal, a crayfish by its walk, a frog by one snap), so
+/// each keeps its own look and its own rules of the road.
+///
+/// It rolls its own dice (a Random of its own, seeded from the animal's dealt
+/// dials): one roll from the animal's own Random would move every roll that
+/// animal makes afterwards, and the owner compares builds at one seed.
+/// </summary>
+internal sealed class Snatch
+{
+    /// <summary>Instruments only: every look, catch, miss and abandon as one line. Null in the real pond.</summary>
+    public static Action<string>? Log;
+    /// <summary>Instruments only: how much oftener than the real pond every predator looks (the chance times this, the rest divided by it), so a test run of four minutes shows what an hour would. 1 in the real pond.</summary>
+    public static float Often = 1f;
+
+    private readonly Random _rng;
+    private readonly string _who;
+    private Tadpole? _prey;
+    private float _timer, _cool, _coolFor;
+    public int Caught, Missed;
+
+    public Snatch(string who, int seed) { _who = who; _rng = new Random(seed); }
+
+    /// <summary>Is it after one right now? False as soon as the prey is eaten (by it or another), gone, or given up.</summary>
+    public bool Hunting => _prey != null;
+    /// <summary>The one it is after (only while Hunting).</summary>
+    public Tadpole Prey => _prey!;
+    /// <summary>Seconds of patience left (only while Hunting).</summary>
+    public float Left => _timer;
+    /// <summary>Rested from the last chase and not in one: may it look at all?</summary>
+    public bool Ready => _cool <= 0 && _prey == null;
+
+    public void Tick(float dt) { if (_cool > 0) _cool -= dt; if (_prey != null) _timer -= dt; }
+
+    /// <summary>
+    /// A look, once a frame while the animal is idle enough to notice: with
+    /// chancePerSecond (so a 0.2 means it takes about five seconds beside the
+    /// clutch to make up its mind), is there a tadpole or froglet within seePx
+    /// of the mouth that it can see? Then the chase begins: it has patience
+    /// seconds, and whatever happens it will not look again for coolFor
+    /// seconds. True when a chase has just begun.
+    /// </summary>
+    public bool Look(Tadpoles tads, PointF mouth, float seePx, float chancePerSecond, float dt, float patience, float coolFor, bool surfaceOnly = false, Func<Tadpole, bool>? ok = null)
+    {
+        if (!Ready) return false;
+        if (_rng.NextDouble() >= 1 - Math.Exp(-chancePerSecond * Often * dt)) return false;
+        Tadpole? t = tads.Spot(mouth, seePx, surfaceOnly, ok);
+        if (t == null) return false;
+        _prey = t; t.Hunter = this; _timer = patience; _coolFor = coolFor / Often;
+        Log?.Invoke($"look,{_who},{t.Stage},{t.Z:F3},{t.Nose.X:F0},{t.Nose.Y:F0},{mouth.X:F0},{mouth.Y:F0}");
+        return true;
+    }
+
+    /// <summary>
+    /// A frame of the chase: eats the prey when the mouth is within reachPx of
+    /// its nose (the animal's own idea of its mouth and reach), gives up when
+    /// the patience is spent or the prey is gone. True while the chase goes
+    /// on; false the frame it ends, caught or not (Caught and Missed say which).
+    /// </summary>
+    public bool Chase(Tadpoles tads, PointF mouth, float reachPx)
+    {
+        if (_prey == null) return false;
+        Tadpole t = _prey;
+        if (!t.Alive || t.Hunter != this || t.Leaving != Tadpole.Exit.None) { Drop("lost"); return false; }
+        PointF n = t.Nose;
+        float dx = n.X - mouth.X, dy = n.Y - mouth.Y;
+        if (dx * dx + dy * dy <= reachPx * reachPx) { tads.Eat(t); Caught++; Drop("caught"); return false; }
+        if (_timer <= 0) { Missed++; Drop("missed"); return false; }
+        return true;
+    }
+
+    /// <summary>Something else took over (a threat, a bump): the chase ends with nothing eaten.</summary>
+    public void Abandon() { if (_prey != null) Drop("abandon"); }
+
+    private void Drop(string how)
+    {
+        if (_prey != null)
+        {
+            Log?.Invoke($"{how},{_who},{_prey.Stage},{_prey.Z:F3},{_prey.Nose.X:F0},{_prey.Nose.Y:F0},{_timer:F2}");
+            if (_prey.Hunter == this) _prey.Hunter = null;
+        }
+        _prey = null;
+        _cool = _coolFor;
     }
 }
