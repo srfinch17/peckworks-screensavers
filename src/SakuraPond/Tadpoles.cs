@@ -309,8 +309,10 @@ internal sealed class Clutch
 
     public void Draw(FrameBuffer fb, bool surface)
     {
+        // The tadpoles are drawn before the koi (under every fish); a froglet near the surface, rising or diving, goes with
+        // the surface pass after them (drawn with the tadpoles it went under a deeper koi for half a second).
         foreach (Tadpole t in Fish)
-            if (t.Alive && t.AtSurface == surface) t.Draw(fb);
+            if (t.Alive && (t.AtSurface || (t.Stage == 4 && t.Z < 0.15f)) == surface) t.Draw(fb);
     }
 
     public void PushPetals(Petals petals)
@@ -383,6 +385,7 @@ internal sealed class Tadpole : Body
     private int _planEdge = -1;
     private int _side = 1;
     private float _dive, _checkT, _checkX, _checkY, _stuck;
+    private float _rescueX, _rescueY, _rescueAge = -1;   // the last rescue's spot and when: a second rescue near it means a pocket, and the deep rule from then on
     private bool _deep;
     private bool _dived;
 
@@ -1024,17 +1027,27 @@ internal sealed class Tadpole : Body
             // ducklings' eight-way rescue, a nudge of a third of a body toward the most open of eight directions.
             if (_stuck > 0.5f)
             {
-                float best = 0, bx = 0, by = 0;
+                // Rescued near here within the last fifteen seconds already: a pocket a rescue by open water leads straight back
+                // into (12.6 s confined within twelve pixels on a portrait screen). The deep rule from now on.
+                if (_rescueAge >= 0 && _age - _rescueAge < 15f && !_deep && MathF.Abs(X - _rescueX) + MathF.Abs(Y - _rescueY) < _u * 0.02f) { _deep = true; PlanGoal(-1); }
+                _rescueX = X; _rescueY = Y; _rescueAge = _age;
+                float best = 0, bx = 0, by = 0; bool byDeep = false;
                 // Open water first; when no direction starts on it (a pocket between a pad's rim and the log, where the froglet's
-                // own pixel is a pad: two sat there 57 and 44 s on a portrait screen) the deep rule, anything but land.
+                // own pixel is a pad: two sat there 57 and 44 s on a portrait screen) the deep rule, anything but land, and
+                // from then on it swims BY the deep rule (the nudge alone put it onto the pad, where the next ordinary step was
+                // refused again: a minute of wiggling in the same pocket).
                 for (int pass = 0; pass < 2 && best == 0; pass++)
                     for (int k = 0; k < 8; k++)
                     {
                         float a = k * MathF.PI / 4, cx = MathF.Cos(a), cy = MathF.Sin(a), score = 0;
                         for (int m = 1; m <= 3; m++) if (CanSwim(X + cx * _bl * 0.3f * m, Y + cy * _bl * 0.3f * m, pass == 1)) score++; else break;
-                        if (score > best) { best = score; bx = cx; by = cy; }
+                        if (score > best) { best = score; bx = cx; by = cy; byDeep = pass == 1; }
                     }
-                if (best > 0) { X += bx * _bl * 0.3f; Y += by * _bl * 0.3f; }
+                if (best > 0)
+                {
+                    X += bx * _bl * 0.3f; Y += by * _bl * 0.3f;
+                    if (byDeep && !_deep) { _deep = true; PlanGoal(-1); }
+                }
                 _stuck = 0;
             }
         }

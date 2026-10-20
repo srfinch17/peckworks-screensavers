@@ -731,7 +731,9 @@ internal sealed class Ducks
         // The trail, sampled at even steps back from the mother's middle: everything below reads this one row of points.
         var walk = _trail!.Begin(new PointF(leader.X, leader.Y), 0, 0, leader.Heading);
         for (int j = 0; j < _tp.Length; j++) _tp[j] = walk.Advance(j * TStep * u).P;
-        float first = 0.4f * leader.Len + 0.5f * _sp.KidLen * u + 0.006f * u;
+        // The first slot starts just behind her tail tip (at 0.4 of her length it sat a tenth inside her tail end, and the
+        // discs that keep a duckling off her body pushed it back every frame while the slot pulled it in).
+        float first = 0.5f * leader.Len + 0.5f * _sp.KidLen * u + 0.006f * u;
         for (int r = 0; r < rows; r++)
         {
             float at = (first + rowGap * r) * squeeze / (TStep * u);              // how many steps back along the trail
@@ -852,17 +854,22 @@ internal sealed class Ducks
             // body points only, let one following close ride up her flank or sit under her chin with no push. Two ground discs
             // never push straight up; two coincident points push along the line between the middles.
             foreach (Duck m in _adults)
+            {
+                // Only the DEEPEST overlapping pair pushes (summing every pair, up to 84 of them, fought the slot's pull and the
+                // line shuddered: reversals of 1.5 px and more, steps of 8 px).
+                float deepest = 0, ux = 0, uy = 0;
                 for (int q = 0; q < a.Shape.Points.Length; q++)
                     for (int s = 0; s < 12; s++)
                     {
                         System.Numerics.Vector3 p = a.Shape.Points[q], c = m.Shape.Points[s];
                         float r = m.Shape.Radius[s] + a.Shape.Radius[q];
                         float dx = p.X - c.X, dy = p.Y - c.Y, d = MathF.Sqrt(dx * dx + dy * dy);
-                        if (d >= r) continue;
+                        if (d >= r || r - d <= deepest) continue;
                         if (d < 1e-3f) { dx = a.X - m.X; dy = a.Y - m.Y; d = MathF.Sqrt(dx * dx + dy * dy); if (d < 1e-3f) { dx = 1; dy = 0; d = 1; } }
-                        float push = MathF.Min(a.Len * 3f * dt, r - d);
-                        a.Shove(dx / d * push, dy / d * push);
+                        deepest = r - d; ux = dx / d; uy = dy / d;
                     }
+                if (deepest > 0) { float push = MathF.Min(a.Len * 3f * dt, deepest); a.Shove(ux * push, uy * push); }
+            }
         }
     }
 
@@ -1291,6 +1298,7 @@ internal sealed class DuckWorld
         foreach (BankRock r in pond.Rocks) Add(r.Centre, r.Radius);
         Add(pond.CattailSpot, U * 0.075f);                 // the cattails stand in front of the ducks: keep the whole clump clear
         foreach ((PointF root, _) in pond.IrisSpots) Add(root, U * 0.05f);
+        if (pond.Island is Island isle) Add(isle.Cap, isle.CapRadius * 1.3f);   // the island's dry cap (a duckling dabbled on it)
         _cx = cx.ToArray(); _cy = cy.ToArray(); _cr = cr.ToArray();
         if (pond.Log is Log log)
         {
@@ -1787,7 +1795,9 @@ internal sealed class Duck : Body
         _turnRate += (turn - _turnRate) * (1 - MathF.Exp(-dt * 6f));
         // A turn swings the bill and the tail round the middle: never into a pad or the bank (it would then be inside it, and stuck).
         float newHeading = Wrap(Heading + _turnRate * dt);
-        if (BodyRoom(X, Y, newHeading) <= 0 && BodyRoom(X, Y, Heading) > 0) _turnRate = 0;
+        // (Not while getting unstuck: the watchdog's clear way was refused by this very rule, and a drake stood bill-on-a-pad
+        // for five seconds with a free heading chosen and never taken.)
+        if (_unstickT <= 0 && BodyRoom(X, Y, newHeading) <= 0 && BodyRoom(X, Y, Heading) > 0) _turnRate = 0;
         else Heading = newHeading;
 
         // ---- forward, unless that would put it on something ----
@@ -1811,7 +1821,7 @@ internal sealed class Duck : Body
         if (_stuckT > 1.2f)
         {
             // Pinned again soon after the last try: the trap is a narrow pocket, so for three seconds only its middle has to be in clear water.
-            if (_sinceUnstick < 6) _evacT = 3;
+            if (_sinceUnstick < 6) { _evacT = 3; Rescue(MathF.Max(0.7f, step * 2)); }   // and the body itself goes a little toward the most open way
             _stuckT = 0; _unstickT = 2.5f; _unstickH = ClearestWay(); _sinceUnstick = 0;
         }
 
@@ -1922,13 +1932,36 @@ internal sealed class Duck : Body
         float clearAhead = _blocked ? 0 : ClearAlong(Heading, look);
         if (clearAhead >= margin) return;
         float best = Heading, bestScore = MathF.Min(clearAhead, margin * 2);
-        for (int k = 1; k <= 6; k++)
+        // The whole circle (ten steps of 0.32 rad each side): a search that stopped at a hundred and ten degrees returned the
+        // heading it had, and a drake stood with his bill against a pad's rim for five seconds while his mate left.
+        for (int k = 1; k <= 10; k++)
             foreach (int side in (ReadOnlySpan<int>)[1, -1])
             {
                 float a = Heading + side * k * 0.32f;
                 float score = MathF.Min(ClearAlong(a, look), margin * 2) - k * margin * 0.1f;
                 if (score > bestScore) { bestScore = score; best = a; }
             }
+        if (bestScore <= 0)
+        {
+            // Nothing clears within the look: look again at a third of it, and failing that take the most open of eight ways.
+            for (int k = 0; k <= 10; k++)
+                foreach (int side in (ReadOnlySpan<int>)[1, -1])
+                {
+                    float a = Heading + side * k * 0.32f;
+                    float score = MathF.Min(ClearAlong(a, look * 0.3f), margin * 2) - k * margin * 0.1f;
+                    if (score > bestScore) { bestScore = score; best = a; }
+                    if (k == 0) break;
+                }
+            if (bestScore <= 0)
+            {
+                float open = float.MinValue;
+                for (int k = 0; k < 8; k++)
+                {
+                    float a = k * MathF.PI / 4, room = _w.Clear(X + MathF.Cos(a) * Len * 0.5f, Y + MathF.Sin(a) * Len * 0.5f);
+                    if (room > open) { open = room; best = a; }
+                }
+            }
+        }
         // The nearer the obstacle, the less the goal's pull counts: a goal pull and an avoidance turn that simply add can cancel
         // and hold the bill against a pad for ever (the first build did, for four minutes).
         float urgency = Math.Clamp(1 - clearAhead / margin, 0, 1);

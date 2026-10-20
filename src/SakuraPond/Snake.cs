@@ -196,6 +196,7 @@ internal sealed class Snake : Body
         foreach (BankRock r in pond.Rocks) { centres.Add(r.Centre); radii.Add(r.Radius); }
         centres.Add(pond.CattailSpot); radii.Add(_u * 0.06f);
         foreach ((PointF root, _) in pond.IrisSpots) { centres.Add(root); radii.Add(_u * 0.045f); }
+        if (pond.Island is Island isle) { centres.Add(isle.Cap); radii.Add(isle.CapRadius * 1.3f); }   // the island's dry cap
         _obsCentre = centres.ToArray();
         _obsRadius = radii.ToArray();
         _log = pond.Log;

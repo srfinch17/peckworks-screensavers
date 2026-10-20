@@ -189,7 +189,16 @@ internal sealed class KoiSchool
     /// The same two points of EVERY koi, whatever its depth: for the animals on the bed (the tadpoles, the crayfish). A fish
     /// over the shallows is never deeper than the shallows, so the surface test above ruled out exactly the fish passing over them.
     /// </summary>
-    public PointF[] BedHeads => _fish.SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
+    public PointF[] BedHeads
+    {
+        get
+        {
+            if (_bedHeads.Length != _fish.Length * 2) _bedHeads = new PointF[_fish.Length * 2];   // reused between frames
+            for (int i = 0; i < _fish.Length; i++) { _bedHeads[2 * i] = _fish[i].Head; _bedHeads[2 * i + 1] = _fish[i].Middle; }
+            return _bedHeads;
+        }
+    }
+    private PointF[] _bedHeads = [];
 
     // Scratch for Draw, kept between frames so drawing allocates nothing (see Room).
     private int[] _order = [], _layer = [];

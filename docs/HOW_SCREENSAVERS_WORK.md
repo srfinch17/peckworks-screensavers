@@ -624,8 +624,8 @@ hen, a frog crawling under her: feelers only keep a duck off things while it mov
 along the line between their closest parts, onto open water only (a turtle up at the surface counts
 too; and when the two closest pieces cross exactly the chain test answers straight up, so the push is
 then sideways along the line between the two middles, the koi school's own fallback). Pairs that may
-still touch for a moment, each on purpose or by nobody's rule: a frog and the snake, the snake and the
-turtle (neither moves for the other), a duckling and a floating frog. A duck's shadow is painted only on
+still overlap for a few seconds, each by nobody's rule: a frog and the snake, a frog and the turtle, the
+snake and the turtle (none of them moves for the other), a duckling and a floating frog. A duck's shadow is painted only on
 water in view, like every other shadow: painted on all water, it showed as a grey duck, wings and
 all, lying on the blossom wherever the duck itself was hidden under a branch. The two
 adults of a pair are solid to each other (overlapping bodies are pushed half the way apart along the

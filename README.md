@@ -213,8 +213,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   the snake's body and a swimming frog, the snake swims round the ducks and is startled by a touch
   from one, a swimming frog dives from any part of a duck, a duck that the snake, a frog or a
   surfacing turtle still gets onto recoils off it, and the two adults of a pair keep off each
-  other. What may still touch for a moment: a frog and the snake, the snake and the turtle
-  (neither moves for the other), a duckling and a floating frog. The "Ducks" setting scales
+  other. What may still overlap for a few seconds: a frog and the snake, a frog and the turtle, the
+  snake and the turtle (none of them moves for the other), a duckling and a floating frog. The "Ducks" setting scales
   how often they come (100% is every four to eight minutes).
 - **Petals** let go of the blossom, sway and tumble down, their shadows sliding in to meet them,
   touch the water with a tiny ring, then float, drifting slowly and gathering against the banks.
@@ -228,7 +228,7 @@ travelling wave (the cattails and irises sway with it stiffly).
   brown with a cream line along the neck; the karasuhebi, near black with a blue sheen down the
   back) comes out of the grass, swims across the pond with its body weaving behind its head and a
   small wake, and slips away. It is
-  not on rails: it feels its way, goes round the lily pads, the rocks, the log, the cattails and
+  not on rails: it feels its way, goes round the lily pads, the rocks, the log, the island's cap, the cattails and
   the iris clumps rather than over them, pushes the floating petals out of its way, and if a
   koi, a turtle or the lizard touches it, it startles: a burst of speed, a swing away, rings off its head, then it calms. The koi and
   turtles treat its body as solid (they steer under or round it, and a fish that meets it is pushed out), and the minnows keep
