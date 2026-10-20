@@ -159,7 +159,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   its legs and floats up (a buoyant rise at one slow rate whichever way it faces: it grows and
   sharpens as it comes, which reads as surfacing), pokes its nose up for a breath (one small ring), drifts over to a petal
   and nibbles it, then paddles off, or
-  dives to the bed for a while. And it hauls out: it swims up to the island rock or the fallen
+  dives to the bed for a while. A tadpole it comes upon while cruising or diving it may chase, half again
+  as fast, and eat if its nose gets there. And it hauls out: it swims up to the island rock or the fallen
   log, climbs onto it, sits with its legs spread in the sun for fifteen seconds to a minute, and
   slips back in (sooner if the snake comes near, and then on the side away from it). Each turtle has its own dials: how much it loves the sun
   and how jumpy it is.
@@ -167,7 +168,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   the bank's edge, olive green with brown blotches and a pale line down the back, two bulging
   eyes on top of the head. A frog sits still for half a minute at a time, its pale throat
   fluttering and now and then swelling in a croak (no sound), with the odd shuffle or hop round
-  on the spot to face the water; a bold one snaps at a dragonfly that settles close. Then it
+  on the spot to face the water; a bold one snaps at a dragonfly that settles close, or at a froglet (or
+  a tadpole up near the top) that comes within a snap of its perch, and eats it if the snout lands on it. Then it
   leaps: a crouch, the hind legs snapping out behind, an arc a few body lengths long with its
   shadow left behind on the pad and then the water (the gap is the height), and a splash. It
   swims with frog kicks (a quick push that surges the body, then a slow glide with the legs
@@ -188,7 +190,10 @@ travelling wave (the cattails and irises sway with it stiffly).
   clutches" (0 to 3, default 1) sets how many clusters. Tadpoles are too small to be solid to
   anything: they pass under fish and pads and flee them; a froglet at the surface is solid to petals.
   Everything under the water (tadpoles, a rising froglet, koi, minnows) is painted under the floating
-  petals and under the heap of petals drifted against the bank.
+  petals and under the heap of petals drifted against the bank. And they are food: an animal that
+  happens to come near the clutch and sees them (a koi, a turtle, a frog on its pad, the snake, a duck,
+  the crayfish) will sometimes single one out, chase it for a few seconds and eat it, or lose it; nothing
+  goes looking for them, and each animal rests for minutes between tries. A thinned clutch hatches more.
 - A **crayfish** (amerika-zarigani, the red swamp crayfish of every Japanese ditch) lives under a
   bank rock or the log and now and then comes out into the shallows where the bed shows: it edges
   out claws first, walks slowly on eight legs rippling in a wave, antennae waving, stops to feed
@@ -196,7 +201,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   and, when a koi or a turtle passes over, escapes with the tail flip: the abdomen snaps under and
   it shoots backward two or three times, then sits with its claws up and walks home and slides
   back under the stone. It is drawn on the bed (sunk, hazed and shrunk like the fish above it)
-  and is solid to nothing: everything swims over it. Each visit has its own two dials, how bold
+  and is solid to nothing: everything swims over it. A tadpole within a few steps on the bed it walks
+  at, briskly, and eats if its claws reach it; then it stands and feeds. Each visit has its own two dials, how bold
   and how hungry. The "Crayfish" knob sets how often it comes out (0 for never).
 - **Ducks** swim by now and then: usually a mother with three to six ducklings, sometimes a drake and
   a hen, sometimes a lone drake, of one of four species (the eastern spot-billed duck, mallard,
@@ -216,7 +222,10 @@ travelling wave (the cattails and irises sway with it stiffly).
   the snake's body and a swimming frog, the snake swims round the ducks and is startled by a touch
   from one, a swimming frog dives from any part of a duck, a duck that the snake, a frog or a
   surfacing turtle still gets onto recoils off it, and the two adults of a pair keep off each
-  other. What may still overlap for a few seconds: a frog and the snake, a frog and the turtle, the
+  other. A grown duck paddling past the tadpoles' shallows may, rarely, single out a tadpole or froglet near
+  its bill, swing round at it a third faster than a cruise and tip down for it with its neck stretched
+  forward (eaten only if the bill gets there; a duck never goes looking for them, and not again for minutes).
+  What may still overlap for a few seconds: a frog and the snake, a frog and the turtle, the
   snake and the turtle (none of them moves for the other), a duckling and a floating frog. The "Ducks" setting scales
   how often they come (100% is every four to eight minutes).
 - **Petals** let go of the blossom, sway and tumble down, their shadows sliding in to meet them,
@@ -249,7 +258,9 @@ travelling wave (the cattails and irises sway with it stiffly).
   meal travels down the snake and fades; sometimes the prey was already gone (a lizard flings
   itself aside, a mouse jumps straight up) and the jaws close on nothing. A snake strikes at most
   twice a visit, and one that has eaten is slow and would sooner bask. An eaten animal is replaced
-  by a new one (new temper) two to five minutes later.
+  by a new one (new temper) two to five minutes later. A snake that is only swimming across, with a
+  tadpole or froglet at the top of the water right at its nose, may single that one out for a few
+  seconds' chase and a lunge (never looked for, and it rests four to eight minutes after any chase).
 - Two **lizards** (kanahebi, the Japanese grass lizard with the very long tail) each come out on
   the bank every couple of minutes: a dash, dead still, another dash, over the grass and up onto a
   rock to bask, its body and tail throwing an S-wave as it runs and its legs stepping on opposite

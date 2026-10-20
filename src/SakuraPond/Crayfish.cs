@@ -37,6 +37,9 @@ internal sealed class Crayfish
     /// <param name="threats">Screen points of what sends it flipping backward: koi heads and middles, turtle noses and shells, the ducks' heads.</param>
     public void Update(float dt, PointF[] threats) => _animal?.Update(dt, threats);
 
+    /// <summary>The pond's tadpoles: a crayfish out on the bed walks at one within a few steps and eats it. Set once by the scene.</summary>
+    public Tadpoles? Prey { set { if (_animal != null) _animal.Prey = value; } }
+
     /// <summary>On the bed: before every fish (everything that swims is above it).</summary>
     public void Draw(FrameBuffer fb) => _animal?.Draw(fb);
 }
@@ -151,6 +154,12 @@ internal sealed class CrayfishBody : Body
     private float _feedNext;
     private int _feedSide;
     private readonly float[] _dice = new float[4];
+    // ---- a chance meal (Tadpoles.cs): a tadpole on the bed within a few steps ----
+    private readonly Snatch _snatch;
+    private readonly Func<Tadpole, bool> _canReach;      // made once: a prey it can walk straight to (a closure made per look would be garbage)
+    private bool _toPrey;                                // this Walk is the chase
+    private int _ate;                                    // catches seen so far (a new one begins a feed)
+    internal Tadpoles? Prey { get; set; }
 
     private (float, float) ToGround(float x, float y) => (x, CentreY + (y - CentreY) / Ripples.Squash);
     private PointF ToScreen(float gx, float gy) => new(gx, CentreY + (gy - CentreY) * Ripples.Squash);
@@ -173,6 +182,8 @@ internal sealed class CrayfishBody : Body
         _view = new bool[pond.Width * pond.Height];
         for (int i = 0; i < _view.Length; i++) _view[i] = pond.Water[i] && pond.Open[i];
         _hasHome = FindHome();
+        _snatch = new Snatch("crayfish", Snatch.Seed((int)_p0x, (int)_p0y, 7));   // its own dice, seeded from where its home is (its dials are rolled per visit)
+        _canReach = t => Free(t.X, t.Y) && LineFree(_x, _y, t.X, t.Y);
         _mind.Begin(Doing.Hidden, _hasHome ? (30 + 60 * (float)rng.NextDouble()) / often : Mind<Doing>.Forever);
         ResetClaws();
     }
@@ -353,6 +364,8 @@ internal sealed class CrayfishBody : Body
             return;
         }
         _scareCool.Tick(dt);
+        _snatch.Tick(dt);
+        if (!(_doing == Doing.Walk && _toPrey) && _snatch.Hunting) { _snatch.Abandon(); _toPrey = false; }   // a scare, the retreat: the meal is forgotten
         _visitLeft -= dt;
         float ox = _x, oy = _y;
         _sc = Light.Scale(_z);
@@ -369,7 +382,7 @@ internal sealed class CrayfishBody : Body
                     break;
                 }
             case Doing.Walk:
-                DoWalk(dt, 1f, true);
+                DoWalk(dt, _toPrey ? 1.4f : 1f, true);         // brisker after a tadpole
                 break;
             case Doing.Feed:
                 DoFeed(dt);
@@ -462,6 +475,16 @@ internal sealed class CrayfishBody : Body
     private void Decide()
     {
         if (_visitLeft <= 0) { StartRetreat(); return; }
+        _toPrey = false;
+        // A tadpole on the bed within a few steps (0.08u) that it can walk straight to: a hungry one goes for
+        // it more often than not when the dice are rolled (the one second handed to the dice means "one roll
+        // per decision"), and not again for a couple of minutes after.
+        if (Prey != null && _snatch.Look(Prey, Spot, _u * 0.08f, 0.6f + 0.6f * _hungry, 1f, 8f, 120 + 200 * (1 - _hungry), surfaceOnly: false, ok: _canReach))
+        {
+            _toPrey = true; _gx = _snatch.Prey.X; _gy = _snatch.Prey.Y;
+            _mind.Begin(Doing.Walk, 8.5f);
+            return;
+        }
         bool haveGoal = PickGoal();
         bool canBack = FreeStep(_x - MathF.Cos(_heading) * _u * 0.03f, _y - MathF.Sin(_heading) * _u * 0.03f, _heading, true);
         // A feed lasts 10 to 30 s and a walk a few, so the walk gets the bigger face to keep the time about even.
@@ -518,6 +541,20 @@ internal sealed class CrayfishBody : Body
     /// </summary>
     private void DoWalk(float dt, float pace, bool decideAtEnd)
     {
+        if (_toPrey)
+        {
+            // The chase: the goal is the prey's nose, read afresh (it scatters from the claws). Caught when the
+            // nose is within a third of a length of it (the claws reach that far ahead): then it stands and feeds,
+            // a claw to the mouth. Given up when the patience runs out.
+            if (!_snatch.Chase(Prey!, Spot, _len * 0.35f))
+            {
+                _toPrey = false;
+                if (_snatch.Caught > _ate) { _ate = _snatch.Caught; _mind.Begin(Doing.Feed, 6f); _feedNext = 0.2f; }
+                else Decide();
+                return;
+            }
+            _gx = _snatch.Prey.X; _gy = _snatch.Prey.Y;
+        }
         float dx = _gx - _x, dy = _gy - _y, d = MathF.Sqrt(dx * dx + dy * dy);
         if (d < _u * 0.004f || (decideAtEnd && _mind.Over)) { if (decideAtEnd) Decide(); return; }
         float err = Wrap(MathF.Atan2(dy, dx) - _heading);

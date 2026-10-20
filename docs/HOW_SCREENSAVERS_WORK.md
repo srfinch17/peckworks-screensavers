@@ -634,7 +634,16 @@ stop wherever it was when the first stopped, often on top of her). And the duck'
 the land goes on beyond the screen's edge: a point off the picture reads the last pixel on the
 picture in its row or column, water beside water, land beside the land corner. The first version
 called everything off the screen water, and a drake skirted the bank along that strip into the
-bottom corner, where the bank meets both edges, and sat in the grass for the rest of the run.
+bottom corner, where the bank meets both edges, and sat in the grass for the rest of the run. A grown duck
+(never a duckling) may also take a chance meal: from a plain Cruise only (never a look, dabble, wait or
+herd), with the bill on the picture and the director's leave (not on the way out, the mother not in the
+middle of a cute thing), a `Snatch` (Tadpoles.cs, its own dice, seeded from the duck's dials) may single out
+a tadpole or froglet within a tenth of the screen of the bill. Then `Doing.Snatch` closes in at 1.3 times the
+cruise through the same feelers and step rule, and within a quarter of a body length tips down as in a dabble
+with the neck reaching forward; the prey is eaten only if, while the head is under, the bill is within a fiftieth
+of the screen of its nose (the head stays down up to 1.3 seconds while the prey is still close), else it is a
+dip at nothing. A herd, a wait or the end of the visit ends it (all through
+`Duck.Start`, and `EndHunt` at the visit's end, so no tadpole stays claimed).
 
 *The frogs sit, leap and kick.* A frog (`Frog.cs`, a `Frogs` holder like `Turtles`) is rigid, so
 it has a STRAIGHT spine like the turtle's (the same `Body` drawing: haze by depth, branch shadows,
@@ -708,6 +717,27 @@ petals. The petals heaped against the bank are part of the painted backdrop, so 
 list of their pixels (`Pond.Heap`) and copies them back from the backdrop each frame once
 everything under the water is painted (`Pond.CoverWithHeap`): a tadpole under the heap is hidden
 by it, like a fish under the live petals.
+
+*Tadpoles are food, taken by chance.* The owner's rule: an animal that happens to be near the
+tadpoles and sees them will sometimes single one out, chase it and eat it; nothing goes looking for
+them. One small shared piece does the "sometimes" and the "single one out" for every eater
+(`Snatch`, at the end of `Tadpoles.cs`): each predator owns one and asks it three things a frame.
+May I start (`Look`: its own dice first, at a chance per second, so a fish needs a few seconds beside
+the clutch to make up its mind; then `Tadpoles.Spot`, the nearest living, unclaimed, visible tadpole
+or froglet within sight of the mouth; and it will not look again for minutes after a chase, hit or
+miss). Where is it now (`Prey`: it flees, so the goal is read afresh). Have I got it or lost it
+(`Chase`: eaten when the animal's own idea of its mouth is within its own idea of reach of the prey's
+nose, `Tadpoles.Eat`; given up when the patience of a few seconds runs out). The piece never steers:
+a koi runs its ordinary goal and depth at the prey (flat out, down to the tadpole's depth, the bed's
+clamp keeping it honest), a turtle paddles half again as fast with its feelers still on, a sitting
+frog uses its dragonfly snap (one hop; the prey is taken only if the snout lands on it), the crayfish
+walks at one within a few steps and then stands and feeds, and the snake and the ducks have their own
+gestures (their paragraphs). Anything that takes the animal over (a flee, a bump, a herd, a scare)
+abandons the chase in one line at the top of its `Begin`. A prey has one hunter at a time (`Hunter`)
+so two fish never both "catch" it. Each `Snatch` rolls its own `Random`, seeded from the animal's
+dealt dials: one roll from the animal's own dice would move every roll it makes afterwards, and the
+builds are compared at one seed. An eaten tadpole leaves as `Exit.Eaten`, counted by its clutch, which
+hatches more when thinned; a small ring marks a catch near the surface.
 
 *A lizard on land is the koi's method on the ground.* The lizard (`Lizard.cs`) is the same
 bending spine, its head leading and its body and long tail laid along the trail behind it, with
@@ -827,7 +857,15 @@ two rings and swims off the far end. The log is not an obstacle to a snake that 
 lying on or leaving it, and is to every other doing. All of this only chooses a goal and a speed:
 the feelers, the "never stuck" rule and the startle (which ends a hunt or a lie) still have the
 last word. The weave's width is eased from one doing's value to the next, so the head never jumps
-sideways when the doing changes.
+sideways when the doing changes. *A chance meal* (`Doing.Snatch`): while it is only crossing or
+exploring with its head on the water, a tadpole or froglet at the top of the water within 0.15u of
+its nose and in front of its head (within 75 degrees of where it points; the tadpoles bolt from 0.09u, so a smaller look would leave no time to begin) may be
+singled out (the shared `Snatch` in `Tadpoles.cs` rolls the dice, a bold snake sooner, then finds the
+nearest one). For up to five seconds the goal is that tadpole's nose at a pace of 1.4 cruises, and
+whenever the nose is within 0.12u (a tadpole bolts at 0.09u) and within 20 degrees of dead ahead it
+lunges for 0.35 s (cut short if the nose ends up behind the head) at 0.6u a second (a tadpole's burst is about twice the snake's cruise, so a slower
+lunge never closes), with a ring off the head; the catch is the nose within 0.02u of the head. A
+touch, a hunt, a tadpole diving out of reach or the visit ending drops the chase, and it rests four to eight minutes after any chase.
 
 *Five skins and a hunt.* Each visit wears one of five skins (`Snake.Colour(s, v)`: a shimahebi,
 aodaisho, yamakagashi, hibakari or karasuhebi), picked from the two dials already rolled at the door

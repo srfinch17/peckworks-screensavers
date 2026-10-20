@@ -57,6 +57,9 @@ internal sealed class Frogs
     public IReadOnlyList<Frog> All => _all;
     public IReadOnlyList<FrogPerch> Perches => _perches;
 
+    /// <summary>The pond's tadpoles: a sitting frog snaps at a froglet or a shallow tadpole that comes within reach. Set once by the scene.</summary>
+    public Tadpoles? Prey { set { foreach (Frog f in _all) f.Prey = value; } }
+
     /// <summary>The frogs in the water this frame (swimming, floating or dived): solid to the koi.</summary>
     public IReadOnlyList<Body> InWater => _inWater;
 
@@ -385,9 +388,12 @@ internal sealed class Frog : Body
     private HopKind _hop;
     private float _hopT, _hopDur, _crouch, _ax, _ay, _bx, _by, _hmax, _h0, _h1;
     private bool _scared, _snapToWater, _splashPending;
+    private bool _snapPrey;                                // this snap is at a tadpole or froglet (else at a dragonfly)
     private float _splashIn;
     private PointF _splashAt, _snapBug;
     private float _savedLeft;
+    private readonly Snatch _snatch;                       // the chance meal (Tadpoles.cs): a froglet or shallow tadpole that came within a snap of its perch
+    internal Tadpoles? Prey { get; set; }                  // the pond's tadpoles (set by the wrapper once the scene has made them)
 
     // ---- the world this frame ----
     private PointF? _snakeHead;
@@ -410,6 +416,7 @@ internal sealed class Frog : Body
         _rng = rng;
         _bold = bold;
         _restless = restless;
+        _snatch = new Snatch("frog", Snatch.Seed((int)(bold * 1e6f), (int)(restless * 1e6f), 3));   // its own dice, from the dealt dials
         _dragonflies = dragonflies;
         _u = pond.U;
         _len = LenOf(pond);
@@ -631,6 +638,8 @@ internal sealed class Frog : Body
         _snakeHead = snakeHead; _koiHeads = koiHeads; _turtleSpots = turtleSpots; _lizardNoses = lizardNoses;
         _alarm.Tick(dt);
         _mind.Tick(dt);
+        _snatch.Tick(dt);
+        if (_hop != HopKind.Snap && _snatch.Hunting) _snatch.Abandon();     // the snap is the whole chase; anything else going on means it is off
         for (int i = 0; i < _bad.Length; i++) if (_bad[i] > 0) _bad[i] -= dt;
         if (_doing == Doing.Sit) _wet = 0; else _wet += dt;
         if (_splashPending)
@@ -766,12 +775,20 @@ internal sealed class Frog : Body
             _pivotIn = (7 + 18 * (float)_rng.NextDouble()) / boldMul * (1.2f - 0.5f * _restless);
         }
 
-        // A dragonfly settled close: a bold frog snaps at it.
+        // A dragonfly settled close, or a froglet (or a tadpole up near the top) within a snap of the perch: a
+        // bold frog snaps at it. The tadpole look is made at these same moments (every half second or so,
+        // hence the half second handed to the dice as the time since the last look), and a frog that has
+        // eaten, or missed, does not look again for minutes.
         _snapIn -= dt;
         if (_snapIn <= 0)
         {
             _snapIn = 0.3f + 0.5f * (float)_rng.NextDouble();
-            if (_dragonflies != null && _hop == HopKind.None && _rng.NextDouble() < 0.1 + 0.6 * _bold) TrySnap();
+            if (Prey != null && _hop == HopKind.None && _perch != null
+                && _snatch.Look(Prey, Nose, _u * 0.07f, 0.15f + 0.4f * _bold, 0.55f, 0.15f, 150 + 250 * (1 - _bold), surfaceOnly: true))
+            {
+                if (!SnapAt(_snatch.Prey.Nose, prey: true)) _snatch.Release();   // no room for the hop from this perch: it lets this one go and may look again soon
+            }
+            else if (_dragonflies != null && _hop == HopKind.None && _rng.NextDouble() < 0.1 + 0.6 * _bold) TrySnap();
         }
 
         if (_mind.Over && _hop == HopKind.None)
@@ -788,11 +805,28 @@ internal sealed class Frog : Body
     {
         PointF nose = Nose;
         if (_perch == null || !_dragonflies!.NearestPerched(nose.X, nose.Y, _u * 0.07f, out PointF bug)) return;
+        SnapAt(bug, prey: false);
+    }
+
+    /// <summary>
+    /// The snap itself, at a screen spot (a dragonfly, or a tadpole's nose): the hop that lands the snout on it,
+    /// on the same perch if it can, else in the water if that is open. False when there is no room for the hop.
+    /// </summary>
+    private bool SnapAt(PointF bug, bool prey)
+    {
+        if (_perch == null) return false;
         PointF c = Centre;
         float d = Dist(c, bug);
-        if (d < _len * 0.3f) return;                                   // it is right under the snout already
+        if (d < _len * 0.3f || MathF.Min(_u * 0.03f, MathF.Max(0, d - _len * 0.45f)) < _u * 0.006f)
+        {
+            // It is right under the snout already: nothing to hop for. A bug is left alone; a tadpole is simply taken
+            // (the first run saw a sitting frog look at the same tadpole under its nose twenty times and never eat it).
+            if (!prey) return false;
+            if (Prey != null && _snatch.Hunting) _snatch.Chase(Prey, Nose, _len * 0.5f);
+            if (_snatch.Hunting) _snatch.Abandon();
+            return true;
+        }
         float move = MathF.Min(_u * 0.03f, MathF.Max(0, d - _len * 0.45f));
-        if (move < _u * 0.006f) return;
         var dest = new PointF(c.X + (bug.X - c.X) / d * move, c.Y + (bug.Y - c.Y) / d * move);
         bool onPerch;
         switch (_perch.Kind)
@@ -805,15 +839,16 @@ internal sealed class Frog : Body
             default: onPerch = LandAt(dest) && OpenAt(dest) && !WaterAt(dest); break;
         }
         bool water = !onPerch && WaterAt(dest) && _pond.RoomAt(dest.X, dest.Y) > _len * 0.6f && Clear(dest.X, dest.Y, -1) > _len * 0.4f;
-        if (!onPerch && !water) return;
-        _snapToWater = water; _snapBug = bug;
+        if (!onPerch && !water) return false;
+        _snapToWater = water; _snapBug = bug; _snapPrey = prey;
         _savedLeft = _mind.Left;
         _mind.Begin(Doing.Snap);
         (float gx, float gy) = ToGround(dest);
         float face = MathF.Atan2(gy - _y, gx - _x);
         if (water) { _owner.Free(_perch, this); _lastPerch = _perch; _perch = null; }
         BeginHop(HopKind.Snap, _x, _y, gx, gy, 0.18f, 0.06f, 0.008f * _u, face);
-        Log?.Invoke($"snap bug={bug.X:F0},{bug.Y:F0} water={water}");
+        Log?.Invoke($"snap {(prey ? "prey" : "bug")}={bug.X:F0},{bug.Y:F0} water={water}");
+        return true;
     }
 
     // ================================================================ hops
@@ -854,10 +889,18 @@ internal sealed class Frog : Body
             _hopHeight = _hmax * MathF.Sin(MathF.PI * Math.Clamp(_hopT / _hopDur, 0, 1)) / _u;
             _poseWant = 0.25f * MathF.Sin(MathF.PI * Math.Clamp(_hopT / _hopDur, 0, 1));
         }
-        if (_hop == HopKind.Snap && q > 0.6f && !_scared)
+        if (_hop == HopKind.Snap && !_snapPrey && q > 0.6f && !_scared)
         {
             _scared = true;
             _dragonflies?.Scare(_snapBug.X, _snapBug.Y, _u * 0.04f);       // the bug takes off as the frog arrives
+        }
+        if (_hop == HopKind.Snap && _snapPrey && q > 0.75f && !_scared)
+        {
+            // The snout comes down: the prey is taken if it is still within reach of it (a froglet that kicked
+            // off in the meantime is missed; the snap's patience ran out in the air, so Chase says so).
+            _scared = true;
+            if (Prey != null && _snatch.Hunting) _snatch.Chase(Prey, Nose, _len * 0.4f);
+            if (_snatch.Hunting) _snatch.Abandon();
         }
         if (_hopT >= _hopDur) EndHop();
     }

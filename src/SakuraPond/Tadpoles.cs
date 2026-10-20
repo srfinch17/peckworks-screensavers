@@ -397,7 +397,7 @@ internal sealed class Clutch
     public void Draw(FrameBuffer fb, Pass pass)
     {
         foreach (Tadpole t in Fish)
-            if (t.Alive && t.DrawPass == pass) t.Draw(fb);
+            if (t.Alive && t.Leaving == Tadpole.Exit.None && t.DrawPass == pass) t.Draw(fb);   // one eaten by an animal updated after the tadpoles is gone THIS frame, not drawn once more at the mouth
     }
 
     public void PushPetals(Petals petals)
@@ -1487,6 +1487,14 @@ internal sealed class Snatch
 
     public Snatch(string who, int seed) { _who = who; _rng = new Random(seed); }
 
+    /// <summary>
+    /// A seed from up to four whole numbers (an animal's dealt dials times a million, its index) that is the SAME
+    /// every time the screensaver runs. HashCode.Combine is not: .NET salts it afresh each process, so a Snatch
+    /// seeded with it rolled different dice on every launch and the same seed gave a different pond (a frame
+    /// dump made to look at a catch had no catch in it). Plain multiply-and-xor mixing, fixed for ever.
+    /// </summary>
+    public static int Seed(int a, int b, int c = 0, int d = 0) => unchecked(a * 73856093 ^ b * 19349663 ^ c * 83492791 ^ d * -1640531535 ^ 0x5bd1e995);
+
     /// <summary>Is it after one right now? False as soon as the prey is eaten (by it or another), gone, or given up.</summary>
     public bool Hunting => _prey != null;
     /// <summary>The one it is after (only while Hunting).</summary>
@@ -1527,22 +1535,25 @@ internal sealed class Snatch
     {
         if (_prey == null) return false;
         Tadpole t = _prey;
-        if (!t.Alive || t.Hunter != this || t.Leaving != Tadpole.Exit.None) { Drop("lost"); return false; }
+        if (!t.Alive || t.Hunter != this || t.Leaving != Tadpole.Exit.None) { Drop("lost", mouth); return false; }
         PointF n = t.Nose;
         float dx = n.X - mouth.X, dy = n.Y - mouth.Y;
-        if (dx * dx + dy * dy <= reachPx * reachPx) { tads.Eat(t); Caught++; Drop("caught"); return false; }
-        if (_timer <= 0) { Missed++; Drop("missed"); return false; }
+        if (dx * dx + dy * dy <= reachPx * reachPx) { tads.Eat(t); Caught++; Drop("caught", mouth); return false; }
+        if (_timer <= 0) { Missed++; Drop("missed", mouth); return false; }
         return true;
     }
 
-    /// <summary>Something else took over (a threat, a bump): the chase ends with nothing eaten.</summary>
-    public void Abandon() { if (_prey != null) Drop("abandon"); }
+    /// <summary>Something else took over (a threat, a bump): the chase ends with nothing eaten, and it rests as after a miss.</summary>
+    public void Abandon(string why = "abandon") { if (_prey != null) Drop("abandon:" + why, default); }
 
-    private void Drop(string how)
+    /// <summary>It looked, but cannot get at this one (no room for the frog's hop): let it go, and look again in a few seconds rather than minutes.</summary>
+    public void Release() { if (_prey != null) { Drop("release", default); _cool = 4f / Often; } }
+
+    private void Drop(string how, PointF mouth)
     {
         if (_prey != null)
         {
-            Log?.Invoke($"{how},{_who},{_prey.Stage},{_prey.Z:F3},{_prey.Nose.X:F0},{_prey.Nose.Y:F0},{_timer:F2}");
+            Log?.Invoke($"{how},{_who},{_prey.Stage},{_prey.Z:F3},{_prey.Nose.X:F0},{_prey.Nose.Y:F0},{_timer:F2},{mouth.X:F0},{mouth.Y:F0}");
             if (_prey.Hunter == this) _prey.Hunter = null;
         }
         _prey = null;

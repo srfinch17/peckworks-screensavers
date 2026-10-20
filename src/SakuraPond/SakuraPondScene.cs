@@ -98,7 +98,12 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _crayfish = new Crayfish(_pond, _ripples, settings.CrayfishPercent / 100f, new Random(unchecked(salt + 202)));
         // Who may eat a tadpole or froglet it happens upon (Snatch in Tadpoles.cs): nothing goes looking for them.
         _koi.Prey = _tadpoles;
+        _turtles.Prey = _tadpoles;
+        _frogs.Prey = _tadpoles;
+        _crayfish.Prey = _tadpoles;
+        _snake.Prey = _tadpoles;                   // and the swimming snake, when a tadpole is right at its nose
         _ducks = new Ducks(_pond, _ripples, settings.DuckPercent / 100f, new Random(unchecked(salt + 303)), _petals, settings.MinnowSchools > 0 ? _minnows : null, _waterInView);
+        _ducks.Prey = _tadpoles;                   // a duck that happens to paddle past the clutch may single one out (Snatch in Tadpoles.cs)
     }
 
     /// <summary>

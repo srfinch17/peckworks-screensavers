@@ -357,6 +357,13 @@ internal sealed class Ducks
     private readonly Roster? _roster;
     private readonly float _u;
 
+    /// <summary>
+    /// The tadpoles of the pond, set by the scene (null in a pond without any). A grown duck that happens to be paddling
+    /// past the clutch, with its bill near a tadpole or a froglet it can see, may single one out, chase it for a few
+    /// seconds and tip down after it (Snatch in Tadpoles.cs; Duck.Doing.Snatch). The ducks never go LOOKING for them.
+    /// </summary>
+    internal Tadpoles? Prey { get; set; }
+
     // ---- the visit in hand ----
     private bool _visiting, _leaving, _entered;
     private float _next, _visitT, _wpT;
@@ -463,6 +470,7 @@ internal sealed class Ducks
         ComputeSlots(leader);
         for (int k = 0; k < nKids; k++) _kids[k].Place(_slotX[k], _slotY[k], heading);
         _heads = new PointF[_adults.Length + nKids];
+        foreach (Duck a in _adults) a.Prey = Prey;                         // each grown duck owns its own chance meal (a fresh one every visit)
 
         // The route: two to four stops in open water that can be seen, then out beyond another edge.
         _wpCount = 0; _wpAt = 0; _extra = 0; _wpT = 0;
@@ -544,6 +552,11 @@ internal sealed class Ducks
         Cutes(dt, leader);
         leader.AllowBig = _cute == Cute.None && !_leaving;
         if (_adults.Length > 1) _adults[1].AllowBig = false;
+        // A chance meal (a tadpole in reach of the bill): the mother only between cute things (her ducklings are not in the
+        // middle of anything, and they follow her trail wherever the chase takes her, closing up behind her when she tips
+        // down), her mate any time but on the way out; nobody on the way out (it must not wheel round for a tadpole).
+        leader.AllowSnatch = leader.AllowBig;
+        if (_adults.Length > 1) _adults[1].AllowSnatch = !_leaving;
         foreach (Duck a in _adults) a.Update(dt);
         if (_adults.Length > 1) Mirror(leader, _adults[1]);
         // A pair are solid to each other: two bodies that overlap are each pushed half the way out along the line between
@@ -615,6 +628,7 @@ internal sealed class Ducks
         if (_entered && !anyIn && (_leaving || _visitT > 150) || _goneT > 10 || _visitT > 260 && !leader.OnScreen || _visitT > 420)
         {
             _visiting = false;
+            foreach (Duck a in _adults) a.EndHunt();                       // a chase in hand lets go of its prey (a tadpole stays "claimed" for ever otherwise)
             _next = (240 + 240 * (float)_rng.NextDouble()) / _often;       // four to eight minutes at the normal setting
         }
     }
@@ -703,7 +717,8 @@ internal sealed class Ducks
     private static void Mirror(Duck leader, Duck f)
     {
         bool still = leader.Now is Duck.Doing.Dabble or Duck.Doing.Preen or Duck.Doing.Flap or Duck.Doing.Wait;
-        if (still && f.Now is not (Duck.Doing.Wait or Duck.Doing.Herd)) f.BeginWait(false, 0, 0);
+        // (A mate in the middle of a chase for a tadpole keeps at it: the leader's dabble or preen is over in a few seconds.)
+        if (still && f.Now is not (Duck.Doing.Wait or Duck.Doing.Herd or Duck.Doing.Snatch)) f.BeginWait(false, 0, 0);
         else if (!still && f.Now == Duck.Doing.Wait) f.EndWait();
     }
 
@@ -1497,7 +1512,7 @@ internal sealed class DuckWorld
 /// </summary>
 internal sealed class Duck : Body
 {
-    public enum Doing { Cruise, Look, Dabble, Preen, Flap, Wait, Herd }
+    public enum Doing { Cruise, Look, Dabble, Preen, Flap, Wait, Herd, Snatch }
 
     private const int Points = 13;
     // How far along from the bill tip (0) to the tail tip (1) each spine point is, and how wide the body is there (a share of the half width).
@@ -1532,6 +1547,24 @@ internal sealed class Duck : Body
     private readonly Mind<Doing> _mind = new(Doing.Cruise);
     private Doing _doing => _mind.Doing;
 
+    // ---- the chance meal (Snatch in Tadpoles.cs) ----
+    // FEYNMAN VERSION: a duck paddling along sees a speck near its bill. With a little luck (the dice are the duck's own, not
+    // the pond's) it makes up its mind, swings round, paddles at the speck a third faster than its cruise, and when its bill
+    // is close tips down for it, just as it tips down for weed: head and neck under, tail up, a ring, then up with a shake.
+    // The Snatch only keeps the score (who, how long, eaten or not); every bit of steering is the duck's own.
+    private readonly Snatch _snatch;
+    /// <summary>The pond's tadpoles (set by the director). Null: nothing to look for.</summary>
+    internal Tadpoles? Prey { get; set; }
+    /// <summary>May it look for a meal just now? Set by the director every frame (not on the way out, not in the middle of a cute thing).</summary>
+    public bool AllowSnatch;
+    private int _snPhase;                     // 0 closing in on it, 1 tipping down
+    private float _snX, _snY;                 // the prey's nose, ground pixels, as last seen
+    private float _ext;                       // the neck stretched forward for the grab, as a share of its length
+    private float _snDown;                    // the second (in the dip) at which it starts to come up; stretched while the prey is still close
+    private const float DipAt = 0.25f;        // tip down when the bill is within this many body lengths of the prey
+    private const float Stretch = 0.50f;      // and stretch the neck out by this share as the head goes down
+    private const float SnDown = 0.30f, SnHold = 0.45f, SnUp = 0.30f, SnShake = 0.7f;   // seconds: tip down, hold at the bottom, come up, shake
+
     private readonly float[] _h = new float[Points];           // how high each spine point is above the water, u
     private readonly PointF[] _g = new PointF[Points];         // each spine point on the water (ground, squashed to the screen, NOT lifted)
     private readonly float[] _gHalf = new float[Points];
@@ -1546,6 +1579,10 @@ internal sealed class Duck : Body
         Sp = sp; Look = look; Drake = drake;
         Len = sp.Len * _u; _wide = Len * 0.19f; Cruise = cruise;
         _calm = calm; _fussy = fussy;
+        // The meal's dice are seeded from what makes this duck itself (its two dials and its looks, so a drake and a hen of
+        // one species differ), never rolled from the visit's own Random: that would move every roll made after it.
+        // (A fixed mix, NOT HashCode.Combine: that is randomised per process, so a run at one seed would not repeat.)
+        _snatch = new Snatch(drake ? "drake" : "hen", unchecked((int)(calm * 1e6f) * 73856093 ^ (int)(fussy * 1e6f) * 19349663 ^ ((int)look.Style + 6) * 83492791 ^ 0x5bd1e995));
         for (int i = 0; i < Points; i++) Along[i] = S[i];
         _mind.Begin(Doing.Cruise, 4 + 6 * (float)rng.NextDouble());
         _phase = (float)rng.NextDouble() * MathF.Tau;
@@ -1604,6 +1641,9 @@ internal sealed class Duck : Body
 
     private void Start(Doing d, float seconds)
     {
+        // EVERYTHING THAT CAN TAKE A DOING OVER GOES THROUGH HERE (a herd from the snake, a wait for a straggler, a flap, the
+        // dice), so one line ends a chase that something else interrupts. (A no-op when there is none.)
+        if (_doing == Doing.Snatch && d != Doing.Snatch) _snatch.Abandon();
         _mind.Begin(d, seconds);
         _t = 0;
         if (d != Doing.Wait) _hasLook = false;
@@ -1632,6 +1672,20 @@ internal sealed class Duck : Body
         Start(Doing.Flap, 2.6f);
         _flapRings = 0; _sprays = 0;
     }
+
+    /// <summary>The visit is over: let go of the prey, if any.</summary>
+    public void EndHunt() => _snatch.Abandon();
+
+    /// <summary>It has singled one out: close in on it. No dice of the duck's own are rolled here (the Snatch rolled its own).</summary>
+    private void BeginSnatch()
+    {
+        Start(Doing.Snatch, Mind<Doing>.Forever);          // no timer: the chase ends itself (patience, the prey gone, a dip done)
+        _snPhase = 0;
+        _snX = _snatch.Prey.X; _snY = _snatch.Prey.Y;
+    }
+
+    /// <summary>The chase is over, whatever came of it: back to cruising (with the leader's goal as before). A fixed time, not a roll.</summary>
+    private void EndSnatch() => Start(Doing.Cruise, 6f);
 
     /// <summary>The snake is near: swing away from it at 1.5 times the cruise for a few seconds (not again for ten).</summary>
     public bool StartHerd(PointF snakeScreen)
@@ -1701,7 +1755,18 @@ internal sealed class Duck : Body
         _t += dt;
         _mind.Tick(dt);
         _herdCool -= dt;
+        _snatch.Tick(dt);
         if (_mind.Over) Decide();
+
+        // A tadpole or froglet near the bill while it paddles along: it may single one out. Only from a plain cruise (never a
+        // look, a dabble, a preen, a flap, a wait for ducklings or a herd: those have a purpose), only when the director allows
+        // it, only with the bill on the picture, and not again for three to seven minutes (hit or miss). The dice run FIRST,
+        // inside Look, so the search of the clutch (Spot) happens only on the odd frame the dice chose.
+        // It sees about a tenth of the screen round the bill; the chance a second is 0.06 to 0.21 by how fussy it is (a few
+        // seconds beside the clutch to make up its mind), the patience six seconds, and a calm duck rests longer after.
+        if (Prey != null && AllowSnatch && _doing == Doing.Cruise && !_w.OffScreen(_g[0].X, _g[0].Y)
+            && _snatch.Look(Prey, _g[0], _u * 0.10f, 0.06f + 0.15f * _fussy, dt, 6f, 180f + 220f * _calm, surfaceOnly: true))
+            BeginSnatch();
 
         // ---- what this doing asks for: a speed, a neck angle, and its animation ----
         float want = 0, neckWant = 0, neckRate = 5f;
@@ -1719,6 +1784,51 @@ internal sealed class Duck : Body
                 want = Cruise * 1.5f * (1 + 0.1f * MathF.Sin(2 * _phase));
                 neckWant = Math.Clamp(_turnRate * 0.35f, -0.4f, 0.4f);
                 break;
+            case Doing.Snatch:
+                {
+                    bool hunting = _snatch.Hunting;
+                    if (hunting) { _snX = _snatch.Prey.X; _snY = _snatch.Prey.Y; }
+                    if (_snPhase == 0)
+                    {
+                        // CLOSING IN: a third faster than a cruise, the head leading the turn. Chase(.., 0) only asks "is it still
+                        // there, is there patience left" (the catch itself is the dip's, below). The prey runs from the duck's head
+                        // (the scene arranges that), so this goes on until the bill is near or the six seconds are spent.
+                        want = Cruise * 1.3f * (1 + 0.1f * MathF.Sin(2 * _phase));
+                        neckWant = Math.Clamp(_turnRate * 0.35f, -0.4f, 0.4f);
+                        if (!hunting || !_snatch.Chase(Prey!, _g[0], 0f) || !AllowSnatch || _w.OffScreen(_g[0].X, _g[0].Y)) { EndSnatch(); break; }
+                        if (Dist(_g[0], _snatch.Prey.Nose) < DipAt * Len) { _snPhase = 1; _t = 0; _snDown = SnDown + SnHold; _ring1 = _ring2 = false; }
+                        break;
+                    }
+                    // THE DIP: the dabble's tip-down with the bill at the prey. The head and neck go under (the neck stretches
+                    // forward for it), the tail lifts, a ring; at the bottom the bill is tried against the prey; then up and a shake.
+                    float down = _snDown;
+                    want = Cruise * (_t < SnDown ? 0.3f : 0.06f);                 // a little lunge on the way down
+                    if (_t < SnDown) _tip = _t / SnDown;
+                    else if (_t < down) _tip = 1;
+                    else if (_t < down + SnUp) _tip = 1 - (_t - down) / SnUp;
+                    else _tip = 0;
+                    if (!_ring1 && _t > 0.25f) { _ring1 = true; Ring(0.3f); }
+                    if (!_ring2 && _t > down + 0.2f) { _ring2 = true; Ring(0.25f); }
+                    if (_tip > 0.6f && _t < down && _snatch.Hunting)
+                    {
+                        // Down (the head is under the water from a tip of about 0.6): eaten if the bill is within a fiftieth of the
+                        // screen of its nose. A froglet that has dived is out of a duck's reach (a duck tips down about a neck's
+                        // length): then it is a dip at nothing.
+                        float reach = _snatch.Prey.Z < 0.12f ? _u * 0.02f : 0f;
+                        _snatch.Chase(Prey!, _g[0], reach);
+                        // Rummaging: a prey still close (it bolted a little way and stopped) keeps the head down a little longer, up to
+                        // 1.3 seconds in all, in tenths of a second at a time.
+                        if (_snatch.Hunting && _t > down - 0.05f && _t < SnDown + 1.3f && Dist(_g[0], _snatch.Prey.Nose) < 0.8f * Len) _snDown = _t + 0.1f;
+                    }
+                    float shakeT = _t - down - SnUp;
+                    if (shakeT > 0) { neckWant = MathF.Sin(shakeT * MathF.Tau * 6) * 0.45f * Math.Max(0, 1 - shakeT / SnShake); neckRate = 30f; }
+                    if (_t >= down + SnUp + SnShake)
+                    {
+                        if (_snatch.Hunting) { Snatch.Log?.Invoke($"dry,{(Drake ? "drake" : "hen")},dip at nothing"); _snatch.Abandon(); }   // a miss: a dabble at nothing
+                        EndSnatch();
+                    }
+                    break;
+                }
             case Doing.Dabble:
                 {
                     want = Cruise * 0.06f;
@@ -1756,7 +1866,9 @@ internal sealed class Duck : Body
                 break;
         }
         if (_doing != Doing.Flap) { _flapK += (0 - _flapK) * (1 - MathF.Exp(-dt * 8f)); _wingK = 0; _wag *= MathF.Exp(-dt * 6f); }
-        if (_doing != Doing.Dabble) _tip += (0 - _tip) * (1 - MathF.Exp(-dt * 8f));
+        if (_doing != Doing.Dabble && _doing != Doing.Snatch) _tip += (0 - _tip) * (1 - MathF.Exp(-dt * 8f));
+        // The neck reaches forward as the head goes down for a snatch, and eases back when anything else is going on.
+        _ext = _doing == Doing.Snatch && _snPhase == 1 ? Stretch * Smooth(_tip) : _ext * MathF.Exp(-dt * 8f);
         _headAlpha = Math.Clamp(1 - Smooth(_tip) * 1.7f, 0f, 1f);
         _neck = neckRate >= 30f ? neckWant : _neck + (neckWant - _neck) * (1 - MathF.Exp(-dt * neckRate));
 
@@ -1778,7 +1890,7 @@ internal sealed class Duck : Body
         }
         else if (want > 0.05f * Cruise)
         {
-            float gx = _doing == Doing.Herd ? _herdX : GoalX, gy = _doing == Doing.Herd ? _herdY : GoalY;
+            float gx = _doing == Doing.Herd ? _herdX : _doing == Doing.Snatch ? _snX : GoalX, gy = _doing == Doing.Herd ? _herdY : _doing == Doing.Snatch ? _snY : GoalY;
             turn = Wrap(MathF.Atan2(gy - Y, gx - X) - Heading) * (_doing == Doing.Herd ? 1.6f : 0.9f);
             Feel(ref turn, ref most);
         }
@@ -2035,7 +2147,7 @@ internal sealed class Duck : Body
             }
             else
             {
-                float ahead = (NeckAt - S[i]) * Len * (1 + 0.05f * _bob);                     // the head rocks fore and aft with the stroke
+                float ahead = (NeckAt - S[i]) * Len * (1 + 0.05f * _bob + _ext);              // the head rocks fore and aft with the stroke (and reaches out for a snatch)
                 cx = px + hcs * ahead; cy = py + hsn * ahead;
                 rx = -hsn; ry = hcs;
             }

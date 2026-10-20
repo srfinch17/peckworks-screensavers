@@ -97,11 +97,23 @@ namespace SakuraPond;
 /// The prey is told what is happening through IPrey (the bottom of this file); a
 /// lizard or mouse that is eaten is gone, and the Lizards and Mice wrappers bring
 /// a new one in a few minutes later.
+///
+/// AND A CHANCE MEAL OF TADPOLES (Snatch, in Tadpoles.cs). Nothing here goes LOOKING for the tadpoles
+/// (his rule). But a snake that is simply swimming across or about, with its head on the water and a
+/// tadpole or froglet at the top of the water within 0.15u of its nose (u is the screen's short side), may single that
+/// one out: a few dice a second (a bold snake sooner), then a few seconds of chase at a brisk pace, and
+/// a lunge (a ring off the head, then a dash much quicker than the minnow hunt's: a tadpole bolts at about
+/// twice the snake's cruise, so only a strike can ever reach one) whenever it is close and facing it.
+/// It only notices what is in front of its head. A catch is a mouthful, not a meal: the snake is NOT "fed" (that is the lizard's bulge).
+/// It rests four to eight minutes after any chase, caught or not. The chase is only a goal and a pace: the
+/// feelers, the wall of the picture's edge and the "never stuck" step rule steer it as always, so a
+/// tadpole behind a rock is simply not reached, and a touch from another animal ends the chase.
 /// </summary>
 internal sealed class Snake : Body
 {
     private const int Points = 44;
     private const float StrikeFor = 0.6f;                 // seconds a strike lasts
+    private const float SnatchLunge = 0.35f;              // seconds a lunge at a tadpole lasts (at 0.6u a second: up to 0.21u, from 0.12u away)
 
     private readonly Pond _pond;
     private readonly Ripples _ripples;
@@ -125,7 +137,7 @@ internal sealed class Snake : Body
     // Two dials rolled at the start of each visit, 0 to 1 (see the class comment),
     // and what they turn into: how fast it cruises and how long a fright lasts.
     private float _bold, _nerve, _cruise, _fleeFor;
-    private enum Doing { Cross, Explore, Hunt, Bask, Stalk, Strike, Swallow, Miss }
+    private enum Doing { Cross, Explore, Hunt, Bask, Stalk, Strike, Swallow, Miss, Snatch }
     private readonly Mind<Doing> _mind = new();          // the doing now and how long before it gives it up (Core/Minds)
     private Doing _doing => _mind.Doing;
     private int _phase;                                    // where in the doing it is (Hunt: 0 stalk, 1 strike. Bask: 0 swim to the log, 1 climb on, 2 lie, 3 slip off)
@@ -159,6 +171,12 @@ internal sealed class Snake : Body
     private float _poseK, _pullK, _mouth = 1;             // the S in the neck: the bow (1 = fully bowed; a small negative or positive is a kick), the retreat of the head (1 = fully drawn back) and the head's width (1 closed, 1.5 open)
     private PointF _lungeFrom, _lungeTo, _lastNose;
     private float _bulgeT = -1, _bulgeBase, _bulgeAmp, _bulgeTravel, _bulgeS;   // the meal moving down the body: -1 = none
+
+    // ---- THE CHANCE MEAL ---- (see the class comment)
+    private readonly Snatch _snatch;                       // who it is after, how long it will bother, when it may look again (Tadpoles.cs)
+    private readonly Func<Tadpole, bool> _ahead;            // "is it in front of the head?" made once, so a look allocates nothing
+    private int _snatchSeen;                               // how many catches the snatch had counted when this chase began (to tell a catch from a give-up)
+    internal Tadpoles? Prey { get; set; }                  // the pond's tadpoles (set by the scene; null in a pond without any)
 
     // For the instruments only (nothing in the drawing or the mind reads these): the last thing that
     // happened in the hunt, as a fixed word, and a counter that goes up each time.
@@ -200,6 +218,12 @@ internal sealed class Snake : Body
         _obsCentre = centres.ToArray();
         _obsRadius = radii.ToArray();
         _log = pond.Log;
+        // Its own dice for the chance meal, made ONCE here (not each visit) so that the rest after a chase carries over
+        // from one visit to the next (a visit is about two minutes and the rest is four to eight). Seeded from the pad
+        // geometry the way the scene seeds the frogs, never from a roll of the scene's Random: one extra roll would move
+        // every roll the scene makes afterwards, and the owner compares builds at one seed.
+        _ahead = AheadOfHead;
+        _snatch = new Snatch("snake", unchecked(pond.Pads.Count * 7919 + (pond.Pads.Count > 0 ? (int)pond.Pads[0].Center.X * 31 + (int)pond.Pads[0].Center.Y : 0) + pond.Width + 404));
     }
 
     /// <summary>Is it on screen (or coming or going) right now?</summary>
@@ -436,6 +460,98 @@ internal sealed class Snake : Body
             case Doing.Strike: ThinkStrike(dt); break;
             case Doing.Swallow: ThinkSwallow(dt); break;
             case Doing.Miss: ThinkMiss(dt); break;
+            case Doing.Snatch: ThinkSnatch(dt); break;
+        }
+    }
+
+    // ==================== THE CHANCE MEAL ====================
+    //
+    // FEYNMAN VERSION: think of a heron strolling a shallow stream that happens to see a tadpole at its
+    // feet. It does not hunt for tadpoles; it was only passing. But this one is right there, so it takes a
+    // few quick steps and a stab. If the tadpole is quicker, the heron shrugs and carries on, and it will
+    // not bother again for a good while. The snake does the same with its head: the pond's own wandering
+    // brought it here, a few dice say "that one", and for about five seconds its goal is the tadpole.
+
+    /// <summary>
+    /// Once a frame, while it is just swimming (Cross or Explore, not a prowl, which has a purpose): is a
+    /// tadpole or froglet at the top of the water within 0.15u of its nose? Never when it has
+    /// a meal in it, is frightened, or has its head off the picture or on land (the land corner), which is
+    /// where a snake coming in or going out has its head. Snatch.Look rolls its own dice FIRST (Spot, the
+    /// search over the clutch, runs only on the frames the dice chose).
+    /// </summary>
+    /// <summary>
+    /// A snake only notices what is in front of its head (within 75 degrees of where it points, the same cone the strike
+    /// uses). A tadpole behind it was "seen" in the first build, and the snake, whose turning circle is wide at a swim,
+    /// spent its five seconds in a long U-turn with the tadpole bolting away behind it.
+    /// </summary>
+    private bool AheadOfHead(Tadpole t)
+    {
+        PointF h = Spine[0], n = t.Nose;
+        return MathF.Abs(Wrap(MathF.Atan2(n.Y - h.Y, n.X - h.X) - _heading)) < 1.309f;
+    }
+
+    private void LookForTadpole(float dt)
+    {
+        if (Prey == null || _fed || _flee > 0 || !(_doing is Doing.Cross or Doing.Explore) || _phase != 0) return;
+        PointF mouth = Spine[0];
+        int ix = (int)mouth.X, iy = (int)mouth.Y;
+        if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height || !_pond.Water[iy * _pond.Width + ix]) return;
+        // It sees 0.15u round its nose, not the 0.1u first asked for: a tadpole bolts when a head comes within 0.09u of it
+        // (UpdateTadpole's scare), so at 0.1u the snake would have a 0.01u ring, a fifth of a second of swimming, in which to
+        // make up its mind, and almost never begin. From 0.15u it has about a second of approach.
+        // A bold snake looks sooner (0.08 to 0.28 a second: a few seconds beside the clutch) and rests less after a
+        // chase (4 minutes bold, 8 nervous). Five seconds' patience. Only what is up near the top of the water.
+        if (!_snatch.Look(Prey, mouth, _u * 0.15f, 0.08f + 0.2f * _bold, dt, 5f, 240f + 240f * _nerve, surfaceOnly: true, ok: _ahead)) return;
+        _snatchSeen = _snatch.Caught;
+        _mind.Begin(Doing.Snatch, 9f);                      // the patience is the Snatch's (5 s); this is only a backstop
+        _phase = 0; _strikeT = 1; _goal = _snatch.Prey.Nose;
+    }
+
+    /// <summary>
+    /// A frame of the chase. Phase 0: close in on the prey's nose (the goal, read afresh every frame, because it
+    /// moves). When it is within 0.12u (a little before a tadpole bolts, at 0.09u) AND the nose is within 20 degrees of where the snake points,
+    /// phase 1: a lunge (SnatchLunge long, at 0.6u a second, a ring off the head at the start). A lunge that has not got it
+    /// ends with the minnow hunt's second ring, a half second of closing in again, and another lunge if the
+    /// patience lasts. The catch is the Snatch's: the prey's nose within 0.02u of the head.
+    /// </summary>
+    private void ThinkSnatch(float dt)
+    {
+        PointF head = Spine[0];
+        bool going = Prey != null && _snatch.Chase(Prey, head, _u * 0.02f);
+        if (!going)
+        {
+            // Caught or given up (or the prey was taken by another: lost). A catch rings once at the head; either
+            // way the snake carries on with whatever it rolls next, and is not "fed" (a tadpole is a mouthful).
+            if (_snatch.Caught != _snatchSeen) _ripples.Add(head.X, head.Y, 0.9f);
+            _snatchSeen = _snatch.Caught;
+            Decide();
+            return;
+        }
+        if (_mind.Over) { _snatch.Abandon(); Decide(); return; }
+        Tadpole prey = _snatch.Prey;
+        // A tadpole that has dived out of reach (a froglet always is within it) is let go: the snake takes what is near the top,
+        // and in the first runs it chased a tadpole three tenths of the pond's depth down for its whole five seconds.
+        if (prey.Stage < 4 && prey.Z > 0.2f) { _snatch.Abandon(); Decide(); return; }
+        PointF nose = prey.Nose;
+        _goal = nose;
+        // How far the nose is off the way the head points, in radians (0 dead ahead, 3.14 straight behind).
+        float off = MathF.Abs(Wrap(MathF.Atan2(nose.Y - head.Y, nose.X - head.X) - _heading));
+        if (_phase == 0)
+        {
+            _strikeT += dt;                                    // seconds since the last lunge ended
+            // A lunge is AIMED: within 20 degrees of dead ahead. At 0.6u a second the head cannot steer, and a lunge begun
+            // from 33 degrees off passed the tadpole at 38 px and carried on away from it.
+            if (_strikeT >= 0.5f && off < 0.35f && Dist(head, nose) < _u * 0.12f)
+            {
+                _phase = 1; _strikeT = SnatchLunge;
+                _ripples.Add(head.X, head.Y, 0.9f);            // the lunge pushes the water
+            }
+        }
+        else
+        {
+            _strikeT -= dt;
+            // Over when its time is up, or when the prey is behind the head (the lunge has gone past: no point carrying on away from it).
+            if (_strikeT <= 0 || off > 1.57f) { _ripples.Add(head.X, head.Y, 0.7f); _phase = 0; _strikeT = 0; }
         }
     }
 
@@ -826,7 +942,7 @@ internal sealed class Snake : Body
         // On a crossing the same, for every edge but the one the goal lies beyond: a crossing begun at the land corner went round
         // the bank rocks, under the bottom edge, and ran east BELOW the picture for a thousand pixels, the goal's pull too weak
         // to bend it back. The exit edge stays open, so the crossing can leave.
-        if ((_doing == Doing.Explore && _phase == 0 || _doing == Doing.Cross) && _x >= 0 && _y >= 0 && _x < _pond.Width && _y < _pond.Height)
+        if ((_doing == Doing.Explore && _phase == 0 || _doing is Doing.Cross or Doing.Snatch) && _x >= 0 && _y >= 0 && _x < _pond.Width && _y < _pond.Height)
         {
             float wall = _u;
             if (!(_doing == Doing.Cross && _goal.X < 0)) wall = MathF.Min(wall, px);
@@ -869,6 +985,10 @@ internal sealed class Snake : Body
     public void Update(float dt, ReadOnlySpan<PointF> animals, Lizards? lizards = null, Mice? mice = null)
     {
         _lizards = lizards; _mice = mice;
+        _snatch.Tick(dt);                                                    // the rest after a chase runs whether it is on screen or not
+        // ANY other doing taking over (a fright, a hunt, the jam breaker, the visit ending) ends a chase in progress: one
+        // check here covers every Begin that could replace it. (It also frees the tadpole it had singled out for the others.)
+        if (!_live || _doing != Doing.Snatch) _snatch.Abandon();
         if (!_live || _doing != Doing.Bask) _pond.LogPerch.Release(this);   // the log is only the snake's while it is basking (or on its way to)
         if (!_live)
         {
@@ -907,6 +1027,7 @@ internal sealed class Snake : Body
                     // A fright ends a lie on the log, and a nervous snake's hunt; a bold snake gets over
                     // it and goes back to stalking (every hunt was being cut short by a koi on the way).
                     if (_doing == Doing.Hunt && _nerve > 0.5f) Decide();
+                    else if (_doing == Doing.Snatch) Decide();                   // a touch ends the chase (the check at the top of Update frees the tadpole)
                     else if (_doing == Doing.Bask && _phase == 0) Decide();
                     else if (_doing == Doing.Bask && _phase <= 2) StartSlip();     // already on the log: off it by the log's own line (Decide here left it inside the log, stuck, for 88 s)
                     break;
@@ -916,18 +1037,19 @@ internal sealed class Snake : Body
 
         Scan();
         Notice();
+        LookForTadpole(dt);
         Think(dt);
         UpdateBulge(dt);
         if (_doing == Doing.Bask && _phase == 2) { UpdateLie(dt); return; }    // lying still: the spine is laid by the pose, nothing steers
 
         // ---- Speed: a steady swim, slower when stalking or climbing, a burst when startled or striking ----
-        bool striking = _doing == Doing.Hunt && _phase == 1;
+        bool striking = _phase == 1 && _doing is Doing.Hunt or Doing.Snatch;
         // The creep of a stalk is about a third of a cruise (0.4: a third let the prey wander off first); a prowl, going to look, is
         // a brisk 1.7 (prey is out for only half a minute); the chase after a miss a third faster than a cruise; a fed snake is slow.
         float pace = _doing == Doing.Hunt && _phase == 0 ? StalkPace() : _doing == Doing.Bask && _phase == 1 ? 0.6f
-                   : _doing == Doing.Stalk ? 0.4f : _doing == Doing.Miss ? 1.3f : _doing == Doing.Explore && _phase == 1 ? 1.7f : 1f;
+                   : _doing == Doing.Stalk ? 0.4f : _doing == Doing.Miss ? 1.3f : _doing == Doing.Snatch ? 1.4f : _doing == Doing.Explore && _phase == 1 ? 1.7f : 1f;
         if (_fed) pace *= 0.6f;
-        float wantSpeed = striking ? _u * 0.18f : _cruise * pace * (1 + 2.2f * fear);
+        float wantSpeed = striking ? (_doing == Doing.Snatch ? _u * 0.6f : _u * 0.18f) : _cruise * pace * (1 + 2.2f * fear);
         // The chase after a miss holds off at 0.08u from the prey's nose (the prey is faster, and its tail is between its nose and
         // the jaws: without this the jaws ran onto a fleeing lizard's tail with nothing happening, a bite that was not one).
         if (_doing == Doing.Miss && _phase == 1 && _target != null && Dist(Spine[0], _target.PreyNose) < _u * 0.08f) wantSpeed = 0;
@@ -939,10 +1061,10 @@ internal sealed class Snake : Body
         // A gentle pull toward the goal the mind chose (firmer when climbing onto
         // the log or striking), a slow wander, and when startled a hard swing
         // away from whatever touched it.
-        float pull = striking ? 2.5f : _doing == Doing.Bask && _phase == 1 ? 1.5f : _doing is Doing.Stalk or Doing.Miss ? 1.8f : 0.5f;
+        float pull = striking ? 2.5f : _doing == Doing.Bask && _phase == 1 ? 1.5f : _doing is Doing.Stalk or Doing.Miss or Doing.Snatch ? 1.8f : 0.5f;
         float turn = Wrap(MathF.Atan2(_goal.Y - _y, _goal.X - _x) - _heading) * pull;
-        if (!striking && !(_doing == Doing.Bask && _phase == 1) && _doing is not (Doing.Stalk or Doing.Strike or Doing.Swallow or Doing.Miss)) turn += 0.2f * MathF.Sin(_alive * 0.35f);
-        float most = (striking ? 2.5f : 1.0f) + 1.5f * fear;
+        if (!striking && !(_doing == Doing.Bask && _phase == 1) && _doing is not (Doing.Stalk or Doing.Strike or Doing.Swallow or Doing.Miss or Doing.Snatch)) turn += 0.2f * MathF.Sin(_alive * 0.35f);
+        float most = (striking ? 2.5f : _doing == Doing.Snatch ? 1.8f : 1.0f) + 1.5f * fear;   // a chase turns a little tighter than a cruise
 
         // Something in the way? Feel for the smallest turn that clears it.
         // "Enough room" is the head's own width a few times over; past that,
@@ -955,6 +1077,10 @@ internal sealed class Snake : Body
         // else: the nearer an obstacle, the less the swing counts (an early
         // build fled straight into a lily pad and sat inside it).
         if (fear > 0) turn += Wrap(_fleeAway - _heading) * 2.5f * fear * Math.Clamp(clearAhead / margin, 0, 1);
+        // A chase's pull toward the prey gives way to an obstacle ahead, the nearer the less it counts. With the prey behind
+        // the head and a rock in front, the pull (turn back toward the prey) and the avoidance (turn to the clear heading) were
+        // equal and opposite, and the snake sat on the rock's margin for three seconds, head still, blocked every frame.
+        if (_doing == Doing.Snatch) turn *= Math.Clamp(clearAhead / margin, 0f, 1f);
         if (clearAhead < margin)
         {
             float best = _heading, bestScore = MathF.Min(clearAhead, margin * 2);
@@ -1036,7 +1162,7 @@ internal sealed class Snake : Body
         // Distance drives it, so a burst of speed quickens the weave by itself.
         // Its width eases to the doing's: narrow while stalking or climbing (a
         // creeping snake does not thrash), nearly straight in a strike.
-        float weaveWant = striking ? 0.3f : _doing == Doing.Hunt ? 0.5f : _doing == Doing.Bask && _phase == 1 ? 0.35f : _doing == Doing.Stalk ? 0.25f : _doing == Doing.Strike ? 0.1f : 1f;
+        float weaveWant = striking ? 0.3f : _doing is Doing.Hunt or Doing.Snatch ? 0.5f : _doing == Doing.Bask && _phase == 1 ? 0.35f : _doing == Doing.Stalk ? 0.25f : _doing == Doing.Strike ? 0.1f : 1f;
         weaveWant *= 0.4f + 0.6f * Math.Clamp(clearAhead / (margin * 2), 0, 1);       // and narrower still beside an obstacle, so the body's swing never brushes it
         _weaveAmp += (weaveWant - _weaveAmp) * (1 - MathF.Exp(-dt * 1.5f));
         // A snake that has stopped does not weave: the gate closes (quickly) when it is not moving, so the head

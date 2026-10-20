@@ -43,6 +43,9 @@ internal sealed class Turtles
     /// <summary>The turtles themselves, for KoiSchool to deal into its depth order (a turtle is drawn between the koi deeper and shallower than it).</summary>
     public IReadOnlyList<Turtle> All => _all;
 
+    /// <summary>The pond's tadpoles: a turtle that happens upon one may chase and eat it. Set once by the scene.</summary>
+    public Tadpoles? Prey { set { foreach (Turtle t in _all) t.Prey = value; } }
+
     /// <summary>
     /// Paints the turtles that are up on a perch. KoiSchool leaves those out:
     /// a hauled-out turtle is above the water, so it goes over everything that
@@ -125,7 +128,7 @@ internal sealed class Turtle : Body
     private const int SkinLen = 256, SkinWide = 64;
 
     /// <summary>What a turtle can be doing. One at a time; Decide() picks the next when the current one ends.</summary>
-    private enum Doing { Cruise, Float, Dive, Approach, Climb, Bask, Slip }
+    private enum Doing { Cruise, Float, Dive, Approach, Climb, Bask, Slip, Snatch }   // Snatch: a tadpole or froglet it came upon, chased for a few seconds
 
     /// <summary>Which perch it is heading for, sitting on, or leaving.</summary>
     private enum Perch { None, Island, Log }
@@ -153,6 +156,9 @@ internal sealed class Turtle : Body
     private float _nibbleTimer;                           // floating: when it next looks for a petal to nibble
     private bool _breathed;                               // floating: has it taken this float's breath at the surface yet
     private PointF? _nibble;                              // the petal it is drifting toward, screen pixels
+    private readonly Snatch _snatch;                      // the chance meal in hand (Tadpoles.cs): a tadpole it happened upon
+    private readonly Func<Tadpole, bool> _canReach;       // which prey is in water it can swim in
+    internal Tadpoles? Prey { get; set; }                 // the pond's tadpoles (set by the wrapper once the scene has made them)
     private double _time;
 
     /// <summary>Where the head leaves the shell, as s along the body: the head and neck ahead of this turn on the neck; the shell behind it is rigid.</summary>
@@ -221,6 +227,12 @@ internal sealed class Turtle : Body
         _room = RoomAround;
         _sunny = sunny;
         _nerve = nerve;
+        _snatch = new Snatch("turtle", Snatch.Seed((int)(sunny * 1e6f), (int)(nerve * 1e6f), 2));   // its own dice, from the dealt dials: no roll of the pond's moves
+        // Only prey in water a turtle can swim in: the room a cruising goal needs, and a bed under a shell-wide ball
+        // deeper than the margin it keeps above the bed. The clutch hangs where the bed is a finger deep; a turtle
+        // that chased a tadpole in there stood on the spot for the rest of the run (its steps refused by the bed,
+        // the first stress run, seed 3). Made once: a look makes no garbage.
+        _canReach = t => _pond.RoomAt(t.Nose.X, t.Nose.Y) >= _len * 0.6f && 0.9f * BedUnder(t.X, t.Y) > 0.35f * _len / DepthPx + 0.04f;
         _len = pond.U * 0.1f;
         _wide = _len * 0.24f;
         _skin = Skin(rng);
@@ -361,6 +373,13 @@ internal sealed class Turtle : Body
         _bodies = bodies ?? [];
         _mind.Tick(dt);
         _hauls.Tick(dt);
+        _snatch.Tick(dt);
+        if (_doing != Doing.Snatch && _snatch.Hunting) _snatch.Abandon();   // something took over (a slip from the snake, the dice): the meal is forgotten
+        // A tadpole or froglet in sight while it cruises or dives: it may single one out. Never on the way to a
+        // perch, never afloat (it is resting), and minutes between looks, hit or miss. It sees about 0.1u round
+        // its nose; a jumpy turtle is the quicker to go for what moves.
+        if (Prey != null && _doing is Doing.Cruise or Doing.Dive && _snatch.Look(Prey, Nose, _pond.U * 0.1f, 0.05f + 0.15f * _nerve, dt, 8f, 200 + 300 * _sunny, ok: _canReach))
+            _mind.Begin(Doing.Snatch, 8.5f);                                   // a little longer than the chase's own patience: the chase ends itself
 
         switch (_doing)
         {
@@ -380,10 +399,11 @@ internal sealed class Turtle : Body
                 _depthTimer = 8 + 10 * (float)_rng.NextDouble();
             }
         }
+        else if (_doing == Doing.Snatch && _snatch.Hunting) _zTarget = MathF.Max(0.02f, _snatch.Prey.Z);   // down to the prey's depth (the bed's margin below caps it)
         PointF here = ToScreen(_x, _y);
         float bottom = 0.05f + 0.9f * FloorAt(here);   // the bed, rocks included (never inside a stone)
         // Coming up to a perch is quicker than a lazy drift up (it must be at the surface to climb out).
-        float rate = _doing is Doing.Approach or Doing.Climb or Doing.Bask or Doing.Slip ? 1.2f : _doing == Doing.Dive ? 0.45f : 0.3f;
+        float rate = _doing is Doing.Approach or Doing.Climb or Doing.Bask or Doing.Slip or Doing.Snatch ? 1.2f : _doing == Doing.Dive ? 0.45f : 0.3f;
         bool swimming = _doing is not (Doing.Climb or Doing.Slip or Doing.Bask);
         // When the feelers chose a climb or a dive to clear something, the depth
         // follows that slope for the distance swum (a straight course in three
@@ -459,6 +479,11 @@ internal sealed class Turtle : Body
         {
             if (_doing == Doing.Approach) GiveUp(); else Decide();
         }
+        // The chase: eaten when the nose is within three tenths of a shell length of the prey's nose (its head and
+        // neck reach out that far), given up when the patience runs out or it got away. A turtle is slow and a tadpole
+        // bursts off whenever the head comes near, so most chases end in a miss (one catch in sixteen on the first
+        // runs at a fifth of a length): that is a turtle. Then it cruises on as if nothing had happened.
+        if (_doing == Doing.Snatch && !_snatch.Chase(Prey!, Nose, _len * 0.3f)) { StartCruise(); return; }
         bool floating = _doing == Doing.Float, approach = _doing == Doing.Approach;
 
         // ---- Paddle, or float and rest ----
@@ -467,7 +492,7 @@ internal sealed class Turtle : Body
         // Each pair of legs pushes during its quick sweep back (see Stroke); the push is
         // eased in and out, so the surge is a swell, not a kick.
         float push = MathF.Max(Thrust(_phase), Thrust(_phase + MathF.PI));
-        float targetSpeed = floating ? 0 : _len * 0.5f * (0.65f + 0.7f * push);
+        float targetSpeed = floating ? 0 : _len * 0.5f * (0.65f + 0.7f * push) * (_doing == Doing.Snatch ? 1.5f : 1f);   // half again as fast after a tadpole
         _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (floating ? 0.8f : 2.5f)));
 
         // ---- Steering: a slow wander, a pull toward its goal, and the bank kept off ----
@@ -515,6 +540,15 @@ internal sealed class Turtle : Body
                 turn = Wrap(MathF.Atan2(ay - _y, ax - _x) - _heading) * (free ? 1.6f : 0.6f);
                 most = free ? 0.9f : 0.6f;
                 if (!free) Feel(ref turn, ref most, dt);           // the bank, the bed and every other body, on the way to the perch too
+            }
+            else if (_doing == Doing.Snatch)
+            {
+                // Straight at the prey's nose (ground pixels, read afresh each frame: it flees), keenly, with the
+                // bank, the bed and every other body still felt for on the way.
+                Tadpole p = _snatch.Prey;
+                turn = Wrap(MathF.Atan2(p.Y - _y, p.X - _x) - _heading) * 1.4f;
+                most = 0.9f;
+                Feel(ref turn, ref most, dt);
             }
             else
             {
@@ -614,7 +648,11 @@ internal sealed class Turtle : Body
         else
         {
             float roomNext = _pond.RoomAt(next.X, next.Y);
-            ok = roomNext > _len * 0.2f || roomNext >= _pond.RoomAt(here.X, here.Y);   // never stuck: toward more room is always allowed
+            // Never stuck: toward more room is always allowed. But never onto a rock, the log or the ground: where the
+            // room is nought on both sides of the step ("as much room as here"), that rule walked a turtle's nose onto
+            // a bank stone, and there the room grid is flat, so nothing could steer it off (a turtle after a tadpole
+            // in the shallows stood with its nose on a stone for the rest of a run, 2026-10-20).
+            ok = !LandAt(next) && (roomNext > _len * 0.2f || roomNext >= _pond.RoomAt(here.X, here.Y));
         }
         if (ok)
         {
@@ -628,6 +666,7 @@ internal sealed class Turtle : Body
             // on an approach, 1.5 s of it gives the perch up: never stand refused.
             _refused += dt;
             if (approach && _refused > 1.5f) GiveUp();
+            else if (_doing == Doing.Snatch && _refused > 1.0f) { _snatch.Abandon("refused"); StartCruise(); }   // the prey has led it to water too shallow for it: let it go
             // Turning while refused, it turns ABOUT ITS MIDDLE, not its nose: with the nose
             // held and the heading swinging, the shell swept 11 to 14 px tail first in a
             // second (the review's refused-step pivots). The nose is moved so the shell's
@@ -659,6 +698,21 @@ internal sealed class Turtle : Body
         float roomAhead = Feelers.Along(_room, in here3, in level, look);
         _dodge = 0;
         if (roomAhead >= _len * 0.8f && _refused <= 0) return;
+        if (_refused > 0.8f)
+        {
+            // STANDING REFUSED: most of a second with every step refused (between two bank stones with the room a hair
+            // under the step's threshold, the instruments found, after a chase into the shallows). The feelers answered
+            // left one frame and right the next there, and the eased turn rate averaged to nothing: the heading never
+            // moved and it stood for the rest of the run. So it stops asking them and commits: the roomiest of eight
+            // ways half a length out, swung to at a good rate and held until a step is taken (the step toward more room
+            // is always allowed), with enough speed kept to try one.
+            PointF at = ToScreen(_x, _y);
+            turn = Wrap(RoomiestWay(at) - _heading) * 2f;
+            most = MathF.Max(most, 1.2f);
+            _dodge = -0.5f;
+            _speed = MathF.Max(_speed, _len * 0.12f);
+            return;
+        }
         (float best, float climb, float found) = Feelers.Best(_room, in here3, _heading, look, _len * 0.9f, 0.35f, 4, 0.5f, _len * 0.08f, _len * 0.05f);
         _dodge = climb;
         float urgency = Math.Clamp(1 - roomAhead / (_len * 0.8f), 0, 1);
@@ -670,14 +724,34 @@ internal sealed class Turtle : Body
             // levels off, the way a slider feels its way off the bottom.
             PointF here = ToScreen(_x, _y), open = _pond.OpenWay(here.X, here.Y);
             if (open.X * open.X + open.Y * open.Y > 1e-6f) turn += Wrap(GroundHeading(open.X, open.Y) - _heading) * 2f;
+            else
+            {
+                // The room grid is flat here too (the nose against a stone's rim, where every neighbouring cell reads
+                // nought): the grid's slope says nothing. Then the roomiest of eight ways half a length out is the way,
+                // as the snake walks out of a pocket uphill on the clearance, and it keeps enough speed to try a step.
+                turn += Wrap(RoomiestWay(here) - _heading) * 2f;
+                _speed = MathF.Max(_speed, _len * 0.12f);
+            }
             _dodge = -0.5f;
             most = MathF.Max(most, 1.0f);
-            _speed *= 1 - 0.8f * dt;
+            if (open.X * open.X + open.Y * open.Y > 1e-6f) _speed *= 1 - 0.8f * dt;
             return;
         }
         turn += Wrap(best - _heading) * (1f + 2f * urgency);
         most = MathF.Max(most, 0.6f + 0.6f * urgency);
         if (climb == 0) _speed *= 1 - 0.8f * urgency * dt;
+    }
+
+    /// <summary>The ground heading, of eight, with the most room half a shell length out from a screen point (the way out of a pocket).</summary>
+    private float RoomiestWay(PointF at)
+    {
+        float bestH = _heading, bestR = -1;
+        for (int k = 0; k < 8; k++)
+        {
+            float h = k * (MathF.Tau / 8), r = _pond.RoomAt(at.X + MathF.Cos(h) * _len * 0.5f, at.Y + MathF.Sin(h) * _len * 0.5f * Ripples.Squash);
+            if (r > bestR) { bestR = r; bestH = h; }
+        }
+        return bestH;
     }
 
     private void NewGoal()
