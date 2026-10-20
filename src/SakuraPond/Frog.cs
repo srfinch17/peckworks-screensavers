@@ -50,7 +50,9 @@ internal sealed class Frogs
         for (int i = 0; i < shadowMask.Length; i++) shadowMask[i] = pond.Open[i] && !pond.Water[i];
         // Two dials each, dealt (Traits.Deal) so no two frogs are near-twins: one bold, one restless.
         float[] bold = Traits.Deal(rng, n), restless = Traits.Deal(rng, n);
-        for (int i = 0; i < n; i++) _all[i] = new Frog(this, pond, ripples, where, shadowMask, rng, bold[i], restless[i], dragonflies);
+        // One grown frog at a time (his rule): the first is the adult; any others are young ones, two thirds its
+        // size, that croak only now and then. They sit, leap and swim exactly as the adult does.
+        for (int i = 0; i < n; i++) _all[i] = new Frog(this, pond, ripples, where, shadowMask, rng, bold[i], restless[i], dragonflies, i == 0 ? 1f : 0.64f);
         foreach (Frog f in _all) f.Seat();
     }
 
@@ -383,6 +385,7 @@ internal sealed class Frog : Body
 
     // ---- sitting events ----
     private float _croakIn, _croakT = -1, _croakPulses, _shiftIn, _shiftT = -1, _pivotIn, _snapIn;
+    private readonly float _croakMul = 1f;                 // a young frog waits this many times longer between croaks
 
     // ---- a hop in hand ----
     private HopKind _hop;
@@ -406,7 +409,8 @@ internal sealed class Frog : Body
     /// <summary>For instruments: called with a line of text at each leap, climb, dive and threat. Null in the real saver, so nothing is built.</summary>
     public Action<string>? Log { get; set; }
 
-    public Frog(Frogs owner, Pond pond, Ripples ripples, bool[] where, bool[] shadowMask, Random rng, float bold, float restless, Dragonflies? dragonflies) : base(Points)
+    /// <param name="size">1 for the one grown frog; about two thirds for a young one (smaller, and it croaks a third as often).</param>
+    public Frog(Frogs owner, Pond pond, Ripples ripples, bool[] where, bool[] shadowMask, Random rng, float bold, float restless, Dragonflies? dragonflies, float size = 1f) : base(Points)
     {
         _owner = owner;
         _pond = pond;
@@ -419,8 +423,9 @@ internal sealed class Frog : Body
         _snatch = new Snatch("frog", Snatch.Seed((int)(bold * 1e6f), (int)(restless * 1e6f), 3));   // its own dice, from the dealt dials
         _dragonflies = dragonflies;
         _u = pond.U;
-        _len = LenOf(pond);
+        _len = LenOf(pond) * size;
         _wide = _len * 0.30f;
+        _croakMul = size < 1f ? 3f : 1f;
         _skin = Skin(rng);
         for (int i = 0; i < Points; i++) Along[i] = i / (Points - 1f);
         _padC = new PointF[pond.Pads.Count];
@@ -741,7 +746,7 @@ internal sealed class Frog : Body
         {
             _croakT = 0; _croakPulses = 2 + _rng.Next(3);
             Log?.Invoke($"croak pulses={_croakPulses:F0}");
-            _croakIn = (7 + 15 * (float)_rng.NextDouble()) / boldMul;
+            _croakIn = (7 + 15 * (float)_rng.NextDouble()) / boldMul * _croakMul;
         }
         float breath = 0.12f + 0.07f * MathF.Sin((float)(_time % 1000.0) * 5.2f);          // a fine flutter all the time
         if (_croakT >= 0)

@@ -1156,12 +1156,16 @@ internal sealed class Turtle : Body
         PointF q = new(MathF.Cos(qa), MathF.Sin(qa));
         if (!ExitPoint(qa, out PointF x)) return false;
         if (x.X < _len || x.Y < _len || x.X > _pond.Width - _len || x.Y > _pond.Height - _len) return false;
-        if (!WaterAt(x) || !WaterAt(Toward(x, q, _len * 0.4f)) || _pond.RoomAt(x.X, x.Y) < _len * 0.3f) return false;
-        // And the way there: where the nose will be once it has turned, then three quarters of the way along, must be in the water.
+        // The landing and the way there must be in the POND (not land, not a rock, not the log), by Pond.Land. Not by
+        // Pond.Water: that mask leaves the lily pads out, and a log beached with pads along both sides had every way
+        // off refused, so the turtle sat on it for the last hundred seconds of a run, half under a pad ("turtle can
+        // get stuck under the rock"). A turtle slides in under a pad as a koi swims under one.
+        if (LandAt(x) || LandAt(Toward(x, q, _len * 0.4f)) || _pond.RoomAt(x.X, x.Y) < _len * 0.3f) return false;
+        // And the way there: where the nose will be once it has turned, then three quarters of the way along, must be in the pond.
         float hq = GroundHeading(q.X, q.Y);
         PointF n0 = NoseFor(_sitMid, hq);
         SetCurve(n0, hq, x, hq);
-        if (!WaterAt(Bezier(0.75f))) return false;
+        if (LandAt(Bezier(0.75f))) return false;
         // And nobody in the water where it lands: the slip is scripted and the
         // feelers do not run during it, so a koi under the landing spot was slid
         // into (13 to 18 px of overlap for six frames on the review's seed 11).
@@ -1318,7 +1322,11 @@ internal sealed class Turtle : Body
     {
         var skin = new uint[SkinLen * SkinWide];
         float hue = (float)rng.NextDouble();                            // a little variety: browner or greener shells
-        (float R, float G, float B) shell = (66 + 20 * hue, 80 - 6 * hue, 40), seam = (118, 128, 66), skin0 = (74, 92, 48), stripe = (214, 196, 80);
+        // A red-eared slider from above: an olive-green shell with pale yellow-green seams between the plates, an
+        // olive head and neck with a few THIN yellow lines running back from the eye and the red patch behind it.
+        // (The first skin was browner, with two broad yellow bands down the whole neck that read, at the size a
+        // turtle is drawn, as a striped tube: "i dont like the neck colors".)
+        (float R, float G, float B) shell = (72 + 18 * hue, 98 - 8 * hue, 44), seam = (134, 146, 74), skin0 = (84, 108, 54), stripe = (216, 204, 98);
         for (int si = 0; si < SkinLen; si++)
             for (int vi = 0; vi < SkinWide; vi++)
             {
@@ -1326,11 +1334,14 @@ internal sealed class Turtle : Body
                 (float R, float G, float B) c;
                 if (s < 0.22f)
                 {
-                    // Head and neck: olive, two yellow stripes running back from the eyes, the red "ear" behind them.
+                    // Head and neck: olive, with thin yellow lines (one low on each side from the eye back along the
+                    // neck, a fainter one higher up) and the red "ear" patch just behind the eye. The lines are thin
+                    // and soft so that, drawn a few pixels wide, the neck still reads as green with a glint of yellow.
                     c = skin0;
-                    if (s > 0.03f && MathF.Abs(av - 0.5f) < 0.1f) c = Mix(c, stripe, 0.75f);
-                    if (s > 0.1f && s < 0.19f && av > 0.62f && av < 0.95f) c = Mix(c, (196, 58, 40), 0.85f);
-                    float dome = 0.7f + 0.3f * MathF.Sqrt(MathF.Max(0, 1 - v * v));
+                    if (s > 0.05f && MathF.Abs(av - 0.58f) < 0.05f) c = Mix(c, stripe, 0.55f);
+                    if (s > 0.08f && s < 0.21f && MathF.Abs(av - 0.3f) < 0.035f) c = Mix(c, stripe, 0.3f);
+                    if (s > 0.085f && s < 0.125f && av > 0.7f && av < 0.92f) c = Mix(c, (188, 60, 44), 0.8f);   // the patch sits on the HEAD just behind the eye (at s 0.07), not down the neck (where it read as two red lines)
+                    float dome = 0.72f + 0.28f * MathF.Sqrt(MathF.Max(0, 1 - v * v));
                     c = (c.R * dome, c.G * dome, c.B * dome);
                 }
                 else if (s <= 0.88f)
@@ -1343,7 +1354,7 @@ internal sealed class Turtle : Body
                     float plateS = ps - MathF.Floor(ps) - 0.5f;
                     float plateV = av > 0.82f ? (av - 0.91f) / 0.09f : av < 0.36f ? v / 0.36f : (av - 0.59f) / 0.23f;
                     float inside = 1 - MathF.Max(MathF.Abs(plateS) * 2, MathF.Abs(plateV));
-                    c = Mix(c, (104, 116, 60), 0.35f * MathF.Max(0, inside));
+                    c = Mix(c, (116, 134, 66), 0.35f * MathF.Max(0, inside));
                     // The seams.
                     bool seamS = MathF.Abs(plateS) > 0.5f - 0.022f;
                     bool seamV = MathF.Abs(av - 0.36f) < 0.012f || MathF.Abs(av - 0.82f) < 0.012f;
@@ -1354,7 +1365,7 @@ internal sealed class Turtle : Body
                 }
                 else
                 {
-                    c = (60, 74, 40);
+                    c = (70, 88, 46);                                   // the tail: plain olive
                 }
                 skin[si * SkinWide + vi] = (uint)(Math.Min(255, (int)c.R) << 16 | Math.Min(255, (int)c.G) << 8 | Math.Min(255, (int)c.B));
             }
@@ -1417,9 +1428,15 @@ internal sealed class Turtle : Body
     }
 
     /// <summary>
-    /// One leg: a broad flat paddle from under the shell's edge at s, on one
-    /// side, swung out at "angle" from straight ahead (0 = forward, pi =
-    /// backward), with the webbed foot at its end.
+    /// One leg: from under the shell's edge at s, on one side, swung out at
+    /// "angle" from straight ahead (0 = forward, pi = backward). A pond slider
+    /// has LEGS WITH WEBBED, CLAWED FEET, not the flippers of a sea turtle (the
+    /// first version drew one long flat paddle, and the owner saw a sea
+    /// turtle in it): a short rounded upper leg, a lower leg, and a foot that
+    /// is a small palm with four toes fanned from it, each tipped with a dark
+    /// claw. The fan opens on the push and folds on the return. Where the
+    /// turtle is drawn too small for toes to be more than a pixel (the
+    /// preview, a far dive) the foot is one small oval, as before.
     /// </summary>
     private void Leg(FrameBuffer fb, bool[] stencil, float s, int side, float angle, float length, float spread, float murk)
     {
@@ -1430,10 +1447,35 @@ internal sealed class Turtle : Body
         // The hip, just inside the shell's edge, in ground pixels.
         float hw = _wide * Profile(s) * 0.8f * k;
         float hx = _x - hdx * s * _len * k - hdy * side * hw, hy = _y - hdy * s * _len * k + hdx * side * hw;
-        PointF thigh = ToScreen(hx + dx * l * 0.4f, hy + dy * l * 0.4f), foot = ToScreen(hx + dx * l * 0.85f, hy + dy * l * 0.85f);
-        // Sunk for its depth in the water, lifted by its own height on a perch (a leg hanging over the edge is lower than the one on the rock).
-        thigh.Y += Sink - Height(thigh) * LiftPx; foot.Y += Sink - Height(foot) * LiftPx;
-        Oval(fb, stencil, thigh, a, l * 0.5f, l * 0.2f, 66, 84, 44, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
-        Oval(fb, stencil, foot, a, l * 0.3f, l * (0.13f + 0.08f * spread), 56, 74, 40, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);   // the webbed foot opens on the push, folds on the return
+        PointF upper = Lift(ToScreen(hx + dx * l * 0.3f, hy + dy * l * 0.3f));
+        PointF lower = Lift(ToScreen(hx + dx * l * 0.62f, hy + dy * l * 0.62f));
+        Oval(fb, stencil, upper, a, l * 0.34f, l * 0.2f, 78, 98, 50, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        Oval(fb, stencil, lower, a, l * 0.24f, l * 0.14f, 74, 94, 48, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        float toe = l * 0.17f;
+        if (toe < 2.5f)
+        {
+            // Too small for toes: one small foot.
+            PointF foot = Lift(ToScreen(hx + dx * l * 0.85f, hy + dy * l * 0.85f));
+            Oval(fb, stencil, foot, a, l * 0.2f, l * (0.12f + 0.06f * spread), 66, 86, 44, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+            return;
+        }
+        // The palm at the end of the lower leg, then four toes fanned from its far edge (the fan widens as the
+        // foot spreads on the push), a webbing-coloured oval under them, and a dark claw at each tip.
+        float px0 = hx + dx * l * 0.8f, py0 = hy + dy * l * 0.8f;
+        PointF palm = Lift(ToScreen(px0, py0));
+        Oval(fb, stencil, palm, a, l * 0.13f, l * (0.13f + 0.05f * spread), 70, 90, 46, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        float fan = 0.5f + 0.35f * spread;
+        for (int i = 0; i < 4; i++)
+        {
+            float ta = a + (i - 1.5f) * fan / 1.5f * 0.45f;
+            float tdx = MathF.Cos(ta), tdy = MathF.Sin(ta);
+            PointF mid = Lift(ToScreen(px0 + tdx * toe * 0.7f, py0 + tdy * toe * 0.7f));
+            PointF tip = Lift(ToScreen(px0 + tdx * toe * 1.25f, py0 + tdy * toe * 1.25f));
+            Oval(fb, stencil, mid, ta, toe * 0.6f, MathF.Max(0.6f, l * 0.03f), 72, 92, 48, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+            Oval(fb, stencil, tip, ta, MathF.Max(0.7f, l * 0.03f), MathF.Max(0.6f, l * 0.022f), 38, 44, 26, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        }
     }
+
+    /// <summary>A leg point sunk for its depth in the water, lifted by its own height on a perch (a leg hanging over the edge is lower than the one on the rock).</summary>
+    private PointF Lift(PointF p) { p.Y += Sink - Height(p) * LiftPx; return p; }
 }

@@ -12,6 +12,12 @@ namespace SakuraPond;
 /// BURSTS: it curls into a C, the whole tail whips in a fast S (about ten beats a second), the
 /// body shoots a few of its own lengths and stops dead. Anything big that comes near scatters
 /// the cluster in a flurry, and over the next several seconds it drifts back together.
+/// Nor do they stay in one spot all day: the whole cluster moves house every few minutes, like ducks
+/// changing sides of a pond. It drifts, a few bursts and pauses at a time, from the warm shallows by the
+/// bank to the island's shoulders or the outer shallows and back (the home point slides along a road
+/// checked clear of land and rock, and the tadpoles trail after it as a cloud, across water too deep to
+/// see the bed in, where they swim in the sunlit upper water). And now and then ONE of them goes
+/// exploring on its own, a few bursts out, a pause or a nibble, and swims back to the others.
 /// Then, one at a time and minutes apart, one of them grows up: two buds at the base of the
 /// tail, then hind legs folded back along it, then forelegs, the body narrowing into a frog's
 /// wedge and the tail shrinking away. Now it is a FROGLET, a tiny frog. It rises to the surface
@@ -22,7 +28,8 @@ namespace SakuraPond;
 ///
 /// THE FOUR GATES (see the repo notes on creatures):
 ///   VISIBLE: they live only in shallow, sunlit water over a bed that shows, and are kept off
-///   every pixel a branch or pad hides; a spot where the haze would swallow them is refused like land.
+///   every pixel a branch or pad hides; a spot where the haze would swallow them is refused like land
+///   (only a clutch moving house crosses such deep water, hazy but never lost: Tadpole.DeepZ).
 ///   PERSPECTIVE: each is hung a little above the bed at the depth the bed allows, drawn shrunk,
 ///   hazed and sunk down the screen by that depth (Light.cs, as the koi are), squashed by the
 ///   view, with a small shadow hugging it on the bed.
@@ -171,8 +178,24 @@ internal sealed class Clutch
     private float _hatchX, _hatchY;                   // ground pixels
     private float _homeSettle;                        // after a hatch the home glides to its new place (never a jump)
 
+    // ---- Haunts: where the cluster spends its days, and the lazy migration between them ----
+    /// <summary>The three places a clutch likes to hang about (see Update's "moving house").</summary>
+    public enum Haunt { Shore, Island, Open }
+    /// <summary>Where the home is (or is heading, while it moves).</summary>
+    internal Haunt Place = Haunt.Shore;
+    internal bool Moving => _moving;
+    private bool _moving, _homeward;                  // the home is on a road to the next haunt; the cluster is too small and wants the cattails to lay
+    private bool _arrived;                            // the home has reached the haunt and is waiting for the cloud
+    private float _shoreX, _shoreY;                   // the last home the cluster had at the shore (ground pixels): always a place it can go back to
+    private float _hauntTimer;                        // seconds until the cluster thinks about moving house
+    private float _moveT;                             // seconds this move has taken
+    private readonly float[] _wx = new float[2], _wy = new float[2];   // the road: up to two stops, ground pixels (the last is the new home)
+    private int _wpN, _wpI;
+    private float _ventureTimer;                      // seconds until one tadpole next goes off on its own
+    internal Tadpole? Venturer;                       // the one that is out on a lone trip, if any
+
     // Things the checks count (the build's instrument reads them).
-    internal int Started, Finished, LeftAtEdge, DivedOut, Murked, Hatches, HatchedTotal, Eaten;
+    internal int Started, Finished, LeftAtEdge, DivedOut, Murked, Hatches, HatchedTotal, Eaten, Moves, Ventures;
 
     public Clutch(Pond pond, Ripples ripples, bool[] where, bool[] stand, Random rng)
     {
@@ -185,6 +208,7 @@ internal sealed class Clutch
         _changeTimer = 60 + 180 * (float)rng.NextDouble();      // the first one changes 60 to 240 s in
         if (!FindHome(out PointF home)) return;
         (HomeX, HomeY) = Minnow.ToGround(pond, home.X, home.Y);
+        (_shoreX, _shoreY) = (HomeX, HomeY);
         HasHome = true;
         int count = 8 + rng.Next(7);
         for (int i = 0; i < count; i++)
@@ -199,7 +223,16 @@ internal sealed class Clutch
             }
             Fish[i].Birth(x, y, (float)(rng.NextDouble() * MathF.Tau), hatchling: false);
         }
+        // Last of all, so the first picture of the cluster is rolled exactly as before haunts existed.
+        _hauntTimer = HauntStay();
+        _ventureTimer = VentureGap();
     }
+
+    /// <summary>How long a clutch stays at a haunt before it drifts to the next: two to five minutes.</summary>
+    private float HauntStay() => 120 + 180 * (float)_rng.NextDouble();
+
+    /// <summary>The gap between one tadpole's lone trips: 50 to 90 s, so about one a minute while the cluster is settled.</summary>
+    private float VentureGap() => 50 + 40 * (float)_rng.NextDouble();
 
     /// <summary>
     /// A home in view, in shallow water with the bed 0.02 to 0.1u down and room all round,
@@ -226,7 +259,7 @@ internal sealed class Clutch
         return false;
     }
 
-    private bool Good(float x, float y, float lo, float hi, float room, out PointF at)
+    private bool Good(float x, float y, float lo, float hi, float room, out PointF at, int minOk = 14)
     {
         at = new PointF(x, y);
         if (x < 0 || y < 0 || x >= _pond.Width || y >= _pond.Height) return false;
@@ -252,7 +285,7 @@ internal sealed class Clutch
                 int j = (int)ry * _pond.Width + (int)rx;
                 if (_stand[j] && !_pond.Land[j]) ok++;
             }
-            if (ok < 14) return false;
+            if (ok < minOk) return false;
         }
         return room <= 0 || _pond.RoomAt(x, y) >= room;
     }
@@ -270,6 +303,31 @@ internal sealed class Clutch
         // ---- Who is alive, and who is a free-swimming tadpole ----
         int tadpoles = 0;
         foreach (Tadpole t in Fish) if (t.Alive && t.Stage < 4) tadpoles++;
+
+        // ---- Moving house: every two to five minutes the home drifts to another haunt ----
+        // A pond-side cluster is not glued to one spot all day. The home (the point the tadpoles keep to) slides, slowly and
+        // along a road that was checked clear, to the shore shallows (half the moves), the island's shoulders (a third) or the
+        // outer shallows (the rest); the tadpoles drift after it as a loose cloud (the home waits for the cloud, see
+        // AdvanceHome). When the cluster has thinned to three or fewer it heads back to the cattails first: the eggs are laid
+        // there, so a hatch only happens at the shore.
+        if (_moving) AdvanceHome(dt);
+        else if (_homeSettle <= 0 && _hatchLeft == 0)
+        {
+            if (tadpoles <= 3 && Place != Haunt.Shore && !_homeward) { _homeward = true; _hauntTimer = MathF.Min(_hauntTimer, 5); }
+            _hauntTimer -= dt;
+            if (_hauntTimer <= 0)
+            {
+                if (BeginMove(_homeward ? Haunt.Shore : ChooseHaunt())) _homeward = false;
+                else _hauntTimer = 15;                     // no road just now: look again soon
+            }
+        }
+
+        // ---- A lone trip: about once a minute one tadpole goes off on its own and comes back ----
+        if (!_moving)
+        {
+            _ventureTimer -= dt;
+            if (_ventureTimer <= 0) TryVenture();
+        }
 
         // ---- Growing up: one at a time, minutes apart ----
         if (_changing != null && (!_changing.Alive || _changing.Stage >= 4))
@@ -300,9 +358,10 @@ internal sealed class Clutch
             {
                 if (_hatchTimer < 0) _hatchTimer = 60 + 180 * (float)_rng.NextDouble();
                 _hatchTimer -= dt;
-                if (_hatchTimer <= 0 && PickHatchPoint())
+                if (_hatchTimer <= 0 && !_moving && Place == Haunt.Shore && PickHatchPoint())
                 {
                     _hatchLeft = 8 + _rng.Next(7);
+                    (_shoreX, _shoreY) = (_hatchX, _hatchY);          // the home is about to glide to the hatch: that is the shore now
                     _hatchNext = 0;
                     _hatchTimer = -1;
                     Hatches++;
@@ -339,6 +398,7 @@ internal sealed class Clutch
         foreach (Tadpole t in Fish)
         {
             if (!t.Alive) continue;
+            t.Transit = _moving;
             t.Update(dt, HomeX, HomeY, Fish, threats, threatCount);
             if (t.Leaving != Tadpole.Exit.None)
             {
@@ -354,6 +414,247 @@ internal sealed class Clutch
             }
         }
     }
+
+    // ================================================================ haunts
+
+    /// <summary>Rolls where to go next: the shore shallows half the time, the island a third, the outer shallows the rest
+    /// (when the seed has no island, its share goes to the shore).</summary>
+    private Haunt ChooseHaunt()
+    {
+        float r = (float)_rng.NextDouble();
+        if (r < 0.5f) return Haunt.Shore;
+        if (r < 0.83f) return _pond.Island != null ? Haunt.Island : Haunt.Shore;
+        return Haunt.Open;
+    }
+
+    /// <summary>
+    /// Starts the home on its way to a haunt: the one asked for if a place and a clear road can be found, else the next
+    /// kind round (a seed may have no island; a road may be walled in by pads and rocks). False when none works.
+    /// </summary>
+    private bool BeginMove(Haunt first)
+    {
+        for (int k = 0; k < 3; k++)
+        {
+            Haunt kind = (Haunt)(((int)first + k) % 3);
+            if (kind == Haunt.Island && _pond.Island == null) continue;
+            if (kind == Haunt.Shore && Far(Minnow.ToScreen(_pond, HomeX, HomeY), Minnow.ToScreen(_pond, _shoreX, _shoreY)) < _u * MinMove)
+            {
+                // Already at the shore (a seed where the first home was found beside the island puts the shore there): nothing to
+                // move, but it is the shore for the hatch's sake, and another stay begins.
+                Place = Haunt.Shore; _hauntTimer = HauntStay();
+                return true;
+            }
+            // A place that has no clear road is dropped and another of the same kind tried (six times; the road is what a pond
+            // full of pads and rocks makes hard, not the place).
+            float gx = 0, gy = 0;
+            bool found = false;
+            for (int attempt = 0; attempt < 6 && !found; attempt++) found = PickHaunt(kind, out gx, out gy) && PlanRoad(gx, gy);
+            if (!found) continue;
+            Place = kind; _moving = true; _arrived = false; _moveT = 0; _wpI = 0; Moves++;
+            if (kind == Haunt.Shore) (_shoreX, _shoreY) = (gx, gy);
+            if (Venturer != null) { Venturer.EndVenture(); Venturer = null; }     // a lone trip waits: the whole cluster is going
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// A new home of the given kind, as a ground spot. Every kind uses Good (the same test as the first home: standable, the
+    /// bed in sight, two rings of open surroundings) with its own window of bed depth:
+    ///   Shore:  within 0.3u of the cattails, bed 5 to 25 percent of full depth (as the first home); that is a small patch,
+    ///           so when 150 tries find nothing the last shore home (_shoreX, _shoreY) is used: the cluster can always go back.
+    ///   Island: a ring round the dry cap, from 0.035u outside its rim to the stone's edge, where the bed climbs the island's
+    ///           shoulders into sight (bed 8 to 35 percent); the cap itself eats a few of the surrounding samples, so
+    ///           only 9 of 16 must be open.
+    ///   Open:   the outer shallows, bed 24 to 49 percent (12 of 16 open). THE POND IS DEEP: the bed reaches 50 percent only
+    ///           0.12u off the bank and is lost in the haze there (Tadpole.OkFloor), so "a little way out" cannot be further.
+    ///           It must be over 0.15u from the cattails and 0.12u from the island's edge, or it is just the shore or the island again.
+    /// It must also be at least MinMove (0.12u) from where the home is now, or it is not a move.
+    /// </summary>
+    private bool PickHaunt(Haunt kind, out float gx, out float gy)
+    {
+        gx = gy = 0;
+        PointF here = Minnow.ToScreen(_pond, HomeX, HomeY);
+        float room = _u * 0.05f;
+        if (kind == Haunt.Shore)
+        {
+            // The random tries first; the remembered shore home last.
+            for (int tries = 0; tries < 150; tries++)
+            {
+                float a = (float)(_rng.NextDouble() * MathF.Tau), d = _u * 0.3f * MathF.Sqrt((float)_rng.NextDouble());
+                if (Good(_cat.X + MathF.Cos(a) * d, _cat.Y + MathF.Sin(a) * d, 12.75f, 63.75f, room, out PointF at) && Far(at, here) >= _u * MinMove)
+                { (gx, gy) = Minnow.ToGround(_pond, at.X, at.Y); return true; }
+            }
+            (gx, gy) = (_shoreX, _shoreY);
+            return Far(Minnow.ToScreen(_pond, gx, gy), here) >= _u * MinMove;
+        }
+        for (int tries = 0; tries < 400; tries++)
+        {
+            float x, y, lo, hi, rm = room;
+            int minOk = 14;
+            float a = (float)(_rng.NextDouble() * MathF.Tau);
+            switch (kind)
+            {
+                case Haunt.Island:
+                    {
+                        Island isle = _pond.Island!.Value;
+                        float rMin = isle.CapRadius + _u * 0.035f, rMax = MathF.Max(isle.Radius + _u * 0.04f, rMin + _u * 0.03f);
+                        float d = rMin + (rMax - rMin) * (float)_rng.NextDouble();
+                        x = isle.Cap.X + MathF.Cos(a) * d; y = isle.Cap.Y + MathF.Sin(a) * d; lo = 20f; hi = 90f; rm = _u * 0.035f; minOk = 9;
+                        break;
+                    }
+                default:
+                    x = (float)_rng.NextDouble() * _pond.Width; y = (float)_rng.NextDouble() * _pond.Height; lo = 60f; hi = 125f; rm = _u * 0.04f; minOk = 12;
+                    break;
+            }
+            if (!Good(x, y, lo, hi, rm, out PointF at, minOk)) continue;
+            if (Far(at, here) < _u * MinMove) continue;
+            if (kind == Haunt.Open)
+            {
+                if (Far(at, _cat) < _u * 0.15f) continue;
+                if (_pond.Island is Island isle2 && Far(at, isle2.Centre) < isle2.Radius + _u * 0.12f) continue;
+            }
+            (gx, gy) = Minnow.ToGround(_pond, at.X, at.Y);
+            return true;
+        }
+        return false;
+    }
+
+    private const float MinMove = 0.12f;                // a new haunt is at least this far (in u) from the home, or it is not a move
+
+    private static float Far(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
+
+    /// <summary>
+    /// Is the straight road between two ground spots free for a cloud of tadpoles to follow? Every 0.01u it must be water in
+    /// view (not land, not under a pad, not the island's cap or a rock: Tadpole.CanTransit), with 0.015u of open water round
+    /// it. The bed does NOT have to show: the road may cross deep water, where the tadpoles keep to the upper water.
+    /// </summary>
+    private bool Road(float ax, float ay, float bx, float by)
+    {
+        float len = MathF.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+        int n = (int)(len / (_u * 0.01f)) + 1;
+        for (int i = 1; i <= n; i++)
+        {
+            float x = ax + (bx - ax) * i / n, y = ay + (by - ay) * i / n;
+            if (!Tadpole.CanTransit(_pond, _where, x, y)) return false;
+            PointF s = Minnow.ToScreen(_pond, x, y);
+            if (_pond.RoomAt(s.X, s.Y) < _u * 0.015f) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Fills in the road from the home to the new haunt: straight if it is clear, else round one stop (the shortest of
+    /// 24 random tries whose two legs are both clear). False when there is none: a cluster never drifts through a stone.</summary>
+    private bool PlanRoad(float tx, float ty)
+    {
+        if (Road(HomeX, HomeY, tx, ty)) { _wpN = 1; _wx[0] = tx; _wy[0] = ty; return true; }
+        float mx = (HomeX + tx) / 2, my = (HomeY + ty) / 2, best = float.MaxValue;
+        for (int tries = 0; tries < 24; tries++)
+        {
+            float a = (float)(_rng.NextDouble() * MathF.Tau), d = _u * (0.1f + 0.4f * (float)_rng.NextDouble());
+            float wx = mx + MathF.Cos(a) * d, wy = my + MathF.Sin(a) * d;
+            float total = MathF.Sqrt((wx - HomeX) * (wx - HomeX) + (wy - HomeY) * (wy - HomeY)) + MathF.Sqrt((tx - wx) * (tx - wx) + (ty - wy) * (ty - wy));
+            if (total >= best || !Road(HomeX, HomeY, wx, wy) || !Road(wx, wy, tx, ty)) continue;
+            best = total; _wpN = 2; _wx[0] = wx; _wy[0] = wy; _wx[1] = tx; _wy[1] = ty;
+        }
+        return best < float.MaxValue;
+    }
+
+    /// <summary>
+    /// Slides the home along the road at 0.014u a second (a lazy swim, not a dash: 0.5u takes about 35 s) and eases off over
+    /// the last 0.06u. THE HOME WAITS FOR THE CLOUD, like a guide on a walk who slows when the party strings out: the
+    /// further the middle tadpole (of those not scared) is behind it, beyond 0.06u, the slower it goes, to a third speed at 0.14u.
+    /// So the tadpoles, which drift home in bursts and pauses as they always do, arrive together as a loose cloud rather
+    /// than a line. When the home has arrived it stands still until the cloud is within 0.07u of it, and only then is the
+    /// move over (the tadpoles may cross deep water until then). A move that has taken four minutes (something is in the
+    /// way) ends where the home stands.
+    /// </summary>
+    private void AdvanceHome(float dt)
+    {
+        _moveT += dt;
+        // How far behind is the cloud? The MIDDLE one of the tadpoles that are not in a scare (a koi sweeping through scatters
+        // some of them far off; a guide does not wait for the ones who ran, only for the party).
+        Span<float> behind = stackalloc float[Slots];
+        int n = 0;
+        foreach (Tadpole t in Fish)
+        {
+            if (!t.Alive || t.Stage >= 4 || t.State == TadState.Flee || t.State == TadState.Windup || t.State == TadState.Burst) continue;
+            float d = MathF.Sqrt((t.X - HomeX) * (t.X - HomeX) + (t.Y - HomeY) * (t.Y - HomeY));
+            int j = n++;
+            while (j > 0 && behind[j - 1] > d) { behind[j] = behind[j - 1]; j--; }      // insertion sort: at most 28 of them
+            behind[j] = d;
+        }
+        float lag = n > 0 ? behind[n / 2] : 0;
+        float wait = Math.Clamp(1 - (lag - _u * 0.06f) / (_u * 0.08f), 0.35f, 1f);      // never below a third speed: the cloud must be able to catch up
+        if (_arrived)
+        {
+            // The home is there; the move is over once the cloud has caught up (until then the tadpoles may still cross deep
+            // water, or the ones left on the near shelf could never follow).
+            if (lag <= _u * 0.07f || _moveT > 240) EndMove();
+            return;
+        }
+        float tx = _wx[_wpI], ty = _wy[_wpI];
+        float dx = tx - HomeX, dy = ty - HomeY, dist = MathF.Sqrt(dx * dx + dy * dy);
+        bool last = _wpI == _wpN - 1;
+        float speed = _u * 0.014f * wait * (last ? 0.25f + 0.75f * Math.Clamp(dist / (_u * 0.06f), 0f, 1f) : 1f);
+        float step = speed * dt;
+        if (dist <= MathF.Max(step, _u * 0.002f))
+        {
+            HomeX = tx; HomeY = ty;
+            if (last) { _arrived = true; return; }
+            _wpI++;
+        }
+        else { HomeX += dx / dist * step; HomeY += dy / dist * step; }
+        if (_moveT > 240)
+        {
+            // Stuck: stay where the home is. Say it is the shore only if it is by the cattails (a hatch is allowed only there).
+            PointF s = Minnow.ToScreen(_pond, HomeX, HomeY);
+            Place = Far(s, _cat) < _u * 0.35f ? Haunt.Shore : Haunt.Open;
+            EndMove();
+        }
+    }
+
+    private void EndMove() { _moving = false; _hauntTimer = HauntStay(); }
+
+    /// <summary>
+    /// One tadpole goes off on its own: a calm free-swimming one (not changing, not chased, not fleeing) is given a spot 0.10
+    /// to 0.20u from the home that is a place to hang (CanLive's test, 0.02u of open water round it) with a clear walk to it
+    /// from where the tadpole is now; the tadpole's own rules do the rest (Tadpole.Venture). One out at a time.
+    /// </summary>
+    private void TryVenture()
+    {
+        if (Venturer != null && Venturer.Alive && Venturer.Venturing) { _ventureTimer = 10; return; }
+        Venturer = null;
+        int count = 0;
+        foreach (Tadpole t in Fish) if (Calm(t)) count++;
+        if (count == 0) { _ventureTimer = 10; return; }
+        int pick = _rng.Next(count);
+        Tadpole? who = null;
+        foreach (Tadpole t in Fish) if (Calm(t) && pick-- == 0) { who = t; break; }
+        if (who == null) { _ventureTimer = 10; return; }
+        for (int tries = 0; tries < 24; tries++)
+        {
+            float a = (float)(_rng.NextDouble() * MathF.Tau), d = _u * (0.10f + 0.10f * (float)_rng.NextDouble());
+            float tx = HomeX + MathF.Cos(a) * d, ty = HomeY + MathF.Sin(a) * d;
+            if (!Tadpole.CanStand(_pond, _stand, tx, ty)) continue;
+            PointF s = Minnow.ToScreen(_pond, tx, ty);
+            if (_pond.RoomAt(s.X, s.Y) < _u * 0.02f) continue;
+            float wx = tx - who.X, wy = ty - who.Y, wl = MathF.Sqrt(wx * wx + wy * wy);
+            if (wl < _u * 0.09f) continue;                                  // not a trip at all
+            bool clear = true;
+            for (int i = 1; i <= (int)(wl / (_u * 0.012f)) && clear; i++)
+                clear = Tadpole.CanStand(_pond, _where, who.X + wx * i * _u * 0.012f / wl, who.Y + wy * i * _u * 0.012f / wl);
+            if (!clear) continue;
+            who.Venture(tx, ty); Venturer = who; Ventures++;
+            _ventureTimer = VentureGap();
+            return;
+        }
+        _ventureTimer = 10;                                                  // nowhere to go just now
+    }
+
+    private static bool Calm(Tadpole t)
+        => t.Alive && t.Stage == 0 && t.Hunter == null && t.Leaving == Tadpole.Exit.None && !t.Venturing
+           && (t.State == TadState.Hang || t.State == TadState.Scull || t.State == TadState.Graze);
 
     /// <summary>
     /// Where the next hatch appears: the cattails' foot (within 0.04u) or a pad's rim, whichever
@@ -467,6 +768,15 @@ internal sealed class Tadpole : Body
     private float _phase, _amp, _freq, _curl, _turnRate;
     private float _fleeDir;
 
+    // ---- crossing deep water (the clutch moving house) and the lone venture ----
+    /// <summary>Set by the clutch every frame: it is moving house, so the cluster may follow it across water too deep to hang in.</summary>
+    internal bool Transit;
+    private bool _wide;                            // this frame: allowed to step on water whose bed is out of sight (Transit, or already in it and swimming back)
+    private float _refusedFor, _loose;             // seconds of refused steps in a row; and, once that was two, seconds left of crawling out under the cover
+    private bool _strictHere = true;               // this frame: the spot it is on passes the ordinary test (else it is in a hidden band and may crawl out)
+    private int _vPhase;                           // a venture: 0 none, 1 going out, 2 there, 3 coming back
+    private float _vx, _vy, _vT, _vWait;           // where it is going (ground pixels), the clock of this phase, how long it stays out there
+
     // the froglet
     private float _kickT, _pose;
     private float _gx, _gy;                        // the goal beyond the edge, ground pixels
@@ -494,6 +804,19 @@ internal sealed class Tadpole : Body
     }
 
     public bool AtSurface => Stage == 4 && Z <= 0.03f;
+
+    /// <summary>On a lone trip away from the cluster (see Venture).</summary>
+    public bool Venturing => _vPhase != 0;
+    public int VenturePhase => _vPhase;
+
+    /// <summary>Sets off on a lone trip to this ground spot: out, a pause there, and back to the cluster's home. The clutch
+    /// has checked that the spot is standable and the way to it is.</summary>
+    public void Venture(float tx, float ty) { _vPhase = 1; _vx = tx; _vy = ty; _vT = 0; }
+
+    /// <summary>Calls the lone trip off (the clutch is moving house): home is the clutch's home again at once.</summary>
+    public void EndVenture() => _vPhase = 0;
+
+    private static float Dist2(float ax, float ay, float bx, float by) => (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
 
     /// <summary>Where in the scene's draw order this one is painted (see Clutch.Pass). Only a froglet ever leaves the
     /// Under pass: a tadpole hangs near the bed, so it is always under the fish.</summary>
@@ -527,6 +850,7 @@ internal sealed class Tadpole : Body
         _burstTimer = 1 + _burstEvery * R();
         _age = 0; _aliveFor = 0; _phase = R() * MathF.Tau; _amp = 0; _freq = 1.2f; _curl = 0; _turnRate = 0;
         _dived = false; _deep = false; _dive = 0;
+        _vPhase = 0; Transit = false; _wide = false;
         Dims();
         float f = FloorFrac(X, Y);
         Z = 0.9f * f;
@@ -559,13 +883,68 @@ internal sealed class Tadpole : Body
         return sy < p.Height && where[sy * p.Width + ix];
     }
 
+    /// <summary>
+    /// How deep (Z) a tadpole hangs over water whose bed is out of sight: the pond is deep out in the middle, and a tadpole
+    /// does not follow the bed down there, it keeps to the sunlit upper water, hazy but still seen. Only a clutch moving
+    /// house (or a tadpole already out there swimming back) is ever in such water; it never settles in it.
+    /// </summary>
+    internal const float DeepZ = 0.3f;
+
+    /// <summary>The depth a tadpole hangs at over a bed of this depth (0 to 255): just above the bed where the bed shows, DeepZ where it does not.</summary>
+    internal static float SwimZ(byte floor) => OkFloor[floor] ? 0.9f * floor / 255f : DeepZ;
+
+    /// <summary>
+    /// CanStand without the rule that the bed must show: any water in view that is not land, a pad or a rock, with the
+    /// place it is DRAWN (sunk by DeepZ) in view too. The road a clutch takes between two haunts, across deep water.
+    /// </summary>
+    public static bool CanTransit(Pond p, bool[] where, float gx, float gy)
+    {
+        PointF s = Minnow.ToScreen(p, gx, gy);
+        int ix = (int)s.X, iy = (int)s.Y;
+        if (s.X < 0 || s.Y < 0 || ix >= p.Width || iy >= p.Height) return false;
+        int i = iy * p.Width + ix;
+        if (!where[i] || p.Land[i]) return false;
+        int sy = (int)(s.Y + Light.SinkPx(SwimZ(p.Floor[i]), p.U));
+        return sy < p.Height && where[sy * p.Width + ix];
+    }
+
     /// <summary>A step or a path may go anywhere in view: through the petal heap too (it is hidden under the heap while
     /// there, which is right). Only where it chooses to SETTLE (CanLive) keeps clear of the heap's zone: making the zone a
-    /// wall penned a scattered clutch in the pocket between the heap and the screen's edge for three minutes on one seed.</summary>
-    private bool CanStand(float gx, float gy) => CanStand(_pond, _where, gx, gy);
+    /// wall penned a scattered clutch in the pocket between the heap and the screen's edge for three minutes on one seed.
+    /// Over water too deep to see the bed in, only a tadpole that is moving house (or is already out there) may go
+    /// (_wide); every other tadpole stops at the edge of the shallows as before.</summary>
+    private bool CanStand(float gx, float gy) => CanStand(_pond, _where, gx, gy) || (_wide && CanTransit(_pond, _where, gx, gy)) || ((_loose > 0 || !_strictHere) && CanCrawl(gx, gy));
 
-    /// <summary>A spot to hang at or graze from: standable and clear of the petal heap's zone, so it is not out of sight.</summary>
-    private bool CanLive(float gx, float gy) => CanStand(_pond, _stand, gx, gy);
+    /// <summary>
+    /// The rescue rule for a pinned tadpole: only the NOSE has to be on water in view and over a bed that shows; where the
+    /// body is DRAWN (sunk by its depth) may be hidden under a cattail's blades or a pad's rim for a moment. Normally that is
+    /// refused (it would hang half cut off), but a hatchling born in a one-pixel nook at the cattails' foot had every step
+    /// refused and sat there for good while its whole clutch moved house. After two seconds of refused steps or of no free
+    /// heading (_refusedFor) it may crawl out this way for five seconds (_loose), and for as long as the spot it is on fails the
+    /// ordinary test (a tadpole that has crawled into a wider hidden band must keep going until it is out of it); it settles
+    /// nowhere by this rule (CanLive stays strict).
+    /// </summary>
+    private bool CanCrawl(float gx, float gy)
+    {
+        PointF s = Minnow.ToScreen(_pond, gx, gy);
+        int ix = (int)s.X, iy = (int)s.Y;
+        if (s.X < 0 || s.Y < 0 || ix >= _pond.Width || iy >= _pond.Height) return false;
+        int i = iy * _pond.Width + ix;
+        return _where[i] && !_pond.Land[i] && OkFloor[_pond.Floor[i]];
+    }
+
+    /// <summary>A spot to hang at or graze from: standable and clear of the petal heap's zone, so it is not out of sight.
+    /// Only while the whole clutch is moving house does deep water count as a place to be (the road runs over it); a tadpole
+    /// left out in it afterwards finds every spot there refused and swims back to the shallows.</summary>
+    private bool CanLive(float gx, float gy) => CanStand(_pond, _stand, gx, gy) || (Transit && CanTransit(_pond, _stand, gx, gy));
+
+    /// <summary>The depth this tadpole would hang at over this ground spot (see SwimZ).</summary>
+    private float SwimZAt(float gx, float gy)
+    {
+        PointF s = Minnow.ToScreen(_pond, gx, gy);
+        int ix = Math.Clamp((int)s.X, 0, _pond.Width - 1), iy = Math.Clamp((int)s.Y, 0, _pond.Height - 1);
+        return SwimZ(_pond.Floor[iy * _pond.Width + ix]);
+    }
 
     /// <summary>The bed under a ground spot, as a fraction of the pond's full depth (0 at the edge).</summary>
     private float FloorFrac(float gx, float gy)
@@ -594,11 +973,15 @@ internal sealed class Tadpole : Body
         // lift moves the PICTURE up the screen. Heading down the screen up a slope, the two cancel and
         // a burst is seen to go nowhere (cos -1 at 5 px/s in the first timeline). So the way ahead must
         // still move the picture along the way it is going by at least half of what it should.
-        float z0 = 0.9f * FloorFrac(X, Y);
+        float z0 = SwimZAt(X, Y);
         for (int k = 1; k <= 4; k++)        // at four points along the way, so a steep step early on is not averaged away
         {
             float d = reach * k / 4f;
-            float z1 = 0.9f * FloorFrac(X + c * d, Y + s * d);
+            // Every quarter of the way must stand, not only the half and the end: a thin band the step rule refuses (a drawn spot
+            // that would sink under the bank's edge) slipped between those two samples and pinned a tadpole for 58 s once its
+            // home had moved on (every spot it picked lay the same way, through the band).
+            if ((k & 1) == 1 && !CanStand(X + c * d, Y + s * d)) return false;
+            float z1 = SwimZAt(X + c * d, Y + s * d);
             float up = (z0 - z1) * Pond.DepthU * _u * Light.Sink;       // pixels the picture rises over the way so far
             float fx = c * d, fy = s * d * Ripples.Squash;
             if (fx * fx + (fy - up) * fy < slope * (fx * fx + fy * fy)) return false;
@@ -679,10 +1062,31 @@ internal sealed class Tadpole : Body
 
     private void UpdateTadpole(float dt, float homeX, float homeY, Tadpole[] all, float[] threats, int threatCount)
     {
-        float len = Len, scare = _u * 0.09f;
+        // Out over deep water a tadpole is less easily startled and runs less far: only a fish within 0.055u sends it off
+        // (0.09u in the shallows), and it bolts at seven body lengths a second, not ten. The open water is full of fish, and
+        // a cloud that ran from every one of them at full tilt (30 percent of its frames) was strewn all over the pond.
+        float len = Len, scare = _u * (_wide ? 0.055f : 0.09f);
         _stateT -= dt;
         _burstTimer -= dt;
         _bobT += dt;
+
+        // ---- Over deep water? Only a clutch moving house, or a tadpole already out in it, may step there ----
+        _strictHere = CanStand(_pond, _where, X, Y);
+        _wide = Transit || !_strictHere;
+        if (_loose > 0) _loose -= dt;
+
+        // ---- A venture: for a while "home" is the far spot it set out for, then the real home again ----
+        // The tadpole's own rules do the swimming (they only ever say "go toward home"), so a venture needs nothing
+        // but a different place to call home: out, a pause there (it may graze, burst, hang), and back.
+        if (_vPhase != 0)
+        {
+            _vT += dt;
+            if (Stage != 0) _vPhase = 0;                                   // growing up: the lone trip is over
+            else if (_vPhase == 1 && (Dist2(X, Y, _vx, _vy) < _roam * _roam * 1.7f || _vT > 45)) { _vPhase = 2; _vT = 0; _vWait = 6 + 8 * R(); }
+            else if (_vPhase == 2 && _vT > _vWait) { _vPhase = 3; _vT = 0; }
+            else if (_vPhase == 3 && (Dist2(X, Y, homeX, homeY) < _roam * _roam * 1.7f || _vT > 60)) _vPhase = 0;
+            if (_vPhase == 1 || _vPhase == 2) { homeX = _vx; homeY = _vy; }
+        }
 
         // ---- Anything big near: scatter, directly away, at burst speed ----
         int near = -1;
@@ -695,6 +1099,9 @@ internal sealed class Tadpole : Body
         if (near >= 0)
         {
             float away = MathF.Atan2(Y - threats[near * 2 + 1], X - threats[near * 2]);
+            // Out over deep water (moving house, or swimming back from a scare) it still runs away, but veers a little toward
+            // home, up to a third of a radian: a cloud harried by passing fish would otherwise be strewn across the pond.
+            if (_wide) away += Math.Clamp(Wrap(MathF.Atan2(homeY - Y, homeX - X) - away), -0.9f, 0.9f) * 0.35f;
             // Straight away, or as near as a way that does not run up a steep shoal (the lift would cancel the flight); a cornered one takes any way there is.
             float free = FreeHeading(away, len * 3f, 0.9f);
             if (float.IsNaN(free)) free = FreeHeading(away, len * 3f, 0.5f);
@@ -713,7 +1120,7 @@ internal sealed class Tadpole : Body
             case TadState.Flee:
                 {
                     float err = Turn(_fleeDir, 30f, dt);
-                    Speed = MathF.Abs(err) < 1.2f ? len * 10f : 0;
+                    Speed = MathF.Abs(err) < 1.2f ? len * (_wide ? 7f : 10f) : 0;
                     if (_stateT <= 0) { State = TadState.Hang; _stateT = 0.5f + 1.5f * R(); Speed = 0; }
                     break;
                 }
@@ -746,10 +1153,12 @@ internal sealed class Tadpole : Body
         {
             float step = Speed * dt;
             float nx = X + MathF.Cos(Heading) * step, ny = Y + MathF.Sin(Heading) * step;
-            if (CanStand(nx, ny)) { X = nx; Y = ny; }
+            if (CanStand(nx, ny)) { X = nx; Y = ny; _refusedFor = 0; }
             else
             {
                 Speed = 0;
+                _refusedFor += dt;
+                if (_refusedFor > 2f) { _loose = 5f; _refusedFor = 0; }          // pinned: see CanCrawl
                 if (State == TadState.Burst || State == TadState.Flee || State == TadState.Scull) { State = TadState.Hang; _stateT = 0.5f + R(); }
             }
         }
@@ -758,7 +1167,7 @@ internal sealed class Tadpole : Body
         if ((last.X - X) * (last.X - X) + (last.Y - Y) * (last.Y - Y) > stepLen * stepLen) Remember(new PointF(X, Y));
 
         // ---- Depth: a little above the bed, never below it ----
-        float zc = 0.9f * FloorFrac(X, Y);
+        float zc = SwimZAt(X, Y);           // (over water too deep to see the bed, DeepZ: the upper water)
         Z = HoldZ(Z, zc, dt);
         if (Z > zc) Z = zc;
 
@@ -848,7 +1257,7 @@ internal sealed class Tadpole : Body
         // A burst, when its timer says so and it is not busy.
         if (_burstTimer <= 0 && State != TadState.Graze)
         {
-            _burstTimer = _burstEvery * (0.6f + 0.8f * R());
+            _burstTimer = _burstEvery * (0.6f + 0.8f * R()) * (_wide ? 0.4f : 1f);      // out over deep water, bursts come two and a half times as often: the way home is a few short dashes
             float want = (hd > _roam && R() < 0.7f) ? MathF.Atan2(hdy, hdx) + (R() - 0.5f) * 1.2f : R() * MathF.Tau;
             float free = FreeHeading(want, len * 4.5f, 0.8f);   // a burst is picked to be SEEN going somewhere: the lift of a shoaling bed may cancel at most a fifth of it (at 0.9 bursts fell to 0.5 a minute by steep banks)
             if (!float.IsNaN(free))
@@ -867,9 +1276,28 @@ internal sealed class Tadpole : Body
             sx += px * 1.5f; sy += py * 1.5f;
             float want = MathF.Atan2(sy, sx);
             float free = FreeHeading(want, len * 1.2f);
-            if (float.IsNaN(free)) { State = TadState.Hang; _stateT = 1 + R(); Speed = 0; _noScull = 1.5f; return; }
+            if (float.IsNaN(free) && Transit)
+            {
+                // Hemmed in (a cove between the bank and a pad, 21 s once) while the home has moved on: out by the way with
+                // the most open water, as the froglet does, and the road home from there is another try.
+                // A steep shoal can refuse every way out: the lift rule (Clear) says a heading up the screen into deeper water
+                // goes nowhere, because the sinking picture cancels it. For a tadpole hemmed in that is the lesser evil (the
+                // same last resort a scattering tadpole has), so the third try ignores it.
+                PointF here = Minnow.ToScreen(_pond, X, Y), ow = _pond.OpenWay(here.X, here.Y);
+                float openH = MathF.Abs(ow.X) + MathF.Abs(ow.Y) > 1e-3f ? MathF.Atan2(ow.Y / Ripples.Squash, ow.X) : want;
+                free = FreeHeading(openH, len * 1.2f);
+                if (float.IsNaN(free)) free = FreeHeading(openH, len * 1.2f, -1f);
+                if (float.IsNaN(free)) free = FreeHeading(want, len * 1.2f, -1f);
+            }
+            if (float.IsNaN(free))
+            {
+                _refusedFor += 1f;                                              // no way out at all counts as a second of being pinned
+                if (_refusedFor > 2f) { _loose = 5f; _refusedFor = 0; }
+                State = TadState.Hang; _stateT = 1 + R(); Speed = 0; _noScull = 1.5f; return;
+            }
             Turn(free, 3f, dt);
             float pace = 0.3f + 0.9f * Math.Clamp((hd - _roam) / (_u * 0.05f), 0, 1);   // lazy near its place, quicker the further it has been scattered
+            if (_wide) pace += 1.8f * Math.Clamp((hd - _u * 0.1f) / (_u * 0.1f), 0, 1);   // and out over deep water, a purposeful three body lengths a second when 0.2u or more behind
             float target = len * pace;
             Speed += (target - Speed) * (1 - MathF.Exp(-dt * 4f));
             if (d < len * 0.4f || _stateT <= 0) { State = TadState.Hang; _stateT = 1.5f + 3 * R(); }

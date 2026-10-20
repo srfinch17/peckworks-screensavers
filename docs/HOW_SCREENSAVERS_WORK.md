@@ -591,7 +591,7 @@ first and a slip is the same thing backward. Up is a lift up the screen plus a s
 down and right on the perch; while any of it is up it is not "in the water" (no haze, depth 0,
 no cross shadows) and is painted against the whole view instead of the water only. Its turning
 circle is kept no tighter than 0.6 body lengths (0.85 while lining up on a perch), or the middle
-of the shell drifts sideways and it reads as going tail first.
+of the shell drifts sideways and it reads as going tail first. Its look is a red-eared slider's seen from above (`Turtle.Skin`): an olive-green shell with pale yellow-green seams, an olive head and neck with thin yellow lines and a small red patch behind each eye, and legs that end in webbed, clawed feet (`Turtle.Leg`: an upper leg, a lower leg, a palm and four toes fanned from it, each tipped with a claw; the fan opens on the push), because a pond slider has feet and only a sea turtle has flippers. The slip off a perch tests its landing and its way by `Pond.Land`, not by the water mask: the water mask leaves the lily pads out, and a log beached with pads along both sides once held a turtle for a hundred seconds with every way off refused (a turtle slides in under a pad as a koi swims under one).
 
 *The ducks paddle, dabble and herd.* A duck (`Ducks.cs`: `Ducks` is the visitor and director, `Duck` a
 grown duck, `Duckling` a fluff ball) is rigid, so it has a STRAIGHT spine like the turtle's, laid out
@@ -671,7 +671,7 @@ surface bodies), it steers round the pads (a pad is a wall to a frog, which swim
 no wall to a koi, which swims under), and a swim whose steps are refused for over a second (wedged
 between pads) ends in a hop to open water. A dive is the koi's depth rule (`Light`): smaller, hazier
 and sunk down the screen, so a pad can cover it. Frogs are built last in the scene, with dice of
-their own, so adding them moved nothing else.
+their own, so adding them moved nothing else. One frog is grown and the rest are young (`Frogs` hands each a size: 1 for the first, about two thirds for the others), smaller and quieter but living exactly the same life.
 
 *A school moves as one with three rules.* The minnows (`Minnows.cs`) have no leader and no
 choreography. Every frame each fish adds up a few pulls: keep going the way I am going, head for
@@ -700,7 +700,7 @@ the spine is laid along where the head has been, so it swings its whole body rou
 middle of the body (a rigid pivot) before a burst, curling the tail into a C; a moving one turns by
 bending. It hangs at 0.9 of the bed's depth under its nose, drawn shrunk, hazed and sunk by that
 depth as the koi are, with a small shadow hugging it on the bed; a spot where the bed is too
-deep to show is refused like land, and so is a heading whose bed rises so fast that the lift would
+deep to show is refused like land (except to a clutch moving house, below), and so is a heading whose bed rises so fast that the lift would
 cancel a burst down the screen (the first timeline showed bursts that went nowhere). Growing up is
 slow and one at a time: buds, hind legs, forelegs, the tail shrinking to a third, then a froglet
 with the frog's look at a smaller size that rises to the surface and kicks (a push of a quarter
@@ -710,7 +710,36 @@ three a new hatch of half-size tadpoles appears at the cattails or a pad's rim. 
 (nothing clips): tadpoles and froglets are far too small to be solid to a fish or a pad, so they
 pass under every koi, pad and turtle and flee them (they are not in the scene's surface list);
 they never enter land, rock or the shade of a branch; a froglet at the surface is solid to the
-floating petals only. They are drawn in three passes by depth (`Clutch.Pass`): the clutch and a
+floating petals only. *Haunts and ventures (round twenty-one).* A clutch does not stay at one spot. Its
+home (the point the tadpoles keep to) has a place, `Clutch.Haunt`: Shore (within 0.3u of the cattails,
+as the first home; the last shore home is remembered, so the way back always exists), Island (a ring
+round the island's dry cap where the bed climbs the shoulders into sight) or Open (the outer shallows,
+beyond 0.15u of the cattails and 0.12u of the island's edge). Every two to five minutes (`HauntStay`) it
+rolls the next one (half Shore, a third Island, the rest Open; no island on the seed, no Island), picks
+a spot of that kind with `Good`, the test the first home passed, at least 0.12u from where it is, and
+plans a ROAD to it (`PlanRoad`): the straight line, checked every 0.01u by `Tadpole.CanTransit` (water
+in view, not land, not under a pad, not the island's cap or a rock, 0.015u of room round it), or round
+one stop. A spot with no road is dropped and another of its kind tried (six times), then the next
+kind; with none at all the move waits 15 s: a cluster drifting through a stone would be a clip. The
+home then slides along the road at 0.014u a second (`AdvanceHome`), slowing to a third of that as the
+middle tadpole of those not scared falls 0.06u to 0.14u behind, so the cloud arrives together; on
+arrival it stands still until that middle tadpole is within 0.07u, and only then is the move over. While
+it lasts (`Tadpole.Transit`) tadpoles may step over water too deep to see the bed in, which no tadpole
+otherwise does (`OkFloor`), and there they hang at `Tadpole.DeepZ` (0.3: the sunlit upper water, hazy
+but seen); out over deep water they are also less easily startled (0.055u, not 0.09u) and bolt at seven
+body lengths a second, veer a little toward home when they bolt, and burst and scull home faster, because
+the open water is full of koi (without that, 30 percent of a migrating cloud's frames were flights and the
+cloud was strewn across the pond). A straggler left out in deep water afterwards swims back by the
+old rules. The pond is deep: the bed is lost in the haze 0.12u off the bank, so the island can only be
+reached across deep water, and the Open haunt is only a little way beyond the Shore one. When the
+cluster has thinned to three it heads for the Shore first, because a hatch only happens there. A
+VENTURE (`TryVenture`, `Tadpole.Venture`): about once a minute (`VentureGap`, 50 to 90 s) one calm
+free-swimming tadpole is given a standable spot 0.10 to 0.20u from the home with a clear walk to it; for
+it "home" is that spot (its own rules do the swimming), it stays 6 to 14 s (it may graze), then home is the
+clutch's again. Not while the clutch moves. A tadpole pinned for two seconds (every step refused, or no
+free heading) may crawl out through the hidden band round it (`CanCrawl`: only its nose must be in view):
+a hatchling in a one-pixel nook at the cattails' foot used to sit there for good. They are drawn in three
+passes by depth (`Clutch.Pass`): the clutch and a
 deep froglet before the koi, a froglet in the top of the water right after the koi (over the fish
 below it, under the ripples and the floating petals), and a froglet with its back out after the
 petals. The petals heaped against the bank are part of the painted backdrop, so the pond keeps the
@@ -933,7 +962,20 @@ hard it swims (a chase is all beating, a rest all glide) and how deep it hangs (
 nose at something, deep to rest). Being chased interrupts anything; a dragonfly's tap interrupts a
 curious fish that is not busy. A swallow skimming low is a shadow sweeping over the water, and a
 fish under it flinches: a dart away and a dive, then a sulk deep down (the bolder the fish, the
-closer the shadow has to pass). Now and then a koi leaps (the doing `Leap`): from an unhurried
+closer the shadow has to pass). On top of the dials each fish keeps a notebook of how fond it is of every
+other fish (`_like`, 0 to 1; `Meet`, `Befriend` and `Company` in `Koi.cs`). A line starts from how alike the
+two fish's dials are, grows every frame the pair is within two body lengths and not a quarter of the pond's
+depth apart (in full when one is following the other, a third as fast for merely passing) and fades toward a
+small floor with a half-life of twelve minutes when they are apart. `Company` turns a liking into 0 (a
+stranger) to 1 (best friends), and the mind leans on it in four places: the Follow face of the dice (up to
+five times the weight, and the best-liked fish in reach is the friend, not the nearest), the length of a
+Follow (ten to thirty seconds for a stranger, up to a minute or two for a friend), the pace (a follower beats
+when its friend beats and sets its speed to the friend's plus a push to close the gap to its slot, which for
+a friend is 1.5 lengths behind and 0.6 to the side), and the idle goals (an idle wander is picked beside the
+friend's own destination, a rest beside a resting friend and a little under it). If the fish it would follow
+is following it, the lead changes hands instead of the two chasing each other's tails. No more than three
+keep company together (`Party`), and none of it touches the steering reflexes, the bump or the shy, which
+still have the last word. Now and then a koi leaps (the doing `Leap`): from an unhurried
 moment in the upper water with open water a few lengths ahead and the whole thing in view, a
 burst flat out to the surface, then half a second in the air on a thrown ball's arc (height = peak
 x 4p(1 - p)), still moving forward at the speed it left with, stiff as a rod, with no steering

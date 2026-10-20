@@ -131,6 +131,12 @@ travelling wave (the cattails and irises sway with it stiffly).
   tapped the water), swim along behind and beside a friend, or now and then burst after another
   fish, which speeds up and swerves away until the chaser loses interest. Only one chase runs in
   the pond at a time, and a curious fish answers a dragonfly's tap far more often than a dull one.
+  Each koi also keeps a liking for every other fish: it starts from how alike their dials are, grows while
+  the two spend time close (faster when one follows the other) and fades with a half-life of twelve minutes
+  when they are apart, so pairs and trios form and drift over an afternoon. A fish with a friend follows it
+  far more often, for a minute or two instead of ten to thirty seconds, keeps pace with it, idles toward the
+  friend's destination, rests beside it and trades the lead; never more than three keep company, and the
+  bump and shy rules are unchanged.
   When a swallow skims low over a fish, its shadow makes the fish dart away and dive, and it sulks
   deep for a while; a bold fish (energetic and sociable) barely notices, a timid one flinches at a
   shadow some way off. And now and then a koi LEAPS: a burst up from an unhurried cruise, half a
@@ -149,9 +155,11 @@ travelling wave (the cattails and irises sway with it stiffly).
   the rings in a body and circle under the spot, nipping at the surface where the dragonfly
   touched (a fizz of tiny rings). The dragonfly darts off across the pond, wanders, and comes back
   a little later to do it again, taking the schools in turn.
-- A **turtle** (a red-eared slider, the turtle of nearly every park pond in Japan) paddles just
+- A **turtle** (a red-eared slider, the turtle of nearly every park pond in Japan: an olive-green
+  shell with pale seams between the plates, an olive head with thin yellow lines and the red patch
+  behind each eye, and legs with webbed, clawed FEET, not a sea turtle's flippers) paddles just
   under the surface, front left leg with back right and then the other pair, with a small surge
-  on each stroke, turning as one rigid piece in wide slow arcs, its head leading each turn on
+  on each stroke, the toes spreading on the push, turning as one rigid piece in wide slow arcs, its head leading each turn on
   its neck. It steers in three dimensions like the koi: its feelers take it over, under or round
   a fish in its way, and where the two still meet (about ten times in three minutes) the fish is
   pushed out of it; its rise and sink while it paddles are held to what the paddling can hide,
@@ -166,7 +174,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   and how jumpy it is.
 - **Frogs** (tonosama-gaeru, the Japanese pond frog) sit on the lily pads, the dry bank rocks and
   the bank's edge, olive green with brown blotches and a pale line down the back, two bulging
-  eyes on top of the head. A frog sits still for half a minute at a time, its pale throat
+  eyes on top of the head. One of them is the grown frog; any others are young ones, two thirds
+  its size, that croak only now and then. A frog sits still for half a minute at a time, its pale throat
   fluttering and now and then swelling in a croak (no sound), with the odd shuffle or hop round
   on the spot to face the water; a bold one snaps at a dragonfly that settles close, or at a froglet (or
   a tadpole up near the top) that comes within a snap of its perch, and eats it if the snout lands on it. Then it
@@ -186,7 +195,13 @@ travelling wave (the cattails and irises sway with it stiffly).
   coming near scatters them and they drift back together. One at a time, minutes apart, one grows
   up: buds, hind legs, forelegs, the tail shrinking, then a froglet that rises, swims off with frog
   kicks across open water (shoving petals aside) and leaves the screen for good. When the cluster
-  has thinned, a new hatch of tiny ones appears at the cattails or a pad's rim. The knob "Tadpole
+  has thinned, a new hatch of tiny ones appears at the cattails or a pad's rim. The cluster does not
+  stay in one spot: every two to five minutes it drifts, as a loose cloud at a lazy pace, to another
+  haunt (the shore shallows half the time, the island's shoulders a third, the outer shallows the
+  rest; the way to the island is across water too deep to see the bed, which they cross in the
+  sunlit upper water, so the koi may well find them there), and about once a minute one tadpole
+  ventures off on its own, a few bursts out to a spot 0.1 to 0.2 of the screen away, a pause or a
+  graze, and back. The knob "Tadpole
   clutches" (0 to 3, default 1) sets how many clusters. Tadpoles are too small to be solid to
   anything: they pass under fish and pads and flee them; a froglet at the surface is solid to petals.
   Everything under the water (tadpoles, a rising froglet, koi, minnows) is painted under the floating
