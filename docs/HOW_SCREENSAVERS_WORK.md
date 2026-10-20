@@ -647,7 +647,11 @@ right (`Light.cs`, the same rule as the petals), and the shadow is painted on th
 where it sits and over the water in a leap. The pose is one number, 0 (legs folded in a Z beside the
 body) to 1 (stretched out behind), eased, and the hops and the swimming kick both drive it. A kick
 is a quick push (the legs sweep out and back, the body surges) and a slow glide (they fold forward),
-about one a second. Its mind is on the shared parts (`Core/Minds`): two dials dealt at birth (bold,
+about one a second. The FORELEGS are not on that dial: each is three pieces (upper arm, forearm,
+hand with three fingers) whose elbow and wrist are eased toward a pose per state (`EaseArms`):
+planted beside the body with the hands set down under the eyes when it sits, swept back along the
+flanks in the flight of a leap, held still along the sides while it swims (a frog swims with its
+hind legs), spread out sideways when it floats. Its mind is on the shared parts (`Core/Minds`): two dials dealt at birth (bold,
 restless), a `Doing` (Sit, Snap, Leap, Swim, Float, Dive, Climb), weighted dice, a cooldown after a
 fright. The PERCHES (a lily pad with bare green leaf to sit on, not its notch or a flower; a dry bank
 rock; a spot on the bank's edge) are found once when the scene is made, and one frog holds one.
@@ -697,7 +701,13 @@ three a new hatch of half-size tadpoles appears at the cattails or a pad's rim. 
 (nothing clips): tadpoles and froglets are far too small to be solid to a fish or a pad, so they
 pass under every koi, pad and turtle and flee them (they are not in the scene's surface list);
 they never enter land, rock or the shade of a branch; a froglet at the surface is solid to the
-floating petals only.
+floating petals only. They are drawn in three passes by depth (`Clutch.Pass`): the clutch and a
+deep froglet before the koi, a froglet in the top of the water right after the koi (over the fish
+below it, under the ripples and the floating petals), and a froglet with its back out after the
+petals. The petals heaped against the bank are part of the painted backdrop, so the pond keeps the
+list of their pixels (`Pond.Heap`) and copies them back from the backdrop each frame once
+everything under the water is painted (`Pond.CoverWithHeap`): a tadpole under the heap is hidden
+by it, like a fish under the live petals.
 
 *A lizard on land is the koi's method on the ground.* The lizard (`Lizard.cs`) is the same
 bending spine, its head leading and its body and long tail laid along the trail behind it, with

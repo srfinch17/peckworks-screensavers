@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using Peckworks.Screensavers.Core;
 using Peckworks.Screensavers.Core.Minds;
 using Peckworks.Screensavers.Core.Sakura;
 
@@ -53,6 +54,20 @@ internal sealed class Pond
 
     /// <summary>Not under the overhanging branches. Everything below the branches (water, koi, dragonflies) shows only here.</summary>
     public required bool[] Open { get; init; }
+
+    /// <summary>The pixels of the petals painted into the backdrop, drifted against the bank (DriftedPetals), that are still
+    /// water in the finished picture. They float on the surface, so each frame, once everything UNDER the water is painted,
+    /// the scene copies these pixels back from the backdrop (CoverWithHeap): a tadpole or a koi passing under the heap is
+    /// hidden by it, the way the live floating petals paint over the fish. Before this, a froglet in the shallows sat
+    /// crisp on top of the heap, which read as a tadpole swimming on the petals.</summary>
+    public required int[] Heap { get; init; }
+
+    /// <summary>Paints the drifted petal heap back over whatever was drawn under the water this frame (see Heap).</summary>
+    public void CoverWithHeap(FrameBuffer fb)
+    {
+        uint[] px = fb.Pixels, back = Pixels;
+        foreach (int i in Heap) px[i] = back[i];
+    }
 
     /// <summary>The lawn: land that is neither bare sand, a stone nor a rock. Grass tufts root only here.</summary>
     public required bool[] Grassy { get; init; }
@@ -233,7 +248,9 @@ internal static class PondPainter
         Write(bmp, px);
         Murk(g, inPond, w, h, u, rng);
 
+        uint[] beforeHeap = Read(bmp);
         DriftedPetals(g, inPond, dist, w, h, u, rng);                    // before the rocks, which sit on top of them
+        bool[] heapTouched = Brushwork.Unchanged(beforeHeap, Read(bmp)); // false where a drifted petal was painted (its soft rim too)
 
         // ---- 3: the bank (ShorePainter): the lawn, the bare edge, stones, rocks, irises ----
         using var noGrassSheet = new Bitmap(w, h, PixelFormat.Format32bppRgb);   // white where no grass may root (sand, stones, rocks)
@@ -362,10 +379,16 @@ internal static class PondPainter
                 }
         }
 
+        // The heap: every pixel a drifted petal touched that is still open water in the finished picture (a rock or the
+        // log painted over it later is not water, so it is left out; the branch shade darkened it, and the backdrop pixel
+        // copied back carries that shade).
+        var heap = new List<int>();
+        for (int i = 0; i < waterMask.Length; i++) if (!heapTouched[i] && waterMask[i]) heap.Add(i);
+
         return new Pond(room, gw, gh, cell)
         {
             Width = w, Height = h, U = u,
-            Pixels = final, Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun,
+            Pixels = final, Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(),
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
             Rocks = rocks, Log = log, Island = island,

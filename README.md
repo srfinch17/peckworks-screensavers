@@ -171,7 +171,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   leaps: a crouch, the hind legs snapping out behind, an arc a few body lengths long with its
   shadow left behind on the pad and then the water (the gap is the height), and a splash. It
   swims with frog kicks (a quick push that surges the body, then a slow glide with the legs
-  folding forward), floats with its legs hanging, steers round pads and the bank, and climbs
+  folding forward; the arms stay tucked along its sides), floats with its legs hanging and its
+  arms spread, steers round pads and the bank, and climbs
   out onto another pad or the bank with a short hop and turns to face the water. Frightened by
   the snake, a koi's head, a turtle, a lizard or a swallow's shadow, a sitting frog leaps in and a
   swimming one dives (hazy and smaller as it goes down, back up with a tiny ring). A frog in the
@@ -186,6 +187,8 @@ travelling wave (the cattails and irises sway with it stiffly).
   has thinned, a new hatch of tiny ones appears at the cattails or a pad's rim. The knob "Tadpole
   clutches" (0 to 3, default 1) sets how many clusters. Tadpoles are too small to be solid to
   anything: they pass under fish and pads and flee them; a froglet at the surface is solid to petals.
+  Everything under the water (tadpoles, a rising froglet, koi, minnows) is painted under the floating
+  petals and under the heap of petals drifted against the bank.
 - A **crayfish** (amerika-zarigani, the red swamp crayfish of every Japanese ditch) lives under a
   bank rock or the log and now and then comes out into the shallows where the bed shows: it edges
   out claws first, walks slowly on eight legs rippling in a wave, antennae waving, stops to feed

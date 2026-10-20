@@ -46,11 +46,14 @@ internal sealed class Tadpoles
 
     internal Clutch[] Clutches => _clutches;
 
-    public Tadpoles(Pond pond, int clutches, Ripples ripples, bool[] where, Random rng, Petals petals)
+    /// <param name="where">Water in view: where a tadpole is painted.</param>
+    /// <param name="stand">Where a tadpole may BE: water in view less the zone of the petals heaped against the bank (the scene makes
+    /// it), so the clutch is never placed under the heap and never swims into it; under the heap it could not be seen.</param>
+    public Tadpoles(Pond pond, int clutches, Ripples ripples, bool[] where, bool[] stand, Random rng, Petals petals)
     {
         _pond = pond;
         _clutches = new Clutch[Math.Max(0, clutches)];
-        for (int i = 0; i < _clutches.Length; i++) _clutches[i] = new Clutch(pond, ripples, where, rng);
+        for (int i = 0; i < _clutches.Length; i++) _clutches[i] = new Clutch(pond, ripples, where, stand, rng);
     }
 
     /// <param name="threats">Screen points of everything a tadpole flees: koi heads and middles, turtle noses and shells, the snake's head, the ducks' heads.</param>
@@ -66,16 +69,24 @@ internal sealed class Tadpoles
         foreach (Clutch c in _clutches) c.Update(dt, _threats, _threatCount);
     }
 
-    /// <summary>The tadpoles and any froglet under the surface: after the koi, before the minnows.</summary>
+    /// <summary>The tadpoles and any froglet deep under the surface: before the koi, so every fish passes over them.</summary>
     public void DrawUnder(FrameBuffer fb)
     {
-        foreach (Clutch c in _clutches) c.Draw(fb, surface: false);
+        foreach (Clutch c in _clutches) c.Draw(fb, Clutch.Pass.Under);
     }
 
-    /// <summary>A froglet at the surface, swimming away: after the frogs, before the turtles up on a perch.</summary>
+    /// <summary>A froglet near the surface but still under it (rising or diving): right after the koi, so it shows over
+    /// the fish below it, and BEFORE the ripples and the floating petals, which lie on the water above it. Three passes,
+    /// because a thing under the water must never be painted over something floating on it (a froglet once was).</summary>
+    public void DrawRising(FrameBuffer fb)
+    {
+        foreach (Clutch c in _clutches) c.Draw(fb, Clutch.Pass.Rising);
+    }
+
+    /// <summary>A froglet with its back out of the water, swimming away: after the petals, before the turtles up on a perch.</summary>
     public void Draw(FrameBuffer fb)
     {
-        foreach (Clutch c in _clutches) c.Draw(fb, surface: true);
+        foreach (Clutch c in _clutches) c.Draw(fb, Clutch.Pass.Surface);
     }
 
     /// <summary>A froglet at the surface shoves the floating petals in its way aside.</summary>
@@ -96,7 +107,8 @@ internal sealed class Clutch
     private const int Slots = 28;
 
     private readonly Pond _pond;
-    private readonly bool[] _where;
+    private readonly bool[] _where;                 // water in view: where it is painted
+    private readonly bool[] _stand;                 // where it may be: in view and clear of the drifted petal heap's zone
     private readonly Random _rng;
     private readonly float _u;
     private readonly PointF _cat;                     // the cattails' foot, screen pixels
@@ -116,14 +128,14 @@ internal sealed class Clutch
     // Things the checks count (the build's instrument reads them).
     internal int Started, Finished, LeftAtEdge, DivedOut, Murked, Hatches, HatchedTotal;
 
-    public Clutch(Pond pond, Ripples ripples, bool[] where, Random rng)
+    public Clutch(Pond pond, Ripples ripples, bool[] where, bool[] stand, Random rng)
     {
         _pond = pond;
-        _where = where;
+        _where = where; _stand = stand;
         _rng = rng;
         _u = pond.U;
         _cat = pond.CattailSpot;
-        for (int i = 0; i < Slots; i++) Fish[i] = new Tadpole(pond, where, rng, ripples);
+        for (int i = 0; i < Slots; i++) Fish[i] = new Tadpole(pond, where, stand, rng, ripples);
         _changeTimer = 60 + 180 * (float)rng.NextDouble();      // the first one changes 60 to 240 s in
         if (!FindHome(out PointF home)) return;
         (HomeX, HomeY) = Minnow.ToGround(pond, home.X, home.Y);
@@ -137,7 +149,7 @@ internal sealed class Clutch
             {
                 float a = (float)(rng.NextDouble() * MathF.Tau), d = _u * 0.05f * MathF.Sqrt((float)rng.NextDouble());
                 float tx = HomeX + MathF.Cos(a) * d, ty = HomeY + MathF.Sin(a) * d;
-                if (Tadpole.CanStand(pond, where, tx, ty)) { x = tx; y = ty; break; }
+                if (Tadpole.CanStand(pond, stand, tx, ty)) { x = tx; y = ty; break; }
             }
             Fish[i].Birth(x, y, (float)(rng.NextDouble() * MathF.Tau), hatchling: false);
         }
@@ -174,7 +186,28 @@ internal sealed class Clutch
         if (x < 0 || y < 0 || x >= _pond.Width || y >= _pond.Height) return false;
         int i = (int)y * _pond.Width + (int)x;
         float f = _pond.Floor[i];
-        if (!_where[i] || _pond.Land[i] || f < lo || f > hi || !Tadpole.OkFloor[_pond.Floor[i]]) return false;
+        if (!_stand[i] || _pond.Land[i] || f < lo || f > hi || !Tadpole.OkFloor[_pond.Floor[i]]) return false;
+        // Where a tadpole hanging here is DRAWN (sunk down the screen by the depth) must be standable too, the same
+        // test every tadpole's step makes (Tadpole.CanStand), and so must most of a ring round it: a home whose
+        // surroundings are refused (the zone of the petal heap, a rock) gave every tadpole born there the home itself
+        // to stand on, a spot their own steps refused, so they hung on one pixel for the whole run.
+        int sy = (int)(y + Light.SinkPx(0.9f * f / 255f, _u));
+        if (sy >= _pond.Height || !_stand[sy * _pond.Width + (int)x]) return false;
+        if (room > 0)
+        {
+            // Two rings, at the cluster's spread and twice it: nearly all of it must be standable, or the clutch lives
+            // with its back to the heap and sculls in and out of it all day (seed 35: three quarters of its frames hidden).
+            int ok = 0;
+            for (int k = 0; k < 16; k++)
+            {
+                float r = _u * (k < 8 ? 0.04f : 0.08f), a = (k % 8) * MathF.PI / 4 + (k < 8 ? 0 : MathF.PI / 8);
+                float rx = x + MathF.Cos(a) * r, ry = y + MathF.Sin(a) * r;
+                if (rx < 0 || ry < 0 || rx >= _pond.Width || ry >= _pond.Height) continue;   // off the picture counts as refused
+                int j = (int)ry * _pond.Width + (int)rx;
+                if (_stand[j] && !_pond.Land[j]) ok++;
+            }
+            if (ok < 14) return false;
+        }
         return room <= 0 || _pond.RoomAt(x, y) >= room;
     }
 
@@ -247,7 +280,7 @@ internal sealed class Clutch
                     for (int tries = 0; tries < 20; tries++)
                     {
                         float a = (float)(_rng.NextDouble() * MathF.Tau), d = _u * 0.012f * (float)_rng.NextDouble();
-                        if (Tadpole.CanStand(_pond, _where, _hatchX + MathF.Cos(a) * d, _hatchY + MathF.Sin(a) * d)) { x = _hatchX + MathF.Cos(a) * d; y = _hatchY + MathF.Sin(a) * d; break; }
+                        if (Tadpole.CanStand(_pond, _stand, _hatchX + MathF.Cos(a) * d, _hatchY + MathF.Sin(a) * d)) { x = _hatchX + MathF.Cos(a) * d; y = _hatchY + MathF.Sin(a) * d; break; }
                     }
                     Fish[i].Birth(x, y, (float)(_rng.NextDouble() * MathF.Tau), hatchling: true);
                     HatchedTotal++;
@@ -299,7 +332,7 @@ internal sealed class Clutch
                 // The offset is made on the SCREEN (a pad is a circle there; in ground pixels the squash
                 // put the spot inside it), then taken back to the ground.
                 (float tx, float ty) = Minnow.ToGround(_pond, c.X + MathF.Cos(a) * d, c.Y + MathF.Sin(a) * d);
-                if (!Tadpole.CanStand(_pond, _where, tx, ty)) continue;
+                if (!Tadpole.CanStand(_pond, _stand, tx, ty)) continue;
                 bestD = dd; _hatchX = tx; _hatchY = ty; found = true;
                 break;
             }
@@ -307,12 +340,16 @@ internal sealed class Clutch
         return found;
     }
 
-    public void Draw(FrameBuffer fb, bool surface)
+    /// <summary>Which of the scene's three draw moments a tadpole belongs to. Under: before the koi (the clutch on the
+    /// bed, and a froglet deep enough that any fish is above it). Rising: just after the koi (a froglet in the top of the
+    /// water, over the fish below it, under the ripples and the floating petals). Surface: after the petals (a froglet
+    /// whose back breaks the surface; it shoves the petals aside, so it is painted over them).</summary>
+    public enum Pass { Under, Rising, Surface }
+
+    public void Draw(FrameBuffer fb, Pass pass)
     {
-        // The tadpoles are drawn before the koi (under every fish); a froglet near the surface, rising or diving, goes with
-        // the surface pass after them (drawn with the tadpoles it went under a deeper koi for half a second).
         foreach (Tadpole t in Fish)
-            if (t.Alive && (t.AtSurface || (t.Stage == 4 && t.Z < 0.15f)) == surface) t.Draw(fb);
+            if (t.Alive && t.DrawPass == pass) t.Draw(fb);
     }
 
     public void PushPetals(Petals petals)
@@ -347,7 +384,8 @@ internal sealed class Tadpole : Body
     }
 
     private readonly Pond _pond;
-    private readonly bool[] _where;
+    private readonly bool[] _where;                 // water in view: where it is painted
+    private readonly bool[] _stand;                 // where it may be: in view and clear of the drifted petal heap's zone
     private readonly Random _rng;
     private readonly Ripples _ripples;
     private readonly float _u;
@@ -400,12 +438,16 @@ internal sealed class Tadpole : Body
     private float _legScale;
     private float _eyeR;
 
-    public Tadpole(Pond pond, bool[] where, Random rng, Ripples ripples) : base(Points)
+    public Tadpole(Pond pond, bool[] where, bool[] stand, Random rng, Ripples ripples) : base(Points)
     {
-        _pond = pond; _where = where; _rng = rng; _ripples = ripples; _u = pond.U;
+        _pond = pond; _where = where; _stand = stand; _rng = rng; _ripples = ripples; _u = pond.U;
     }
 
     public bool AtSurface => Stage == 4 && Z <= 0.03f;
+
+    /// <summary>Where in the scene's draw order this one is painted (see Clutch.Pass). Only a froglet ever leaves the
+    /// Under pass: a tadpole hangs near the bed, so it is always under the fish.</summary>
+    public Clutch.Pass DrawPass => AtSurface ? Clutch.Pass.Surface : Stage == 4 && Z < 0.15f ? Clutch.Pass.Rising : Clutch.Pass.Under;
     public bool Dived => _dived;
     public float Growth => _grow;
     public float Size => _bl0 + _tl0;
@@ -467,7 +509,13 @@ internal sealed class Tadpole : Body
         return sy < p.Height && where[sy * p.Width + ix];
     }
 
+    /// <summary>A step or a path may go anywhere in view: through the petal heap too (it is hidden under the heap while
+    /// there, which is right). Only where it chooses to SETTLE (CanLive) keeps clear of the heap's zone: making the zone a
+    /// wall penned a scattered clutch in the pocket between the heap and the screen's edge for three minutes on one seed.</summary>
     private bool CanStand(float gx, float gy) => CanStand(_pond, _where, gx, gy);
+
+    /// <summary>A spot to hang at or graze from: standable and clear of the petal heap's zone, so it is not out of sight.</summary>
+    private bool CanLive(float gx, float gy) => CanStand(_pond, _stand, gx, gy);
 
     /// <summary>The bed under a ground spot, as a fraction of the pond's full depth (0 at the edge).</summary>
     private float FloorFrac(float gx, float gy)
@@ -782,7 +830,8 @@ internal sealed class Tadpole : Body
         Speed += (0 - Speed) * (1 - MathF.Exp(-dt * 10f));
         if (Speed < 0.02f * len) Speed = 0;
         _noScull -= dt;
-        if ((crowded || far) && _noScull <= 0)
+        // Under the petal heap (a flee or a burst can end there) it is out of sight, so it moves on like one that is far from home.
+        if ((crowded || far || !CanLive(X, Y)) && _noScull <= 0)
         {
             PickSpot(homeX, homeY, px, py, far);
             State = TadState.Scull; _stateT = 6;
@@ -807,7 +856,7 @@ internal sealed class Tadpole : Body
         {
             float a = R() * MathF.Tau, d = _roam * MathF.Sqrt(R());
             float tx = homeX + MathF.Cos(a) * d, ty = homeY + MathF.Sin(a) * d;
-            if (!CanStand(tx, ty)) continue;
+            if (!CanLive(tx, ty)) continue;
             _tx = tx; _ty = ty;
             return;
         }
@@ -864,7 +913,7 @@ internal sealed class Tadpole : Body
         float want = radius + Len * 0.35f;
         PointF spot = new(centre.X + dx / d * want, centre.Y + dy / d * want);
         (float gx, float gy) = Minnow.ToGround(_pond, spot.X, spot.Y);
-        if (!CanStand(gx, gy)) return;
+        if (!CanLive(gx, gy)) return;
         (float cgx, float cgy) = Minnow.ToGround(_pond, centre.X, centre.Y);
         best = rim; found = true;
         _tx = gx; _ty = gy; _gHeading = MathF.Atan2(cgy - gy, cgx - gx);

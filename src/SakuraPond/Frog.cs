@@ -260,7 +260,7 @@ internal sealed class Frogs
 /// sound here), once in a while it shuffles its weight or hops round on the spot
 /// to face another way (usually toward the water). If a dragonfly settles close,
 /// a bold frog snaps at it with a quick short hop. Then it LEAPS: the hind legs
-/// snap straight out behind it, the forelegs tuck in, the body stretches, and it
+/// snap straight out behind it, the forelegs sweep back along its flanks, the body stretches, and it
 /// flies in an arc (half a second, up to a few body lengths) and lands in the
 /// water with a splash. It SWIMS with frog kicks: both hind legs sweep out and
 /// back together in a quick push (the body surges), then fold forward slowly
@@ -357,6 +357,10 @@ internal sealed class Frog : Body
     private float _height;                                 // how high above the water it is, in u (a leap, plus the little it stands on a perch)
     private float _hopHeight, _perchLift;
     private float _pose, _poseWant;                        // 0 hind legs folded, 1 stretched out behind
+    // The forelegs have a pose of their own (they are not a copy of the hind legs' dial): where the elbow and the wrist
+    // sit, as offsets from the shoulder in body lengths, forward (+) and out (+). Eased toward the state's pose each
+    // frame, so a tuck or a reach never snaps. Starts planted (sitting).
+    private float _elbowF = 0.0f, _elbowO = 0.14f, _wristF = 0.11f, _wristO = 0.08f;
     private float _kickT, _period = 1f, _boost;            // swimming: seconds into this kick, the kick's length, a dive's extra push
     private float _fx = 1, _fy;                            // cos and sin of the heading, once a frame
     private double _time;
@@ -646,6 +650,7 @@ internal sealed class Frog : Body
         _perchLift += ((standing ? 0.005f : 0f) - _perchLift) * (1 - MathF.Exp(-dt * 12f));
         _height = _hopHeight + _perchLift;
         _pose += (_poseWant - _pose) * (1 - MathF.Exp(-dt * 20f));
+        EaseArms(dt);
         LaySpine();
     }
 
@@ -1539,6 +1544,37 @@ internal sealed class Frog : Body
     // ================================================================ drawing
 
     /// <summary>
+    /// Where the forelegs want to be, by what the frog is doing, and the easing toward it. A real frog's arm is three
+    /// pieces (upper arm, forearm, hand) and about half the length of the folded hind leg; from above it reads by where
+    /// the ELBOW sticks out and where the HAND is planted. The poses, as the elbow's and the wrist's offsets from the
+    /// shoulder (forward, out) in body lengths:
+    ///   PLANTED (sitting, climbing, landing): the elbow out beside the body and the hand set down ahead of the
+    ///     shoulder, under the eye, a little outside the body's edge; the fingers spread forward.
+    ///   TUCKED (the flight of a leap, the push of a kick): the arm swept back and pressed along the flank, the hand
+    ///     trailing by the belly, nearly hidden under the body from above, the way a leaping frog's arms are.
+    ///   TRAILING (swimming, diving): held back along the sides, hands beside the belly; a frog swims with its hind legs
+    ///     and keeps the arms still (they only come forward to brake or to land). In the glide the arms open a touch.
+    ///   SPREAD (floating): the arms out sideways, the hands hanging back, the way a frog lies at the surface.
+    /// Before this, each foreleg was one short stick that shrank to a dot in every kick and leap.
+    /// </summary>
+    private void EaseArms(float dt)
+    {
+        float ef, eo, wf, wo;
+        bool flying = _hop != HopKind.None && _hop != HopKind.Pivot && _poseWant > 0.5f;
+        if (flying) { ef = -0.11f; eo = 0.12f; wf = -0.23f; wo = 0.16f; }                         // tucked
+        else if (_doing == Doing.Float && _hop == HopKind.None) { ef = 0.02f; eo = 0.21f; wf = -0.05f; wo = 0.32f; }   // spread
+        else if ((_doing == Doing.Swim || _doing == Doing.Dive) && _hop == HopKind.None)
+        {
+            float open = 0.03f * (1 - Smooth(_pose));                                                  // a touch wider in the glide
+            ef = -0.08f; eo = 0.13f + open; wf = -0.17f; wo = 0.18f + open;                            // trailing
+        }
+        else { ef = 0.0f; eo = 0.14f; wf = 0.11f; wo = 0.08f; }                                         // planted
+        float k = 1 - MathF.Exp(-dt * 14f);                                                            // about a tenth of a second
+        _elbowF += (ef - _elbowF) * k; _elbowO += (eo - _elbowO) * k;
+        _wristF += (wf - _wristF) * k; _wristO += (wo - _wristO) * k;
+    }
+
+    /// <summary>
     /// Paints the frog: its shadow if it is up in the air or on a perch; the
     /// throat peeking out under the chin; the hind legs and forelegs (first, so
     /// the body covers where they join it); the body; and the eyes, two bulging
@@ -1630,15 +1666,38 @@ internal sealed class Frog : Body
         Limb(fb, stencil, hip, knee, L * 0.1f, 96, 118, 50, murk);                       // the thigh: chunky
     }
 
-    /// <summary>A foreleg: short, from the shoulder, forward and out when it sits, tucked back along the body in a leap.</summary>
+    /// <summary>
+    /// A foreleg: the upper arm from the shoulder to the elbow, the forearm to the wrist, then the hand, a short palm
+    /// and three fingers fanned on from it (the fingers only when they would be more than a couple of pixels, else they
+    /// are a smudge). The hand points on along the forearm: forward when planted, back along the flank when tucked or
+    /// trailing, back and out when floating. Where the elbow and the wrist are comes from EaseArms.
+    /// </summary>
     private void ForeLeg(FrameBuffer fb, bool[] stencil, int side, float L, float murk)
     {
-        float p = Smooth(_pose);
         (float sx, float sy) = RawGround(0.24f, 0.7f * side);
-        float ox = -_fy * side, oy = _fx * side;
-        float f = Lerp(0.17f, -0.02f, p) * L, o = Lerp(0.10f, 0.02f, p) * L;
-        float wx = sx + _fx * f + ox * o, wy = sy + _fy * f + oy * o;
-        Limb(fb, stencil, Drawn_(sx, sy), Drawn_(wx, wy), L * 0.045f, 112, 134, 62, murk);
+        float ox = -_fy * side, oy = _fx * side;                                  // the unit vector out to this side, ground plane
+        float ex = sx + _fx * _elbowF * L + ox * _elbowO * L, ey = sy + _fy * _elbowF * L + oy * _elbowO * L;
+        float wx = sx + _fx * _wristF * L + ox * _wristO * L, wy = sy + _fy * _wristF * L + oy * _wristO * L;
+        // The hand goes on in the forearm's direction, 0.07 L, a little splayed outward.
+        float dx = wx - ex, dy = wy - ey, d = MathF.Max(1e-3f, MathF.Sqrt(dx * dx + dy * dy));
+        dx /= d; dy /= d;
+        float hx = wx + (dx * 0.8f + ox * 0.35f) * L * 0.07f, hy = wy + (dy * 0.8f + oy * 0.35f) * L * 0.07f;
+        PointF shoulder = Drawn_(sx, sy), elbow = Drawn_(ex, ey), wrist = Drawn_(wx, wy), hand = Drawn_(hx, hy);
+        if (L * 0.07f >= 2.5f)
+        {
+            // Three fingers from the wrist, fanned 30 degrees apart about the hand's direction.
+            float fdx = hx - wx, fdy = hy - wy, fl = MathF.Max(1e-3f, MathF.Sqrt(fdx * fdx + fdy * fdy));
+            fdx /= fl; fdy /= fl;
+            foreach (float a in (ReadOnlySpan<float>)[-0.5f, 0f, 0.5f])
+            {
+                float ca = MathF.Cos(a), sa = MathF.Sin(a);
+                float tx = wx + (fdx * ca - fdy * sa) * L * 0.075f, ty = wy + (fdx * sa + fdy * ca) * L * 0.075f;
+                Limb(fb, stencil, wrist, Drawn_(tx, ty), L * 0.014f, 142, 154, 84, murk);
+            }
+        }
+        else Limb(fb, stencil, wrist, hand, L * 0.03f, 142, 154, 84, murk);              // too small for fingers: a pale smudge of a hand
+        Limb(fb, stencil, elbow, wrist, L * 0.04f, 112, 134, 62, murk);                 // the forearm
+        Limb(fb, stencil, shoulder, elbow, L * 0.052f, 104, 126, 56, murk);             // the upper arm, a shade darker and thicker
     }
 
     // ================================================================ (kept for the diving frog's goal)

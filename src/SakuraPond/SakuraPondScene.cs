@@ -94,9 +94,40 @@ internal sealed class SakuraPondScene : IScreensaverScene
         // The tadpoles, the crayfish and the ducks each take dice of their own (seeded from the scene, with a
         // different salt each), for the same reason as the frogs: nothing else in the scene moves when they are added.
         int salt = unchecked(_pond.Pads.Count * 7919 + (_pond.Pads.Count > 0 ? (int)_pond.Pads[0].Center.X * 31 + (int)_pond.Pads[0].Center.Y : 0) + width);
-        _tadpoles = new Tadpoles(_pond, settings.TadpoleClutches, _ripples, _waterInView, new Random(unchecked(salt + 101)), _petals);
+        _tadpoles = new Tadpoles(_pond, settings.TadpoleClutches, _ripples, _waterInView, HeapFree(_waterInView), new Random(unchecked(salt + 101)), _petals);
         _crayfish = new Crayfish(_pond, _ripples, settings.CrayfishPercent / 100f, new Random(unchecked(salt + 202)));
         _ducks = new Ducks(_pond, _ripples, settings.DuckPercent / 100f, new Random(unchecked(salt + 303)), _petals, settings.MinnowSchools > 0 ? _minnows : null, _waterInView);
+    }
+
+    /// <summary>
+    /// The in-view water less the ZONE of the petals heaped against the bank: every heap pixel widened to the cell
+    /// round it (cells of 0.012u, a petal and a half), so the scatter of petals becomes one patch with no gaps. The
+    /// tadpoles live by this one: a clutch under the heap could not be seen (the heap is painted back over everything
+    /// under the water each frame), and a stencil of the petals' own pixels would have refused a tadpole's steps at
+    /// every single petal and cut its body at the gaps.
+    /// </summary>
+    private bool[] HeapFree(bool[] inView)
+    {
+        int w = _pond.Width, h = _pond.Height, cell = Math.Max(2, (int)(_pond.U * 0.012f));
+        int gw = (w + cell - 1) / cell, gh = (h + cell - 1) / cell;
+        var hot = new bool[gw * gh];
+        foreach (int i in _pond.Heap) hot[(i / w / cell) * gw + (i % w) / cell] = true;
+        var free = (bool[])inView.Clone();
+        for (int cy = 0; cy < gh; cy++)
+            for (int cx = 0; cx < gw; cx++)
+            {
+                bool near = false;
+                for (int dy = -1; dy <= 1 && !near; dy++)
+                    for (int dx = -1; dx <= 1 && !near; dx++)
+                    {
+                        int nx = cx + dx, ny = cy + dy;
+                        if (nx >= 0 && ny >= 0 && nx < gw && ny < gh && hot[ny * gw + nx]) near = true;
+                    }
+                if (!near) continue;
+                for (int y = cy * cell; y < Math.Min(h, cy * cell + cell); y++)
+                    for (int x = cx * cell; x < Math.Min(w, cx * cell + cell); x++) free[y * w + x] = false;
+            }
+        return free;
     }
 
     public void Update(double elapsedSeconds)
@@ -165,11 +196,13 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("mice");
         _crayfish.Draw(fb);                       // on the bed of the shallows: under every fish
         Sections.Mark("crayfish");
-        _tadpoles.DrawUnder(fb);                  // the tadpoles, just over the bed in the shallows, and a froglet still under the surface: under every fish (drawn after the koi, a clutch sat on the back of a fish passing over it)
+        _tadpoles.DrawUnder(fb);                  // the tadpoles, just over the bed in the shallows, and a froglet deep under the surface: under every fish (drawn after the koi, a clutch sat on the back of a fish passing over it)
         _koi.Draw(fb, _turtles);                  // the koi and the turtles in one depth order (a turtle between the fish deeper and shallower than it)
         _frogs.DrawUnder(fb);                     // a frog that has dived is under the surface: over the fish deeper than it, under the minnows
+        _tadpoles.DrawRising(fb);                 // a froglet in the top of the water: over the fish below it, UNDER the ripples and the floating petals (drawn after the petals, it swam on top of them)
         Sections.Mark("koi, turtles");
         _minnows.Draw(fb);
+        _pond.CoverWithHeap(fb);                  // the petals heaped against the bank float on the surface: back over everything under the water (a tadpole under them is hidden, as under the live petals)
         Sections.Mark("minnows");
         _ripples.Draw(fb);
         Sections.Mark("ripples");
