@@ -998,7 +998,10 @@ internal sealed class Ducks
         bool petal = FindPetal(leader, out float ptx, out float pty), school = FindSchool(leader, out float scx, out float scy);
         w[0] = 1.0f;
         w[1] = n >= 2 ? 0.9f : 0f;
-        w[2] = 0.8f;
+        w[2] = 0f;      // the ride (a duckling up on her back) is OFF: drawn from above, a duckling on the mother's dark mottled back is a dark
+                        // ball with two yellow stripes, "wings floating above the body" to the owner (2026-10-20); a shadow on her back and a
+                        // sunlit crown did not rescue it on the strips. The code stays (RunRide) for a day it is drawn better. The face is still
+                        // rolled, so the dice sequence is the same.
         w[3] = petal ? 1.1f : 0f;
         w[4] = school ? 1.2f : 0f;
         w[5] = 0.8f;
@@ -2206,7 +2209,7 @@ internal sealed class Duck : Body
         if (_flapK > 0.05f)
         {
             float hh = (HeightOfBack) * _u;
-            Look.WingOut.Draw(fb, _g[MidAt].X + Light.ShadowX * hh, _g[MidAt].Y + Light.ShadowY * hh, Heading, 1f, Ripples.Squash, 0.22f * _flapK * (0.4f + 0.6f * _wingK), Color.FromArgb(10, 24, 24), _w.View);
+            Look.WingOut.Draw(fb, _g[MidAt].X + Light.ShadowX * hh, _g[MidAt].Y + Light.ShadowY * hh, Heading, 0.35f + 0.65f * _flapK, Ripples.Squash, 0.22f * MathF.Min(1f, _flapK / 0.3f) * (0.4f + 0.6f * _wingK), Color.FromArgb(10, 24, 24), _w.View);
         }
     }
 
@@ -2220,8 +2223,11 @@ internal sealed class Duck : Body
         {
             PointF c = Spine[MidAt];
             // The raised stroke solid, the flung-wide stroke laid over it as it comes down: the wings stay solid and their reach swells and shrinks.
-            Look.WingUp.Draw(fb, c.X, c.Y, Heading, 1f, Ripples.Squash, _flapK, null, stencil);
-            Look.WingOut.Draw(fb, c.X, c.Y, Heading, 1f, Ripples.Squash, _wingK * _flapK, null, stencil);
+            // The wings open and close by SIZE, not by fading: drawn at a scale that grows with the flap and at full strength once
+            // a third open (a wing fading in as a translucent fan read as a ghost floating over the duck, 2026-10-20).
+            float open = 0.35f + 0.65f * _flapK, solid = MathF.Min(1f, _flapK / 0.3f);
+            Look.WingUp.Draw(fb, c.X, c.Y, Heading, open, Ripples.Squash, solid, null, stencil);
+            Look.WingOut.Draw(fb, c.X, c.Y, Heading, open, Ripples.Squash, solid * _wingK, null, stencil);
         }
         Paint(fb, stencil, sun, 0f, Soft, _pond.Pixels);
         DrawMarks(fb, stencil, sun);

@@ -226,11 +226,11 @@ travelling wave (the cattails and irises sway with it stiffly).
   edge over water, crosses by a few stops in open water, and leaves beyond another, in a minute or
   two. It paddles with its head rocking in time and a V of rings off its breast, looks about (the
   head turns, the body does not), dabbles (tips up, head under, tail clear of the water), preens
-  (head back over the shoulder), flaps (wings flung wide three times, a little spray, a tail wag),
+  (head back over the shoulder), flaps (the wings open from the shoulders, flung wide three times, a little spray, a tail wag),
   and stops and looks back for a straggler. The ducklings follow her trail in a line (two abreast
   when there are many), and now and then one of them does something cute, never two at once: one
-  lags to peck at something and scrambles to catch up, two bump and spin, one rides on her back and
-  slides off with a plop, one pecks a petal, one dabbles where the minnows flash, all dabble bottoms
+  lags to peck at something and scrambles to catch up, two bump and spin, one pecks a petal, one
+  dabbles where the minnows flash, all dabble bottoms
   up, all bunch under her chin, or she flaps and they scatter and come back. If the snake comes near
   she herds them away. Every duck and duckling is solid to the koi, shoves the floating petals
   aside, and is a head the minnows, tadpoles and frogs keep clear of; a duck goes round the turtle,
