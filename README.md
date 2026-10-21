@@ -135,8 +135,9 @@ travelling wave (the cattails and irises sway with it stiffly).
   the two spend time close (faster when one follows the other) and fades with a half-life of twelve minutes
   when they are apart, so pairs and trios form and drift over an afternoon. A fish with a friend follows it
   far more often, for a minute or two instead of ten to thirty seconds, keeps pace with it, idles toward the
-  friend's destination, rests beside it and trades the lead; never more than three keep company, and the
-  bump and shy rules are unchanged.
+  friend's destination and rests beside it. Two fish may follow each other, each keeping its slot beside and
+  behind the other, which is how a pair keeps station for half a minute or more; never more than three keep
+  company, and the bump and shy rules are unchanged.
   When a swallow skims low over a fish, its shadow makes the fish dart away and dive, and it sulks
   deep for a while; a bold fish (energetic and sociable) barely notices, a timid one flinches at a
   shadow some way off. And now and then a koi LEAPS: a burst up from an unhurried cruise, half a
@@ -149,7 +150,9 @@ travelling wave (the cattails and irises sway with it stiffly).
 - Two **schools of minnows**, a dozen or so tiny fish each, hang just under the surface and move
   as one: all facing the same way, fidgeting in little darts, flashing silver when the whole
   school turns, and scattering like thrown rice when a koi cruises underneath. Each minnow is a
-  bending body on its own trail, like the koi in miniature.
+  bending body on its own trail, like the koi in miniature. A minnow that meets the island, the log
+  or a bank rock between it and its school turns and swims along the stone to get round it (its
+  tail only beats when it is actually moving), instead of nosing the rock.
 - **The dragonfly's game**: every so often a dragonfly flies over to a school, hovers, then skims
   low and taps the water three times in a short line, each tap a small ring. The minnows rush to
   the rings in a body and circle under the spot, nipping at the surface where the dragonfly
@@ -266,7 +269,10 @@ travelling wave (the cattails and irises sway with it stiffly).
   afloat, swim to the log's end, climb on, lie along it for 10 to 30 seconds in a gentle S and
   slip off the far end (bask). A bold snake hunts and basks more and calms sooner; a nervous one
   just crosses, startles at a longer reach and stays frightened longer. It always ends by
-  leaving across the far side. And on the bank it HUNTS: a lizard or a mouse that comes face to face
+  leaving across the far side. A snake that has gone in among the bank rocks or onto the lawn (after
+  a prey, see below) comes out the way it went in: it remembers its path as crumbs and walks them back
+  to open water before setting off for its next goal, so it never paces the pocket between the rocks
+  and the picture's edge. And on the bank it HUNTS: a lizard or a mouse that comes face to face
   with it (within 0.14u, ahead of it, while it is on the bank or at the water's edge) may be
   stalked at a creep, then it draws its neck back into an S and strikes. Sometimes it lands: the
   prey thrashes in the jaws, goes in head first over a few seconds, and a lump the size of the

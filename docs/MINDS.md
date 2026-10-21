@@ -86,6 +86,13 @@ These are in the code comments too; here they are in one place.
   forty-second rest is fine; a forty-second wander at one spot is a jam).
 - **Feelers start closer than the smallest obstacle is wide**, and a step that is refused must
   itself force the avoidance turn, or the goal's pull holds the nose on the obstacle for ever.
+  Soft pushes summed are not that rule: the minnows' "turn from the bank" push lost to the school's
+  pull and they nosed the island, tails beating (round twenty-three). Every animal that steps gets
+  the refused-step rule, flockers included.
+- **The way out is the way in.** Feelers see a body length; a pocket among rocks with the goal beyond
+  them and the picture's edge for a wall has no way out that short, only ways along, and the snake
+  paced it. An animal lays crumbs as it goes (where, and how open it was there), and a doing that
+  begins in a tight spot walks the crumbs back to open water first, the path it knows is passable.
 - **Obstacles are per layer.** A lily pad is no wall to a koi under it and a wall to a snake on
   it. Hold obstacles as shapes and let each animal pick which ones count. The same goes for
   depth: a koi's depth is capped by the bed under every point of its spine and both edges of its

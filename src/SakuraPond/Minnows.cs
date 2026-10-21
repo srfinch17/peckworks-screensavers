@@ -249,6 +249,7 @@ internal sealed class Minnow : Body
     private float _fidget, _burst;                 // when it next twitches, and how long the twitch lasts
     private readonly PointF[] _trail = new PointF[24];
     private int _trailHead, _trailCount;
+    private int _wallSide;                         // 0: free. +1 or -1: following a wall, and which way along it (see Update)
 
     /// <summary>Where its nose is, ground pixels.</summary>
     public float X { get; private set; }
@@ -359,21 +360,105 @@ internal sealed class Minnow : Body
         if (fleeing) target = _len * 10f;
         _speed += (target - _speed) * (1 - MathF.Exp(-dt * (target > _speed ? 5f : 2.5f)));   // quick off the mark, slower to settle
 
-        // ---- Move, never onto land ----
-        float step = _speed * dt;
-        PointF next = ToScreen(_pond, X + MathF.Cos(_heading) * step, Y + MathF.Sin(_heading) * step);
-        float roomNext = _pond.RoomAt(next.X, next.Y);
-        if (roomNext > 2 || roomNext >= roomHere) { X += MathF.Cos(_heading) * step; Y += MathF.Sin(_heading) * step; }
+        // ---- Going round a wall ----
+        // A fish that has met a wall (the island's rim, the log, a bank rock) between it and its school FOLLOWS
+        // the wall until the school is in clear sight. The soft "turn toward open water" push above is no match
+        // for the school's pull when the school is on the far side of the stone: before this rule a fish stood
+        // with its nose on the rock, tail beating, trying to swim straight through it (35 such pins in ten
+        // minutes on one seed). And a one-frame dodge was not enough either: in the pocket where the beached log
+        // meets the bank, "along the wall toward the school" is the dead end, and the pull dragged the fish back
+        // into it every frame (eleven fish wiggling there for up to 10 s on seed 5). So the wall-following is a
+        // STATE with a remembered side (MINDS.md section 4, the refused step and the committed escape): swim
+        // along the wall on that side with a little "away" mixed in, flip the side when the way along is blocked
+        // too (a corner), and only when there is open water round the fish AND a clear line to the school's
+        // target let the school's pull have it back. A minnow turns in a flick, so the heading is set outright.
+        if (_wallSide != 0)
+        {
+            if (roomHere >= wall && LineClear(tx, ty)) _wallSide = 0;
+            else FollowWall(here);
+        }
+        float step = _speed * dt, moved = 0;
+        if (TryStep(step, roomHere)) moved = step;
+        else
+        {
+            // THE STEP WAS REFUSED: the nose is on the wall. Pick the side that leads toward the school when the
+            // fish was free, flip it when it was already following (the way along is a dead end), and step at once.
+            if (_wallSide == 0)
+            {
+                PointF ow = _pond.OpenWay(here.X, here.Y);
+                float alongX = -ow.Y, alongY = ow.X;              // the wall runs across the uphill direction
+                _wallSide = alongX * (tx - X) + alongY * (ty - Y) < 0 ? -1 : 1;
+            }
+            else _wallSide = -_wallSide;
+            FollowWall(here);
+            if (TryStep(step, roomHere)) moved = step;
+            else
+            {
+                // Blocked both ways along (a pocket no wider than a step): straight away from the wall.
+                PointF ow = _pond.OpenWay(here.X, here.Y);
+                float l = MathF.Sqrt(ow.X * ow.X + ow.Y * ow.Y);
+                if (l > 1e-4f) { _heading = MathF.Atan2(ow.Y, ow.X); if (TryStep(step, roomHere)) moved = step; }
+            }
+        }
         PointF last = _trail[_trailHead];
         if ((last.X - X) * (last.X - X) + (last.Y - Y) * (last.Y - Y) > (_len / 10) * (_len / 10)) Remember(new PointF(X, Y));
 
         // ---- The tail beat: quick, quicker still when darting, a little wider when working hard.
         // A minnow's body stays nearly straight; only the last third flicks (a wide wave down the
-        // whole body made them wriggle like worms).
-        _phase = (_phase + MathF.Tau * (2.5f + 6f * MathF.Min(1, _speed / (_len * 7))) * dt) % MathF.Tau;
-        float wantAmp = _len * (0.02f + 0.05f * MathF.Min(1, _speed / (_len * 5)));
+        // whole body made them wriggle like worms). The beat follows the distance actually swum this
+        // frame, not the speed the fish wanted: a fish that could not move does not pretend to swim.
+        float swim = moved / dt;
+        _phase = (_phase + MathF.Tau * (2.5f + 6f * MathF.Min(1, swim / (_len * 7))) * dt) % MathF.Tau;
+        float wantAmp = _len * (0.02f + 0.05f * MathF.Min(1, swim / (_len * 5)));
         _amp += (wantAmp - _amp) * (1 - MathF.Exp(-dt * 4));
         LaySpine();
+    }
+
+    /// <summary>
+    /// Takes one step along the heading if the water there is open, and says whether it did. "Open" is the
+    /// pond's room grid: a step may go anywhere with a couple of pixels of water round it, or anywhere with
+    /// at least as much room as here (so a fish already against a wall may slide along it, never into it).
+    /// </summary>
+    private bool TryStep(float step, float roomHere)
+    {
+        float nx = X + MathF.Cos(_heading) * step, ny = Y + MathF.Sin(_heading) * step;
+        PointF next = ToScreen(_pond, nx, ny);
+        float roomNext = _pond.RoomAt(next.X, next.Y);
+        if (roomNext > 2 || roomNext >= roomHere) { X = nx; Y = ny; return true; }
+        return false;
+    }
+
+    /// <summary>
+    /// Points the fish along the wall it is following: across the "uphill to open water" direction of the
+    /// pond's room grid, on its remembered side, with a little "away from the wall" mixed in so it keeps a
+    /// hair of water between itself and the stone (straight along, it scraped the rim and was refused).
+    /// </summary>
+    private void FollowWall(PointF here)
+    {
+        PointF ow = _pond.OpenWay(here.X, here.Y);
+        float l = MathF.Sqrt(ow.X * ow.X + ow.Y * ow.Y);
+        if (l < 1e-4f) return;
+        float awayX = ow.X / l, awayY = ow.Y / l;
+        float alongX = -awayY * _wallSide, alongY = awayX * _wallSide;
+        _heading = MathF.Atan2(alongY + 0.6f * awayY, alongX + 0.6f * awayX);
+    }
+
+    /// <summary>
+    /// Is the way from here toward a point (ground pixels) open water for the next 0.12u, or as far as the
+    /// point if nearer? Four samples along the line, each needing a little room (0.012u, about half a minnow).
+    /// </summary>
+    private bool LineClear(float tx, float ty)
+    {
+        float dx = tx - X, dy = ty - Y, d = MathF.Sqrt(dx * dx + dy * dy);
+        if (d < 1) return true;
+        float reach = MathF.Min(d, _u * 0.12f);
+        for (int k = 1; k <= 4; k++)
+        {
+            float f = reach * k / 4;
+            PointF p = ToScreen(_pond, X + dx / d * f, Y + dy / d * f);
+            if (_pond.RoomAt(p.X, p.Y) < _u * 0.012f) return false;
+        }
+        return true;
     }
 
     /// <summary>Lays the spine along the trail behind the head, adds the swimming wave, squashes to the screen (the koi's method, shorter).</summary>

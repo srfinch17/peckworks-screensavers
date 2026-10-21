@@ -767,6 +767,7 @@ internal sealed class Tadpole : Body
     private float _bobT, _noScull;       // _noScull: after a refused way, no new drift for a moment (else it flickers Hang, Scull, Hang)
     private float _phase, _amp, _freq, _curl, _turnRate;
     private float _fleeDir;
+    private float _fleeFor;                        // seconds it has been fleeing without a break (a fish that parks beside the clutch stops scaring it after 2.5)
 
     // ---- crossing deep water (the clutch moving house) and the lone venture ----
     /// <summary>Set by the clutch every frame: it is moving house, so the cluster may follow it across water too deep to hang in.</summary>
@@ -838,6 +839,7 @@ internal sealed class Tadpole : Body
     {
         float t0 = _u * (0.014f + 0.006f * R());
         _bl0 = t0 * 0.4f; _tl0 = t0 * 0.6f;        // the tail is one and a half times the body
+        _side = (int)(t0 * 1000) % 2 == 0 ? 1 : -1; // its own side to swerve to when a flight is blocked: read off a roll already made, so the dice do not move
         _burstEvery = 2 + 10 * R();
         _roam = _u * (0.02f + 0.035f * R());
         _grazer = R() < 0.45f;
@@ -992,12 +994,14 @@ internal sealed class Tadpole : Body
     private static readonly float[] Offsets = [0, 0.4f, 0.8f, 1.3f, 1.9f, 2.6f];
 
     /// <summary>The wanted heading, or the nearest to it either side that is clear for "reach" ahead; NaN if every one is blocked.</summary>
-    private float FreeHeading(float want, float reach, float slope = 0.5f)
+    /// <param name="side">Which side of "want" to try first when it is blocked (+1 or -1). A scattering clutch hands in
+    /// each tadpole's own side, so a scare splits round a rock instead of every tadpole swerving the same way into one pile.</param>
+    private float FreeHeading(float want, float reach, float slope = 0.5f, int side = 1)
     {
         if (Clear(want, reach, slope)) return want;
         for (int k = 1; k < Offsets.Length; k++)
         {
-            float a = Offsets[k];
+            float a = Offsets[k] * side;
             if (Clear(want + a, reach, slope)) return want + a;
             if (Clear(want - a, reach, slope)) return want - a;
         }
@@ -1069,6 +1073,11 @@ internal sealed class Tadpole : Body
         _stateT -= dt;
         _burstTimer -= dt;
         _bobT += dt;
+        // HABITUATION. A fish that parks beside the clutch (a resting koi, the turtle on the island's cap) used to keep every
+        // tadpole in Flee for as long as it stayed: the scare fired every frame, the flight was hemmed by the bank, and ten
+        // tadpoles sat turning on the spot in a knot for a minute ("a fuzzy ball of fuzz"). After 2.5 s of unbroken fleeing
+        // a tadpole stops minding what is there, and minds again once it has been calm for about 7 s.
+        _fleeFor = State == TadState.Flee ? _fleeFor + dt : MathF.Max(0, _fleeFor - dt * 0.35f);
 
         // ---- Over deep water? Only a clutch moving house, or a tadpole already out in it, may step there ----
         _strictHere = CanStand(_pond, _where, X, Y);
@@ -1096,22 +1105,45 @@ internal sealed class Tadpole : Body
             float dx = X - threats[i * 2], dy = Y - threats[i * 2 + 1], d2 = dx * dx + dy * dy;
             if (d2 < bestD2) { bestD2 = d2; near = i; }
         }
-        if (near >= 0)
+        if (near >= 0 && _fleeFor < 2.5f)
         {
             float away = MathF.Atan2(Y - threats[near * 2 + 1], X - threats[near * 2]);
             // Out over deep water (moving house, or swimming back from a scare) it still runs away, but veers a little toward
             // home, up to a third of a radian: a cloud harried by passing fish would otherwise be strewn across the pond.
             if (_wide) away += Math.Clamp(Wrap(MathF.Atan2(homeY - Y, homeX - X) - away), -0.9f, 0.9f) * 0.35f;
+            // Room from its neighbours, wider than when idling (2 body lengths, not 1.2): a scare used to send every tadpole
+            // straight away from the same fish with no spacing, and they piled against the island as "a fuzzy ball of fuzz"
+            // (his words); the tightest moments of a clutch were all flights. A crowded tadpole bends its flight away from
+            // the crowd. (At 1.2 lengths the flight still ended as a packed cloud at that spacing, 1.0 lengths from its middle.)
+            float px = 0, py = 0, close = len * 2f;
+            foreach (Tadpole o in all)
+            {
+                if (o == this || !o.Alive || o.Stage == 4) continue;
+                float dx = X - o.X, dy = Y - o.Y, d2 = dx * dx + dy * dy;
+                if (d2 < close * close && d2 > 0.01f) { float d = MathF.Sqrt(d2), w = 1 - d / close; px += dx / d * w; py += dy / d * w; }
+            }
+            // The bend is capped at half a radian: in a packed clutch the neighbours' push outweighed "away from the
+            // fish" and sent tadpoles back TOWARD the threat, which scared them again, and one clutch spent a minute
+            // fleeing on the spot. A flight is always mostly away from what scared it.
+            if (px * px + py * py > 1e-4f)
+                away += Math.Clamp(Wrap(MathF.Atan2(MathF.Sin(away) + py * 1.2f, MathF.Cos(away) + px * 1.2f) - away), -0.5f, 0.5f);
             // Straight away, or as near as a way that does not run up a steep shoal (the lift would cancel the flight); a cornered one takes any way there is.
-            float free = FreeHeading(away, len * 3f, 0.9f);
-            if (float.IsNaN(free)) free = FreeHeading(away, len * 3f, 0.5f);
-            if (float.IsNaN(free)) free = FreeHeading(away, len * 3f, -1f);
+            // Each tadpole tries its own side first when straight away is blocked, so a flight splits round a rock.
+            float free = FreeHeading(away, len * 3f, 0.9f, _side);
+            if (float.IsNaN(free)) free = FreeHeading(away, len * 3f, 0.5f, _side);
+            if (float.IsNaN(free)) free = FreeHeading(away, len * 3f, -1f, _side);
             if (!float.IsNaN(free))
             {
-                _fleeDir = free;
+                // A flight already under way keeps its direction unless the new one is a radian or more off (a second
+                // fish from another side): re-aimed every frame, with the neighbours' push shifting as they moved, the
+                // direction jumped about and the tadpole stood turning after it (speed is 0 while the turn is large).
+                if (State != TadState.Flee || MathF.Abs(Wrap(free - _fleeDir)) > 1f) _fleeDir = free;
                 if (State != TadState.Flee) { State = TadState.Flee; _freq = 7; }
                 _stateT = MathF.Max(_stateT, 0.45f);
-                _burstTimer = MathF.Max(_burstTimer, 1.5f);
+                // Not every scared tadpole's next burst at the same 1.5 s: with one figure the whole clutch wound up and
+                // burst together a second and a half after every scare (seven pivoting at once in one tight moment).
+                // Each takes its own figure off a roll it already has (1.2 to 2.2 s), so the dice do not move.
+                _burstTimer = MathF.Max(_burstTimer, 1f + _burstEvery * 0.1f);
             }
         }
 
@@ -1246,9 +1278,10 @@ internal sealed class Tadpole : Body
     /// </summary>
     private void Idle(float dt, float homeX, float homeY, Tadpole[] all, float len)
     {
-        // Its neighbours: keep room (1.2 body lengths), but no alignment: tadpoles do not face one way.
+        // Its neighbours: keep room (1.5 body lengths; 1.2 read as a fuzzy ball once the clutch was down to seven or
+        // eight hanging together), but no alignment: tadpoles do not face one way.
         float px = 0, py = 0;
-        float close = len * 1.2f;
+        float close = len * 1.5f;
         foreach (Tadpole o in all)
         {
             if (o == this || !o.Alive || o.Stage == 4) continue;

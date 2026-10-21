@@ -515,22 +515,22 @@ internal sealed class Koi : Body
     // changes: the Follow face of the dice (a close friend is followed far more
     // often), how long a Follow lasts (a minute or two, not ten seconds), how
     // closely the follower keeps pace (it beats when the friend beats and closes
-    // the gap to its slot, which for a friend is 1.5 lengths behind and 0.6 aside),
+    // the gap to its slot, a length behind and half a length aside),
     // an idle wander (it heads for the neighbourhood of the friend's own
-    // destination, so two fish end up cruising the same way), a rest (beside a
-    // resting friend, a little under it) and who leads (a fish about to follow its
-    // own follower takes the lead from it instead). Never more than three in a
-    // party. It never changes the solidity rules or the reflexes: company is only a
-    // better reason to be somewhere, and the feelers, the bump and the shy still
-    // have the last word. A STRANGER (a liking under 0.15) is treated exactly as
-    // before, apart from the party limit, the ring check and the lead handover.
+    // destination, so two fish end up cruising the same way) and a rest (beside a
+    // resting friend, a little under it). Two fish may follow each other (a pair
+    // keeping station is the pond's long pairing); never more than three in a
+    // party, and no ring of three. It never changes the solidity rules or the
+    // reflexes: company is only a better reason to be somewhere, and the feelers,
+    // the bump and the shy still have the last word. A STRANGER (a liking under
+    // 0.15) is treated exactly as before, apart from the party limit and the ring check.
     private float[] _like = [];                          // its liking for every fish in the school, by school index (filled by Meet, never rolled)
     private float[] _bond = [];                           // how fast that liking grows, per second (alike fish bond faster)
     private int _me = -1;                                 // its own place in the school
     private Koi? _mate;                                   // the friend a Wander is keeping company with (its goal was picked beside the friend's)
     private const float LikeFloor = 0.05f;                // a liking fades toward this, never to nothing
     private const float LikeHalfLife = 720f;              // seconds for the gap above the floor to halve while the pair is apart
-    private const float LikeGrow = 1f / 150f;             // per second, at full match and full sociability, while close (soft: slower as it nears 1)
+    private const float LikeGrow = 1f / 60f;              // per second, at full match and full sociability, while close (soft: slower as it nears 1); a minute or two side by side makes a friend (at 1/150 a pond watched for ten minutes made none)
     private const int PartyMax = 3;                       // no more than this many keep company together (a trio, never a shoal)
     private readonly Cooldown _chaseCool = new();         // no chase again until this has run out
     private readonly Cooldown _flinchCool = new();        // no flinch at a shadow again until this has run out
@@ -790,7 +790,7 @@ internal sealed class Koi : Body
         // its friend 300 pixels away behind it. Then it swims at its own cruise until the slot is ahead again.)
         bool company = false, turnAround = false;
         float ex = 0;
-        if (_doing == Doing.Follow && _partner != null && !_gulping && Company(Liking(_partner)) > 0.05f)
+        if (_doing == Doing.Follow && _partner != null && !_gulping && Company(Liking(_partner)) > 0.05f && !LeadsPair)   // the leader of a mutual pair swims at its own pace
         {
             company = true;
             FollowSlot(out float sx, out float sy);
@@ -1284,6 +1284,13 @@ internal sealed class Koi : Body
                     // GIVING WAY: if the friend turns and heads at me from close by, the slot swings round to
                     // where the friend is going, so I step out to my own side of its path instead (a turn
                     // of the leader toward the follower is where two fish in company would touch).
+                    if (LeadsPair)
+                    {
+                        // The leader of a mutual pair cruises to an idle goal of its own, a new one when it gets there.
+                        float gx = _goalX - _x, gy = _goalY - _y;
+                        if (gx * gx + gy * gy < _len * _len) NewGoal();
+                        return (_goalX, _goalY, 0.4f);
+                    }
                     float hx = MathF.Cos(_partner!._heading), hy = MathF.Sin(_partner._heading);
                     float px = _x - _partner._x, py = _y - _partner._y;
                     if (px * px + py * py < _len * _len * 6.25f && Toward(_partner, this) > 0.35f)
@@ -1311,19 +1318,30 @@ internal sealed class Koi : Body
 
     /// <summary>
     /// Where a follower belongs (ground pixels): a body length behind its friend's nose and half a length to its side, as now
-    /// for a stranger. A FRIEND is followed at 1.5 lengths behind and 0.6 aside. The pace-keeping below makes a follower
-    /// really arrive at its slot (before, it lagged), and a slot only one length behind the nose puts the follower's nose
-    /// on the leader's tail fin, so every pair that stayed together touched and the bump sent one away (a quarter of all
-    /// Follows ended in a Shy). Half a length more clears the fin.
+    /// for a stranger, and for a friend (see inside: the wider friend's slot the notebook build tried read as two fish).
     /// </summary>
     private void FollowSlot(out float x, out float y)
     {
         float hx = MathF.Cos(_partner!._heading), hy = MathF.Sin(_partner._heading);
-        float f = MathF.Min(1, 4 * Company(Liking(_partner)));                // 0 for a stranger, 1 for anyone who is clearly a friend
-        float behind = _len * (1.0f + 0.5f * f), aside = _len * (0.5f + 0.1f * f);
+        // A friend's slot is the stranger's: a length behind and half a length aside. The notebook build put a friend at
+        // 1.5 behind and 0.6 aside against bumps, and he saw the koi "grouping up together less": a follower then sat a
+        // median 2.5 lengths from its friend's middle (1.65 before the notebook), and a firmer pull or a closer slot
+        // of 1.2 moved that by a tenth. The bumps that end a Follow are with THIRD fish (32 of 42 on one seed), not the
+        // partner, and the pond before the notebook had FEWER of them per follow at this slot (13 of 97 against 42 of
+        // 142), so the extra half length bought nothing.
+        float behind = _len * 1.0f, aside = _len * 0.5f;
         x = _partner._x - hx * behind - hy * _side * aside;
         y = _partner._y - hy * behind + hx * _side * aside;
     }
+
+    /// <summary>
+    /// In a MUTUAL follow (each fish has the other as partner) the fish with the lower school index LEADS: it stays in
+    /// Follow (so the pairing lasts as long as a friend's follow does) but swims as a wanderer, toward an idle goal of
+    /// its own, and the other keeps the friend's slot behind it. Two fish each steering for the slot behind the other
+    /// met head to tail (a third of all Follows ended in a bump); abreast, a length apart, they still bumped on every
+    /// turn (17 pair bumps in ten minutes), because two slots on opposite sides agree only while the two headings do.
+    /// </summary>
+    private bool LeadsPair => _partner != null && _partner._doing == Doing.Follow && _partner._partner == this && _me < _partner._me;
 
     /// <summary>Is any fish in the school chasing or being chased right now? (A loop: the LINQ Any allocated a closure at every decision.)</summary>
     private static bool AnyChasing(IEnumerable<Koi> school)
@@ -1354,19 +1372,20 @@ internal sealed class Koi : Body
         float wLook = (0.08f + 0.45f * _curious) * _play * (_doing == Doing.Investigate ? 0.4f : 1f) * (0.75f + 0.5f * _hunger);   // less likely straight after a look; a hungry fish goes looking (a quarter more at most: the look face is already the biggest)
         bool friendRests = friend != null && friend._doing == Doing.Rest;
         if (friendRests && _doing != Doing.Rest) wRest *= 1 + 2 * company;   // a friend hanging deep and still: the thing to do is hang beside it (but not rest after rest after rest: one rest beside it, then on; chained, a pair sat 44 s)
-        bool leading = friend != null && friend._doing == Doing.Follow && friend._partner == this;    // the friend is following ME: following it back means swapping the lead, which is a change, not the default
-        float wFollow = friend != null && !friendRests ? (0.1f + 0.7f * _social) * _play * (gold && friend._kind == Kind.Goldfish ? 2f : 1f) * (1 + 4 * company) * (leading ? 0.4f : 1f) : 0;   // a goldfish follows a goldfish twice as readily: that is the shoal; a close friend up to five times (a fondness of 0.6 is about half way)
+        float wFollow = friend != null && !friendRests ? (0.1f + 0.7f * _social) * _play * (gold && friend._kind == Kind.Goldfish ? 2f : 1f) * (1 + 4 * company) : 0;   // a goldfish follows a goldfish twice as readily: that is the shoal; a close friend up to five times (a fondness of 0.6 is about half way)
         float wChase = chaseOn ? (0.1f + 0.7f * _social * _energy) * _play : 0;
         switch (Dice.Pick(_rng, [wChase, wFollow, wLook, wRest, wWander]))
         {
             case 0: Begin(Doing.Chase, quarry); break;
             case 1:
+                // Two fish may follow EACH OTHER: the lower school index leads (it cruises to idle goals of its own,
+                // see LeadsPair) and the other keeps the friend's slot behind it, both staying in Follow for a friend's
+                // long timer. That mutual follow was the long pairing the pond had before the notebook came (pairs kept
+                // together 30 s or more on every seed); a "lead handover" here, which sent the other fish off to WANDER
+                // whenever a fish chose to follow its own follower, ended its Follow, so the pair broke at the wander's
+                // next decision, and he saw the koi grouping LESS. Rings of three or more are still refused
+                // (CanKeepCompany): three fish each behind the next only go round.
                 Begin(Doing.Follow, friend);
-                // THE LEAD CHANGES HANDS. If the fish I am about to follow was following me, it would be two fish
-                // each steering for the slot behind the other (a ring). So it takes the front: its follow ends
-                // and it wanders on ahead, and I fall in behind it. (Begin first, so its idle goal is not picked
-                // beside me, as I am now behind it.)
-                if (friend!._doing == Doing.Follow && friend._partner == this) friend.Begin(Doing.Wander);
                 break;
             case 2 when PickTarget(): Begin(Doing.Investigate); break;        // nothing worth a look in reach: it wanders instead
             case 3: Begin(Doing.Rest); break;
@@ -1498,7 +1517,10 @@ internal sealed class Koi : Body
             float alike = 1 - (MathF.Abs(_energy - o._energy) + MathF.Abs(_social - o._social)) * 0.5f;     // 1 = the same dials, about 0.4 for opposites
             float a2 = alike * alike;
             float kin = _kind == o._kind ? 1f : 0.5f;                      // a koi four times a goldfish's length is a poor companion for one: half the start, half the growth
-            _like[j] = LikeFloor + 0.5f * a2 * a2 * kin;
+            // Alike squared, not to the fourth: at the fourth, two fish with dials 0.3 apart began at 0.17 (a stranger, the
+            // 0.15 line), so nearly every koi started the pond with no friend at all and only strangers' short follows ran.
+            // Squared, the same pair begins at 0.3 (a third of the way to a close friend) and most fish have someone.
+            _like[j] = LikeFloor + 0.5f * a2 * kin;
             _bond[j] = LikeGrow * (0.5f + 0.5f * alike) * (0.6f + 0.8f * _social) * kin;
         }
     }

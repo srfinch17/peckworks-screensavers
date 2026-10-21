@@ -727,7 +727,18 @@ rules, are enough for a dozen fish to behave like one creature. The school itsel
 mood: drifting toward a spot it picked in open view, rushing to a lure, or milling round it, each
 fish on its own place in a slow ring. Each minnow is a tiny bending body on a short trail, like a
 koi; its body stays nearly straight and only the tail flicks (a wave down the whole body made them
-wriggle like worms, which the close-up strip showed and a still never would). The dragonfly's game
+wriggle like worms, which the close-up strip showed and a still never would). The pulls are soft, and
+the pull toward a school on the far side of the island beat the "turn from the bank" push, so a
+minnow sat with its nose on the stone, tail beating, trying to swim through it (35 such pins in ten
+minutes on one seed, up to 12 s each). A refused step is now a rule of its own, as for every other
+animal (`Minnow.TryStep`, `FollowWall`): the fish FOLLOWS the wall, swimming along it on a remembered
+side (the side that leads toward the school) with a little "away" mixed in, flips the side when the
+way along is blocked too (a corner), and only lets the school's pull have it back when there is open
+water round it AND a clear line to the school's target (`LineClear`). The side has to be remembered: a
+one-frame dodge was tried first, and in the pocket where the beached log meets the bank the pull
+dragged eleven fish back into the dead end every frame (10 s wiggles that the pin count, which only
+sees refused steps, passed; a "confined within 12 px" count found them). The tail beat follows the
+distance actually swum, so a fish that cannot move does not pretend to swim. The dragonfly's game
 is the two halves meeting: a dragonfly asks where the nearest school is, flies over, hovers, skims
 low tapping the water three times (three small rings), and the taps call the school; then it darts
 off far and its timer runs before it plays again, taking the schools in turn.
@@ -777,7 +788,24 @@ but seen); out over deep water they are also less easily startled (0.055u, not 0
 body lengths a second (six in the shallows), veer a little toward home when they bolt, and burst twice as often and scull home at two lengths a second, because
 the open water is full of koi (without that, 30 percent of a migrating cloud's frames were flights and the
 cloud was strewn across the pond). A straggler left out in deep water afterwards swims back by the
-old rules. The pond is deep: the bed is lost in the haze 0.12u off the bank, so the island can only be
+old rules. A scare keeps the clutch's spacing: a fleeing tadpole bends its flight away from any
+neighbour within 2 body lengths (wider than the 1.2 it keeps when idling: at 1.2 a flight still ended
+as a packed cloud at that spacing), by at most half a radian (uncapped, a packed clutch's push sent
+tadpoles back toward the fish that scared them, and one clutch fled on the spot for a minute), when
+straight away is blocked each tadpole tries its own side
+first (half swerve left, half right, by a roll already made), so a flight splits round a rock, and
+each scared tadpole's next burst comes at its own moment (1.2 to 2.2 s, off a roll it already has)
+rather than the whole clutch winding up together. And a tadpole HABITUATES: after 2.5 s of unbroken
+fleeing it stops minding what is there (minding again after about 7 s calm), and a flight under way
+keeps its direction unless the new one is a radian or more off. The instrument that found this was
+the per-minute table of states: a fish parked beside the clutch (a resting koi, the turtle on the
+island's cap) kept every tadpole in Flee for as long as it stayed, re-aimed every frame, speed zero
+while the turn was large, so ten tadpoles sat turning on the spot in a knot for a minute: that knot,
+not the flight, was the fuzz. Before that every tadpole ran the same way from
+the same fish with no spacing at all, and the tightest moments of every clutch were flights piled
+against the island ("a fuzzy ball of fuzz", his note after twenty-two). Measured on three seeds of a
+five-minute stress run: the tightest five seconds went from 1.0, 0.5 and 0.4 body lengths from the
+clutch's middle to 1.5, 1.4 and 1.0 with the first two changes alone. The pond is deep: the bed is lost in the haze 0.12u off the bank, so the island can only be
 reached across deep water, and the Open haunt is only a little way beyond the Shore one. When the
 cluster has thinned to three it heads for the Shore first, because a hatch only happens there. A
 VENTURE (`TryVenture`, `Tadpole.Venture`): about once a minute (`VentureGap`, 50 to 90 s) one calm
@@ -954,6 +982,22 @@ or a mouse is out. THE HUNT has four new doings. A lizard or mouse that is out, 
 ahead of it (75 degrees), while the head is on the land or within 0.03u of it, is a MEETING; a snake
 that happened on the animal rolls once per animal per visit whether to go for it (50 to 90 percent by
 boldness), one that went to look at it (a prowl, from 0.9u) goes for it without a roll, and then Stalk
+creeps. A prowl pulls toward the prey as hard as a stalk does (1.8, not a cruise's 0.5: at 0.5 the turns
+round the bank rocks won and a prowl toured the far side of the pond), sees the prey from 115 degrees
+round instead of 75 (three prowls in seven passed it broadside), and may put its head a twentieth of
+the screen past the picture's edge and no further (the prey sits on the land corner right by it; with
+no limit one prowl toured the whole pond off the picture for 46 s). THE WAY OUT IS THE WAY IN: the
+snake lays a crumb every 0.03u of its path with how open the water was there, and an explore or a
+crossing that begins in a tight spot (the room grid under 0.035u: among the bank rocks or on the
+lawn, where a prowl or a stalk took it) first walks the crumbs back to the last one in open water,
+at the stalk's margin and with no edge walls, then goes for its goal. It does not walk them one by
+one: each frame it takes the furthest crumb it can reach in a straight clear line (`LineClear`), because
+the crumbs of a looping stalk loop too, and walked in order they replayed the loops (45 s to get 0.3u
+away on one seed). Without that the goal lay beyond
+the rocks, the picture's edge was a wall, the feelers found only ways ALONG the pocket, and the snake
+paced it for 73 s ("only move in circles on that land"). A snake inside two things at once (the edge
+wall and a rock) TURNS toward the way out at most 4 radians a second instead of facing it outright:
+set outright, the way out flipped between the two every frame and the head shook. The stalk itself
 creeps at a third of a cruise with the weave at a quarter, the feelers still on. The stalk is dropped
 if the prey's nose gets further than 0.2u (it ran or hid; counted as abandoned). At 0.05u it Strikes:
 the neck is drawn back into an S for a third of a second (a drawing-only offset laid over the front
@@ -1018,11 +1062,24 @@ stranger) to 1 (best friends), and the mind leans on it in four places: the Foll
 five times the weight, and the best-liked fish in reach is the friend, not the nearest), the length of a
 Follow (ten to thirty seconds for a stranger, up to a minute or two for a friend), the pace (a follower beats
 when its friend beats and sets its speed to the friend's plus a push to close the gap to its slot, which for
-a friend is 1.5 lengths behind and 0.6 to the side), and the idle goals (an idle wander is picked beside the
-friend's own destination, a rest beside a resting friend and a little under it). If the fish it would follow
-is following it, the lead changes hands instead of the two chasing each other's tails. No more than three
-keep company together (`Party`), and none of it touches the steering reflexes, the bump or the shy, which
-still have the last word. Now and then a koi leaps (the doing `Leap`): from an unhurried
+a friend is the stranger's, a length behind and half a length aside: the notebook build's 1.5 behind and 0.6
+aside left a follower a median 2.5 lengths from its friend's middle against 1.65 before, and read as two fish,
+not a pair; a firmer pull, a quicker closing push and a slot at 1.2 each moved that by a tenth, and the bumps
+that end a Follow are with third fish, not the partner), and the idle goals (an idle wander is picked beside the
+friend's own destination, a rest beside a resting friend and a little under it). Two fish may follow EACH
+OTHER: the lower school index LEADS (`LeadsPair`: it stays in Follow, so the pairing lasts a friend's long
+timer, but cruises to idle goals of its own at its own pace) and the other keeps the friend's slot behind
+it. A leader, not two slots: two fish each steering for the slot behind the other met head to tail (a
+third of all Follows ended in a bump), and abreast, a length apart on agreed sides, they still bumped on
+every turn (17 pair bumps in ten minutes on one seed), because two slots on opposite sides agree only
+while the two headings do. That mutual follow is the pond's long pairing (pairs kept together 30 s or more on every seed before
+the notebook came); a "lead handover" in the first notebook build, which sent the other fish off to wander
+whenever a fish chose to follow its own follower, broke every such pair within seconds and halved the long
+pairings, which is what he saw ("grouping up together less"). A ring of three or more is still refused
+(`CanKeepCompany`). The first liking is alike squared (not to the fourth), so most fish have someone above a
+stranger from the first minute, and a liking grows at up to 1/60 a second while close (a minute or two
+side by side makes a friend). No more than three keep company together (`Party`), and none of it touches
+the steering reflexes, the bump or the shy, which still have the last word. Now and then a koi leaps (the doing `Leap`): from an unhurried
 moment in the upper water with open water a few lengths ahead and the whole thing in view, a
 burst flat out to the surface, then half a second in the air on a thrown ball's arc (height = peak
 x 4p(1 - p)), still moving forward at the speed it left with, stiff as a rod, with no steering

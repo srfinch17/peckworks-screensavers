@@ -150,6 +150,20 @@ internal sealed class Snake : Body
     private float _weaveAmp = 1;                           // how wide its weave is right now (1 = a cruise), eased so it never jumps
     private float _weaveGate = 1;                          // 0 when it has stopped (a snake at rest does not weave), eased
 
+    // ---- THE WAY OUT IS THE WAY IN ----
+    // A trail of crumbs: where the head has been, one every 0.03u of travel, with how open the water was
+    // there (the pond's room grid: 0 on land). A prowl or a stalk takes the snake in among the bank rocks
+    // and onto the lawn, where the next doing's goal lies beyond the rocks and the picture's edge is a wall:
+    // the feelers find no way through, only along, and the snake paced a pocket for 73 seconds (natural
+    // seed 11). Now a doing that begins in a tight spot first walks the crumbs back to open water, the
+    // path it knows is passable, then goes for its goal.
+    private readonly float[] _crumbX = new float[64], _crumbY = new float[64], _crumbRoom = new float[64];
+    private int _crumbHead, _crumbCount;
+    private readonly PointF[] _way = new PointF[40];       // the crumbs to walk back, newest first
+    private int _wayN, _wayI;                              // how many, and the one it is walking to (equal: no retreat)
+    private float _retreatT;                               // seconds into the retreat (a cap, in case a crumb is unreachable)
+    private bool Retreating => _wayI < _wayN;
+
     // ---- THE SKIN ---- (see the class comment; chosen in Begin from the two dials, never rolled)
     private int _skin;
     private float _blot;                                   // where along the body this snake's blotches start (0 to 1 of a blotch's length)
@@ -274,6 +288,7 @@ internal sealed class Snake : Body
         _speed = _cruise;
         _travelled = 0; _alive = 0; _flee = 0; _calm.Start(0); _blocked = false; _blockedT = 0; _weaveAmp = 1;
         _trailCount = 0;
+        _crumbCount = 0; _wayN = _wayI = 0;
         // Its body starts laid out straight behind it, off the screen.
         for (int i = 60; i >= 0; i--) Remember(new PointF(_x - MathF.Cos(_heading) * _len * 1.2f * i / 60, _y - MathF.Sin(_heading) * _len * 1.2f * i / 60));
         _live = true;
@@ -328,6 +343,26 @@ internal sealed class Snake : Body
             case 2 when BeginExplore(): break;                  // nowhere to explore: it crosses instead
             case 4: BeginProwl(meal!.Value); break;
             default: BeginCross(); break;
+        }
+        MaybeRetreat();
+    }
+
+    /// <summary>
+    /// An explore or a crossing that begins in a tight spot (the head among the bank rocks or on the lawn, where
+    /// the room grid reads under 0.035u) first walks its crumbs back to the last one in open water. Nothing
+    /// happens when the head is already in the open, or when no crumb within the last forty is.
+    /// </summary>
+    private void MaybeRetreat()
+    {
+        _wayN = _wayI = 0;
+        if (!(_doing == Doing.Explore && _phase == 0 || _doing == Doing.Cross)) return;
+        if (_pond.RoomAt(_x, _y) >= _u * 0.035f) return;
+        int n = Math.Min(_crumbCount, _way.Length);
+        for (int k = 0; k < n; k++)
+        {
+            int i = (_crumbHead - k + _crumbX.Length) % _crumbX.Length;
+            _way[k] = new PointF(_crumbX[i], _crumbY[i]);
+            if (_crumbRoom[i] >= _u * 0.06f) { _wayN = k + 1; _retreatT = 0; Note("retreat"); return; }
         }
     }
 
@@ -627,9 +662,11 @@ internal sealed class Snake : Body
                 if (!p.Huntable) continue;
                 PointF nose = p.PreyNose;
                 if (Dist(head, nose) > reach) continue;
-                if (MathF.Abs(Wrap(MathF.Atan2(nose.Y - head.Y, nose.X - head.X) - _heading)) > 1.309f) continue;   // within 75 degrees of its heading
-                if (!NearLand(head)) continue;
                 bool prowling = _doing == Doing.Explore && _phase == 1;
+                // Within 75 degrees of its heading; a snake that came to LOOK sees further round (115 degrees): three prowls
+                // in seven that got within reach passed the prey broadside and never noticed it.
+                if (MathF.Abs(Wrap(MathF.Atan2(nose.Y - head.Y, nose.X - head.X) - _heading)) > (prowling ? 2.0f : 1.309f)) continue;
+                if (!NearLand(head)) continue;
                 if (WasRolled(p) && !prowling) continue;
                 if (_rolledCount < _rolled.Length && !WasRolled(p)) _rolled[_rolledCount++] = p;
                 Meetings++;
@@ -942,7 +979,8 @@ internal sealed class Snake : Body
         // On a crossing the same, for every edge but the one the goal lies beyond: a crossing begun at the land corner went round
         // the bank rocks, under the bottom edge, and ran east BELOW the picture for a thousand pixels, the goal's pull too weak
         // to bend it back. The exit edge stays open, so the crossing can leave.
-        if ((_doing == Doing.Explore && _phase == 0 || _doing is Doing.Cross or Doing.Snatch) && _x >= 0 && _y >= 0 && _x < _pond.Width && _y < _pond.Height)
+        // A retreat along its crumbs has no walls: the crumbs were laid without them (a prowl's may lie a little off the picture).
+        if ((_doing == Doing.Explore && _phase == 0 || _doing is Doing.Cross or Doing.Snatch) && !Retreating && _x >= 0 && _y >= 0 && _x < _pond.Width && _y < _pond.Height)
         {
             float wall = _u;
             if (!(_doing == Doing.Cross && _goal.X < 0)) wall = MathF.Min(wall, px);
@@ -951,6 +989,10 @@ internal sealed class Snake : Body
             if (!(_doing == Doing.Cross && _goal.Y >= _pond.Height)) wall = MathF.Min(wall, _pond.Height - py);
             best = MathF.Min(best, wall - _u * 0.03f);
         }
+        // A prowl may put its head a twentieth of the screen past an edge (the prey sits on the land corner, right by it) and
+        // no further: with no wall at all, one prowl toured the whole pond off the picture for 46 seconds and never arrived.
+        if (_doing == Doing.Explore && _phase == 1)
+            best = MathF.Min(best, MathF.Min(MathF.Min(px, _pond.Width - px), MathF.Min(py, _pond.Height - py)) + _u * 0.05f);
         if (_log is Log log && !(_doing == Doing.Bask && _phase >= 1))   // a snake climbing on, lying on or slipping off the log does not mind it
         {
             PointF a = log.At(0), b = log.At(1);
@@ -960,6 +1002,19 @@ internal sealed class Snake : Body
             best = MathF.Min(best, MathF.Sqrt(dx * dx + dy * dy) - log.Width * 0.5f);
         }
         return best;
+    }
+
+    /// <summary>Is the straight line from the head to a point clear, with the stalk's margin (0.015u) all the way? Sampled every 0.015u.</summary>
+    private bool LineClear(PointF to)
+    {
+        float dx = to.X - _x, dy = to.Y - _y, d = MathF.Sqrt(dx * dx + dy * dy);
+        int n = Math.Min(60, (int)MathF.Ceiling(d / (_u * 0.015f)));
+        for (int k = 1; k <= n; k++)
+        {
+            float f = (float)k / n;
+            if (Clear(_x + dx * f, _y + dy * f) < _u * 0.015f) return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -1061,9 +1116,13 @@ internal sealed class Snake : Body
         // A gentle pull toward the goal the mind chose (firmer when climbing onto
         // the log or striking), a slow wander, and when startled a hard swing
         // away from whatever touched it.
-        float pull = striking ? 2.5f : _doing == Doing.Bask && _phase == 1 ? 1.5f : _doing is Doing.Stalk or Doing.Miss or Doing.Snatch ? 1.8f : 0.5f;
-        float turn = Wrap(MathF.Atan2(_goal.Y - _y, _goal.X - _x) - _heading) * pull;
-        if (!striking && !(_doing == Doing.Bask && _phase == 1) && _doing is not (Doing.Stalk or Doing.Strike or Doing.Swallow or Doing.Miss or Doing.Snatch)) turn += 0.2f * MathF.Sin(_alive * 0.35f);
+        // A prowl pulls as hard as a stalk (1.8, not the cruise's 0.5): at 0.5 the avoidance turns round the bank rocks won
+        // every time and the prowl toured the pond's far side instead of arriving. A retreat pulls the same, crumb to crumb.
+        bool prowling = _doing == Doing.Explore && _phase == 1;
+        float pull = striking ? 2.5f : _doing == Doing.Bask && _phase == 1 ? 1.5f : _doing is Doing.Stalk or Doing.Miss or Doing.Snatch || prowling || Retreating ? 1.8f : 0.5f;
+        PointF goal = Retreating ? _way[_wayI] : _goal;
+        float turn = Wrap(MathF.Atan2(goal.Y - _y, goal.X - _x) - _heading) * pull;
+        if (!striking && !Retreating && !(_doing == Doing.Bask && _phase == 1) && _doing is not (Doing.Stalk or Doing.Strike or Doing.Swallow or Doing.Miss or Doing.Snatch)) turn += 0.2f * MathF.Sin(_alive * 0.35f);
         float most = (striking ? 2.5f : _doing == Doing.Snatch ? 1.8f : 1.0f) + 1.5f * fear;   // a chase turns a little tighter than a cruise
 
         // Something in the way? Feel for the smallest turn that clears it.
@@ -1071,7 +1130,8 @@ internal sealed class Snake : Body
         // more room counts for nothing, so it skirts a pad rather than
         // heading for the far side of the pond.
         // Stalking or chasing a miss it goes closer past rocks to get at what sits on them (0.02u, not 0.035u; less and the body swung into the stone).
-        float look = _len * 0.8f + _speed * 0.8f, margin = _u * (_doing is Doing.Stalk or Doing.Miss ? 0.02f : 0.035f);    // wider than the weave's swing, so the body clears too
+        // A retreat keeps to the gaps a stalk came in by, so it takes the stalk's margin too.
+        float look = _len * 0.8f + _speed * 0.8f, margin = _u * (_doing is Doing.Stalk or Doing.Miss || Retreating ? 0.02f : 0.035f);    // wider than the weave's swing, so the body clears too
         float clearAhead = _blocked ? 0 : ClearAlong(_heading, look);
         // A fright swings it away from what touched it, but never into something
         // else: the nearer an obstacle, the less the swing counts (an early
@@ -1133,8 +1193,15 @@ internal sealed class Snake : Body
             float gx = Clear(_x + 2, _y) - Clear(_x - 2, _y), gy = Clear(_x, _y + 2) - Clear(_x, _y - 2), gl = MathF.Sqrt(gx * gx + gy * gy);
             if (gl > 1e-4f)
             {
-                _heading = MathF.Atan2(gy, gx);
-                nx = _x + gx / gl * step; ny = _y + gy / gl * step;
+                // The heading TURNS toward the way out, at most 4 radians a second, instead of being set to it: inside two
+                // things at once (the picture's edge wall and a bank rock) the way out flips between "up" and "right" from
+                // one frame to the next, as whichever is deeper wins, and a heading set outright shook the head 10 pixels a
+                // frame for 21 seconds. Eased, it settles between the two, which clears both.
+                float outA = MathF.Atan2(gy, gx);
+                _heading = Wrap(_heading + Math.Clamp(Wrap(outA - _heading), -4f * dt, 4f * dt));
+                float ex = _x + MathF.Cos(_heading) * step, ey = _y + MathF.Sin(_heading) * step;
+                if (Clear(ex, ey) >= clearHere) { nx = ex; ny = ey; }
+                else { nx = _x + gx / gl * step; ny = _y + gy / gl * step; }
                 _blocked = false;
             }
         }
@@ -1142,6 +1209,29 @@ internal sealed class Snake : Body
         {
             _x = nx; _y = ny;
             _travelled += step;
+        }
+        // A crumb every 0.03u of the way, with how open the water is there; and on a retreat, the next crumb once this one is
+        // reached. A retreat that has not got there in 15 seconds (a crumb the body cannot reach) is dropped for the doing's own goal.
+        {
+            int last = _crumbHead;
+            float cx = _x - _crumbX[last], cy = _y - _crumbY[last];
+            if (_crumbCount == 0 || cx * cx + cy * cy > _u * _u * 0.03f * 0.03f)
+            {
+                _crumbHead = (_crumbHead + 1) % _crumbX.Length;
+                _crumbX[_crumbHead] = _x; _crumbY[_crumbHead] = _y; _crumbRoom[_crumbHead] = _pond.RoomAt(_x, _y);
+                _crumbCount = Math.Min(_crumbCount + 1, _crumbX.Length);
+            }
+            if (Retreating)
+            {
+                _retreatT += dt;
+                // String-pulling: the crumbs of a looping stalk loop too, and walked one by one they replayed the loops
+                // (45 s and 1.7u of path to get 0.3u away on one seed). So each frame the snake looks for the FURTHEST
+                // crumb along the way it can reach in a straight clear line, and goes for that one.
+                for (int j = _wayN - 1; j > _wayI; j--)
+                    if (LineClear(_way[j])) { _wayI = j; break; }
+                if (Dist(new PointF(_x, _y), _way[_wayI]) < _u * 0.025f) _wayI++;
+                if (_retreatT > 25f || !(_doing == Doing.Explore && _phase == 0 || _doing == Doing.Cross)) _wayI = _wayN;
+            }
         }
         // A jam breaker (found by a 20 minute run: on one seed a snake sat 10 minutes at the screen's edge inside a lily pad's
         // margin, trying every heading and refused every step). Blocked for 5 seconds: if it is out of sight it has left; if it is
@@ -1151,7 +1241,7 @@ internal sealed class Snake : Body
         {
             _blockedT = 0;
             if (_x < 0 || _y < 0 || _x > _pond.Width || _y > _pond.Height) { _target = null; _live = false; return; }
-            _target = null; BeginCross();
+            _target = null; BeginCross(); MaybeRetreat();
         }
         // Gone: leaving, and its head is far enough past an edge that its tail has left too.
         float m = _len * 1.25f;
