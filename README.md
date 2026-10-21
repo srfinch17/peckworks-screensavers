@@ -284,8 +284,9 @@ travelling wave (the cattails and irises sway with it stiffly).
   seconds' chase and a lunge (never looked for, and it rests four to eight minutes after any chase).
 - Two **lizards** (kanahebi, the Japanese grass lizard with the very long tail) each come out on
   the bank every couple of minutes: a dash, dead still, another dash, over the grass and up onto a
-  rock to bask, its body and tail throwing an S-wave as it runs and its legs stepping on opposite
-  corners, then gone into the grass again. Each has its own temper, rolled once: a BOLD one stays
+  rock to bask, its body and tail throwing an S-wave as it runs and its sprawling legs (a knee bent
+  forward, five long clawed toes spread like a hand) stepping on opposite corners, then gone into
+  the grass again. Each has its own temper, rolled once: a BOLD one stays
   out longer, basks longer and wins a standoff, an ENERGETIC one makes longer dashes with shorter
   rests. They also run to the water's edge and drink (one tiny ring in front of the nose), creep
   up on a dragonfly sitting on a bank rock (it takes off a body length short), bolt for cover

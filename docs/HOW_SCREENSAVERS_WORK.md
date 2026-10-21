@@ -845,8 +845,12 @@ hatches more when thinned; a small ring marks a catch near the surface.
 
 *A lizard on land is the koi's method on the ground.* The lizard (`Lizard.cs`) is the same
 bending spine, its head leading and its body and long tail laid along the trail behind it, with
-a running S-wave that grows down the tail and dies away when it stops, and four legs as small
-ovals swinging on opposite corners in step. What makes it a lizard rather than a small snake with
+a running S-wave that grows down the tail and dies away when it stops, and four sprawling legs
+swinging on opposite corners in step: each an upper leg out sideways, a lower leg turned forward
+at the knee (bending more on the push of a step) and five long thin toes spread like a hand, a dark
+claw on each (`Lizard.Legs`; one small oval when a toe would be under 2.5 px). They were one flat
+oval each until round twenty-three ("he currently has the turtle paddle limbs", his note); the
+5x and 6x crops that judged the change are in the kit. What makes it a lizard rather than a small snake with
 legs is the RHYTHM: a dash of under a second, then dead still for one to three, then another; a
 climb onto a dry rock and a long bask; and it comes in from the screen's edge and leaves the same
 way, so it never pops into being. It asks the land mask (the ground plus whatever stands in the

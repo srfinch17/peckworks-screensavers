@@ -996,7 +996,15 @@ internal sealed class Lizard : Body, IPrey
         }
     }
 
-    /// <summary>A pair of legs at spine point i: each a thin oval out from the body, swinging fore and aft with the gait (the two sides half a step apart).</summary>
+    /// <summary>
+    /// A pair of legs at spine point i, swinging fore and aft with the gait (the two sides half a step apart).
+    /// A LIZARD'S LEG seen from above (look at any skink or anole on a wall): it sprawls. The upper leg goes
+    /// out sideways from the body, the lower leg turns FORWARD at the elbow or knee, and the foot is five long,
+    /// thin toes spread like a hand with a dark claw on each. One flat oval per leg, which is what the lizard had,
+    /// is a turtle's paddle ("he currently has the turtle paddle limbs", his note). Three pieces and the toes now,
+    /// the knee bending more on the forward reach of a step; when a toe would be under 2.5 px the foot is one
+    /// small oval, as the turtle's is.
+    /// </summary>
     private void Legs(FrameBuffer fb, int i, float len, float wid, float phaseOffset)
     {
         PointF p = Spine[i], q = Spine[Math.Max(0, i - 1)];
@@ -1004,12 +1012,37 @@ internal sealed class Lizard : Body, IPrey
         float run = MathF.Min(1, _speed / (_len * 2f));
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
         {
-            // Standing: legs out sideways and a little back. Running: each swings forward and back about that.
-            float swing = 0.7f * run * MathF.Sin(_gait + phaseOffset + (side > 0 ? 0 : MathF.PI));
+            // Standing: upper legs out sideways. Running: each swings forward and back about that, and the knee
+            // straightens on the reach and bends on the push.
+            float phase = _gait + phaseOffset + (side > 0 ? 0 : MathF.PI);
+            float swing = 0.7f * run * MathF.Sin(phase);
             float a = back - side * (MathF.PI / 2 + 0.35f) + swing;
-            float l = _len * len;
-            var c = new PointF(p.X + MathF.Cos(a) * (l * 0.5f + HalfWidth[i] * 0.6f), p.Y + MathF.Sin(a) * (l * 0.5f + HalfWidth[i] * 0.6f) * Ripples.Squash);
-            Oval(fb, _pond.Open, c, a, l * 0.5f, _len * wid * 0.5f, 98, 80, 48, 1f, 0, _pond.Sun, rays: false);
+            float bend = 0.85f - 0.3f * run * MathF.Sin(phase);          // radians the lower leg turns toward the nose
+            float lower = a - side * bend;
+            float l = _len * len, thin = _len * wid * 0.5f;
+            // The joints, in screen pixels (y squashed as everything on the ground is).
+            PointF root = At(p, a, HalfWidth[i] * 0.6f), knee = At(root, a, l * 0.45f), ankle = At(knee, lower, l * 0.4f);
+            Oval(fb, _pond.Open, At(root, a, l * 0.225f), a, l * 0.25f, thin * 0.85f, 98, 80, 48, 1f, 0, _pond.Sun, rays: false);
+            Oval(fb, _pond.Open, At(knee, lower, l * 0.2f), lower, l * 0.22f, thin * 0.65f, 92, 76, 46, 1f, 0, _pond.Sun, rays: false);
+            float toe = l * 0.35f;
+            if (toe < 2.5f)
+            {
+                Oval(fb, _pond.Open, At(ankle, lower, l * 0.1f), lower, l * 0.16f, thin * 0.9f, 88, 72, 44, 1f, 0, _pond.Sun, rays: false);
+                continue;
+            }
+            // Five toes fanned from the ankle, a little further toward the nose than the shin; the fourth from the
+            // inside is the longest (a lizard's hind foot especially), and each ends in a claw.
+            float foot = lower - side * 0.3f;
+            for (int t = 0; t < 5; t++)
+            {
+                float ta = foot + side * (t - 2) * 0.28f;
+                float tl = toe * (t == 3 ? 1.3f : t == 0 ? 0.7f : 1f);
+                Oval(fb, _pond.Open, At(ankle, ta, tl * 0.5f), ta, tl * 0.5f, MathF.Max(0.55f, l * 0.035f), 88, 72, 44, 1f, 0, _pond.Sun, rays: false);
+                Oval(fb, _pond.Open, At(ankle, ta, tl), ta, MathF.Max(0.6f, l * 0.03f), MathF.Max(0.5f, l * 0.022f), 40, 34, 24, 1f, 0, _pond.Sun, rays: false);
+            }
         }
     }
+
+    /// <summary>A point "d" screen pixels from p along angle a, the y squashed as the ground is.</summary>
+    private static PointF At(PointF p, float a, float d) => new(p.X + MathF.Cos(a) * d, p.Y + MathF.Sin(a) * d * Ripples.Squash);
 }
