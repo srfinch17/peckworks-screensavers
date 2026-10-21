@@ -1,0 +1,13 @@
+<Project>
+  <!-- Shared build settings for every project under src.
+
+       TieredCompilation off: a screensaver is a hot loop from its first frame. With tiered JIT (the default) the
+       painters run as quick, unoptimised "tier 0" code for their first calls and are only re-compiled in the
+       background later, so on a 4K screen the first frames cost 15 to 20 ms instead of 9, the frame pump dropped
+       to 30 fps to cope and, with the cost then sitting on its switch-back line, could stay there for the whole run
+       (measured 2026-10-20: 299 of the first 300 frames over 20 ms; with this off, a steady 60 fps from the fourth
+       frame, render 9.0 ms against 9.4 once the tiers had settled). The price is about 60 ms more at startup. -->
+  <PropertyGroup>
+    <TieredCompilation>false</TieredCompilation>
+  </PropertyGroup>
+</Project>

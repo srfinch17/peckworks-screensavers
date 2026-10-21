@@ -12,6 +12,7 @@ public static class ScreensaverApp
     public static void Run(string[] args, ScreensaverDefinition definition)
     {
         CommandLine cmd = CommandLine.Parse(args);
+        if (cmd.Mode != LaunchMode.Preview && cmd.Mode != LaunchMode.Configure) CompileEverythingNow();
 
         switch (cmd.Mode)
         {
@@ -37,6 +38,70 @@ public static class ScreensaverApp
                 RunSnapshot(definition, cmd.Extra);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Compiles every method of the saver and the engine on a helper thread
+    /// at start-up, so none is compiled in the middle of a frame.
+    ///
+    /// FEYNMAN VERSION: a .NET program ships as a recipe, not as machine code;
+    /// each method is turned into machine code (the JIT, "just in time") the
+    /// first time it is called. Tiered compilation is off for the savers (see
+    /// src/Directory.Build.props), so that first call does the full, slow,
+    /// optimising compile: ten milliseconds and more for a big method. In a
+    /// screensaver most methods are first called on the frame an animal first
+    /// appears (the snake's first visit, a lizard running in, the first duck
+    /// family), and that frame then ran 12 to 14 ms long: one dropped frame,
+    /// right as something new came on (measured 2026-10-20: the "update: snake",
+    /// "update: lizards, mice" and "update: frogs, tadpoles" sections each with
+    /// a worst frame of 11 to 13 ms against averages under 0.1). So the whole
+    /// programme is compiled here, on a thread pool thread, while the window
+    /// is being made and the scene pre-warmed. Generic methods are skipped
+    /// (they are compiled per type argument and cannot be prepared in the
+    /// abstract); a method that will not compile is skipped too.
+    /// </summary>
+    private static void CompileEverythingNow()
+    {
+        System.Threading.Tasks.Task.Run(static () =>
+        {
+            const System.Reflection.BindingFlags all = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static
+                | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+            var assemblies = new List<System.Reflection.Assembly> { typeof(ScreensaverApp).Assembly };
+            if (System.Reflection.Assembly.GetEntryAssembly() is { } entry && !assemblies.Contains(entry)) assemblies.Add(entry);
+            // Every type of ours, plus every CLOSED generic type of ours that a field names (Mind<Koi.Doing>, say): a
+            // generic type's methods are compiled once per type argument, and only the closed form can be prepared.
+            var types = new List<Type>();
+            foreach (System.Reflection.Assembly asm in assemblies)
+            {
+                try { types.AddRange(asm.GetTypes()); }
+                catch (System.Reflection.ReflectionTypeLoadException e) { types.AddRange(e.Types.Where(t => t != null)!); }
+            }
+            var closed = new HashSet<Type>();
+            foreach (Type t in types.ToArray())
+            {
+                System.Reflection.FieldInfo[] fields;
+                try { fields = t.GetFields(all); } catch (Exception) { continue; }
+                foreach (System.Reflection.FieldInfo f in fields)
+                {
+                    Type ft = f.FieldType;
+                    if (ft.IsConstructedGenericType && assemblies.Contains(ft.GetGenericTypeDefinition().Assembly) && closed.Add(ft)) types.Add(ft);
+                }
+            }
+            foreach (Type t in types)
+            {
+                if (t.ContainsGenericParameters) continue;
+                try
+                {
+                    foreach (System.Reflection.MethodBase m in t.GetMethods(all).Cast<System.Reflection.MethodBase>().Concat(t.GetConstructors(all)))
+                    {
+                        if (m.IsAbstract || m.ContainsGenericParameters) continue;
+                        try { System.Runtime.CompilerServices.RuntimeHelpers.PrepareMethod(m.MethodHandle); }
+                        catch (Exception) { /* a method the runtime will not compile ahead (a P/Invoke stub, say): it compiles on its first call as before */ }
+                    }
+                }
+                catch (Exception) { /* a type whose methods cannot be listed: skipped, the rest still get compiled (one throw used to end the whole pass) */ }
+            }
+        });
     }
 
     /// <summary>
@@ -108,16 +173,22 @@ public static class ScreensaverApp
 
         const double step = 1.0 / 60;
         int gc0 = GC.CollectionCount(0), gc1 = GC.CollectionCount(1), gc2 = GC.CollectionCount(2);
+        long alloc0 = GC.GetTotalAllocatedBytes();
         var timer = new Stopwatch();
+        var updateTimer = new Stopwatch();     // Update alone: a slow frame is either the world or the painting, and the number says which
+        double worstUpdate = 0;
         int frames = 0;
         var lastSixty = new Queue<double>();   // the last 60 frame times, oldest first: a one-second window that slides along
         double windowSum = 0, worstSecond = 0, slowestFrame = 0, before = 0;
         for (double t = 0; t < seconds; t += step)
         {
             timer.Start();
+            updateTimer.Restart();
             scene.Update(step);
+            updateTimer.Stop();
             scene.Render(frame);   // render every step, so the timing is realistic
             timer.Stop();
+            if (frames > 60) worstUpdate = Math.Max(worstUpdate, updateTimer.Elapsed.TotalMilliseconds);
             frames++;
 
             double now = timer.Elapsed.TotalMilliseconds, took = now - before;
@@ -136,7 +207,8 @@ public static class ScreensaverApp
         File.WriteAllText(path + ".txt",
             $"{width}x{height}, {frames} frames, average {timer.Elapsed.TotalMilliseconds / frames:F2} ms per frame (update + render)"
             + (worstSecond > 0 ? $", worst second {worstSecond:F2} ms per frame, slowest frame {slowestFrame:F1} ms" : "")
-            + $", garbage collections {GC.CollectionCount(0) - gc0}/{GC.CollectionCount(1) - gc1}/{GC.CollectionCount(2) - gc2} (gen 0/1/2)\n");
+            + $", garbage collections {GC.CollectionCount(0) - gc0}/{GC.CollectionCount(1) - gc1}/{GC.CollectionCount(2) - gc2} (gen 0/1/2)"
+            + $", allocated {(GC.GetTotalAllocatedBytes() - alloc0) / 1048576.0 / Math.Max(1, seconds):F1} MB per second, slowest update {worstUpdate:F1} ms\n");
     }
 
     /// <summary>

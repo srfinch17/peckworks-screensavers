@@ -30,6 +30,8 @@ public static class Sections
     private static readonly bool On = !string.IsNullOrEmpty(Path);
     private static readonly Stopwatch Clock = new();
     private static readonly Dictionary<string, double> Totals = new();
+    private static readonly Dictionary<string, double> Worst = new();      // the slowest single frame of each section: a hitch hides in an average
+    private static readonly Dictionary<string, int> WorstAt = new();       // and which frame it was, so the moment can be looked up in a log
     private static readonly List<string> Order = new();
     private static int _frames;
     private static long _last;
@@ -48,6 +50,19 @@ public static class Sections
         _frames++;
     }
 
+    /// <summary>
+    /// Start the laps again from now WITHOUT counting a frame: for timing the
+    /// parts of Update, which runs before Render's Begin. In the live window the
+    /// time since the last mark would include the present and the wait for
+    /// the screen, which are not the scene's doing, so Update calls Lap first.
+    /// </summary>
+    public static void Lap()
+    {
+        if (!On) return;
+        if (!Clock.IsRunning) Clock.Start();
+        _last = Clock.ElapsedTicks;
+    }
+
     /// <summary>The part called "name" has just finished: its time is the time since the last mark (or Begin).</summary>
     public static void Mark(string name)
     {
@@ -57,17 +72,18 @@ public static class Sections
         _last = now;
         if (!Totals.TryGetValue(name, out double total)) Order.Add(name);
         Totals[name] = total + ms;
+        if (_frames > 60 && (!Worst.TryGetValue(name, out double worst) || ms > worst)) { Worst[name] = ms; WorstAt[name] = _frames; }   // after the first second: the first frames pay for setup, not for the scene
     }
 
     private static void Write()
     {
         if (_frames == 0) return;
         double all = Totals.Values.Sum();
-        var lines = new List<string> { $"{_frames} frames, {all / _frames:F2} ms per frame in sections" };
+        var lines = new List<string> { $"{_frames} frames, {all / _frames:F2} ms per frame in sections (average, share, and the slowest single frame after the first second)" };
         foreach (string name in Order)
         {
             double ms = Totals[name] / _frames;
-            lines.Add($"{name,-16} {ms,7:F2} ms  {(all > 0 ? ms * _frames / all * 100 : 0),5:F1}%");
+            lines.Add($"{name,-16} {ms,7:F2} ms  {(all > 0 ? ms * _frames / all * 100 : 0),5:F1}%   worst {Worst.GetValueOrDefault(name),7:F2} ms at frame {WorstAt.GetValueOrDefault(name)}");
         }
         try { File.WriteAllLines(Path!, lines); } catch (IOException) { }
     }

@@ -137,10 +137,16 @@ internal sealed class SakuraPondScene : IScreensaverScene
         return free;
     }
 
+    // The threat lists handed round each frame, kept from frame to frame and only re-made when their length changes
+    // (see Scratch.Gather at the end of this file).
+    private PointF[] _scary = [], _bumpers = [], _frogThreats = [], _bedThreats = [], _tadThreats = [];
+
     public void Update(double elapsedSeconds)
     {
         float dt = (float)Math.Min(elapsedSeconds, 0.1);
+        Sections.Lap();                   // the laps of Update, named "update: ..." in the section table (free unless PECKWORKS_SECTIONS is set)
         _wind.Update(dt);                 // first: everything below reads it
+        Sections.Mark("update: wind");
         // The fish steer round the turtles and the swimming snake, and are pushed out of
         // them if they meet (last frame's spines: near enough). The snake is solid too:
         // before this a koi could rise straight through it.
@@ -149,12 +155,15 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _frogs.AddSwimmers(_surface);              // and the frogs that are in the water (last frame's, as the snake's is)
         _ducks.AddSwimmers(_surface);              // and the ducks: a koi rising under one is pushed back down and steers round it
         _koi.Update(dt, _turtles, _surface);
+        Sections.Mark("update: koi");
         PointF[] koiHeads = _koi.Heads;
         PointF[] duckHeads = _ducks.Heads;
         // Everything small flees the same list: koi near the surface, the snake's head, the ducks' heads (a duck eats minnows and tadpoles).
-        PointF[] scary = _snake.Live ? [.. koiHeads, _snake.Head, .. duckHeads] : [.. koiHeads, .. duckHeads];
+        PointF[] scary = Scratch.Gather(ref _scary, koiHeads, duckHeads, one: _snake.Live ? _snake.Head : null);
         _minnows.Update(dt, scary);                // the minnows keep clear of the snake and the ducks as of a koi
+        Sections.Mark("update: minnows");
         _turtles.Update(dt, _snake.Live ? _snake.Head : null, _koi.Bodies);   // a basking turtle slips in when the snake comes near; a swimming one steers round the fish
+        Sections.Mark("update: turtles");
         _petals.Update(dt);
         // Nothing passes through a floating petal: whatever has its back up at
         // the surface (a koi gulping or brushing it, a turtle paddling, the
@@ -165,27 +174,32 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _frogs.PushPetals(_petals);
         _ducks.PushPetals(_petals);
         _tadpoles.PushPetals(_petals);             // only a froglet swimming off at the surface; a tadpole is under them
+        Sections.Mark("update: petals, pushes");
         // The snake is told where everything that could touch it is: koi heads and
         // middles, turtle noses and shells, the nose of every lizard that is out (its spot
         // from last frame; they are updated after, which is close enough for a touch).
         PointF[] turtleSpots = _turtles.Spots;
         PointF[] duckBeads = _ducks.Beads;                     // every other point along every duck and duckling on the picture (empty when none)
-        PointF[] bumpers = [.. koiHeads, .. turtleSpots, .. _lizards.Noses, .. duckBeads];   // a touch from any of them startles the snake
+        PointF[] bumpers = Scratch.Gather(ref _bumpers, koiHeads, turtleSpots, _lizards.Noses, duckBeads);   // a touch from any of them startles the snake
         _snake.Avoid(duckBeads, _pond.U * 0.02f);             // and it swims round the ducks as it does round the rocks (nothing moves a duck)
         _snake.Update(dt, bumpers, _lizards, _mice);   // and who it may meet on the bank: it can stalk and eat a lizard or a mouse
+        Sections.Mark("update: snake");
         _lizards.Update(dt, _snake.Live ? _snake.Head : null);   // the lizards run from the snake too
         _mice.Update(dt, _snake.Live ? _snake.Head : null, _lizards.Noses);   // the mice run from the snake and the lizards too
-        _frogs.Update(dt, _snake.Live ? _snake.Head : null, duckBeads.Length > 0 ? [.. koiHeads, .. duckBeads] : koiHeads, turtleSpots, _lizards.Noses);   // the frogs leap or dive from all of them (any part of a duck counts as a koi's head: a swimming frog dives from it and never lands on one)
-        PointF[] bedThreats = [.. _koi.BedHeads, .. turtleSpots, .. duckHeads];   // every koi whatever its depth: the fish passing over the shallows are the ones the bed animals must fear
+        Sections.Mark("update: lizards, mice");
+        _frogs.Update(dt, _snake.Live ? _snake.Head : null, duckBeads.Length > 0 ? Scratch.Gather(ref _frogThreats, koiHeads, duckBeads) : koiHeads, turtleSpots, _lizards.Noses);   // the frogs leap or dive from all of them (any part of a duck counts as a koi's head: a swimming frog dives from it and never lands on one)
+        PointF[] bedThreats = Scratch.Gather(ref _bedThreats, _koi.BedHeads, turtleSpots, duckHeads);   // every koi whatever its depth: the fish passing over the shallows are the ones the bed animals must fear
         PointF[] tadThreats = bedThreats;
-        if (_snake.Live) tadThreats = [.. tadThreats, _snake.Head];
-        if (_crayfish.Spot is PointF crayAt) tadThreats = [.. tadThreats, crayAt];   // the one animal that eats them
+        if (_snake.Live || _crayfish.Spot != null)   // plus the snake's head, and the crayfish (the one animal that eats them)
+            tadThreats = Scratch.Gather(ref _tadThreats, bedThreats, one: _snake.Live ? _snake.Head : null, two: _crayfish.Spot);
         _tadpoles.Update(dt, tadThreats);                                              // the tadpoles scatter from all of them
+        Sections.Mark("update: frogs, tadpoles");
         _crayfish.Update(dt, bedThreats);                                                 // the crayfish flips backward from a fish or a turtle over it
         _ducks.Update(dt, _snake.Live ? _snake.Head : null, _turtles.All, _surface);   // the ducks feel round the turtle's shell, the snake's body and the swimming frogs
         _dragonflies.Update(dt);
         _swallows.Update(dt);
         _ripples.Update(dt);
+        Sections.Mark("update: crayfish to ripples");
     }
 
     // The Sections marks cost nothing unless PECKWORKS_SECTIONS names a
@@ -236,3 +250,45 @@ internal sealed class SakuraPondScene : IScreensaverScene
 
     public void Dispose() { }
 }
+
+/// <summary>
+/// Lists of points made afresh each frame without making garbage, and
+/// without a first-use compile in the middle of a frame.
+///
+/// FEYNMAN VERSION: writing a list as [.. a, .. b] (a "collection spread")
+/// reads well, but it builds a new array every frame (garbage for the
+/// collector to sweep up, a pause now and then), and the first time a given
+/// spread runs the runtime compiles, at full strength, the framework's
+/// general-purpose code behind it for THAT element type: the shared array
+/// pool for PointF took 7 ms on the frame the snake first appeared
+/// (2026-10-20). Copying into an array kept from last frame does neither.
+/// The array is only remade when the count changes (a duck family arriving
+/// or leaving), because the animals that read these lists take plain arrays
+/// and read their Length.
+/// </summary>
+internal static class Scratch
+{
+    private static readonly List<PointF> List = new(256);
+
+    /// <summary>All of a, b, c and d (any may be null) and the two optional single points, in that order, in an array kept across frames.</summary>
+    public static PointF[] Gather(ref PointF[] keep, IEnumerable<PointF>? a, IEnumerable<PointF>? b = null, IEnumerable<PointF>? c = null, IEnumerable<PointF>? d = null, PointF? one = null, PointF? two = null)
+    {
+        List.Clear();
+        if (a != null) List.AddRange(a);
+        if (b != null) List.AddRange(b);
+        if (c != null) List.AddRange(c);
+        if (d != null) List.AddRange(d);
+        if (one is PointF p1) List.Add(p1);
+        if (two is PointF p2) List.Add(p2);
+        return Keep(ref keep, List);
+    }
+
+    /// <summary>The list's points in an array kept across frames (remade only when the count changes).</summary>
+    public static PointF[] Keep(ref PointF[] keep, List<PointF> from)
+    {
+        if (keep.Length != from.Count) keep = new PointF[from.Count];
+        from.CopyTo(keep);
+        return keep;
+    }
+}
+

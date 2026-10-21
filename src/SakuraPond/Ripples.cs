@@ -28,6 +28,16 @@ internal sealed class Ripples
     }
 
     private readonly List<Ring> _rings = new();
+
+    /// <summary>A ring worked out for this frame's draw: everything DrawRow needs, computed once per ring, not per row.</summary>
+    private struct Prep
+    {
+        public float X, Y, Radius, Band, A, Outer, Inner;
+        public int Y0, Y1;
+    }
+    private readonly Prep[] _prep = new Prep[Most];
+    private int _prepCount;
+    private FrameBuffer? _fb;
     private readonly Pond _pond;
     private readonly bool[] _where;      // open water and not under a branch
     private const int Most = 32;         // a cap, so a flurry of landings cannot pile up cost (48 rings cost 7 ms in one second at 1440p)
@@ -93,40 +103,79 @@ internal sealed class Ripples
         }
     }
 
+    /// <summary>
+    /// Paints every ring. The rows of the picture are split into bands and the
+    /// bands are painted on separate cores; each band paints, row by row, the
+    /// rings that cross it, in the rings' own order. No two bands share a row,
+    /// so no two cores ever touch the same pixel and the picture is, pixel for
+    /// pixel, the one the old ring-by-ring loop painted (checked by a pixel
+    /// diff at two seeds). A frame with a ring or two is painted straight
+    /// through: handing work to the thread pool costs more than it saves then.
+    /// At the 2048 draw width the rings were 1.2 ms of a 9.7 ms frame drawn one
+    /// after another, one core busy and the rest idle.
+    /// </summary>
     public void Draw(FrameBuffer fb)
     {
-        foreach (Ring r in _rings) DrawRing(fb, r);
-    }
-
-    private void DrawRing(FrameBuffer fb, in Ring r)
-    {
-        float life = r.Age / r.Life;
-        float radius = r.Start + r.Speed * r.Age;
-        float band = MathF.Max(1.2f, _pond.U * 0.0025f * (1 + 2 * life) * r.Width);    // the ring gets wider as it spreads
-        // Strong at the start, fading out; a gentle fade-in over the first moment so it does not pop.
-        float a = r.Strength * 0.22f * (1 - life) * (1 - life) * MathF.Min(1, r.Age * 8);
-        if (a < 0.005f) return;
-        float outer = radius + band * 2.5f, inner = MathF.Max(0, radius - band * 2.5f);
-        float ry = outer * Squash;
-        int w = fb.Width;
-        int y0 = Math.Max(0, (int)(r.Y - ry)), y1 = Math.Min(fb.Height - 1, (int)(r.Y + ry));
-        uint[] px = fb.Pixels;
-        for (int y = y0; y <= y1; y++)
+        _prepCount = 0;
+        int rows = 0;
+        foreach (Ring r in _rings)
         {
-            // In the ring's own round frame, this row is dy away from the middle.
-            float dy = (y + 0.5f - r.Y) / Squash;
-            float xo2 = outer * outer - dy * dy;
-            if (xo2 <= 0) continue;
-            float xo = MathF.Sqrt(xo2);
-            float xi2 = inner * inner - dy * dy;
-            float xi = xi2 > 0 ? MathF.Sqrt(xi2) : 0;
-            // Two spans on this row: the left arc and the right arc (one span if the row is past the hole).
-            Span(fb, px, w, y, r.X - xo, r.X - xi, r, dy, radius, band, a);
-            Span(fb, px, w, y, r.X + xi, r.X + xo, r, dy, radius, band, a);
+            float life = r.Age / r.Life;
+            float radius = r.Start + r.Speed * r.Age;
+            float band = MathF.Max(1.2f, _pond.U * 0.0025f * (1 + 2 * life) * r.Width);    // the ring gets wider as it spreads
+            // Strong at the start, fading out; a gentle fade-in over the first moment so it does not pop.
+            float a = r.Strength * 0.22f * (1 - life) * (1 - life) * MathF.Min(1, r.Age * 8);
+            if (a < 0.005f) continue;
+            float outer = radius + band * 2.5f, inner = MathF.Max(0, radius - band * 2.5f);
+            float ry = outer * Squash;
+            int y0 = Math.Max(0, (int)(r.Y - ry)), y1 = Math.Min(fb.Height - 1, (int)(r.Y + ry));
+            if (y1 < y0) continue;
+            _prep[_prepCount++] = new Prep { X = r.X, Y = r.Y, Radius = radius, Band = band, A = a, Outer = outer, Inner = inner, Y0 = y0, Y1 = y1 };
+            rows += y1 - y0 + 1;
         }
+        if (_prepCount == 0) return;
+        _fb = fb;
+        const int BandRows = 32;
+        if (rows < 400)
+        {
+            // Little to do: one core, no hand-off.
+            for (int k = 0; k < _prepCount; k++)
+                for (int y = _prep[k].Y0; y <= _prep[k].Y1; y++) DrawRow(fb, k, y);
+        }
+        else
+        {
+            int bands = (fb.Height + BandRows - 1) / BandRows;
+            Parallel.For(0, bands, band =>
+            {
+                FrameBuffer f = _fb!;
+                int by0 = band * BandRows, by1 = Math.Min(f.Height - 1, by0 + BandRows - 1);
+                for (int k = 0; k < _prepCount; k++)
+                {
+                    int y0 = Math.Max(by0, _prep[k].Y0), y1 = Math.Min(by1, _prep[k].Y1);
+                    for (int y = y0; y <= y1; y++) DrawRow(f, k, y);
+                }
+            });
+        }
+        _fb = null;
     }
 
-    private void Span(FrameBuffer fb, uint[] px, int w, int y, float from, float to, in Ring r, float dy, float radius, float band, float a)
+    /// <summary>One row of one prepared ring: the two arcs it makes on that row.</summary>
+    private void DrawRow(FrameBuffer fb, int k, int y)
+    {
+        ref Prep p = ref _prep[k];
+        // In the ring's own round frame, this row is dy away from the middle.
+        float dy = (y + 0.5f - p.Y) / Squash;
+        float xo2 = p.Outer * p.Outer - dy * dy;
+        if (xo2 <= 0) return;
+        float xo = MathF.Sqrt(xo2);
+        float xi2 = p.Inner * p.Inner - dy * dy;
+        float xi = xi2 > 0 ? MathF.Sqrt(xi2) : 0;
+        // Two spans on this row: the left arc and the right arc (one span if the row is past the hole).
+        Span(fb.Pixels, fb.Width, y, p.X - xo, p.X - xi, p.X, dy, p.Radius, p.Band, p.A);
+        Span(fb.Pixels, fb.Width, y, p.X + xi, p.X + xo, p.X, dy, p.Radius, p.Band, p.A);
+    }
+
+    private void Span(uint[] px, int w, int y, float from, float to, float cx, float dy, float radius, float band, float a)
     {
         int x0 = Math.Max(0, (int)from), x1 = Math.Min(w - 1, (int)to);
         int row = y * w;
@@ -134,7 +183,7 @@ internal sealed class Ripples
         {
             int i = row + x;
             if (!_where[i]) continue;
-            float dx = x + 0.5f - r.X;
+            float dx = x + 0.5f - cx;
             float d = (MathF.Sqrt(dx * dx + dy * dy) - radius) / band;     // 0 on the crest, negative inside
             int k = (int)((d - ProfileFrom) / ProfileStep);
             if (k < 0 || k >= Profile.Length) continue;                  // too far from the crest to show

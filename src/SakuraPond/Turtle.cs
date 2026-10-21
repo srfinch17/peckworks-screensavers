@@ -38,7 +38,17 @@ internal sealed class Turtles
     }
 
     /// <summary>A point at each turtle's nose and under its shell this frame, screen pixels (the snake keeps clear of them).</summary>
-    public PointF[] Spots => _all.SelectMany(t => new[] { t.Nose, t.Middle }).ToArray();
+    public PointF[] Spots
+    {
+        get
+        {
+            _spotList.Clear();
+            foreach (Turtle t in _all) { _spotList.Add(t.Nose); _spotList.Add(t.Middle); }
+            return Scratch.Keep(ref _spots, _spotList);      // a kept array, not a new one every frame
+        }
+    }
+    private readonly List<PointF> _spotList = new(8);
+    private PointF[] _spots = [];
 
     /// <summary>The turtles themselves, for KoiSchool to deal into its depth order (a turtle is drawn between the koi deeper and shallower than it).</summary>
     public IReadOnlyList<Turtle> All => _all;

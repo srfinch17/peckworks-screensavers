@@ -254,8 +254,13 @@ internal static class FramePump
             // Go to two pages a frame when frames cannot make one page with a
             // little to spare; come back only once they are clearly quick
             // again, and never flip within half a second of the last change.
-            if (!_halfRate && _costAvg > PageMs * 0.88 && _since > 30) { _halfRate = true; _since = 0; }
-            else if (_halfRate && _costAvg < PageMs * 0.62 && _since > 120) { _halfRate = false; _since = 0; }
+            // Drop to an even 30 when the average cost nears a page (a frame that misses its page every other time is
+            // the judder the eye sees), and come back once it sits under 78 percent of a page for a second and a half.
+            // The way back was 62 percent for four seconds: on a 4K screen at the 2048 draw width the cost sits at 10 to
+            // 11 ms, so one slow patch (the first frames, a duck visit) locked the pump at 30 fps for the rest of the run
+            // (measured 2026-10-20: 299 of 300 frames at 33 ms with the cost long back at 11).
+            if (!_halfRate && _costAvg > PageMs * 0.9 && _since > 30) { _halfRate = true; _since = 0; }
+            else if (_halfRate && _costAvg < PageMs * 0.78 && _since > 45) { _halfRate = false; _since = 0; }
             WaitForNextRefresh();
             if (_halfRate) WaitForNextRefresh();
         }

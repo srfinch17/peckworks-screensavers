@@ -203,6 +203,50 @@ nothing moves slower, only in bigger steps. The other lever is drawing fewer pix
 enlarges the picture; on the owner's 4K laptop 2048 holds 60 frames a second where 2560 held an
 even 30.
 
+*The first second, and the frame an animal first appears (2026-10-20).* Two kinds of stutter were
+measured on the owner's 4K laptop with the frame log and the section timer, and neither was in the
+painting. The first: a .NET program ships as a recipe, and each method is turned into machine code
+(the JIT, "just in time") the first time it runs. By default that happens in two tiers, a quick rough
+compile first and the optimised one later in the background, so for the first seconds every painter
+ran its rough version at half speed: the first frames cost 15 to 20 ms instead of 9, the pump dropped
+to an even 30, and because the cost then sat right on the pump's way back (62 percent of a page for
+four seconds) it could stay at 30 for the whole run (299 of the first 300 frames at 33 ms). Now the
+tiers are off for every saver (`src/Directory.Build.props`: `TieredCompilation` false, so every method
+is compiled at full strength the first time), and the pump comes back once the cost sits under 78
+percent of a page for a second and a half (it drops to 30 at 90 percent). The second: with the tiers
+off, the first call of a big method pays the full compile inside the frame, 10 ms and more, and in a
+screensaver the first call of the snake's or a lizard's code is the frame that animal first appears:
+one dropped frame, exactly as something new came on. So at start-up `ScreensaverApp` compiles every
+method of the engine and the saver on a helper thread (`CompileEverythingNow`, `RuntimeHelpers.
+PrepareMethod`) while the window is made and the scene pre-warmed. What that pass cannot reach is the
+framework's own generic code for OUR types, which is compiled the first time a given shape of call
+runs: a collection spread (`[.. a, .. b]`) over points compiled the shared array pool for `PointF` on
+the frame the snake first came (7 ms), `Rocks.Where(...).ToList()` compiled on a lizard's first climb
+(4.5 ms), `OrderBy` over the falling petals on the first frame. The rule that came out of it: no LINQ
+and no collection spreads on a per-frame or per-event path of a saver; plain loops into arrays kept
+from frame to frame (`Scratch.Gather`, `Scratch.Keep` in `SakuraPondScene.cs`), which also make no
+garbage. Found with the JIT's own list of what it compiled and when (`DOTNET_JitDisasmSummary=1`,
+`DOTNET_JitStdOutFile=<file>`): the methods at the END of that list are the ones compiled mid-run.
+After: a steady 60 from the fourth frame (298 of 300 on-screen frames at one page, 153 before), the
+slowest update 1.8 ms against 13.6, the frame at the 2048 draw width 8.8 ms against 9.9.
+
+*Reading a hitch.* The section timer (`PECKWORKS_SECTIONS`) now prints, beside each section's average,
+its slowest single frame after the first second and WHICH frame it was, and the scene's Update is
+timed in laps of its own (`Sections.Lap()` at the top of Update, marks named "update: koi" and so on),
+because a hitch hides in an average and an update spike looks exactly like a render spike from
+outside. The snapshot's timing line also says how much the run allocated per second and the slowest
+Update alone. An average that is fine and a slowest frame that is not points at an event (a first
+visit, a hatch, a collection); the worst-frame column names the section and the frame, and the
+frame names the moment in the logs.
+
+*The ripples in parallel (2026-10-20).* The rings were painted one after another on one core, 1.2 ms
+of a 9.7 ms frame at the 2048 width. Now every ring is prepared once per frame (radius, band,
+strength, the rows it covers) and the rows of the picture are split into bands of 32 painted on
+separate cores, each band painting, row by row, the rings that cross it, in the rings' own order: no
+two cores ever touch the same pixel, and the picture is pixel for pixel the old one (checked by a
+frame diff at two seeds, 0 pixels). 0.84 ms to 0.35; a frame with only a few rows of ring is painted
+straight through, because handing work to the thread pool costs more than it saves then.
+
 *Drawing smaller on purpose.* A saver built from a small photo can say `MaxRenderWidth`: on a
 wider screen it draws its sheet at that width and Windows stretches it to fill the screen
 (`StretchDIBits`). Drawing every pixel of a 4K screen from a 1500 pixel picture adds work, not

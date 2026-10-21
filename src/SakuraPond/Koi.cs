@@ -187,7 +187,19 @@ internal sealed class KoiSchool
     /// anything on it (its head and its middle), screen pixels: the minnows
     /// and the snake keep clear of them. A fish deep down is out of their reach.
     /// </summary>
-    public PointF[] Heads => _fish.Where(f => Light.DepthOf(f.Z) < 0.06f).SelectMany(f => new[] { f.Head, f.Middle }).ToArray();
+    public PointF[] Heads
+    {
+        get
+        {
+            // A plain loop into a kept array: the LINQ version made a new array and an iterator chain every frame.
+            _headList.Clear();
+            foreach (Koi f in _fish)
+                if (Light.DepthOf(f.Z) < 0.06f) { _headList.Add(f.Head); _headList.Add(f.Middle); }
+            return Scratch.Keep(ref _heads, _headList);
+        }
+    }
+    private readonly List<PointF> _headList = new(32);
+    private PointF[] _heads = [];
 
     /// <summary>
     /// The same two points of EVERY koi, whatever its depth: for the animals on the bed (the tadpoles, the crayfish). A fish
@@ -1313,6 +1325,13 @@ internal sealed class Koi : Body
         y = _partner._y - hy * behind + hx * _side * aside;
     }
 
+    /// <summary>Is any fish in the school chasing or being chased right now? (A loop: the LINQ Any allocated a closure at every decision.)</summary>
+    private static bool AnyChasing(IEnumerable<Koi> school)
+    {
+        foreach (Koi k in school) if (k._doing is Doing.Chase or Doing.Flee) return true;
+        return false;
+    }
+
     /// <summary>Rolls the next doing, weighted by personality and by what there is to do.</summary>
     private void Decide(Koi[] school)
     {
@@ -1328,7 +1347,7 @@ internal sealed class Koi : Body
         else if (friend != null && !CanKeepCompany(friend, true)) { friend = null; company = 0; }
         else company = friend != null ? Company(Liking(friend)) : 0;
         // A goldfish never chases a koi, only the odd fellow goldfish; a koi may chase anyone.
-        bool chaseOn = quarry != null && (!gold || quarry._kind == Kind.Goldfish) && _chaseCool.Ready && !school.Any(k => k._doing is Doing.Chase or Doing.Flee);   // one chase in the pond at a time
+        bool chaseOn = quarry != null && (!gold || quarry._kind == Kind.Goldfish) && _chaseCool.Ready && !AnyChasing(school);   // one chase in the pond at a time
         // The dice faces: each doing's weight. Wander is always on the dice.
         float wWander = 1f;
         float wRest = (0.25f + 0.9f * (1 - _energy)) * (_doing == Doing.Rest ? 0.4f : 1f) * (1.3f - 0.6f * _hunger);   // and a rest is less likely straight after a rest, or when hungry

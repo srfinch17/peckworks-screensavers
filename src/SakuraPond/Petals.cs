@@ -45,6 +45,7 @@ internal sealed class Petals
     private readonly Random _rng;
     private readonly float _u;
     private readonly List<Falling> _falling = new();
+    private Falling[] _drawOrder = [];                     // the falling petals sorted far to near for drawing (see DrawFalling)
     private readonly List<Floating> _floating = new();
     private readonly int _fallingCount, _floatingMost;
     private readonly (Color Pale, Color Deep) _colors = (Color.FromArgb(255, 246, 249), Color.FromArgb(255, 176, 199));
@@ -369,8 +370,21 @@ internal sealed class Petals
     /// <summary>The falling petals and their shadows. Drawn last: they are the nearest things to us.</summary>
     public void DrawFalling(FrameBuffer fb)
     {
-        foreach (Falling p in _falling.OrderBy(q => q.Height))
+        // Far to near. Sorted by hand into a kept copy (an insertion sort: a hundred petals, nearly in order already,
+        // so a few swaps a frame) because OrderBy built a sorted copy, an iterator and a key array every frame,
+        // and the order must be STABLE (two petals at one height keep their list order, as OrderBy kept it).
+        int n = _falling.Count;
+        if (_drawOrder.Length < n) _drawOrder = new Falling[Math.Max(16, n * 2)];
+        _falling.CopyTo(_drawOrder);
+        for (int i = 1; i < n; i++)
         {
+            Falling v = _drawOrder[i]; int k = i - 1;
+            while (k >= 0 && _drawOrder[k].Height > v.Height) { _drawOrder[k + 1] = _drawOrder[k]; k--; }
+            _drawOrder[k + 1] = v;
+        }
+        for (int di = 0; di < n; di++)
+        {
+            Falling p = _drawOrder[di];
             float h = p.Height * _u;
             // The shadow: a soft pale-dark smudge on the water or ground, sliding in to meet the petal.
             float sx = p.X + h * ShadowX, sy = p.Y + h * ShadowY;

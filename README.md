@@ -317,7 +317,12 @@ On a screen wider than the "Draw width" setting (2048 pixels by default) it draw
 and Windows enlarges the picture: the scene is soft and painterly, so the enlarging loses little,
 and fewer pixels is what keeps a steady 60 frames a second on a 4K laptop (2560 is sharper and
 runs at an even 30 there). If a frame cannot be drawn and shown inside one screen refresh, the
-engine now holds an even 30 frames a second instead of juddering between 16 and 33 ms gaps.
+engine holds an even 30 frames a second instead of juddering between 16 and 33 ms gaps. Since
+2026-10-20 it holds 60 from the first second: every method is compiled at full strength before
+the first frame (tiered JIT off, and a start-up pass that compiles the whole programme on a
+helper thread), nothing is compiled or sorted on the frame an animal first appears, and the
+ripples are painted on several cores. On the 4K laptop at the default width that is 298 of 300
+on-screen frames at one refresh, where it was 153 before.
 
 ## Halloween
 

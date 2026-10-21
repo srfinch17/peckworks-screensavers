@@ -700,7 +700,13 @@ internal sealed class Lizard : Body, IPrey
                 return;
         }
         // The dash is over: stand still, or lie down if this was the run up onto a rock.
-        bool onRock = _pond.Rocks.Any(r => !r.InWater && Dist(r.Centre, ToScreen(_x, _y)) < r.Radius * 0.6f);
+        bool onRock = false;
+        PointF at = ToScreen(_x, _y);
+        for (int i = 0; i < _pond.Rocks.Count && !onRock; i++)     // a loop, not Any: no closure, nothing compiled at the first bask
+        {
+            BankRock r = _pond.Rocks[i];
+            onRock = !r.InWater && Dist(r.Centre, at) < r.Radius * 0.6f;
+        }
         if (onRock && _rng.NextDouble() < 0.7) _mind.Begin(Doing.Bask, (4 + 8 * (float)_rng.NextDouble()) * (0.6f + 0.9f * _bold));   // the bold bask longest
         else Stand((0.6f + 2.4f * (float)_rng.NextDouble()) * StillScale);
     }
@@ -781,7 +787,13 @@ internal sealed class Lizard : Body, IPrey
         if (face == 1)
         {
             // A rock to climb: a dry one within reach, not the one it is on. None in reach: it looks for company, or roams.
-            var near = _pond.Rocks.Where(r => !r.InWater && r.Radius > _u * 0.02f && Dist(r.Centre, here) < _u * 0.35f && Dist(r.Centre, here) > r.Radius).ToList();
+            List<BankRock> near = _nearRocks;                  // a kept list, not Where(...).ToList(): that compiled the framework's Where over rocks on the first climb (4.5 ms)
+            near.Clear();
+            for (int i = 0; i < _pond.Rocks.Count; i++)
+            {
+                BankRock r = _pond.Rocks[i];
+                if (!r.InWater && r.Radius > _u * 0.02f && Dist(r.Centre, here) < _u * 0.35f && Dist(r.Centre, here) > r.Radius) near.Add(r);
+            }
             if (near.Count > 0) { Go(Aim.Roam, near[_rng.Next(near.Count)].Centre, (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale); return; }
             face = 2;
         }
@@ -789,6 +801,8 @@ internal sealed class Lizard : Body, IPrey
         if (goal is not PointF gp) { Stand(1); return; }
         Go(Aim.Roam, gp, (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale);
     }
+
+    private readonly List<BankRock> _nearRocks = new(8);
 
     /// <summary>Somewhere on the land a little way off, in view, on a line that stays on land. With <paramref name="toward"/>, the candidate nearest to that point.</summary>
     private PointF? RoamGoal(PointF here, PointF? toward)
