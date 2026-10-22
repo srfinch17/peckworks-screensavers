@@ -152,6 +152,8 @@ internal sealed class CrayfishBody : Body
     private readonly float[] _cArm = new float[2], _cPin = new float[2], _cOpen = new float[2], _cExt = new float[2];
     private readonly float[] _reachLeft = new float[2], _reachSm = new float[2];
     private float _feedNext;
+    private float _walkBan;                              // seconds in which the dice may not pick a Walk (after a step was refused)
+    private float _homeStill;                            // seconds standing still on the way home (three: slide home under the stone)
     private int _feedSide;
     private readonly float[] _dice = new float[4];
     // ---- a chance meal (Tadpoles.cs): a tadpole on the bed within a few steps ----
@@ -367,6 +369,7 @@ internal sealed class CrayfishBody : Body
         _snatch.Tick(dt);
         if (!(_doing == Doing.Walk && _toPrey) && _snatch.Hunting) { _snatch.Abandon(); _toPrey = false; }   // a scare, the retreat: the meal is forgotten
         _visitLeft -= dt;
+        _walkBan -= dt;
         float ox = _x, oy = _y;
         _sc = Light.Scale(_z);
         _len = _L * _sc;
@@ -489,7 +492,10 @@ internal sealed class CrayfishBody : Body
         bool canBack = FreeStep(_x - MathF.Cos(_heading) * _u * 0.03f, _y - MathF.Sin(_heading) * _u * 0.03f, _heading, true);
         // A feed lasts 10 to 30 s and a walk a few, so the walk gets the bigger face to keep the time about even.
         _dice[0] = (0.6f + 0.9f * _hungry) * (_doing == Doing.Feed ? 0.4f : 1f);
-        _dice[1] = haveGoal ? 1.8f + 0.8f * _hungry + 0.4f * _bold : 0f;
+        // No Walk for two seconds after a step was refused: rolled again on the spot, the dice picked a new Walk two times in
+        // three, the body swung toward the new goal, the step was refused again, and so on frame after frame: a crayfish
+        // beside a stone shivering between two headings. It feeds or steps back instead, and the next Walk starts fresh.
+        _dice[1] = haveGoal && _walkBan <= 0 ? 1.8f + 0.8f * _hungry + 0.4f * _bold : 0f;
         _dice[2] = 0.08f + 0.1f * _bold;
         _dice[3] = canBack ? 0.2f : 0f;
         int face = Dice.Pick(_rng, _dice);
@@ -556,7 +562,12 @@ internal sealed class CrayfishBody : Body
             _gx = _snatch.Prey.X; _gy = _snatch.Prey.Y;
         }
         float dx = _gx - _x, dy = _gy - _y, d = MathF.Sqrt(dx * dx + dy * dy);
-        if (d < _u * 0.004f || (decideAtEnd && _mind.Over)) { if (decideAtEnd) Decide(); return; }
+        // Arrived when the goal is within a quarter of a length of the nose: the claws reach that far, and a turn swings the
+        // nose round the middle on a circle of that radius, so a goal nearer than that can lie on either side of the nose
+        // from one frame to the next. With "arrived" at a few pixels the body swung left, the bearing to the goal jumped
+        // right, it swung right, the bearing jumped left: a crayfish shivering on the spot until the walk's clock ran out
+        // (the owner's "jitters and vibrates"; the log showed the heading flipping 0.17 rad every four frames).
+        if (d < _len * 0.25f || (decideAtEnd && _mind.Over)) { if (decideAtEnd) Decide(); return; }
         float err = Wrap(MathF.Atan2(dy, dx) - _heading);
         Turn(_heading + Math.Clamp(err, -2.6f * dt, 2.6f * dt));
         float go = Math.Clamp(1 - MathF.Abs(err), 0, 1);
@@ -564,8 +575,8 @@ internal sealed class CrayfishBody : Body
         if (step <= 0) return;
         float nx = _x + MathF.Cos(_heading) * step, ny = _y + MathF.Sin(_heading) * step;
         if (FreeStep(nx, ny, _heading, false)) { _x = nx; _y = ny; }
-        else if (decideAtEnd) Decide();
-        else _wayValid = false;
+        else if (decideAtEnd) { _walkBan = 2f; Decide(); }
+        else { _wayValid = false; _planWait = 0.8f; }       // going home: hold for most of a second before the next waypoint is planned (a replan every quarter second swung it to and fro)
     }
 
     private void DoFeed(float dt)
@@ -734,7 +745,7 @@ internal sealed class CrayfishBody : Body
 
     private void StartRetreat()
     {
-        _stage = 0; _wayValid = false; _planWait = 0; _stuck = 0;
+        _stage = 0; _wayValid = false; _planWait = 0; _stuck = 0; _homeStill = 0;
         _flipActive = false;
         _mind.Begin(Doing.Retreat, Mind<Doing>.Forever);
     }
@@ -751,7 +762,11 @@ internal sealed class CrayfishBody : Body
             case 0:
                 {
                     float hd = MathF.Sqrt((_hx - _x) * (_hx - _x) + (_hy - _y) * (_hy - _y));
-                    if (hd < _u * 0.012f) { _stage = 1; break; }
+                    // At the mouth when within the claws' reach (the walk stops there; "within 0.012u" was a hair inside that,
+                    // and a crayfish stood at the mouth for the rest of the run waiting for a step the walk would never take).
+                    if (hd < MathF.Max(_u * 0.012f, _len * 0.3f)) { _stage = 1; break; }
+                    // Standing on the way home for three seconds, whatever the reason: slide straight home under the stone.
+                    float sx0 = _x, sy0 = _y;
                     _planWait -= dt;
                     if (!_wayValid && _planWait <= 0) PlanWay(hd);
                     if (_wayValid)
@@ -759,13 +774,27 @@ internal sealed class CrayfishBody : Body
                         _gx = _wx; _gy = _wy;
                         DoWalk(dt, 1.5f, false);
                         float wd = MathF.Sqrt((_wx - _x) * (_wx - _x) + (_wy - _y) * (_wy - _y));
-                        if (wd < _u * 0.004f && !_wayHome) _wayValid = false;
+                        if (wd < _len * 0.25f && !_wayHome) _wayValid = false;      // a waypoint counts as reached at a claw's reach, like a walk's goal
                     }
                     else
                     {
+                        // Boxed in (it walked nose first into a notch of the bank where every way out but the way in puts
+                        // its middle on stone, and the planner found no free line for half a second): the way out is the
+                        // way in, so it backs out along its own heading while the planner keeps trying. If three seconds of
+                        // that get nowhere it slides straight home under the stone (the picture is drawn on open water
+                        // only, so it goes under the stone's edge), never vanishing where it stands (it did, once in twelve
+                        // seeds, after six seconds standing still on the bed).
                         _stuck += dt;
-                        if (_stuck > 6) Hide();      // boxed in with no way round (counted by the instruments): it just goes
+                        if (_stuck > 0.5f)
+                        {
+                            float back = _u * 0.012f * dt;
+                            float bx = _x - MathF.Cos(_heading) * back, by = _y - MathF.Sin(_heading) * back;
+                            if (FreeStep(bx, by, _heading, true)) { _x = bx; _y = by; }
+                        }
                     }
+                    float mv = MathF.Abs(_x - sx0) + MathF.Abs(_y - sy0);
+                    _homeStill = mv < 0.05f ? _homeStill + dt : 0;
+                    if (_stuck > 3 || _homeStill > 3) { _stage = 2; _moveT = 0; _fromX = _x; _fromY = _y; _toX = _p0x; _toY = _p0y; }
                     break;
                 }
             case 1:

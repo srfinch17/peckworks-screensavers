@@ -915,7 +915,18 @@ dozen free walks lead away from the doorway. The picture is only drawn on open w
 the head and then the tail appear at the stone's edge as it comes out. On the bed its Z is the
 floor under its middle (never deeper than it), so it is sunk down the screen, hazed toward the
 water and shrunk exactly as a koi at that depth; a step to a pixel that is not open water, or
-where the haze would pass 0.65, is refused. It is solid to nothing: a koi is kept a margin of
+where the haze would pass 0.65, is refused. A walk has arrived when its goal is within a quarter
+of a length of the nose (the claws' reach): a turn swings the nose round the middle on a circle of
+that radius, so a goal nearer than that lay on one side of the nose one frame and the other side
+the next, and the crayfish shivered to and fro until the walk's clock ran out ("stuck on the rock,
+jitters and vibrates" when the goal sat beyond a stone). A refused step ends the walk and bans the
+next one for two seconds (rolled again at once, the dice picked a new walk toward a new goal, the
+body swung, the step was refused again, frame after frame), and on the way home a refused step
+holds the body for most of a second before the next waypoint is planned. Boxed in on the way home
+(it walked nose first into a notch of the bank where every way out but the way in puts its middle
+on stone) it backs out along its own heading while the planner keeps trying, and after three seconds
+of that slides straight home under the stone rather than vanishing where it stands (it did, once in
+twelve seeds). It is solid to nothing: a koi is kept a margin of
 water above the bed by its own rules, so every fish passes over it, and the crayfish reacts
 instead. A koi, turtle or duck within 0.09u (a bold crayfish: 0.06u) sends it flipping backward
 two or three times, 0.1u in 0.15 s each with a 0.4 s pause (a flip that would end on a refused
