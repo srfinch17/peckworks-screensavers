@@ -316,17 +316,28 @@ internal static class PondPainter
         }
         Write(bmp, px);
         uint[] beforeBranches = px;
-        List<PointF> spots = Branches(g, w, h, u, new Random(seed), 0, 0);
-        uint[] final = Read(bmp);
-        // The branches once more, the same seed, onto a clear sheet of their own: the scene lays
-        // that sheet over the frame every frame, swaying (Core's Boughs). The backdrop the scene
-        // restores is the picture WITHOUT them (beforeBranches), or they would show twice.
+        // The branches go onto a clear sheet of their own: the scene lays that sheet over the
+        // frame every frame, swaying (Core's Boughs). The backdrop the scene restores is the
+        // picture WITHOUT them (beforeBranches), or they would show twice. The finished picture
+        // (for the "open" stencil below) is the sheet laid over the backdrop once, here, which
+        // is what painting the branches straight onto it would have given.
         using var boughSheet = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        List<PointF> spots;
         using (var gbough = Graphics.FromImage(boughSheet))
         {
             gbough.Clear(Color.Transparent);
             gbough.SmoothingMode = SmoothingMode.AntiAlias;
-            Branches(gbough, w, h, u, new Random(seed), 0, 0);
+            spots = Branches(gbough, w, h, u, new Random(seed), 0, 0);
+        }
+        uint[] boughs = ReadArgb(boughSheet);
+        var final = new uint[px.Length];
+        for (int i = 0; i < px.Length; i++)
+        {
+            uint c = boughs[i], a = c >> 24, bg = beforeBranches[i];
+            if (a == 0) { final[i] = bg; continue; }
+            uint keep = 255 - a;
+            uint rr = (((bg >> 16) & 0xFF) * keep + ((c >> 16) & 0xFF) * a) / 255, gg = (((bg >> 8) & 0xFF) * keep + ((c >> 8) & 0xFF) * a) / 255, bb = ((bg & 0xFF) * keep + (c & 0xFF) * a) / 255;
+            final[i] = rr << 16 | gg << 8 | bb;
         }
         PointF[] treeRoots = [new PointF(-u * 0.04f, -u * 0.01f), new PointF(w + u * 0.05f, h * 0.26f)];   // the two crowns' centres (see Branches)
 
@@ -405,7 +416,7 @@ internal static class PondPainter
         return new Pond(room, gw, gh, cell)
         {
             Width = w, Height = h, U = u,
-            Pixels = beforeBranches, Branches = ReadArgb(boughSheet), TreeRoots = treeRoots,
+            Pixels = beforeBranches, Branches = boughs, TreeRoots = treeRoots,
             Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(),
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)

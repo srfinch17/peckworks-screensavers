@@ -61,15 +61,24 @@ internal sealed class SakuraPondScene : IScreensaverScene
 
     public SakuraPondScene(int width, int height, SakuraPondSettings settings)
     {
+        // How long the scene takes to build, part by part, when PECKWORKS_STARTLOG names a file
+        // (free otherwise): the painter, the boughs, the lawn's pages. A screensaver that takes
+        // seconds to appear is a screensaver that looks broken, so a build-time cost is a cost.
+        var startClock = System.Diagnostics.Stopwatch.StartNew();
+        string? startLog = Environment.GetEnvironmentVariable("PECKWORKS_STARTLOG");
+        void Lap(string what) { if (!string.IsNullOrEmpty(startLog)) File.AppendAllText(startLog, $"{what} {startClock.Elapsed.TotalMilliseconds:F0} ms\r\n"); }
         _pond = PondPainter.Paint(width, height, _rng);
+        Lap("painter");
         float u = _pond.U;
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
         _wind = new Wind(0.26f, u, Light.View);                   // to the right and a little toward us
         // The cherry boughs sway in that wind: full sway 0.7u out from a trunk, the tips swinging 0.018u at a full lean.
-        _boughs = new Boughs(width, height, _pond.Branches, _pond.TreeRoots, u * 0.7f, u * 0.018f, _wind, Light.View);
+        _boughs = new Boughs(width, height, _pond.Branches, _pond.TreeRoots, u * 0.7f, u * 0.018f, _wind, Light.View, _pond.Pixels);   // the still parts go into the backdrop here
+        Lap("boughs");
         _ripples = new Ripples(_pond, _waterInView);
         _lawn = new Lawn(width, height, _pond.Carpet, _pond.Grassy, u, _wind, Light.View, _rng, _pond.Open, _pond.Sun);   // never over a branch; shaded by its shadow
+        Lap("lawn");
 
         // The cattails: one clump in the shallows, 0.24u tall before foreshortening, stiff (0.7 of the grass's lean).
         _cattails = new Clumps(_wind, Light.View, width, _pond.Open, _pond.Sun);

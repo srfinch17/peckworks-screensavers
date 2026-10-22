@@ -1000,7 +1000,7 @@ public sealed class Lawn
 /// </summary>
 public sealed class Boughs
 {
-    private const int Tile = 16;
+    private const int Tile = 8;
     private readonly int _w, _h, _y0, _y1, _margin, _tw, _th;
     private readonly uint[] _rb, _ag;                           // the sheet, premultiplied and packed two channels to a number (see Lawn)
     private readonly byte[] _amp;                               // 0 to 255 per pixel: how far out along a bough it is (0 at a root)
@@ -1026,7 +1026,11 @@ public sealed class Boughs
     /// <param name="roots">Where each tree's trunk is (off the picture is fine): the sway grows with distance from the nearest.</param>
     /// <param name="reachPx">How far from a root a bough reaches its full sway.</param>
     /// <param name="maxSwayPx">The tip's shift at lean 1, in pixels.</param>
-    public Boughs(int width, int height, uint[] argb, PointF[] roots, float reachPx, float maxSwayPx, Wind wind, Overhead view)
+    /// <param name="backdrop">The scene's backdrop (0x00RRGGBB): the parts of the boughs that hardly move (the thick
+    /// wood and the crowns near the trunks, under a pixel of sway) are painted into it here, once, and left out of
+    /// the live sheet. A crown is the densest part of the picture and the stillest; laying it afresh every frame
+    /// was half the cost for nothing the eye could see.</param>
+    public Boughs(int width, int height, uint[] argb, PointF[] roots, float reachPx, float maxSwayPx, Wind wind, Overhead view, uint[] backdrop)
     {
         _w = width; _h = height;
         _roots = roots;
@@ -1037,18 +1041,14 @@ public sealed class Boughs
         _amp = new byte[argb.Length]; _tree = new byte[argb.Length];
         _rowMin = new int[height]; _rowMax = new int[height];
         _y0 = height; _y1 = -1;
+        // Below this much of the full sway a pixel is "still": with the tip at 26 px it moves under a pixel at a full lean.
+        const float still = 0.2f;
         for (int y = 0; y < height; y++)
         {
             _rowMin[y] = -1; _rowMax[y] = -1;
             for (int x = 0; x < width; x++)
             {
                 int i = y * width + x;
-                uint c = argb[i];
-                uint a = c >> 24;
-                uint r = ((c >> 16) & 0xFF) * a / 255, g = ((c >> 8) & 0xFF) * a / 255, b = (c & 0xFF) * a / 255;
-                _rb[i] = r << 16 | b;
-                _ag[i] = a << 16 | g;
-                if (a != 0) { if (_rowMin[y] < 0) _rowMin[y] = x; _rowMax[y] = x; }
                 // The nearest root, and how far out this pixel is: a gentle curve (the base stiff, the tips free).
                 float best = float.MaxValue; int bt = 0;
                 for (int t = 0; t < roots.Length; t++)
@@ -1057,23 +1057,46 @@ public sealed class Boughs
                     if (d < best) { best = d; bt = t; }
                 }
                 float outward = MathF.Min(1f, MathF.Sqrt(best) / reachPx);
-                _amp[i] = (byte)(MathF.Pow(outward, 1.4f) * 255);
+                float amp = MathF.Pow(outward, 1.4f);
+                _amp[i] = (byte)(amp * 255);
                 _tree[i] = (byte)bt;
+                uint c = argb[i];
+                uint a = c >> 24;
+                if (a == 0) continue;
+                if (amp < still)
+                {
+                    // Painted into the backdrop once, the way the painter would have.
+                    uint bg = backdrop[i];
+                    int keep = (int)(255 - a);
+                    int rr = ((int)((bg >> 16) & 0xFF) * keep + (int)((c >> 16) & 0xFF) * (int)a) / 255;
+                    int gg = ((int)((bg >> 8) & 0xFF) * keep + (int)((c >> 8) & 0xFF) * (int)a) / 255;
+                    int bb = ((int)(bg & 0xFF) * keep + (int)(c & 0xFF) * (int)a) / 255;
+                    backdrop[i] = (uint)(rr << 16 | gg << 8 | bb);
+                    continue;
+                }
+                uint r = ((c >> 16) & 0xFF) * a / 255, g = ((c >> 8) & 0xFF) * a / 255, b = (c & 0xFF) * a / 255;
+                _rb[i] = r << 16 | b;
+                _ag[i] = a << 16 | g;
+                if (_rowMin[y] < 0) _rowMin[y] = x;
+                _rowMax[y] = x;
             }
             if (_rowMin[y] >= 0) { _y0 = Math.Min(_y0, y); _y1 = Math.Max(_y1, y); }
         }
-        // The tiles: a tile is live if any bough pixel lies within the sway's reach of it.
+        // The tiles: a tile is live if any live bough pixel lies within ITS OWN sway's reach of it
+        // (a pixel near a trunk reaches a pixel or two; a tip reaches the full sway).
         _tw = (width + Tile - 1) / Tile; _th = (height + Tile - 1) / Tile;
         _tiles = new bool[_tw * _th];
-        int reachTiles = (_margin + Tile - 1) / Tile;
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
             {
-                if ((argb[y * width + x] >> 24) == 0) continue;
+                int i = y * width + x;
+                if ((_ag[i] >> 16) == 0) continue;
+                int reach = (int)MathF.Ceiling(maxSwayPx * _amp[i] / 255f) + 2;
+                int reachTiles = (reach + Tile - 1) / Tile;
                 int tx = x / Tile, ty = y / Tile;
                 for (int j = Math.Max(0, ty - reachTiles); j <= Math.Min(_th - 1, ty + reachTiles); j++)
-                    for (int i = Math.Max(0, tx - reachTiles); i <= Math.Min(_tw - 1, tx + reachTiles); i++)
-                        _tiles[j * _tw + i] = true;
+                    for (int k = Math.Max(0, tx - reachTiles); k <= Math.Min(_tw - 1, tx + reachTiles); k++)
+                        _tiles[j * _tw + k] = true;
             }
         _swayRb = new uint[argb.Length]; _swayAg = new uint[argb.Length];
         int n = roots.Length;
