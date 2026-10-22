@@ -199,9 +199,14 @@ recent frames took and, when they are too close to the page time to make it reli
 two pages per frame on purpose, every frame (an even 30), coming back to one page per frame once
 frames are clearly quick again. The scene is told the real time that passed either way, so
 nothing moves slower, only in bigger steps. The other lever is drawing fewer pixels: Sakura Pond's
-"Draw width" setting (2048 by default) is the width it draws at on a wider screen, and Windows
-enlarges the picture; on the owner's 4K laptop 2048 holds 60 frames a second where 2560 held an
-even 30.
+"Draw width" setting (1920 by default) is the width it draws at on a wider screen, and Windows
+enlarges the picture; on the owner's 4K laptop 2048 held 60 frames a second where 2560 held an
+even 30. The default went from 2048 to 1920 when the boughs began to sway (2026-10-22): the new
+build at 2048 took two pages on one frame in ten during a gust (269 of 300 frames at one page in
+the on-screen log, against 292 for the build before), and at 1920 it holds 292 to 294 of 300, the
+old build's figure. Splitting the boughs' work differently did not help: shifting every row on
+the carpet frames and none on the tuft frames made the peak bigger, not smaller (231 and 264 of
+300); it is the PEAK frame that drops, so the work has to be spread evenly, not moved.
 
 *The first second, and the frame an animal first appears (2026-10-20).* Two kinds of stutter were
 measured on the owner's 4K laptop with the frame log and the section timer, and neither was in the

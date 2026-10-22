@@ -336,7 +336,7 @@ mice live in the grass (0 to 3), how many clutches of tadpoles wriggle in the sh
 one by default), how often the crayfish comes out from under its rock, and how often a duck
 family swims by.
 
-On a screen wider than the "Draw width" setting (2048 pixels by default) it draws at that width
+On a screen wider than the "Draw width" setting (1920 pixels by default) it draws at that width
 and Windows enlarges the picture: the scene is soft and painterly, so the enlarging loses little,
 and fewer pixels is what keeps a steady 60 frames a second on a 4K laptop (2560 is sharper and
 runs at an even 30 there). If a frame cannot be drawn and shown inside one screen refresh, the
