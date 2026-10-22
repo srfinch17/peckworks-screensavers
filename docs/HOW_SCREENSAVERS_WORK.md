@@ -33,7 +33,7 @@ Two extra notes exist only for development:
 | Note                                  | What it does                                                      |
 |---------------------------------------|-------------------------------------------------------------------|
 | `/window`                             | Plays in a normal resizable window that ignores the mouse. Esc closes it. |
-| `/snapshot out.png [w h seconds]`     | Renders with no window at all, saves a PNG, and writes the time per frame to `out.png.txt` (average, worst second, slowest frame, garbage collections); with `PECKWORKS_SECTIONS` set to a file, also what each part of the frame cost |
+| `/snapshot out.png [w h seconds]`     | Renders with no window at all, saves a PNG, and writes the time per frame to `out.png.txt` (average, worst second, slowest frame, garbage collections); with `PECKWORKS_SECTIONS` set to a file, also what each part of the frame cost; with `PECKWORKS_STARTLOG` set to a file, Sakura Pond also writes how long each part of the scene took to BUILD (the painter, the boughs, the lawn's pages) |
 
 > **Gotcha found while building this:** if you launch a `.scr` by double-clicking it, or with
 > PowerShell's `Start-Process`, Windows' file association **replaces your arguments with `/S`**.
@@ -615,9 +615,14 @@ the wind's lean at the trunk, one swinging in 2.6 s for the thick base and one i
 tips, so a gust bends the boughs over and they swing back past upright and settle, as a branch
 does. The picture is sampled between pixels (four neighbours blended), so the motion is smooth
 at any fraction of a pixel; the shifting is done on alternate rows into a kept sheet and the kept
-sheet laid over the picture every frame, and 16-pixel tiles that no bough can reach are skipped
-(the first version resampled every row's whole painted stretch, which spans both trees: ten
-milliseconds at 1440p). Two things it does not do, said plainly: the branches' shadows on the
+sheet laid over the picture every frame; 8-pixel tiles that no live pixel can reach by its own sway
+are skipped; and the parts that hardly move at all (under a fifth of the full sway: the crowns and
+the thick wood near the trunks, under a pixel of motion at a full lean) are painted into the
+backdrop once when the scene is built and never laid live, with the whole sheet kept as the source
+so a live pixel at the zone's edge samples a neighbour that is there (cleared, it showed as a dark
+seam along the edge). The first version resampled every row's whole painted stretch, which spans
+both trees: ten milliseconds at 1440p; now about 440 thousand live pixels in 770 thousand tile
+pixels, and `PECKWORKS_STARTLOG` prints both. Two things it does not do, said plainly: the branches' shadows on the
 water are painted once and do not move with them (a soft dappled shadow shifting a few pixels is
 not missed), and anything that passes BEHIND a branch (a koi, a dragonfly, a low petal) is cut at
 the branch's resting footprint (`Pond.Open`), so for the few pixels a bough has swung away from,

@@ -1001,6 +1001,7 @@ public sealed class Lawn
 public sealed class Boughs
 {
     private const int Tile = 8;
+    private const byte StillByte = 51;                          // below a fifth of the full sway a pixel is "still": with the tip at 26 px it moves under a pixel at a full lean, so it is baked into the backdrop
     private readonly int _w, _h, _y0, _y1, _margin, _tw, _th;
     private readonly uint[] _rb, _ag;                           // the sheet, premultiplied and packed two channels to a number (see Lawn)
     private readonly byte[] _amp;                               // 0 to 255 per pixel: how far out along a bough it is (0 at a root)
@@ -1022,6 +1023,10 @@ public sealed class Boughs
     private readonly uint[] _swayRb, _swayAg;
     private int _frame;
 
+    /// <summary>How many pixels are laid live each frame (bough pixels outside the still zone), and how many pixels the live tiles hold: the cost, in numbers a log can carry.</summary>
+    public int LivePixels { get; }
+    public int TilePixels { get; }
+
     /// <param name="argb">The branches on a clear sheet, 0xAARRGGBB, the frame's size.</param>
     /// <param name="roots">Where each tree's trunk is (off the picture is fine): the sway grows with distance from the nearest.</param>
     /// <param name="reachPx">How far from a root a bough reaches its full sway.</param>
@@ -1041,8 +1046,7 @@ public sealed class Boughs
         _amp = new byte[argb.Length]; _tree = new byte[argb.Length];
         _rowMin = new int[height]; _rowMax = new int[height];
         _y0 = height; _y1 = -1;
-        // Below this much of the full sway a pixel is "still": with the tip at 26 px it moves under a pixel at a full lean.
-        const float still = 0.2f;
+        const float still = StillByte / 255f;
         for (int y = 0; y < height; y++)
         {
             _rowMin[y] = -1; _rowMax[y] = -1;
@@ -1063,9 +1067,15 @@ public sealed class Boughs
                 uint c = argb[i];
                 uint a = c >> 24;
                 if (a == 0) continue;
+                // The whole sheet stays as the SOURCE (a live pixel at the edge of the still zone
+                // samples a little way into it; cleared pixels there showed as a dark seam along
+                // the zone's edge), but a still pixel is painted into the backdrop once, the way
+                // the painter would have, and never laid live (see Draw).
+                uint r = ((c >> 16) & 0xFF) * a / 255, g = ((c >> 8) & 0xFF) * a / 255, b = (c & 0xFF) * a / 255;
+                _rb[i] = r << 16 | b;
+                _ag[i] = a << 16 | g;
                 if (amp < still)
                 {
-                    // Painted into the backdrop once, the way the painter would have.
                     uint bg = backdrop[i];
                     int keep = (int)(255 - a);
                     int rr = ((int)((bg >> 16) & 0xFF) * keep + (int)((c >> 16) & 0xFF) * (int)a) / 255;
@@ -1074,11 +1084,9 @@ public sealed class Boughs
                     backdrop[i] = (uint)(rr << 16 | gg << 8 | bb);
                     continue;
                 }
-                uint r = ((c >> 16) & 0xFF) * a / 255, g = ((c >> 8) & 0xFF) * a / 255, b = (c & 0xFF) * a / 255;
-                _rb[i] = r << 16 | b;
-                _ag[i] = a << 16 | g;
                 if (_rowMin[y] < 0) _rowMin[y] = x;
                 _rowMax[y] = x;
+                LivePixels++;
             }
             if (_rowMin[y] >= 0) { _y0 = Math.Min(_y0, y); _y1 = Math.Max(_y1, y); }
         }
@@ -1090,7 +1098,7 @@ public sealed class Boughs
             for (int x = 0; x < width; x++)
             {
                 int i = y * width + x;
-                if ((_ag[i] >> 16) == 0) continue;
+                if ((_ag[i] >> 16) == 0 || _amp[i] < StillByte) continue;
                 int reach = (int)MathF.Ceiling(maxSwayPx * _amp[i] / 255f) + 2;
                 int reachTiles = (reach + Tile - 1) / Tile;
                 int tx = x / Tile, ty = y / Tile;
@@ -1098,6 +1106,7 @@ public sealed class Boughs
                     for (int k = Math.Max(0, tx - reachTiles); k <= Math.Min(_tw - 1, tx + reachTiles); k++)
                         _tiles[j * _tw + k] = true;
             }
+        foreach (bool live in _tiles) if (live) TilePixels += Tile * Tile;
         _swayRb = new uint[argb.Length]; _swayAg = new uint[argb.Length];
         int n = roots.Length;
         _base = new float[n]; _baseV = new float[n]; _tip = new float[n]; _tipV = new float[n];
@@ -1154,6 +1163,7 @@ public sealed class Boughs
             {
                 if (!_tiles[tileRow + x / Tile]) { x = (x / Tile + 1) * Tile - 1; continue; }   // an empty tile: skip to its end
                 int i = y * w + x;
+                if (_amp[i] < StillByte) continue;                 // baked into the backdrop already
                 if (sway)
                 {
                     float a = _amp[i] / 255f;

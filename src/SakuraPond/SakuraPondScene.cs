@@ -75,7 +75,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _wind = new Wind(0.26f, u, Light.View);                   // to the right and a little toward us
         // The cherry boughs sway in that wind: full sway 0.7u out from a trunk, the tips swinging 0.018u at a full lean.
         _boughs = new Boughs(width, height, _pond.Branches, _pond.TreeRoots, u * 0.7f, u * 0.018f, _wind, Light.View, _pond.Pixels);   // the still parts go into the backdrop here
-        Lap("boughs");
+        Lap($"boughs (live pixels {_boughs.LivePixels}, tile pixels {_boughs.TilePixels})");
         _ripples = new Ripples(_pond, _waterInView);
         _lawn = new Lawn(width, height, _pond.Carpet, _pond.Grassy, u, _wind, Light.View, _rng, _pond.Open, _pond.Sun);   // never over a branch; shaded by its shadow
         Lap("lawn");
