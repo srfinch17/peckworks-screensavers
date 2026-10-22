@@ -40,6 +40,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Pond _pond;
     private readonly bool[] _waterInView;     // open water that no branch hides
     private readonly Wind _wind;
+    private readonly Boughs _boughs;
     private readonly Ripples _ripples;
     private readonly Lawn _lawn;
     private readonly Clumps _cattails, _irises;
@@ -65,6 +66,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
         _wind = new Wind(0.26f, u, Light.View);                   // to the right and a little toward us
+        // The cherry boughs sway in that wind: full sway 0.7u out from a trunk, the tips swinging 0.018u at a full lean.
+        _boughs = new Boughs(width, height, _pond.Branches, _pond.TreeRoots, u * 0.7f, u * 0.018f, _wind, Light.View);
         _ripples = new Ripples(_pond, _waterInView);
         _lawn = new Lawn(width, height, _pond.Carpet, _pond.Grassy, u, _wind, Light.View, _rng, _pond.Open, _pond.Sun);   // never over a branch; shaded by its shadow
 
@@ -146,6 +149,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         float dt = (float)Math.Min(elapsedSeconds, 0.1);
         Sections.Lap();                   // the laps of Update, named "update: ..." in the section table (free unless PECKWORKS_SECTIONS is set)
         _wind.Update(dt);                 // first: everything below reads it
+        _boughs.Update(dt);
         Sections.Mark("update: wind");
         // The fish steer round the turtles and the swimming snake, and are pushed out of
         // them if they meet (last frame's spines: near enough). The snake is solid too:
@@ -244,6 +248,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _dragonflies.Draw(fb);
         _swallows.Draw(fb);
         Sections.Mark("flyers");
+        _boughs.Draw(fb);                         // the cherry boughs, swaying: over everything on and under the water; only the petals still in the air above them come after
+        Sections.Mark("boughs");
         _petals.DrawFalling(fb);
         Sections.Mark("petals falling");
     }

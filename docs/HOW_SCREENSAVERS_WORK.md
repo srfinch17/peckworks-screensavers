@@ -74,7 +74,7 @@ src/
     Sakura/PetalField.cs           the falling petals (or leaves, or snow), shared by every painted scene
     Sakura/Brushwork.cs            banks, hills, trunks, blossoms, a pine, and self-growing branches
     Sakura/Boat.cs                 the little boat that crosses the water in both sakura scenes
-    Sakura/Plants.cs               one Wind for a whole scene; Mottle (smooth random blotches); plants as flip-books (tufts of six kinds including wildflowers, cattails, irises); a Lawn whose carpet slides in the gusts
+    Sakura/Plants.cs               one Wind for a whole scene; Mottle (smooth random blotches); plants as flip-books (tufts of six kinds including wildflowers, cattails, irises); a Lawn whose carpet slides in the gusts; Boughs (painted branches laid over the frame each frame, swaying on springs)
     Minds/Mind.cs                  the parts every animal mind is built from: dials, weighted dice, one doing at a time, cooldowns (see MINDS.md)
     Minds/Space.cs                 3D steering: Chain (a body's shape for touching), Feelers (room along a line, the smallest change of course) (see MINDS.md, section 8)
     ChimneySmoke.cs                puffs that rise, cool, spread and thin (Cabin by Stream)
@@ -580,7 +580,11 @@ and along the lawn's edges, dry tufts as a sprinkle. The lawn rolls all of this 
 once from the scene's, so however much it rolls, nothing the scene rolls after it moves.
 
 Taller tufts stand in
-the carpet, each a flip-book (`Flipbook`) of 24 pages from upright to "flat downwind"; the blades of a page are
+the carpet, each a flip-book (`Flipbook`) of 48 pages from upright to "flat downwind" (24 read as
+fluid at a glance, but a tall tuft's tip moved nearly two pixels a page at 1440p, a visible step
+every few frames in a gust; at 48 it is under a pixel: the owner's rule is that wind must be
+smooth); the pages of all 36 designs are painted on every core at once, after every design's
+blades have been rolled in order, so the dice land the same whatever the core count. The blades of a page are
 worked out in three dimensions (the bend angle grows from root to tip, each short step going a
 little less up and a little more along the ground) and projected like everything else in an
 overhead scene (`Overhead`: squash, lift, and where a shadow falls): height lifts a point up the
@@ -599,6 +603,40 @@ a meadow or a reed bed: it paints its carpet and its ground once, then makes a `
 and a `Clumps`, and nothing of its own that moves. Two rules travel with them: the lawn is drawn
 first each frame (half its rows are kept from the frame before), and the projection is overhead
 (a side-on scene needs a different one).
+
+*Boughs that sway.* The cherry branches used to be painted into the backdrop. Now the painter
+paints them a second time, with the same seed, onto a clear sheet of their own (`Pond.Branches`),
+and the backdrop the scene restores each frame is the picture WITHOUT them. Every frame the
+scene lays that sheet over everything on and under the water (`Boughs`, Core/Sakura/Plants.cs)
+with each pixel taken from a little upwind of itself: the shift grows with the pixel's distance
+from its tree's trunk (a bough's tip swings, its base barely moves; the two crowns' centres are
+the trunks, `Pond.TreeRoots`), and its amount comes from two damped springs per tree driven by
+the wind's lean at the trunk, one swinging in 2.6 s for the thick base and one in 1.3 s for the
+tips, so a gust bends the boughs over and they swing back past upright and settle, as a branch
+does. The picture is sampled between pixels (four neighbours blended), so the motion is smooth
+at any fraction of a pixel; the shifting is done on alternate rows into a kept sheet and the kept
+sheet laid over the picture every frame, and 16-pixel tiles that no bough can reach are skipped
+(the first version resampled every row's whole painted stretch, which spans both trees: ten
+milliseconds at 1440p). Two things it does not do, said plainly: the branches' shadows on the
+water are painted once and do not move with them (a soft dappled shadow shifting a few pixels is
+not missed), and anything that passes BEHIND a branch (a koi, a dragonfly, a low petal) is cut at
+the branch's resting footprint (`Pond.Open`), so for the few pixels a bough has swung away from,
+the water shows between it and the thing behind. A side effect that turned out to be a fix: a fish
+under the blossom's edge is now hazed toward the WATER behind it (`Pond.Pixels` holds water
+there), where before the painter mixed it toward the pink. Only the petals still in the air above
+the branches are drawn after them.
+
+*Petals in the eddies.* The grass leans along one prevailing wind, but a petal in the air is
+light enough to follow the swirls in it. `Petals.Air` reads a slow pattern of eddies over the pond
+(the same `Mottle` blotches the lawn is painted with, drifting downwind at a fiftieth of the screen
+a second): the eddy at the petal's spot turns its course left or right of the wind, by up to a
+right angle or so, and the wind's own lean there (strong in a gust, faint in a lull) sets how fast
+it is carried, higher petals catching more. A petal falling through the pattern curves one way,
+then the other, two petals a little apart take different turns, and a petal spins faster in a
+gust. A petal on the water feels a third of the same push, on top of its slow circling drift. The
+instrument that showed it: the brightest red-minus-green over 240 frames of a water region, which
+draws every falling petal's path as a streak; the streaks curve and cross where before they were
+parallel lines.
 
 *Rocks that look like rocks.* A rock is a lumpy ring of 9 to 13 points (two slow waves of radius
 plus jitter), a touch wider than tall because we look down on a rounded lump at a slant. It is

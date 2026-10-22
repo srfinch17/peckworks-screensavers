@@ -46,8 +46,14 @@ internal sealed class Pond
     /// <summary>The size unit: the height on a wide screen, less on a tall one (see the repo rules).</summary>
     public required float U { get; init; }
 
-    /// <summary>The finished backdrop, one 0x00RRGGBB number per pixel.</summary>
+    /// <summary>The finished backdrop WITHOUT the branches, one 0x00RRGGBB number per pixel (the branches are a live layer: see Branches).</summary>
     public required uint[] Pixels { get; init; }
+
+    /// <summary>The cherry branches and their blossom on a clear sheet (0xAARRGGBB): the scene lays them over the frame each frame, swaying in the wind (Core's Boughs).</summary>
+    public required uint[] Branches { get; init; }
+
+    /// <summary>Where the two trees' trunks are (off the picture): a bough sways more the further it is from its tree's root.</summary>
+    public required PointF[] TreeRoots { get; init; }
 
     /// <summary>Open water: inside the pond and not under a rock, a lily pad or a bank plant. Koi show only here.</summary>
     public required bool[] Water { get; init; }
@@ -312,6 +318,17 @@ internal static class PondPainter
         uint[] beforeBranches = px;
         List<PointF> spots = Branches(g, w, h, u, new Random(seed), 0, 0);
         uint[] final = Read(bmp);
+        // The branches once more, the same seed, onto a clear sheet of their own: the scene lays
+        // that sheet over the frame every frame, swaying (Core's Boughs). The backdrop the scene
+        // restores is the picture WITHOUT them (beforeBranches), or they would show twice.
+        using var boughSheet = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        using (var gbough = Graphics.FromImage(boughSheet))
+        {
+            gbough.Clear(Color.Transparent);
+            gbough.SmoothingMode = SmoothingMode.AntiAlias;
+            Branches(gbough, w, h, u, new Random(seed), 0, 0);
+        }
+        PointF[] treeRoots = [new PointF(-u * 0.04f, -u * 0.01f), new PointF(w + u * 0.05f, h * 0.26f)];   // the two crowns' centres (see Branches)
 
         bool[] open = Brushwork.Unchanged(beforeBranches, final);
         uint[] blocked = Read(blockers), padded = Read(padSheet), noGrass = Read(noGrassSheet);
@@ -388,7 +405,8 @@ internal static class PondPainter
         return new Pond(room, gw, gh, cell)
         {
             Width = w, Height = h, U = u,
-            Pixels = final, Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(),
+            Pixels = beforeBranches, Branches = ReadArgb(boughSheet), TreeRoots = treeRoots,
+            Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(),
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
             Rocks = rocks, Log = log, Island = island,

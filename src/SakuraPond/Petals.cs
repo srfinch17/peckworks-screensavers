@@ -170,13 +170,39 @@ internal sealed class Petals
         };
     }
 
-    /// <summary>The breeze: a gentle push to the right that rises and dies away with the shared wind's swell, so petals gust when the grass does.</summary>
+    /// <summary>The breeze: a gentle push along the wind that rises and dies away with the shared wind's swell, so petals gust when the grass does.</summary>
     private float Breeze() => _u * (0.006f + 0.008f * _wind.Swell);
+
+    // THE EDDIES. The grass leans along one prevailing wind, but a petal in the
+    // air is light enough to follow the swirls in it. Over the pond lies a slow
+    // pattern of eddies (Mottle, the same smooth blotches the lawn is painted
+    // with), drifting downwind: wherever a petal is, the eddy there turns its
+    // course left or right of the wind, by up to a right angle or so, and the
+    // wind's own lean there (strong in a gust, faint in a lull) sets how fast
+    // it is carried. A petal falling through the pattern curves one way, then
+    // the other, and two petals a little apart take different turns, which is
+    // what a swirl looks like from above. The pattern's drift is kept as a
+    // double that only grows (a screensaver runs for days; at a million
+    // pixels of drift a float still places the eddies to a tenth of a pixel).
+    private readonly int _eddySeed = 7919;
+    private double _eddyDrift;
+
+    /// <summary>The air's course at a spot: where the petal is pushed (screen pixels a second), by the wind's lean there and the eddy there. "high" is the petal's height in u (higher petals catch more wind).</summary>
+    private (float Vx, float Vy) Air(float x, float y, float high)
+    {
+        float cell = _u * 0.25f;
+        float eddy = Mottle.Blotch(x + (float)_eddyDrift, y, cell, _eddySeed);
+        float angle = MathF.Atan2(_wind.Y, _wind.X) + (eddy - 0.5f) * 4.5f;
+        float lean = _wind.LeanAt(x, y);
+        float speed = _u * (0.008f + 0.045f * lean) * (0.6f + 0.8f * high);
+        return (MathF.Cos(angle) * speed, MathF.Sin(angle) * speed * Ripples.Squash);
+    }
 
     public void Update(float dt)
     {
         float breeze = Breeze();
         var c = _pond.Centre;
+        _eddyDrift += _u * 0.02 * dt;                      // the eddies drift downwind at a fiftieth of the screen a second
 
         for (int i = 0; i < _falling.Count; i++)
         {
@@ -184,8 +210,11 @@ internal sealed class Petals
             p.Height -= p.Fall * dt * (0.75f + 0.5f * (1 - MathF.Abs(MathF.Cos(p.Flip))));   // edge-on petals cut through the air faster
             p.Sway += p.SwayFreq * MathF.Tau * dt;
             p.Sway %= MathF.Tau;
-            p.X += (breeze * 2.5f + MathF.Cos(p.Sway) * p.SwayAmp * _u * 2) * dt;
-            p.Angle = (p.Angle + p.Spin * dt) % MathF.Tau;
+            (float ax, float ay) = Air(p.X, p.Y, p.Height);
+            float lean = _wind.LeanAt(p.X, p.Y);
+            p.X += (ax + MathF.Cos(p.Sway) * p.SwayAmp * _u * 2) * dt;
+            p.Y += ay * dt;
+            p.Angle = (p.Angle + p.Spin * (0.7f + 1.5f * lean) * dt) % MathF.Tau;     // it spins faster in a gust
             p.Flip = (p.Flip + p.FlipSpeed * dt) % MathF.Tau;
             if (p.Height <= 0)
             {
@@ -204,7 +233,8 @@ internal sealed class Petals
             float dx = f.X - c.X, dy = (f.Y - c.Y) / Ripples.Squash;
             float r = MathF.Max(1, MathF.Sqrt(dx * dx + dy * dy));
             float swirl = _u * 0.006f;
-            float vx = -dy / r * swirl + breeze * 0.6f + f.Vx, vy = dx / r * swirl * Ripples.Squash + f.Vy;
+            (float ax, float ay) = Air(f.X, f.Y, 0);           // on the water it feels a third of the air's push, so it too drifts with the eddies
+            float vx = -dy / r * swirl + ax * 0.35f + breeze * 0.2f + f.Vx, vy = dx / r * swirl * Ripples.Squash + ay * 0.35f + f.Vy;
             float nx = f.X + vx * dt, ny = f.Y + vy * dt;
             // A shove (PushAside) sent it gliding; it slows over a second or so, as a petal on water does.
             float slow = MathF.Exp(-dt * 3f);

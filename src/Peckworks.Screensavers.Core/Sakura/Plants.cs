@@ -160,7 +160,7 @@ public static class Mottle
 /// </summary>
 public static class Flipbook
 {
-    public const int Poses = 24;                             // 6 pages snapped; 24 read as fluid
+    public const int Poses = 48;                             // 6 pages snapped; 24 read as fluid at a glance; 48 so a tall tuft's tip moves under a pixel a page at 1440p (the owner's rule: wind must be smooth)
     public const float LeanMin = 0f, LeanMax = 1.1f;         // the flip-book's range: upright to flat downwind (the wind never pushes a plant upwind)
 
     /// <summary>Which page shows a given lean.</summary>
@@ -731,12 +731,15 @@ public sealed class Lawn
         // 255): hundreds of dark parallel shadows at 48 wove a lattice.
         _pages = new Flipbook.Page[Designs, Flipbook.Poses];
         int ph = 1, pw = 1;                                     // the tallest and widest page, for the bands and the box below
+        // The blades of every design are rolled first, in order (the dice must
+        // land the same whatever the core count); then the pages are painted
+        // on every core at once (each design's pages are its own bitmaps).
+        var clumps = new (Flipbook.Blade Blade, PointF Root)[Designs][];
+        for (int d = 0; d < Designs; d++) clumps[d] = Flipbook.Tuft(h * Deck[d].Height, rng, Deck[d].Kind);
+        var pagesByDesign = new Flipbook.Page[Designs][];
+        Parallel.For(0, Designs, d => pagesByDesign[d] = Flipbook.Pages(clumps[d], 26, wind, view));
         for (int d = 0; d < Designs; d++)
-        {
-            (Flipbook.TuftKind kind, float tall) = Deck[d];
-            Flipbook.Page[] pages = Flipbook.Pages(Flipbook.Tuft(h * tall, rng, kind), 26, wind, view);
-            for (int p = 0; p < Flipbook.Poses; p++) { _pages[d, p] = pages[p]; ph = Math.Max(ph, pages[p].Sprite.Height); pw = Math.Max(pw, pages[p].Sprite.Width); }
-        }
+            for (int p = 0; p < Flipbook.Poses; p++) { _pages[d, p] = pagesByDesign[d][p]; ph = Math.Max(ph, pagesByDesign[d][p].Sprite.Height); pw = Math.Max(pw, pagesByDesign[d][p].Sprite.Width); }
 
         // The grass's box: where any grassy pixel is.
         _x0 = width; _y0 = height; _x1 = 0; _y1 = 0;
@@ -970,6 +973,188 @@ public sealed class Lawn
                 _slid[keepRow + x - _sx0] = (uint)(Math.Min(255, rr) << 16 | Math.Min(255, gg) << 8 | Math.Min(255, bb));
             }
             ArrayPool<float>.Shared.Return(rowLean);
+        });
+    }
+}
+
+/// <summary>
+/// Boughs that sway in the wind: the painted branches (blossom and wood) on
+/// a clear sheet of their own, laid over the finished frame each frame
+/// SHIFTED a little downwind, more the further a pixel is from its tree's
+/// root (a bough's tip swings, its base barely moves).
+///
+/// FEYNMAN VERSION: a branch in a breeze is a spring. The wind pushes it
+/// over, it bends, and when the gust eases it swings back past upright and
+/// settles, a slow swing for the thick base (a couple of seconds a swing) and
+/// a quicker one for the thin tips. So each tree keeps two springs, driven by
+/// the wind's lean at its root, and a pixel's shift is a mix of the two by how
+/// far out it is. The picture is sampled between pixels (four neighbours
+/// blended) so the motion is smooth at any fraction of a pixel, the same
+/// trick the lawn's carpet uses.
+///
+/// What this cannot do, said plainly: the branches' shadows on the water are
+/// painted once and do not move with them (a soft dappled shadow shifting
+/// a few pixels is not missed), and anything that passes BEHIND a branch is
+/// cut at the branch's resting footprint, so for the few pixels a bough has
+/// swung away from, the water shows between it and the thing behind.
+/// </summary>
+public sealed class Boughs
+{
+    private const int Tile = 16;
+    private readonly int _w, _h, _y0, _y1, _margin, _tw, _th;
+    private readonly uint[] _rb, _ag;                           // the sheet, premultiplied and packed two channels to a number (see Lawn)
+    private readonly byte[] _amp;                               // 0 to 255 per pixel: how far out along a bough it is (0 at a root)
+    private readonly byte[] _tree;                              // which tree's springs a pixel follows
+    private readonly bool[] _tiles;                             // which 16x16 tiles hold any bough pixel (widened by the sway): the rest are skipped
+    private readonly int[] _rowMin, _rowMax;                    // the painted stretch of each row (-1 when empty)
+    private readonly PointF[] _roots;
+    private readonly float _maxPx;
+    private readonly Wind _wind;
+    private readonly Overhead _view;
+    private readonly float[] _base, _baseV, _tip, _tipV;        // the springs: position and speed, base and tip, per tree
+    private readonly float[] _shiftBase, _shiftTip;             // this frame's shift per tree, in pixels along the wind, base and tip
+    // THE SWAYED SHEET, kept between frames. Shifting the picture by a fraction
+    // of a pixel (four neighbours blended) is the dear part, and the boughs
+    // move well under a pixel a frame, so only every other row is shifted
+    // afresh each frame (odd rows one frame, even the next) into these two
+    // arrays, and every frame all rows are laid over the picture from them,
+    // which is cheap. The same halving the lawn's carpet uses.
+    private readonly uint[] _swayRb, _swayAg;
+    private int _frame;
+
+    /// <param name="argb">The branches on a clear sheet, 0xAARRGGBB, the frame's size.</param>
+    /// <param name="roots">Where each tree's trunk is (off the picture is fine): the sway grows with distance from the nearest.</param>
+    /// <param name="reachPx">How far from a root a bough reaches its full sway.</param>
+    /// <param name="maxSwayPx">The tip's shift at lean 1, in pixels.</param>
+    public Boughs(int width, int height, uint[] argb, PointF[] roots, float reachPx, float maxSwayPx, Wind wind, Overhead view)
+    {
+        _w = width; _h = height;
+        _roots = roots;
+        _maxPx = maxSwayPx;
+        _wind = wind; _view = view;
+        _margin = (int)MathF.Ceiling(maxSwayPx) + 2;
+        _rb = new uint[argb.Length]; _ag = new uint[argb.Length];
+        _amp = new byte[argb.Length]; _tree = new byte[argb.Length];
+        _rowMin = new int[height]; _rowMax = new int[height];
+        _y0 = height; _y1 = -1;
+        for (int y = 0; y < height; y++)
+        {
+            _rowMin[y] = -1; _rowMax[y] = -1;
+            for (int x = 0; x < width; x++)
+            {
+                int i = y * width + x;
+                uint c = argb[i];
+                uint a = c >> 24;
+                uint r = ((c >> 16) & 0xFF) * a / 255, g = ((c >> 8) & 0xFF) * a / 255, b = (c & 0xFF) * a / 255;
+                _rb[i] = r << 16 | b;
+                _ag[i] = a << 16 | g;
+                if (a != 0) { if (_rowMin[y] < 0) _rowMin[y] = x; _rowMax[y] = x; }
+                // The nearest root, and how far out this pixel is: a gentle curve (the base stiff, the tips free).
+                float best = float.MaxValue; int bt = 0;
+                for (int t = 0; t < roots.Length; t++)
+                {
+                    float dx = x - roots[t].X, dy = (y - roots[t].Y) / view.Squash, d = dx * dx + dy * dy;
+                    if (d < best) { best = d; bt = t; }
+                }
+                float outward = MathF.Min(1f, MathF.Sqrt(best) / reachPx);
+                _amp[i] = (byte)(MathF.Pow(outward, 1.4f) * 255);
+                _tree[i] = (byte)bt;
+            }
+            if (_rowMin[y] >= 0) { _y0 = Math.Min(_y0, y); _y1 = Math.Max(_y1, y); }
+        }
+        // The tiles: a tile is live if any bough pixel lies within the sway's reach of it.
+        _tw = (width + Tile - 1) / Tile; _th = (height + Tile - 1) / Tile;
+        _tiles = new bool[_tw * _th];
+        int reachTiles = (_margin + Tile - 1) / Tile;
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                if ((argb[y * width + x] >> 24) == 0) continue;
+                int tx = x / Tile, ty = y / Tile;
+                for (int j = Math.Max(0, ty - reachTiles); j <= Math.Min(_th - 1, ty + reachTiles); j++)
+                    for (int i = Math.Max(0, tx - reachTiles); i <= Math.Min(_tw - 1, tx + reachTiles); i++)
+                        _tiles[j * _tw + i] = true;
+            }
+        _swayRb = new uint[argb.Length]; _swayAg = new uint[argb.Length];
+        int n = roots.Length;
+        _base = new float[n]; _baseV = new float[n]; _tip = new float[n]; _tipV = new float[n];
+        _shiftBase = new float[n]; _shiftTip = new float[n];
+        for (int t = 0; t < n; t++) _base[t] = _tip[t] = wind.LeanAt(roots[t].X, roots[t].Y);   // start at rest in today's breeze, not with a lurch from zero
+        Update(0);
+    }
+
+    /// <summary>Once a frame, after the wind: the springs take a step.</summary>
+    public void Update(float dt)
+    {
+        dt = MathF.Min(dt, 1f / 30f);                           // a long pause (the window hidden) must not fling the springs
+        for (int t = 0; t < _roots.Length; t++)
+        {
+            float lean = _wind.LeanAt(_roots[t].X, _roots[t].Y);
+            // A damped spring: pulled toward the wind's lean, slowed by its own speed.
+            // The base swings once in 2.6 s, the tips once in 1.3 s; both settle in a swing or two.
+            Spring(ref _base[t], ref _baseV[t], lean, 2.6f, 0.35f, dt);
+            Spring(ref _tip[t], ref _tipV[t], lean, 1.3f, 0.25f, dt);
+            _shiftBase[t] = _base[t] * _maxPx;
+            _shiftTip[t] = _tip[t] * _maxPx;
+        }
+    }
+
+    private static void Spring(ref float s, ref float v, float target, float period, float damping, float dt)
+    {
+        float k = MathF.Pow(MathF.Tau / period, 2), c = 2 * damping * MathF.Sqrt(k);
+        v += (k * (target - s) - c * v) * dt;
+        s += v * dt;
+    }
+
+    /// <summary>
+    /// Lays the boughs over the frame. First the sway: every other row of the
+    /// kept sheet is taken afresh from a little upwind of itself by its sway
+    /// (the first two frames do every row, so the picture is whole from the
+    /// start). Then the lay: every row of the kept sheet over the picture.
+    /// Both skip the tiles no bough can reach.
+    /// </summary>
+    public void Draw(FrameBuffer fb)
+    {
+        if (_y1 < _y0) return;
+        int w = _w, h = _h;
+        uint[] px = fb.Pixels;
+        float sx = _wind.X, sy = _wind.Y * _view.Squash;
+        int parity = _frame & 1;
+        bool every = _frame < 2;
+        _frame++;
+        Parallel.For(_y0, _y1 + 1, y =>
+        {
+            int x0 = Math.Max(0, _rowMin[y] - _margin), x1 = Math.Min(w - 1, _rowMax[y] + _margin);
+            int tileRow = y / Tile * _tw;
+            bool sway = every || (y & 1) == parity;
+            for (int x = x0; x <= x1; x++)
+            {
+                if (!_tiles[tileRow + x / Tile]) { x = (x / Tile + 1) * Tile - 1; continue; }   // an empty tile: skip to its end
+                int i = y * w + x;
+                if (sway)
+                {
+                    float a = _amp[i] / 255f;
+                    int t = _tree[i];
+                    float shift = (_shiftBase[t] * (1 - a) + _shiftTip[t] * a) * a;
+                    float fx = x - shift * sx, fy = y - shift * sy;
+                    int ix = (int)MathF.Floor(fx), iy = (int)MathF.Floor(fy);
+                    if (ix < 0 || iy < 0 || ix + 1 >= w || iy + 1 >= h) { _swayAg[i] = 0; _swayRb[i] = 0; continue; }
+                    int tx = (int)((fx - ix) * 16), ty = (int)((fy - iy) * 16);
+                    uint w11 = (uint)(tx * ty), w10 = (uint)(tx * (16 - ty)), w01 = (uint)((16 - tx) * ty), w00 = (uint)((16 - tx) * (16 - ty));
+                    int j = iy * w + ix;
+                    _swayAg[i] = ((_ag[j] * w00 + _ag[j + 1] * w10 + _ag[j + w] * w01 + _ag[j + w + 1] * w11) >> 8) & 0x00FF00FF;
+                    _swayRb[i] = ((_rb[j] * w00 + _rb[j + 1] * w10 + _rb[j + w] * w01 + _rb[j + w + 1] * w11) >> 8) & 0x00FF00FF;
+                }
+                uint ag = _swayAg[i];
+                int alpha = (int)(ag >> 16);
+                if (alpha < 2) continue;
+                uint rb = _swayRb[i];
+                int r = (int)(rb >> 16), g = (int)(ag & 0xFF), b = (int)(rb & 0xFF);
+                uint bg = px[i];
+                int keep = 256 - alpha;
+                int rr = ((int)((bg >> 16) & 0xFF) * keep >> 8) + r, gg = ((int)((bg >> 8) & 0xFF) * keep >> 8) + g, bb = ((int)(bg & 0xFF) * keep >> 8) + b;
+                px[i] = (uint)(Math.Min(255, rr) << 16 | Math.Min(255, gg) << 8 | Math.Min(255, bb));
+            }
         });
     }
 }

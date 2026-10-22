@@ -86,7 +86,10 @@ sheen of pale bent blades, each gust its own shape, and the tufts lean over and 
 reaches them. There is ONE wind: the lawn, the tufts, the flowers, the cattails, the irises and
 the falling petals all read the same gust at the same moment, so a gust crosses the scene as one
 travelling wave (the cattails and irises sway with it stiffly; each iris leaf shows a lit half, a
-shaded half and a pale midrib, the way a sword leaf folds).
+shaded half and a pale midrib, the way a sword leaf folds). The cherry boughs sway in it too, the
+tips swinging and settling like springs while the thick wood near the trunks barely moves, and the
+petals in the air follow the eddies: a petal curves one way, then the other, spins faster in a gust
+and drifts in a lull, so no two fall the same way.
 
 ![Sakura Pond](docs/images/sakura-pond.png)
 
