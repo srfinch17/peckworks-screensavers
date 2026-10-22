@@ -1000,7 +1000,8 @@ public sealed class Lawn
 /// </summary>
 public sealed class Boughs
 {
-    private const int Tile = 8;
+    private const int Tile = 4;
+    private readonly int[][] _spans;                            // per row: pairs of (first x, last x) of the stretches a live bough pixel can reach, walked by Draw
     private const byte StillByte = 51;                          // below a fifth of the full sway a pixel is "still": with the tip at 26 px it moves under a pixel at a full lean, so it is baked into the backdrop
     private readonly int _w, _h, _y0, _y1, _margin, _tw, _th;
     private readonly uint[] _rb, _ag;                           // the sheet, premultiplied and packed two channels to a number (see Lawn)
@@ -1107,6 +1108,23 @@ public sealed class Boughs
                         _tiles[j * _tw + k] = true;
             }
         foreach (bool live in _tiles) if (live) TilePixels += Tile * Tile;
+        // The spans: each row's live tiles joined into stretches, so Draw walks a few stretches per
+        // row instead of testing a tile at every pixel across both trees.
+        _spans = new int[height][];
+        var run = new List<int>();
+        for (int y = 0; y < height; y++)
+        {
+            run.Clear();
+            int tileRow = y / Tile * _tw;
+            int start = -1;
+            for (int tx = 0; tx <= _tw; tx++)
+            {
+                bool live = tx < _tw && _tiles[tileRow + tx];
+                if (live && start < 0) start = tx * Tile;
+                if (!live && start >= 0) { run.Add(start); run.Add(Math.Min(width - 1, tx * Tile - 1)); start = -1; }
+            }
+            _spans[y] = run.ToArray();
+        }
         _swayRb = new uint[argb.Length]; _swayAg = new uint[argb.Length];
         int n = roots.Length;
         _base = new float[n]; _baseV = new float[n]; _tip = new float[n]; _tipV = new float[n];
@@ -1156,12 +1174,12 @@ public sealed class Boughs
         _frame++;
         Parallel.For(_y0, _y1 + 1, y =>
         {
-            int x0 = Math.Max(0, _rowMin[y] - _margin), x1 = Math.Min(w - 1, _rowMax[y] + _margin);
-            int tileRow = y / Tile * _tw;
+            int[] spans = _spans[y];
+            if (spans.Length == 0) return;
             bool sway = every || (y & 1) == parity;
-            for (int x = x0; x <= x1; x++)
+            for (int s = 0; s < spans.Length; s += 2)
+            for (int x = spans[s], x1 = spans[s + 1]; x <= x1; x++)
             {
-                if (!_tiles[tileRow + x / Tile]) { x = (x / Tile + 1) * Tile - 1; continue; }   // an empty tile: skip to its end
                 int i = y * w + x;
                 if (_amp[i] < StillByte) continue;                 // baked into the backdrop already
                 if (sway)
