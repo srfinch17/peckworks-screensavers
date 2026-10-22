@@ -61,23 +61,64 @@ internal static class ShorePainter
         float x0 = MathF.Max(0, box.Left), x1 = MathF.Min(w, box.Right), y0 = MathF.Max(0, box.Top), y1 = MathF.Min(h, box.Bottom);
         float area = (x1 - x0) * (y1 - y0);
 
-        // The ground under the grass.
-        GraphicsState st = g.Save();
-        g.SetClip(land, CombineMode.Intersect);
-        using (var moss = new SolidBrush(Color.FromArgb(58, 78, 42))) g.FillPath(moss, land);
-        for (int i = 0; i < 40; i++)
+        // THE GROUND under the grass, pixel by pixel from slow blotches
+        // (Mottle, in Core): lush dark green where the ground is damp, a
+        // warmer yellow-green where the sun bakes it, and in the thinnest
+        // places bare earth showing through. The same blotch thins the
+        // carpet of blades below, so the earth shows where the grass is
+        // worn, not at random. A second blotch marks the clover patches, a
+        // third the moss (velvety, no blades). The lawn's standing tufts
+        // (Core's Lawn) read the finished carpet's thickness, so they thin
+        // out over the worn and mossy ground too.
+        int seed = rng.Next();
+        float blotchCell = u * 0.14f;
+        float Wear(float x, float y) => Mottle.Blotch(x, y, blotchCell, seed);                       // 0 worn to 1 lush
+        float Clover(float x, float y) => Mottle.Blotch(x, y, u * 0.11f, seed + 10);
+        float Moss(float x, float y) => Mottle.Blotch(x, y, u * 0.06f, seed + 20);           // small patches: a big one read as a dark hole in the lawn
+        Color damp = Color.FromArgb(50, 74, 40), lush = Color.FromArgb(64, 92, 44), sunny = Color.FromArgb(96, 118, 50), earth = Color.FromArgb(86, 70, 46), mossy = Color.FromArgb(46, 70, 38);
+        int bx0 = (int)x0, by0 = (int)y0, bw = Math.Max(1, (int)(x1 - x0)), bh = Math.Max(1, (int)(y1 - y0));
+        using (var groundBmp = new Bitmap(bw, bh, PixelFormat.Format32bppArgb))
         {
-            float x = x0 + (float)rng.NextDouble() * (x1 - x0), y = y0 + (float)rng.NextDouble() * (y1 - y0);
-            float r = u * (0.03f + 0.08f * (float)rng.NextDouble());
-            Color patch = rng.Next(3) == 0 ? Color.FromArgb(78, 64, 44) : Color.FromArgb(80, 102, 50);
-            using var path = new GraphicsPath();
-            path.AddEllipse(x - r, y - r * 0.7f, r * 2, r * 1.4f);
-            using var b = new PathGradientBrush(path) { CenterColor = Color.FromArgb(110, patch), SurroundColors = [Color.FromArgb(0, patch)] };
-            g.FillPath(b, path);
+            var gpx = new uint[bw * bh];
+            for (int y = 0; y < bh; y++)
+                for (int x = 0; x < bw; x++)
+                {
+                    float px = bx0 + x, py = by0 + y;
+                    float wear = Wear(px, py);
+                    // Lush to sunny by one blotch; earth where it is worn; moss where the moss blotch is high.
+                    Color c = wear < 0.3f ? Brushwork.Mix(earth, damp, wear / 0.3f) : Brushwork.Mix(lush, sunny, (wear - 0.3f) / 0.7f);
+                    float m = Moss(px, py);
+                    if (m > 0.62f) c = Brushwork.Mix(c, mossy, 0.7f * MathF.Min(1, (m - 0.62f) / 0.1f));
+                    // A fine grain so the ground is not a smooth gradient (soil is speckled).
+                    int grain = (int)((Mottle.At(px, py, 2.3f, seed + 30) - 0.5f) * 18);
+                    gpx[y * bw + x] = 0xFF000000u | (uint)Math.Clamp(c.R + grain, 0, 255) << 16 | (uint)Math.Clamp(c.G + grain, 0, 255) << 8 | (uint)Math.Clamp(c.B + grain, 0, 255);
+                }
+            var data = groundBmp.LockBits(new Rectangle(0, 0, bw, bh), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            System.Runtime.InteropServices.Marshal.Copy((int[])(object)gpx, 0, data.Scan0, gpx.Length);
+            groundBmp.UnlockBits(data);
+            GraphicsState st = g.Save();
+            g.SetClip(land, CombineMode.Intersect);
+            g.DrawImageUnscaled(groundBmp, bx0, by0);
+            // Moss gets a velvety speckle of lighter and darker dots.
+            int dots = (int)Math.Min(20000, area / (u * 0.006f * u * 0.006f));
+            for (int i = 0; i < dots; i++)
+            {
+                float x = x0 + (float)rng.NextDouble() * (x1 - x0), y = y0 + (float)rng.NextDouble() * (y1 - y0);
+                if (Moss(x, y) < 0.64f) continue;
+                float r = u * (0.0012f + 0.0018f * (float)rng.NextDouble());
+                using var b = new SolidBrush(Color.FromArgb(110, rng.Next(2) == 0 ? Color.FromArgb(104, 140, 68) : Color.FromArgb(30, 50, 26)));
+                g.FillEllipse(b, x - r, y - r * 0.8f, r * 2, r * 1.6f);
+            }
+            g.Restore(st);
         }
-        g.Restore(st);
 
-        // The blades, on the carpet. Lighter toward the upper left, where the sun comes from.
+        // THE BLADES, on the carpet. Lighter toward the upper left, where the
+        // sun comes from, and tinted by the ground's blotch (yellower on the
+        // sunny patches, bluer on the damp). Thinned where the ground is
+        // worn, left out on the moss, and on the clover patches a blade
+        // becomes a clover leaf: three small round leaflets on a short stem,
+        // a touch bluer than the grass, which from above makes a rounder,
+        // denser texture than the slivers round it.
         GraphicsState cst = carpet.Save();
         carpet.SetClip(land, CombineMode.Intersect);
         int blades = (int)Math.Min(45000, area / (u * 0.004f * u * 0.004f));
@@ -91,6 +132,7 @@ internal static class ShorePainter
         ];
         var polyArr = new PointF[4];
         using var shadow = new SolidBrush(Color.FromArgb(16, 6, 22, 10));
+        using var cloverShadow = new SolidBrush(Color.FromArgb(22, 6, 22, 10));
         for (int i = 0; i < blades; i++)
         {
             float x, y;
@@ -101,6 +143,29 @@ internal static class ShorePainter
                 double a = rng.NextDouble() * Math.Tau, d = Math.Sqrt(rng.NextDouble()) * u * 0.035;
                 x = c.X + (float)(Math.Cos(a) * d); y = c.Y + (float)(Math.Sin(a) * d * 0.8);
             }
+            float wear = Wear(x, y);
+            if (Moss(x, y) > 0.66f) continue;                                    // moss: no blades
+            if (wear < 0.35f && rng.NextDouble() > wear / 0.35f) continue;        // worn: thinner, earth showing
+            float light = 0.1f * (1 - x / w) + 0.08f * (1 - y / h);
+            if (Clover(x, y) > 0.66f)
+            {
+                // A clover leaf: three leaflets round a point a little up from the stem's foot.
+                float r = u * (0.0024f + 0.0012f * (float)rng.NextDouble());
+                float cx = x + ((float)rng.NextDouble() - 0.5f) * r, cy = y - r * 1.2f;
+                Color leaf = Brushwork.Mix(Color.FromArgb(52, 104, 62), Color.FromArgb(150, 190, 120), light + 0.1f * (float)rng.NextDouble());
+                carpet.FillEllipse(cloverShadow, cx - r * 1.3f + r * 0.5f, cy - r * 1.1f + r * 0.5f, r * 2.6f, r * 2.2f);
+                using var lb = new SolidBrush(leaf);
+                using var lb2 = new SolidBrush(Brushwork.Mix(leaf, Color.FromArgb(220, 236, 200), 0.3f));
+                float a0 = (float)rng.NextDouble() * MathF.Tau;
+                for (int k = 0; k < 3; k++)
+                {
+                    float a = a0 + k * MathF.Tau / 3;
+                    float lx = cx + MathF.Cos(a) * r * 0.75f, ly = cy + MathF.Sin(a) * r * 0.6f;
+                    carpet.FillEllipse(lb, lx - r * 0.72f, ly - r * 0.6f, r * 1.44f, r * 1.2f);
+                    carpet.FillEllipse(lb2, lx - r * 0.3f, ly - r * 0.3f, r * 0.5f, r * 0.4f);   // the pale chevron each leaflet carries
+                }
+                continue;
+            }
             float len = u * (0.014f + 0.018f * (float)rng.NextDouble());
             float az = ((float)rng.NextDouble() - 0.5f) * 1.8f;                 // its own fan, left or right of straight up
             float lean = 0.1f + 0.35f * (float)rng.NextDouble();                // all of them lean a little downwind (right)
@@ -110,8 +175,9 @@ internal static class ShorePainter
             float sx = x + len * (lean * 0.4f + Light.ShadowX * 0.3f), sy = y + len * Light.ShadowY * 0.28f;
             Sliver(carpet, shadow, x, y, sx, sy, wid * 0.9f, polyArr);
             Color c0 = greens[rng.Next(greens.Length)];
-            float light = 0.1f * (1 - x / w) + 0.08f * (1 - y / h);
             c0 = Brushwork.Mix(c0, Color.FromArgb(176, 190, 110), light);
+            // The ground's blotch tints the blade: yellower where sunny, bluer and darker where damp.
+            c0 = wear > 0.5f ? Brushwork.Mix(c0, Color.FromArgb(160, 170, 70), (wear - 0.5f) * 0.5f) : Brushwork.Mix(c0, Color.FromArgb(40, 80, 60), (0.5f - wear) * 0.5f);
             using (var root = new SolidBrush(Brushwork.Mix(c0, Color.FromArgb(24, 40, 20), 0.4f)))
                 Sliver(carpet, root, x, y, tx, ty, wid, polyArr);
             // The tip half again in a lighter colour: light along the blade, as a blade in the sun.

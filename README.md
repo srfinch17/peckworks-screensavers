@@ -77,11 +77,16 @@ their lower flanks darkening under the water as it wraps round them; a strip of 
 pebbles runs between them and the grass; clumps of iris leaves stand on the lawn behind the
 stones, arching out over them toward the water; a clump of cattails stands in the shallows, brown
 heads nodding; lily pads and water lilies float in the calm water nearby; and the branches throw
-dappled shadows on the water. The lawn is long grass in a breeze: a band of bent, lightened blades
-rolls across it as each gust passes, and tufts of taller grass lean over and spring back as the
-wave reaches them. There is ONE wind: the lawn, the tufts, the cattails, the irises and the
-falling petals all read the same gust at the same moment, so a gust crosses the scene as one
-travelling wave (the cattails and irises sway with it stiffly).
+dappled shadows on the water. The lawn is a meadow corner in a breeze, different on every seed:
+lush and sun-baked patches, a worn spot or two where the earth shows, drifts of clover and
+velvety moss, tufts of grass in three heights and three greens with dry tawny ones among them,
+taller grass gone to seed along the edges, and drifts of wildflowers (daisies, buttercups,
+dandelions and their seed clocks) that nod on their stalks. A gust crosses it as a soft, patchy
+sheen of pale bent blades, each gust its own shape, and the tufts lean over and spring back as it
+reaches them. There is ONE wind: the lawn, the tufts, the flowers, the cattails, the irises and
+the falling petals all read the same gust at the same moment, so a gust crosses the scene as one
+travelling wave (the cattails and irises sway with it stiffly; each iris leaf shows a lit half, a
+shaded half and a pale midrib, the way a sword leaf folds).
 
 ![Sakura Pond](docs/images/sakura-pond.png)
 

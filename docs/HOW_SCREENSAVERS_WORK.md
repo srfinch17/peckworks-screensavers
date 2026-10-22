@@ -74,7 +74,7 @@ src/
     Sakura/PetalField.cs           the falling petals (or leaves, or snow), shared by every painted scene
     Sakura/Brushwork.cs            banks, hills, trunks, blossoms, a pine, and self-growing branches
     Sakura/Boat.cs                 the little boat that crosses the water in both sakura scenes
-    Sakura/Plants.cs               one Wind for a whole scene; plants as flip-books (tufts, cattails, irises); a Lawn whose carpet slides in the gusts
+    Sakura/Plants.cs               one Wind for a whole scene; Mottle (smooth random blotches); plants as flip-books (tufts of six kinds including wildflowers, cattails, irises); a Lawn whose carpet slides in the gusts
     Minds/Mind.cs                  the parts every animal mind is built from: dials, weighted dice, one doing at a time, cooldowns (see MINDS.md)
     Minds/Space.cs                 3D steering: Chain (a body's shape for touching), Feelers (room along a line, the smallest change of course) (see MINDS.md, section 8)
     ChimneySmoke.cs                puffs that rise, cool, spread and thin (Cabin by Stream)
@@ -110,7 +110,7 @@ src/
     Program.cs                     Main(), plus the definition (draws at most 2560 wide)
     SakuraPondScene.cs             the layers, back to front
     PondPainter.cs                 paints the pond bed and water, lily pads, branches and their shadows; calls the shore painter
-    Shore.cs                       paints the corner of land: the lawn's ground and carpet, the sand edge, rocks that look like rocks, the fallen log
+    Shore.cs                       paints the corner of land: the lawn's mottled ground and carpet (clover and moss patches, worn earth), the sand edge, rocks that look like rocks, the fallen log
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
     Minnows.cs                     schools of tiny fish that move as one, and rush to the dragonfly's rings
@@ -549,17 +549,49 @@ cattails and the irises, each at its own spot, so a gust reaches them as one tra
 (a plant further downwind leans a moment later). Nothing keeps a clock or a random offset of its
 own. The falling petals read the same wind's SWELL (how strong the breeze is right now), so they
 gust when the grass does, though they do not ride the wave across the screen. The wind at any spot
-is one number, the lean: a slow swell that comes and goes over half a minute, times two waves
-travelling downwind, with the long wave's crests sharpened so the lawn is mostly calm with a band
-of bent grass rolling through it. The lawn shows only where no branch is in front of it, and the
-branches' dappled shadow darkens the moving grass as it darkens the ground. Taller tufts stand in
+is one number, the lean: a slow swell that comes and goes over half a minute, times a broad soft
+hump travelling downwind (the gust front, with no sharp crest), times a slowly drifting pattern of
+patches across and along the wind, so each gust is a blob of its own shape rather than a bar the
+width of the field, plus a faint quick ripple. (The first wind was a sharpened bar crossing at
+0.4u a second; on screen it read as a ruler sliding over the lawn, and the tufts flipping pages
+hid it anyway. A probe that proves the wave travels: the brightness of two lawn patches 400 px
+apart along the wind peaks 56 frames apart at 1440p, against 54 predicted from the wave's speed.)
+The sheen is a real lift in brightness (up to half again at full lean, the blue channel less, so
+it goes pale yellow-green, not grey). The lawn shows only where no branch is in front of it, and the
+branches' dappled shadow darkens the moving grass as it darkens the ground.
+
+The lawn's VARIETY comes from two places. The painter (`Shore.cs`) reads smooth random blotches
+(`Mottle`, in Plants.cs: a random value pinned to each corner of a grid and blended between, three
+grid sizes added so the shapes are ragged) to lay the ground: lush dark green where damp, warmer
+yellow-green where sunny, bare earth in the most worn spots, moss patches with a velvety speckle;
+the same blotch thins the carpet's blades where the ground is worn, leaves them off the moss, and
+on a second blotch's patches paints a clover leaf (three round leaflets with a pale chevron)
+instead of a blade, so clover reads as a rounder, denser texture. The standing tufts (`Lawn`) are
+dealt from a deck of 36 flip-book designs: plain grass in three heights and three colour families
+(the lawn's green, a yellower sun-baked one, a bluer damp one), dry tawny tufts, taller grass gone
+to seed (thin limber stems with a pale oat-shaped head painted along the stem's top), and three
+wildflower kinds (daisies, buttercups, dandelions with the odd seed clock), each a few blades
+with two to four flower stalks rising out of them. Where each tuft goes follows the painted
+carpet: the planter measures the carpet's thickness cell by cell and gives a spot a chance in
+proportion, so the tufts thin out over the worn and mossy ground the painter made (the two never
+have to agree by any other means). Which KIND a tuft is follows blotches of its own: flowers grow
+in drifts of one kind (a coarse grid picks the kind per drift), seed heads in their own patches
+and along the lawn's edges, dry tufts as a sprinkle. The lawn rolls all of this on dice dealt
+once from the scene's, so however much it rolls, nothing the scene rolls after it moves.
+
+Taller tufts stand in
 the carpet, each a flip-book (`Flipbook`) of 24 pages from upright to "flat downwind"; the blades of a page are
 worked out in three dimensions (the bend angle grows from root to tip, each short step going a
 little less up and a little more along the ground) and projected like everything else in an
 overhead scene (`Overhead`: squash, lift, and where a shadow falls): height lifts a point up the
-screen, and throws its shadow down and to the right. A tuft stamps the page nearest its lean. The
-cattails and the iris clumps are the same machinery (`Clumps`): a few plants that each stand in
-one place, one flip-book each, stiffer than grass. The lean itself comes from a coarse grid worked
+screen, and throws its shadow down and to the right. A flower is stamped at its stalk's tip, seen
+from above (a disc of petals round an eye) with a small round shadow on the ground under it, so a
+daisy nods with the wind exactly as the blade under it would. Tuft shadows are faint (26 of 255):
+hundreds of dark parallel shadows at 48 wove a lattice over the whole lawn. A tuft stamps the page
+nearest its lean. The cattails and the iris clumps are the same machinery (`Clumps`): a few plants
+that each stand in one place, one flip-book each, stiffer than grass; an iris leaf (a sword leaf,
+`Taper` 2) is painted as a lit half and a shaded half either side of a pale midrib, which is what
+makes a flat strip read as a leaf with a fold. The lean itself comes from a coarse grid worked
 out once a frame (a sine per pixel would cost more than the drawing), and the tufts are drawn in
 horizontal bands on several cores, even bands then odd, since a tuft can only ever touch tufts in
 its own band or the next. All of this lives in the engine for the next scene seen from above with

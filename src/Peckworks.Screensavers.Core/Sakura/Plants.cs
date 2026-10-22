@@ -30,12 +30,18 @@ public readonly record struct Overhead(float Squash, float Lift, float ShadowX, 
 /// everywhere at once; it runs ACROSS the grass as a travelling wave, and
 /// each blade leans as the wave reaches it and springs back as it passes.
 /// Here that is a slow swell that comes and goes over half a minute, times
-/// two waves running downwind, a long one and a short one, with the long
-/// one's crests sharpened so the field is mostly calm with a band of bent
-/// grass rolling through it. Two plants at the same spot lean the same;
-/// two plants a little way apart lean a moment apart, because the wave
-/// reaches one first. That (and nothing random per plant) is what makes a
-/// field move as ONE field rather than as things twitching on their own.
+/// a broad soft wave rolling downwind (the gust front), times a slowly
+/// drifting pattern of PATCHES across and along the wind (a real gust is
+/// not a bar the width of the field; it is a blob, stronger here than
+/// there, and the next one is a different blob), plus a faint quick ripple.
+/// Two plants at the same spot lean the same; two plants a little way apart
+/// lean a moment apart, because the wave reaches one first. That (and
+/// nothing random per plant) is what makes a field move as ONE field
+/// rather than as things twitching on their own.
+///
+/// The first version was a sharpened bar travelling at 0.4u a second: on
+/// screen it read as a ruler sliding over the lawn, and the tufts flipping
+/// their pages hid it anyway. Softer, slower and patchy reads as weather.
 /// </summary>
 public sealed class Wind
 {
@@ -43,14 +49,15 @@ public sealed class Wind
     public readonly float X, Y;
 
     private readonly float _u, _squash;
-    // A screensaver runs for days. Each of the four rhythms keeps its own
-    // PHASE (an angle, in radians) as a double, wrapped at a full turn every
-    // frame, so no number ever grows large and no sine ever loses precision.
-    // (One shared clock wrapped at 100000 s went coarse after 14 hours and
-    // snapped every plant on the wrap, once a day.)
+    // A screensaver runs for days. Each of the rhythms keeps its own PHASE
+    // (an angle, in radians, or a fraction of a turn) as a double, wrapped
+    // every frame, so no number ever grows large and no sine ever loses
+    // precision. (One shared clock wrapped at 100000 s went coarse after 14
+    // hours and snapped every plant on the wrap, once a day.)
     private double _swellA, _swellB;        // the two slow swell sines
     private double _long, _short;           // how far the long and the short travelling waves have run, in turns
-    private float _swell, _gust, _longF, _shortF;
+    private double _patchA, _patchB;        // how far the gust patches have drifted, across and along the wind, in turns
+    private float _swell, _gust, _longF, _shortF, _patchAF, _patchBF;
 
     /// <param name="angle">Direction in radians, 0 = to the right, positive = down the screen (toward us).</param>
     /// <param name="u">The scene's size unit (see the repo rules): wave lengths scale with it.</param>
@@ -73,25 +80,69 @@ public sealed class Wind
     /// <summary>Once a frame, before anything asks the wind.</summary>
     public void Update(float dt)
     {
-        _swellA = (_swellA + dt * 0.21) % Math.Tau;
-        _swellB = (_swellB + dt * 0.073) % Math.Tau;
-        _long = (_long + dt * 0.6) % 1.0;
-        _short = (_short + dt * 1.5) % 1.0;
-        _longF = (float)_long; _shortF = (float)_short;
+        _swellA = (_swellA + dt * 0.17) % Math.Tau;
+        _swellB = (_swellB + dt * 0.061) % Math.Tau;
+        _long = (_long + dt * 0.28) % 1.0;                 // the gust front: 1.1u long, so it crosses the lawn in a few seconds
+        _short = (_short + dt * 0.9) % 1.0;
+        _patchA = (_patchA + dt * 0.11) % 1.0;
+        _patchB = (_patchB + dt * 0.07) % 1.0;
+        _longF = (float)_long; _shortF = (float)_short; _patchAF = (float)_patchA; _patchBF = (float)_patchB;
         _swell = (float)((0.5 + 0.5 * Math.Sin(_swellA)) * (0.6 + 0.4 * Math.Sin(_swellB + 1)));
-        _gust = 0.25f + 0.75f * _swell;
+        _gust = 0.2f + 0.8f * _swell;
     }
 
     /// <summary>The lean at screen point (x, y) right now.</summary>
     public float LeanAt(float x, float y)
     {
-        // How far along the wind this spot lies, in u, on the ground (the screen's y is squashed).
-        float along = (x * X + y / _squash * Y) / _u;
-        float w1 = MathF.Sin(MathF.Tau * (along / 0.7f - _longF));
-        float crest = 0.5f + 0.5f * w1; crest *= crest;                   // sharpened: calm troughs, a narrow band of bent grass
-        float w2 = MathF.Sin(MathF.Tau * (along / 0.3f - _shortF) + 2.1f);
-        return 0.08f + _gust * (0.15f + 0.75f * crest + 0.12f * w2);
+        // How far along and across the wind this spot lies, in u, on the ground (the screen's y is squashed).
+        float gy = y / _squash;
+        float along = (x * X + gy * Y) / _u, across = (gy * X - x * Y) / _u;
+        // The gust front: a broad soft hump (a smooth step up and down, no sharp crest) rolling downwind.
+        float w1 = 0.5f + 0.5f * MathF.Sin(MathF.Tau * (along / 1.1f - _longF));
+        float crest = w1 * w1 * (3 - 2 * w1);
+        // The patches: a slow checker of strong and weak, drifting sideways and downwind, so each gust is its own shape.
+        float patch = 0.5f + 0.5f * MathF.Sin(MathF.Tau * (across / 0.55f + _patchAF) + 1.3f) * MathF.Sin(MathF.Tau * (along / 0.8f - _patchBF));
+        // A faint quick ripple over it all.
+        float w2 = MathF.Sin(MathF.Tau * (along / 0.33f - _shortF) + 2.1f);
+        return 0.05f + _gust * (0.1f + 0.65f * crest * (0.4f + 0.6f * patch) + 0.08f * w2);
     }
+}
+
+/// <summary>
+/// Smooth random blotches, for anything that should vary gently from place
+/// to place: where a lawn is lush or worn, where clover has spread, where
+/// the flowers are. "Value noise": a random number is pinned to every
+/// corner of a grid, and between corners the value is blended smoothly,
+/// so neighbours agree and far-apart spots do not. Three sizes of grid are
+/// added (big blotches, with smaller ones on top) so the shapes are
+/// ragged, not round. The same (x, y, seed) always gives the same answer:
+/// a painter and a planter asking about the same spot get the same patch.
+/// </summary>
+public static class Mottle
+{
+    private static float Corner(int x, int y, int seed)
+    {
+        uint h = (uint)(x * 374761393) + (uint)(y * 668265263) + (uint)(seed * 1274126177);
+        h = (h ^ (h >> 13)) * 1274126177u;
+        h ^= h >> 16;
+        return (h & 0xFFFF) / 65535f;
+    }
+
+    /// <summary>One grid of blotches "cell" pixels across: 0 to 1.</summary>
+    public static float At(float x, float y, float cell, int seed)
+    {
+        float gx = x / cell, gy = y / cell;
+        int ix = (int)MathF.Floor(gx), iy = (int)MathF.Floor(gy);
+        float fx = gx - ix, fy = gy - iy;
+        fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+        float top = Corner(ix, iy, seed) * (1 - fx) + Corner(ix + 1, iy, seed) * fx;
+        float bottom = Corner(ix, iy + 1, seed) * (1 - fx) + Corner(ix + 1, iy + 1, seed) * fx;
+        return top * (1 - fy) + bottom * fy;
+    }
+
+    /// <summary>Three grids added (the biggest "cell" across, then half and a quarter of it, each fainter): 0 to 1, mostly near the middle.</summary>
+    public static float Blotch(float x, float y, float cell, int seed)
+        => (At(x, y, cell, seed) * 4 + At(x, y, cell * 0.5f, seed + 1) * 2 + At(x, y, cell * 0.25f, seed + 2)) / 7f;
 }
 
 /// <summary>
@@ -124,30 +175,91 @@ public static class Flipbook
         public readonly int Ax = ax, Ay = ay;                   // where the root sits inside this page
     }
 
+    /// <summary>What sits on top of a blade, if anything.</summary>
+    public enum Head
+    {
+        None,
+        Cattail,    // a velvety brown sausage with a pale spike above it
+        Seed,       // a grass seed head: a pale, slightly fatter stretch at the top of a thin stem
+        Daisy,      // white petals round a yellow eye, seen from above
+        Buttercup,  // five glossy yellow petals, small
+        Dandelion,  // a yellow pompom
+        Clock,      // a dandelion gone to seed: a pale, airy ball
+    }
+
     /// <summary>
     /// One blade: its height, which way it splays, how far, how much the wind
-    /// bends it, its width and colours. Cattail = true for a stem with a head.
+    /// bends it, its width and colours, what sits on top (Head) and how big
+    /// that is (HeadSize, pixels: the head's half width).
     /// Taper: 1 = a grass blade, narrowing steadily from root to tip; 2 = a
-    /// sword leaf, keeping its width and narrowing only near the tip.
+    /// sword leaf, keeping its width and narrowing only near the tip (painted
+    /// with a fold: a lit half, a shaded half and a pale midrib).
     /// </summary>
-    public readonly record struct Blade(float H, float AzX, float AzY, float Droop, float Flex, float Wid, Color Root, Color Tip, bool Cattail, float Taper = 1f);
+    public readonly record struct Blade(float H, float AzX, float AzY, float Droop, float Flex, float Wid, Color Root, Color Tip, Head Head = Head.None, float Taper = 1f, float HeadSize = 0f);
 
-    /// <summary>A tuft of grass: 6 to 10 blades splayed every way, each a little different, all from one root.</summary>
-    public static (Blade Blade, PointF Root)[] Tuft(float h, Random rng)
+    /// <summary>
+    /// The kinds of tuft a lawn is made of. Most are plain grass; the rest
+    /// give the lawn its variety: dry tawny tufts, taller grass gone to
+    /// seed, and the wildflowers, each a few blades with flower stalks
+    /// rising out of them.
+    /// </summary>
+    public enum TuftKind { Grass, Dry, Seeds, Daisies, Buttercups, Dandelions }
+
+    /// <summary>
+    /// A tuft: 5 to 10 blades splayed every way, each a little different, all
+    /// from one root, in one of a few colour families (a yellower green, a
+    /// bluer green, a tawny dry one), and for the flowering kinds two to four
+    /// thin stalks with a flower on top. Flower stalks are limber (a high
+    /// Flex) so they whip a little more than the blades in a gust.
+    /// </summary>
+    public static (Blade Blade, PointF Root)[] Tuft(float h, Random rng, TuftKind kind = TuftKind.Grass)
     {
-        var blades = new (Blade, PointF)[6 + rng.Next(5)];
-        for (int i = 0; i < blades.Length; i++)
+        bool flowers = kind is TuftKind.Daisies or TuftKind.Buttercups or TuftKind.Dandelions;
+        int blades = flowers ? 5 + rng.Next(3) : 6 + rng.Next(5);
+        int stalks = flowers ? 2 + rng.Next(3) : kind == TuftKind.Seeds ? 2 + rng.Next(2) : 0;
+        var all = new (Blade, PointF)[blades + stalks];
+        // The colour family: a base green, warmer or cooler, or dry.
+        int family = kind == TuftKind.Dry ? 3 : rng.Next(3);
+        for (int i = 0; i < blades; i++)
         {
             float az = (float)(rng.NextDouble() * MathF.Tau);
-            Color g = Color.FromArgb(60 + rng.Next(30), 104 + rng.Next(40), 38 + rng.Next(24));
-            blades[i] = (new Blade(
-                h * (0.55f + 0.45f * (float)rng.NextDouble()), MathF.Cos(az), MathF.Sin(az),
+            Color g = family switch
+            {
+                0 => Color.FromArgb(60 + rng.Next(30), 104 + rng.Next(40), 38 + rng.Next(24)),    // the lawn's own green
+                1 => Color.FromArgb(84 + rng.Next(30), 118 + rng.Next(36), 34 + rng.Next(16)),    // yellower, sun-baked
+                2 => Color.FromArgb(46 + rng.Next(24), 98 + rng.Next(34), 54 + rng.Next(26)),     // bluer, in damp ground
+                _ => Color.FromArgb(132 + rng.Next(30), 118 + rng.Next(24), 64 + rng.Next(20)),   // dry: tawny straw
+            };
+            float bh = flowers ? h * (0.45f + 0.3f * (float)rng.NextDouble()) : h * (0.55f + 0.45f * (float)rng.NextDouble());
+            all[i] = (new Blade(
+                bh, MathF.Cos(az), MathF.Sin(az),
                 0.25f + 0.45f * (float)rng.NextDouble(), 0.9f + 0.5f * (float)rng.NextDouble(),
                 h * (0.08f + 0.04f * (float)rng.NextDouble()),
                 Color.FromArgb((int)(g.R * 0.55f), (int)(g.G * 0.6f), (int)(g.B * 0.55f)),
-                Color.FromArgb(Math.Min(255, g.R + 90), Math.Min(255, g.G + 70), Math.Min(255, g.B + 40)), false), PointF.Empty);
+                Color.FromArgb(Math.Min(255, g.R + 90), Math.Min(255, g.G + 70), Math.Min(255, g.B + 40))), PointF.Empty);
         }
-        return blades;
+        for (int i = 0; i < stalks; i++)
+        {
+            float az = (float)(rng.NextDouble() * MathF.Tau);
+            Head head = kind switch
+            {
+                TuftKind.Seeds => Head.Seed,
+                TuftKind.Daisies => Head.Daisy,
+                TuftKind.Buttercups => Head.Buttercup,
+                _ => rng.Next(3) == 0 ? Head.Clock : Head.Dandelion,
+            };
+            float sh = head switch { Head.Seed => h * (1.05f + 0.35f * (float)rng.NextDouble()), Head.Buttercup => h * (0.7f + 0.2f * (float)rng.NextDouble()), _ => h * (0.85f + 0.3f * (float)rng.NextDouble()) };
+            float size = head switch { Head.Seed => h * 0.035f, Head.Daisy => h * 0.11f, Head.Buttercup => h * 0.07f, Head.Clock => h * 0.11f, _ => h * 0.085f };
+            Color stem = Color.FromArgb(92, 124, 54);
+            all[blades + i] = (new Blade(
+                sh, MathF.Cos(az), MathF.Sin(az),
+                0.08f + 0.22f * (float)rng.NextDouble(), 1.2f + 0.5f * (float)rng.NextDouble(),
+                h * (head == Head.Seed ? 0.035f : 0.03f),
+                Color.FromArgb((int)(stem.R * 0.6f), (int)(stem.G * 0.65f), (int)(stem.B * 0.6f)),
+                Color.FromArgb(Math.Min(255, stem.R + 50), Math.Min(255, stem.G + 40), Math.Min(255, stem.B + 30)), head, HeadSize: size),
+                new PointF(((float)rng.NextDouble() - 0.5f) * h * 0.2f, ((float)rng.NextDouble() - 0.5f) * h * 0.1f));
+        }
+        return all;
     }
 
     /// <summary>
@@ -173,7 +285,8 @@ public static class Flipbook
                 stem ? 0.3f + 0.15f * (float)rng.NextDouble() : 0.7f + 0.4f * (float)rng.NextDouble(),
                 stem ? h * 0.018f : h * (0.03f + 0.015f * (float)rng.NextDouble()),
                 Color.FromArgb((int)(g.R * 0.6f), (int)(g.G * 0.65f), (int)(g.B * 0.6f)),
-                Color.FromArgb(Math.Min(255, g.R + 60), Math.Min(255, g.G + 50), Math.Min(255, g.B + 30)), stem), root);
+                Color.FromArgb(Math.Min(255, g.R + 60), Math.Min(255, g.G + 50), Math.Min(255, g.B + 30)),
+                stem ? Head.Cattail : Head.None, HeadSize: stem ? h * 0.018f * 1.6f : 0f), root);
         }
         return all;
     }
@@ -201,7 +314,7 @@ public static class Flipbook
                 1.1f + 0.5f * (float)rng.NextDouble(), 0.35f + 0.25f * (float)rng.NextDouble(),
                 h * 0.14f,
                 Brushwork.Mix(leaf, Color.Black, 0.25f),
-                Brushwork.Mix(leaf, Color.FromArgb(190, 210, 130), 0.25f), false, Taper: 2f), PointF.Empty);
+                Brushwork.Mix(leaf, Color.FromArgb(190, 210, 130), 0.25f), Taper: 2f), PointF.Empty);
         }
         return blades;
     }
@@ -211,7 +324,11 @@ public static class Flipbook
     /// then the blades, each followed root to tip in short steps, bent a
     /// little further over at each. A cattail stem is painted in three
     /// parts: the stem, the brown head over the top fifth, and a pale
-    /// spike above it.
+    /// spike above it. A flower stalk is a thin blade with its flower
+    /// stamped at the tip, seen from above (a disc of petals round an eye),
+    /// and a small round shadow on the ground under it. A sword leaf (Taper
+    /// 2) is painted as a lit half and a shaded half either side of a pale
+    /// midrib, which is what makes a flat strip read as a leaf with a fold.
     /// </summary>
     public static void PaintClump(Graphics g, (Blade Blade, PointF Root)[] clump, float lean, int ax, int ay, int shadowAlpha, Wind wind, Overhead view)
     {
@@ -219,7 +336,7 @@ public static class Flipbook
         foreach (bool shadows in (ReadOnlySpan<bool>)[true, false])
             foreach (var (b, root) in clump)
             {
-                int steps = b.Cattail ? 12 : 8;
+                int steps = b.Head == Head.Cattail ? 12 : 8;
                 var top = new PointF[steps + 1];
                 var ground = new PointF[steps + 1];
                 // The bend: its own splay in its own direction, plus the wind's push downwind.
@@ -238,18 +355,49 @@ public static class Flipbook
                     ground[s] = new PointF(rx + gx + z * view.ShadowX, ry + (gy + z * view.ShadowY) * view.Squash);
                 }
                 PointF[] line = shadows ? ground : top;
-                if (!b.Cattail)
+                if (b.Head != Head.Cattail)
                 {
                     // A strip tapering from the root's width to a point at the tip
-                    // (steadily for grass; a sword leaf keeps its width until near the tip).
-                    PointF[] poly = Strip(line, s => b.Wid * (1 - 0.9f * MathF.Pow(s, b.Taper)) * 0.5f);
-                    if (shadows) { g.FillPolygon(shadow, poly); continue; }
-                    using var brush = new LinearGradientBrush(top[0], top[steps], b.Root, b.Tip);
-                    g.FillPolygon(brush, poly);
+                    // (steadily for grass; a sword leaf keeps its width until near
+                    // the tip; a flower stalk keeps most of its width to the top).
+                    float endW = b.Head == Head.None ? 0.9f : 0.5f;
+                    PointF[] poly = Strip(line, s => b.Wid * (1 - endW * MathF.Pow(s, b.Taper)) * 0.5f);
+                    if (shadows)
+                    {
+                        g.FillPolygon(shadow, poly);
+                        if (b.HeadSize > 0) g.FillEllipse(shadow, line[steps].X - b.HeadSize, line[steps].Y - b.HeadSize * view.Squash, b.HeadSize * 2, b.HeadSize * 2 * view.Squash);
+                        continue;
+                    }
+                    if (b.Taper >= 2f)
+                    {
+                        // The fold: the left half lit, the right half in its own shade, a pale midrib between.
+                        int n = line.Length;
+                        var left = new PointF[n * 2]; var right = new PointF[n * 2];
+                        for (int s = 0; s < n; s++)
+                        {
+                            left[s] = poly[s]; left[n * 2 - 1 - s] = line[s];
+                            right[s] = line[s]; right[n * 2 - 1 - s] = poly[n * 2 - 1 - s];
+                        }
+                        using (var lit = new LinearGradientBrush(top[0], top[steps], b.Root, b.Tip)) g.FillPolygon(lit, left);
+                        using (var dim = new LinearGradientBrush(top[0], top[steps], Brushwork.Mix(b.Root, Color.Black, 0.3f), Brushwork.Mix(b.Tip, Color.Black, 0.22f))) g.FillPolygon(dim, right);
+                        using (var rib = new Pen(Color.FromArgb(70, 214, 226, 150), MathF.Max(1f, b.Wid * 0.1f))) g.DrawLines(rib, line[..Math.Max(2, n - 1)]);
+                        continue;
+                    }
+                    using (var brush = new LinearGradientBrush(top[0], top[steps], b.Root, b.Tip)) g.FillPolygon(brush, poly);
+                    if (b.Head == Head.Seed)
+                    {
+                        // The seed head lies ALONG the stem's last stretch (an oat, not a pin head): a pale strip
+                        // over the top quarter, fattest in its middle, with a lighter streak down its sunny side.
+                        PointF[] headLine = line[(steps - 2)..];
+                        PointF[] oat = Strip(headLine, s => b.HeadSize * MathF.Min(1, MathF.Min(s * 3 + 0.3f, (1 - s) * 3 + 0.3f)));
+                        using (var ob = new SolidBrush(Color.FromArgb(198, 186, 132))) g.FillPolygon(ob, oat);
+                        using (var ol = new Pen(Color.FromArgb(120, 226, 216, 164), MathF.Max(1f, b.HeadSize * 0.5f))) g.DrawLines(ol, headLine);
+                    }
+                    else if (b.Head != Head.None) Flower(g, b.Head, top[steps], b.HeadSize, view);
                     continue;
                 }
                 // A cattail: stem (steps 0 to 9), head (9 to 11), spike (11 to 12).
-                float headW = b.Wid * 3.2f;
+                float headW = b.HeadSize * 2;
                 PointF[] stem = Strip(line[..10], s => b.Wid * (1 - 0.3f * s) * 0.5f);
                 PointF[] head = Strip(line[9..12], s => headW * 0.5f * MathF.Min(1, MathF.Min(s * 6 + 0.35f, (1 - s) * 6 + 0.35f)));
                 PointF[] spike = Strip(line[11..13], s => b.Wid * 0.35f);
@@ -260,6 +408,67 @@ public static class Flipbook
                     g.FillPolygon(hb, head);
                 using (var pb = new SolidBrush(Color.FromArgb(150, 128, 84))) g.FillPolygon(pb, spike);
             }
+    }
+
+    /// <summary>
+    /// A flower (or a seed head) at the tip of a stalk, seen from above and
+    /// squashed like everything on the ground. Sizes are in pixels, so at a
+    /// small draw size a daisy is a white dot with a yellow eye and nothing
+    /// finer is attempted.
+    /// </summary>
+    private static void Flower(Graphics g, Head head, PointF at, float r, Overhead view)
+    {
+        float sq = view.Squash;
+        void Disc(Color c, float cx, float cy, float rad)
+        {
+            using var b = new SolidBrush(c);
+            g.FillEllipse(b, cx - rad, cy - rad * sq, rad * 2, rad * 2 * sq);
+        }
+        switch (head)
+        {
+            case Head.Seed:
+                break;                                              // painted along the stem by PaintClump, not as a disc
+            case Head.Daisy:
+                // Nine petals round a yellow eye; petals as small discs a little out from the centre (a scalloped rim from above).
+                for (int i = 0; i < 9; i++)
+                {
+                    float a = i / 9f * MathF.Tau;
+                    Disc(Color.FromArgb(244, 244, 236), at.X + MathF.Cos(a) * r * 0.55f, at.Y + MathF.Sin(a) * r * 0.55f * sq, r * 0.42f);
+                }
+                Disc(Color.FromArgb(236, 196, 52), at.X, at.Y, r * 0.38f);
+                Disc(Color.FromArgb(214, 160, 36), at.X + r * 0.08f, at.Y + r * 0.1f, r * 0.2f);
+                break;
+            case Head.Buttercup:
+                for (int i = 0; i < 5; i++)
+                {
+                    float a = i / 5f * MathF.Tau + 0.4f;
+                    Disc(Color.FromArgb(246, 206, 40), at.X + MathF.Cos(a) * r * 0.5f, at.Y + MathF.Sin(a) * r * 0.5f * sq, r * 0.5f);
+                }
+                Disc(Color.FromArgb(226, 160, 24), at.X, at.Y, r * 0.28f);
+                break;
+            case Head.Dandelion:
+                // A pompom: a yellow disc with a ring of short rays and a paler middle.
+                Disc(Color.FromArgb(228, 188, 30), at.X, at.Y, r);
+                using (var ray = new Pen(Color.FromArgb(246, 216, 60), MathF.Max(1f, r * 0.14f)))
+                    for (int i = 0; i < 14; i++)
+                    {
+                        float a = i / 14f * MathF.Tau;
+                        g.DrawLine(ray, at.X + MathF.Cos(a) * r * 0.4f, at.Y + MathF.Sin(a) * r * 0.4f * sq, at.X + MathF.Cos(a) * r * 1.05f, at.Y + MathF.Sin(a) * r * 1.05f * sq);
+                    }
+                Disc(Color.FromArgb(250, 228, 90), at.X, at.Y, r * 0.4f);
+                break;
+            case Head.Clock:
+                // Gone to seed: an airy pale ball, mostly see-through, with a few seeds showing as specks.
+                Disc(Color.FromArgb(90, 236, 236, 228), at.X, at.Y, r);
+                Disc(Color.FromArgb(120, 244, 244, 238), at.X, at.Y, r * 0.6f);
+                for (int i = 0; i < 10; i++)
+                {
+                    float a = i / 10f * MathF.Tau + 0.2f;
+                    Disc(Color.FromArgb(160, 206, 200, 180), at.X + MathF.Cos(a) * r * 0.75f, at.Y + MathF.Sin(a) * r * 0.75f * sq, MathF.Max(0.6f, r * 0.08f));
+                }
+                Disc(Color.FromArgb(150, 130, 90), at.X, at.Y, r * 0.16f);
+                break;
+        }
     }
 
     /// <summary>A strip along a line of points, "halfWidth(s)" wide either side at fraction s along it: left edge out, right edge back.</summary>
@@ -292,7 +501,7 @@ public static class Flipbook
         foreach (var (b, root) in clump)
         {
             tallest = MathF.Max(tallest, b.H);
-            widest = MathF.Max(widest, b.Cattail ? b.Wid * 3.2f : b.Wid);
+            widest = MathF.Max(widest, MathF.Max(b.Wid, b.HeadSize * 2.2f));
             spreadX = MathF.Max(spreadX, MathF.Abs(root.X)); spreadY = MathF.Max(spreadY, MathF.Abs(root.Y));
         }
         float margin = widest + 4;
@@ -429,7 +638,24 @@ public sealed class Clumps
 /// </summary>
 public sealed class Lawn
 {
-    private const int Designs = 10;
+    // The tuft designs: a deck of flip-books dealt to the tufts. Most are
+    // plain grass of three heights; the rest are the lawn's variety.
+    private const int Designs = 36;
+    private static readonly (Flipbook.TuftKind Kind, float Height)[] Deck = BuildDeck();
+
+    private static (Flipbook.TuftKind, float)[] BuildDeck()
+    {
+        var deck = new List<(Flipbook.TuftKind, float)>();
+        for (int i = 0; i < 8; i++) deck.Add((Flipbook.TuftKind.Grass, 0.55f));       // short
+        for (int i = 0; i < 8; i++) deck.Add((Flipbook.TuftKind.Grass, 0.8f));        // middling
+        for (int i = 0; i < 6; i++) deck.Add((Flipbook.TuftKind.Grass, 1.05f));       // tall
+        for (int i = 0; i < 4; i++) deck.Add((Flipbook.TuftKind.Dry, 0.75f));
+        for (int i = 0; i < 4; i++) deck.Add((Flipbook.TuftKind.Seeds, 1.1f));
+        for (int i = 0; i < 2; i++) deck.Add((Flipbook.TuftKind.Daisies, 0.85f));
+        for (int i = 0; i < 2; i++) deck.Add((Flipbook.TuftKind.Buttercups, 0.75f));
+        for (int i = 0; i < 2; i++) deck.Add((Flipbook.TuftKind.Dandelions, 0.8f));
+        return deck.ToArray();
+    }
 
     private readonly struct Tuft(int x, int y, byte design, float stiff)
     {
@@ -484,6 +710,10 @@ public sealed class Lawn
         _view = view;
         _where = where;
         _sun = sun;
+        // The lawn's own dice, dealt once from the scene's: however much the
+        // lawn rolls (and a new design rolls plenty), everything the scene
+        // rolls after it stays where it was.
+        rng = new Random(rng.Next());
         float h = u * 0.05f;                                    // a tall blade, screen pixels
         _shift = u * 0.012f;
 
@@ -496,12 +726,15 @@ public sealed class Lawn
             _rb[i] = r << 16 | b;
             _ag[i] = a << 16 | g;
         }
-        // The tufts' pages, each trimmed to the pixels it actually uses. Half the designs are shorter tufts.
+        // The tufts' pages, one flip-book per design in the deck, each page
+        // trimmed to the pixels it actually uses. Shadows are faint (26 of
+        // 255): hundreds of dark parallel shadows at 48 wove a lattice.
         _pages = new Flipbook.Page[Designs, Flipbook.Poses];
         int ph = 1, pw = 1;                                     // the tallest and widest page, for the bands and the box below
         for (int d = 0; d < Designs; d++)
         {
-            Flipbook.Page[] pages = Flipbook.Pages(Flipbook.Tuft(h * (d < Designs / 2 ? 0.72f : 1f), rng), 48, wind, view);
+            (Flipbook.TuftKind kind, float tall) = Deck[d];
+            Flipbook.Page[] pages = Flipbook.Pages(Flipbook.Tuft(h * tall, rng, kind), 26, wind, view);
             for (int p = 0; p < Flipbook.Poses; p++) { _pages[d, p] = pages[p]; ph = Math.Max(ph, pages[p].Sprite.Height); pw = Math.Max(pw, pages[p].Sprite.Width); }
         }
 
@@ -527,22 +760,58 @@ public sealed class Lawn
             for (int y = 0; y < _sh; y++) Array.Copy(where, (_sy0 + y) * width + _sx0, _whereBox, y * _sw, _sw);
         }
 
+        // How thick the painted carpet is, cell by cell: the share of pixels
+        // a blade covers. Tufts follow it (thick grass where the carpet is
+        // thick, few where the painter wore it thin or let moss take over),
+        // so the standing grass and the painted grass agree about where the
+        // lawn is lush. The share is measured against the lawn's typical
+        // cell, so a lawn painted thin all over still gets its tufts.
+        float space = u * 0.017f;
+        int occW = (int)(width / space) + 2, occH = (int)(height / space) + 2;
+        var cover = new float[occW * occH];
+        var cells = new List<float>();
+        for (int cy = 0; cy < occH; cy++)
+            for (int cx = 0; cx < occW; cx++)
+            {
+                int n = 0, grass = 0;
+                for (int y = (int)(cy * space); y < (int)((cy + 1) * space) && y < height; y += 2)
+                    for (int x = (int)(cx * space); x < (int)((cx + 1) * space) && x < width; x += 2)
+                    {
+                        if (!grassy[y * width + x]) continue;
+                        n++;
+                        if ((carpet[y * width + x] >> 24) > 40) grass++;
+                    }
+                cover[cy * occW + cx] = n == 0 ? 0 : grass / (float)n;
+                if (n > 0) cells.Add(cover[cy * occW + cx]);
+            }
+        cells.Sort();
+        float typical = cells.Count == 0 ? 1 : MathF.Max(0.05f, cells[cells.Count * 2 / 3]);
+
         // Plant the tufts: random spots on the lawn (not sand, stones or
         // rocks, and not right against them), each at least "space" from
         // every tuft already planted, so they scatter the way plants do
         // rather than standing in rows. A coarse grid of "taken" cells
-        // makes the spacing test quick.
-        float space = u * 0.017f;
+        // makes the spacing test quick. A spot's chance of a tuft is its
+        // cell's cover (so the lawn has thick and thin places, not one even
+        // crop); what KIND of tuft it gets comes from slow blotches over the
+        // lawn (Mottle): the flowers grow in drifts of one kind, the seed
+        // heads in their own patches and along the lawn's edges, and the
+        // rest is grass, dealt from the deck.
         float keep = h * 0.25f;
-        int occW = (int)(width / space) + 2, occH = (int)(height / space) + 2;
         var taken = new List<PointF>[occW * occH];
         var tufts = new List<Tuft>();
         int want = (int)((_x1 - _x0 + 1) * (_y1 - _y0 + 1) / (space * space) * 0.55f);
-        for (int tries = 0; tries < want * 6 && tufts.Count < want; tries++)
+        int flowerSeed = rng.Next(), seedSeed = rng.Next();
+        int grassDesigns = 0; while (grassDesigns < Designs && Deck[grassDesigns].Kind == Flipbook.TuftKind.Grass) grassDesigns++;
+        int FirstOf(Flipbook.TuftKind kind) { for (int d = 0; d < Designs; d++) if (Deck[d].Kind == kind) return d; return 0; }
+        int dryAt = FirstOf(Flipbook.TuftKind.Dry), seedsAt = FirstOf(Flipbook.TuftKind.Seeds), daisyAt = FirstOf(Flipbook.TuftKind.Daisies), buttercupAt = FirstOf(Flipbook.TuftKind.Buttercups), dandelionAt = FirstOf(Flipbook.TuftKind.Dandelions);
+        for (int tries = 0; tries < want * 8 && tufts.Count < want; tries++)
         {
             int x = _x0 + rng.Next(_x1 - _x0 + 1), y = _y0 + rng.Next(_y1 - _y0 + 1);
             if (!Grassy(x, y) || !Grassy(x - keep, y) || !Grassy(x + keep, y) || !Grassy(x, y - keep) || !Grassy(x, y + keep)) continue;
             int ox = (int)(x / space), oy = (int)(y / space);
+            float chance = MathF.Min(1f, cover[oy * occW + ox] / typical);
+            if (rng.NextDouble() > chance * chance) continue;
             bool crowded = false;
             for (int j = oy - 1; j <= oy + 1 && !crowded; j++)
                 for (int i = ox - 1; i <= ox + 1 && !crowded; i++)
@@ -552,7 +821,25 @@ public sealed class Lawn
                 }
             if (crowded) continue;
             (taken[oy * occW + ox] ??= new List<PointF>()).Add(new PointF(x, y));
-            tufts.Add(new Tuft(x, y, (byte)rng.Next(Designs), 0.7f + 0.6f * (float)rng.NextDouble()));
+            // The kind. Flower drifts: where the flower blotch is high, one kind per drift
+            // (the drift's own corner of a coarse grid picks it), and not every tuft in a
+            // drift flowers. Seed heads: their own blotch, and the lawn's edges, where the
+            // mower never reached. Dry tufts: a sprinkle anywhere. Else grass.
+            int design;
+            float flower = Mottle.Blotch(x, y, u * 0.16f, flowerSeed);
+            float seeds = Mottle.Blotch(x, y, u * 0.2f, seedSeed);
+            float edge = h * 1.2f;
+            bool nearEdge = !Grassy(x - edge, y) || !Grassy(x + edge, y) || !Grassy(x, y - edge) || !Grassy(x, y + edge);
+            if (flower > 0.6f && rng.NextDouble() < 0.6)
+            {
+                int drift = (int)(x / (u * 0.22f)) * 31 + (int)(y / (u * 0.18f)) * 17 + flowerSeed;
+                int at = (drift & 0xFFFF) % 3 switch { 0 => daisyAt, 1 => buttercupAt, _ => dandelionAt };
+                design = at + rng.Next(2);
+            }
+            else if ((seeds > 0.64f && rng.NextDouble() < 0.3) || (nearEdge && rng.NextDouble() < 0.12)) design = seedsAt + rng.Next(4);
+            else if (rng.NextDouble() < 0.08) design = dryAt + rng.Next(4);
+            else design = rng.Next(grassDesigns);
+            tufts.Add(new Tuft(x, y, (byte)design, 0.7f + 0.6f * (float)rng.NextDouble()));
         }
         // Bands taller than a page: tufts in two bands that are not next to
         // each other can never touch, so those bands can be drawn at the same
@@ -668,10 +955,15 @@ public sealed class Lawn
                 int a = (int)(ag >> 16);
                 if (a < 2) continue;
                 uint rb = ((_rb[j] * w00 + _rb[j + 1] * w10 + _rb[j + w] * w01 + _rb[j + w + 1] * w11) >> 8) & 0x00FF00FF;
-                // Brighter where it leans: bent blades show their pale tips. In 128ths. Darker in a branch's shadow.
-                int bright = (int)((1 + 0.35f * (lean - 0.25f)) * 128);
+                // Brighter where it leans: bent blades show their pale undersides
+                // to the sky, which is what a gust looks like from above (a
+                // sheen rolling over the field). In 128ths; the blue channel
+                // gains less, so the sheen is a pale yellow-green, not grey.
+                // Darker in a branch's shadow.
+                int bright = (int)((1 + 0.6f * (lean - 0.2f)) * 128);
                 if (_sun != null) bright = bright * (_sun[i] + 1) >> 8;
-                int r = (int)(rb >> 16) * bright >> 7, g = (int)(ag & 0xFF) * bright >> 7, b = (int)(rb & 0xFF) * bright >> 7;
+                int brightB = (bright * 3 + 128) >> 2;
+                int r = (int)(rb >> 16) * bright >> 7, g = (int)(ag & 0xFF) * bright >> 7, b = (int)(rb & 0xFF) * brightB >> 7;
                 uint bg = px[i];
                 int keep = 256 - a;
                 int rr = ((int)((bg >> 16) & 0xFF) * keep >> 8) + r, gg = ((int)((bg >> 8) & 0xFF) * keep >> 8) + g, bb = ((int)(bg & 0xFF) * keep >> 8) + b;
