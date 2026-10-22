@@ -652,8 +652,23 @@ sinks the head, a flap lifts the whole bird and stamps two pictures of the open 
 visit (calm, fussy), a `Doing` (Cruise, Look, Dabble, Preen, Flap, Wait, Herd), weighted dice; the
 steering is the snake's (feelers from just past the bill over the pads, rocks, log, reeds and the
 bank, the smallest turn that clears, a refused step forces the turn) with an eased turn rate. The
-ducklings do not steer by themselves: each chases a point on the mother's trail (`Trail`) a set way
-back, the line closing up when she stops, feeling the way as she does. The cute things are the
+ducklings do not steer by themselves: each has a place on the mother's trail (`Trail`) a set way
+back, the line closing up when she stops, and it feels the way as she does. Where it POINTS and how
+hard it CLOSES are kept apart, as a car follows a road: it points at a spot a body length ahead of
+its place along her trail (so in place it simply faces the way the line goes, and off to one side
+it eases back onto the line at a shallow angle), and its speed is her pace plus a gentle closing on
+how far behind its place it is, capped at a third over her cruise, with a turn no tighter than a
+body length across and never over 3.5 radians a second. The first version aimed each duckling at
+its place itself at a speed set by the distance to it: every duckling raced at its slot at nearly
+twice her speed, overshot, swung round at seven radians a second and came at it again, S-curves
+and full circles behind a mother paddling straight (six to thirteen circles per duckling per visit
+on the log, two reversals a second; the owner's words were "chaotic" and "looping ducks"). When the
+water between a duckling and its place is not clear (she went round a pad), its place is a point
+of her trail just ahead of where it is, in the same shape. A slide along an edge eases the heading
+toward the slid way rather than copying it (a two radian snap in one frame, then a circle back),
+the feelers search the whole way round, and a duckling wanting to go and getting nowhere for a
+second (a pocket between two pads and the cattails, where it paddled on the spot) swims the clearest
+of sixteen ways out for two seconds, as a grown duck does. The cute things are the
 director's: a weighted dice picks one (never two at once, the last one much less likely), sets the
 ducklings' doings and runs it a phase at a time. A straggler (more than 0.15u from her and more
 than 0.07u behind its place) makes her stop and look back until it is in place. A duck is solid to

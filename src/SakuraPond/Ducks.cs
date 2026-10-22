@@ -376,7 +376,7 @@ internal sealed class Ducks
     private int _wpCount, _wpAt, _extra;
     private PointF _exitG;
     private int _entryEdge;
-    private float[] _slotX = [], _slotY = [], _slotAt = [], _slotLat = [], _carX = [], _carY = [];
+    private float[] _slotX = [], _slotY = [], _slotAt = [], _slotLat = [], _carX = [], _carY = [], _close = [];
     private const float TStep = 0.012f;       // the mother's trail sampled every 0.012u back to 0.66u, once a frame
     private readonly PointF[] _tp = new PointF[56];
     private float _fizzT;
@@ -466,7 +466,7 @@ internal sealed class Ducks
         _trail.Straight(new PointF(lx, ly), heading, 0.7f * u, 175);
         _kids = new Duckling[nKids];
         for (int k = 0; k < nKids; k++) _kids[k] = new Duckling(w, _ripples, _rng, _sp.KidSkin, _sp.KidLen, k);
-        _slotX = new float[nKids]; _slotY = new float[nKids]; _slotAt = new float[nKids]; _slotLat = new float[nKids]; _carX = new float[nKids]; _carY = new float[nKids];
+        _slotX = new float[nKids]; _slotY = new float[nKids]; _slotAt = new float[nKids]; _slotLat = new float[nKids]; _carX = new float[nKids]; _carY = new float[nKids]; _close = new float[nKids];
         ComputeSlots(leader);
         for (int k = 0; k < nKids; k++) _kids[k].Place(_slotX[k], _slotY[k], heading);
         _heads = new PointF[_adults.Length + nKids];
@@ -762,28 +762,44 @@ internal sealed class Ducks
                 _slotX[k] = p.X - dir.Y * lat; _slotY[k] = p.Y + dir.X * lat;
             }
         }
-        // The carrot each duckling chases: its slot, straight, when the water between is clear; otherwise (a pad between it and
-        // its place, the mother having gone round it) a short way along her trail from where it is. The search for "where it is
-        // on the trail" is kept to the stretch just behind its own slot: nearest over the WHOLE trail picked an old part of the
-        // path that happened to pass close by, and the duckling followed the whole loop of her old route round again.
+        // Where each duckling POINTS and how hard it CLOSES are two different things. It points at a spot on her trail a body
+        // length AHEAD of its own place (so when it is in place it simply faces the way the line goes, and when it is off to
+        // one side it eases back onto the line at a shallow angle); and it closes on its place by how far BEHIND the place it
+        // is along the line, a little harder when it is off to the side. Pointing at the place itself, at a speed set by the
+        // distance to it, had every duckling in a line race at its own slot at nearly twice her speed, overshoot it, swing
+        // round at seven radians a second and come at it again: S-curves and full circles behind a mother paddling in a
+        // straight line (six to thirteen circles per duckling per visit, two reversals a second). This is pure pursuit, as a
+        // car follows a road: aim ahead, let the speed settle the distance.
+        // When the water between it and its place is not clear (a pad between, the mother having gone round it), it points at
+        // a short way along her trail from where it is instead. That search is kept to the stretch just behind its own slot:
+        // nearest over the WHOLE trail picked an old part of the path that happened to pass close by, and the duckling
+        // followed the whole loop of her old route round again.
+        float look = _sp.KidLen / TStep;                                          // one body length ahead, in trail steps
         for (int k = 0; k < n; k++)
         {
             Duckling d = _kids[k];
-            if (Ground.LineClear(_solidFn!, new PointF(d.X, d.Y), new PointF(_slotX[k], _slotY[k]), 0.012f * u))
+            float place = _slotAt[k];
+            if (!Ground.LineClear(_solidFn!, new PointF(d.X, d.Y), new PointF(_slotX[k], _slotY[k]), 0.012f * u))
             {
-                _carX[k] = _slotX[k]; _carY[k] = _slotY[k];
-                continue;
+                int lo = (int)_slotAt[k], hi = Math.Min(_tp.Length - 1, lo + 20), near = lo;
+                float best = float.MaxValue;
+                for (int j = lo; j <= hi; j++)
+                {
+                    float dx = _tp[j].X - d.X, dy = _tp[j].Y - d.Y, dd = dx * dx + dy * dy;
+                    if (dd < best) { best = dd; near = j; }
+                }
+                place = near > _slotAt[k] ? MathF.Max(_slotAt[k], near - 4f) : _slotAt[k];
             }
-            int lo = (int)_slotAt[k], hi = Math.Min(_tp.Length - 1, lo + 20), near = lo;
-            float best = float.MaxValue;
-            for (int j = lo; j <= hi; j++)
-            {
-                float dx = _tp[j].X - d.X, dy = _tp[j].Y - d.Y, dd = dx * dx + dy * dy;
-                if (dd < best) { best = dd; near = j; }
-            }
-            float ci = near > _slotAt[k] ? MathF.Max(_slotAt[k], near - 4f) : _slotAt[k];
-            (PointF p, PointF dir) = TrailAt(ci);
-            _carX[k] = p.X - dir.Y * _slotLat[k]; _carY[k] = p.Y + dir.X * _slotLat[k];
+            // The same shape whichever place it is heading for (its slot, or a point of her trail just ahead of where it is):
+            // point a body length ahead of the place along the trail, close by the distance behind the place. The blocked case
+            // first kept the old "point at the place itself" and a duckling beside a pad orbited its own carrot at a body length.
+            (PointF ap, PointF ad) = TrailAt(MathF.Max(0f, place - look));
+            _carX[k] = ap.X - ad.Y * _slotLat[k]; _carY[k] = ap.Y + ad.X * _slotLat[k];
+            (PointF pp, PointF pd) = TrailAt(place);
+            float ex = pp.X - pd.Y * _slotLat[k] - d.X, ey = pp.Y + pd.X * _slotLat[k] - d.Y;
+            float behind = ex * pd.X + ey * pd.Y;                                 // negative when it has got ahead of its place
+            float aside = MathF.Abs(ex * pd.Y - ey * pd.X);
+            _close[k] = MathF.Max(behind, 0.5f * aside);
         }
     }
 
@@ -805,11 +821,14 @@ internal sealed class Ducks
         bool scramble = d.Doing == KDoing.Scramble;
         switch (d.Doing)
         {
+            // In the line: her pace plus a gentle closing on its place, never more than a third over her cruise (a duckling
+            // that hurries at twice her speed is the frantic one; he asked for smooth and slow). A scramble is the same with a
+            // little more hurry.
             case KDoing.Follow:
-                d.Steer(dt, _carX[k], _carY[k], 1.7f * cr, ms);
+                d.Steer(dt, _carX[k], _carY[k], 1.3f * cr, ms, _close[k] * 1.2f);
                 break;
             case KDoing.Scramble:
-                d.Steer(dt, _carX[k], _carY[k], 2.3f * cr, ms);
+                d.Steer(dt, _carX[k], _carY[k], 1.5f * cr, ms, _close[k] * 1.6f);
                 if (d.DistTo(_slotX[k], _slotY[k]) < 0.03f * u) d.Begin(KDoing.Follow);
                 break;
             case KDoing.Lag:
@@ -952,7 +971,7 @@ internal sealed class Ducks
     private void EndCute()
     {
         _lastCute = _cute; _cute = Cute.None;
-        _cuteGap = 8 + 10 * (float)_rng.NextDouble();
+        _cuteGap = 14 + 16 * (float)_rng.NextDouble();      // mostly in line; a cute thing every quarter to half minute (was 8 to 18 s)
         _waitIsCute = false;
         if (_adults.Length > 0 && _adults[0].Now == Duck.Doing.Wait && _kids.Length > 0) { /* the straggler rule decides from here */ }
     }
@@ -1055,7 +1074,7 @@ internal sealed class Ducks
                     float ax = d.X - leader.X, ay = d.Y - leader.Y, al = MathF.Max(1e-3f, MathF.Sqrt(ax * ax + ay * ay));
                     float tx = d.X + ax / al * 0.07f * _u, ty = d.Y + ay / al * 0.07f * _u;
                     d.TX = _world!.SolidG(tx, ty) ? tx : d.X; d.TY = _world.SolidG(tx, ty) ? ty : d.Y;
-                    d.MaxV = 2.0f * leader.Cruise;
+                    d.MaxV = 1.4f * leader.Cruise;
                 }
                 break;
         }
@@ -1095,7 +1114,8 @@ internal sealed class Ducks
                             _phase = 1; _phaseT = 0;
                             PointF m = new((a.Centre.X + b.Centre.X) / 2, (a.Centre.Y + b.Centre.Y) / 2);
                             _ripples.Add(m.X, m.Y, 0.2f);
-                            a.StartSpin(MathF.PI, 0.9f); b.StartSpin(-MathF.PI, 0.9f);               // bumped heads, and each spins half round
+                            a.StartSpin(MathF.PI * 0.5f, 0.8f); b.StartSpin(-MathF.PI * 0.5f, 0.8f);   // bumped heads, and each is knocked a quarter round
+                            // (half round, then the scramble back turning on the same way, was a full circle: a looping duckling)
                         }
                     }
                     else if (_phase == 1) { if (_phaseT > 1.3f) { a.Begin(KDoing.Scramble); b.Begin(KDoing.Scramble); _phase = 2; } }
@@ -1110,7 +1130,7 @@ internal sealed class Ducks
                     {
                         PointF s = _world!.ToScreen(_px, _py);
                         if (_petals.NearestFloating(s.X, s.Y, 0.06f * u, out PointF at)) (_px, _py) = _world.ToGround(at.X, at.Y);     // it drifts: keep the aim on it
-                        a.TX = _px; a.TY = _py; a.MaxV = 1.4f * cr;
+                        a.TX = _px; a.TY = _py; a.MaxV = 1.1f * cr;
                         if (a.DistTo(_px, _py) < 0.014f * u) { _phase = 1; _phaseT = 0; }
                         else if (_phaseT > 8 || a.DistTo(leader.X, leader.Y) > 0.2f * u) _phase = 2;      // too far from her: give up and go back
                     }
@@ -1136,7 +1156,7 @@ internal sealed class Ducks
                             (float sx, float sy) = _world!.ToGround(s.X, s.Y);
                             if (Dist(sx, sy, a.X, a.Y) < 0.25f * u && Dist(sx, sy, leader.X, leader.Y) < 0.19f * u && _world.SolidG(sx, sy)) { _px = sx; _py = sy; }
                         }
-                        a.TX = _px; a.TY = _py; a.MaxV = 1.5f * cr;
+                        a.TX = _px; a.TY = _py; a.MaxV = 1.1f * cr;
                         if (a.DistTo(_px, _py) < 0.035f * u) { _phase = 1; _phaseT = 0; a.WantTip = true; _ripples.Add(a.Centre.X, a.Centre.Y, 0.15f); }
                         else if (_phaseT > 9 || a.DistTo(leader.X, leader.Y) > 0.2f * u) _phase = 2;
                     }
@@ -1167,7 +1187,7 @@ internal sealed class Ducks
                         float ang = cnt <= 1 ? 0 : -0.95f + 1.9f * idx / (cnt - 1);
                         float rad = (0.038f + 0.034f * ring) * u;
                         _kids[k].TX = hx + MathF.Cos(h + ang) * rad; _kids[k].TY = hy + MathF.Sin(h + ang) * rad;
-                        _kids[k].MaxV = 2.0f * cr;
+                        _kids[k].MaxV = 1.3f * cr;
                     }
                     if (_phaseT > _bunchFor) { SendBack(); leader.EndWait(); _waitIsCute = false; _phase = 1; }
                 }
@@ -2421,7 +2441,7 @@ internal sealed class Duckling : Body
     /// <summary>How deep the head is dipped for a peck, 0 to 1 (set by the director).</summary>
     public float Dip;
 
-    private float _turnRate, _tip, _phase, _spinLeft, _spinRate, _fizz, _rock, _refusedT;
+    private float _turnRate, _tip, _phase, _spinLeft, _spinRate, _fizz, _rock, _refusedT, _stuckT, _unstickT, _unstickH;
     private float _headAlpha = 1;
     private readonly float[] _h = new float[Points];
     private readonly PointF[] _g = new PointF[Points];
@@ -2478,24 +2498,34 @@ internal sealed class Duckling : Body
     public void StartSpin(float by, float secs) { _spinRate = by / secs; _spinLeft = secs; }
 
     /// <summary>
-    /// Swim toward (tx, ty): as fast as the mother's own speed plus enough to
-    /// close the gap (so it catches up smoothly and stops when she stops), never
-    /// faster than "maxV". Its heading turns toward where it is going on an eased
-    /// turn rate. A step onto land, a pad or a rock is refused and slid along the
-    /// edge instead (Ground.Step).
+    /// Swim toward (tx, ty) on its own (a petal, a sibling, a place under her chin): the closing speed grows with the distance
+    /// left, so it slows into the spot and stops there.
     /// </summary>
     public void Steer(float dt, float tx, float ty, float maxV, float motherSpeed)
+        => Steer(dt, tx, ty, maxV, motherSpeed, DistTo(tx, ty) * 2f);
+
+    /// <summary>
+    /// Point at (aimX, aimY) and swim at the mother's own speed plus "closing" (pixels a second: the director's reading of how
+    /// far behind its place it is), never faster than "maxV". Pointing and closing are kept apart on purpose (see
+    /// Ducks.ComputeSlots): aimed at its place itself and sped by the distance to it, a duckling overshot and circled.
+    /// Its heading turns toward the aim on an eased turn rate, no tighter than a body length across. A step onto land, a pad
+    /// or a rock is refused and slid along the edge instead (Ground.Step).
+    /// </summary>
+    public void Steer(float dt, float aimX, float aimY, float maxV, float motherSpeed, float closing)
     {
-        float dx = tx - X, dy = ty - Y, d = MathF.Sqrt(dx * dx + dy * dy);
-        float want = MathF.Min(maxV, motherSpeed * 0.92f + d * 3f);
-        if (d < _u * 0.004f) want = MathF.Min(want, motherSpeed);
-        // Feel the way, as a grown duck does (a pad or rock between it and where it is going: the smallest turn that is clear).
+        float dx = aimX - X, dy = aimY - Y, d = MathF.Sqrt(dx * dx + dy * dy);
+        float want = Math.Clamp(motherSpeed * 0.92f + closing, 0f, maxV);
+        // Feel the way, as a grown duck does (a pad or rock between it and where it is going: the smallest turn that is clear,
+        // searched the whole way round). Pinned (wanting to go, and getting nowhere for a second: a pocket between a pad and
+        // the bank, where the step slid it a pixel left and a pixel right at full paddle), it ignores the aim for two seconds
+        // and swims the clearest way out, as a grown duck does.
         float desired = MathF.Atan2(dy, dx);
-        if (d > _u * 0.01f)
+        if (_unstickT > 0) { _unstickT -= dt; desired = _unstickH; }
+        else if (d > _u * 0.01f)
         {
             float look = MathF.Min(d, Len * 1.3f + Speed * 0.4f);
             if (!ClearAhead(desired, look))
-                for (int k = 1; k <= 6; k++)
+                for (int k = 1; k <= 8; k++)
                 {
                     float a1 = desired + k * 0.4f, a2 = desired - k * 0.4f;
                     if (ClearAhead(a1, look)) { desired = a1; break; }
@@ -2504,13 +2534,17 @@ internal sealed class Duckling : Body
         }
         Speed += (want - Speed) * (1 - MathF.Exp(-dt * 8f));
         float turn = 0;
-        // A turn is no tighter than about half a body length across at this speed (a duckling that swings round faster than it moves is
-        // pivoting on the spot, and reads as going tail first).
-        float most = Math.Clamp(MathF.Max(Speed, _u * 0.02f) / (0.5f * Len), 1.5f, 7f);
-        if (d > _u * 0.006f && Speed > _u * 0.004f) turn = Math.Clamp(Wrap(desired - Heading) * 6f, -most, most);
-        _turnRate += (turn - _turnRate) * (1 - MathF.Exp(-dt * 12f));
+        // A turn is no tighter than about seven tenths of a body length across at this speed, and never over 3.5 radians a
+        // second (a duckling that swings round faster than it moves is pivoting on the spot, and reads as going tail first; at
+        // seven radians a second with a gain of six it was a dodgem; a circle wider than a body length could not reach an aim a
+        // body length off to the side and orbited it). The gain of three and the eighth-of-a-second ease are what read as a
+        // small bird settling onto a line rather than snapping to it.
+        float most = Math.Clamp(MathF.Max(Speed, _u * 0.02f) / (0.7f * Len), 1.5f, 3.5f);
+        if (d > _u * 0.006f && Speed > _u * 0.004f) turn = Math.Clamp(Wrap(desired - Heading) * 3f, -most, most);
+        _turnRate += (turn - _turnRate) * (1 - MathF.Exp(-dt * 8f));
         Heading = Wrap(Heading + _turnRate * dt);
         float step = Speed * dt;
+        float x0 = X, y0 = Y;
         if (step > 1e-4f)
         {
             float x = X, y = Y, h = Heading;
@@ -2525,8 +2559,32 @@ internal sealed class Duckling : Body
                 _refusedT += dt;
                 if (_refusedT > 0.4f) Rescue(step * 1.5f);
             }
-            else { X = x; Y = y; if (h != Heading) Heading = h; _refusedT = 0; }
+            else
+            {
+                X = x; Y = y; _refusedT = 0;
+                // A slide along an edge hands back the heading it slid on, up to three radians off: taken outright that was a snap
+                // (two radians in a frame on the log) and then a whole circle back to the line. Ease toward it instead.
+                if (h != Heading) Heading = Wrap(Heading + Math.Clamp(Wrap(h - Heading), -2f * most * dt, 2f * most * dt));
+            }
         }
+        // The watchdog: wanting to go and not getting anywhere (a quarter of the step at most) for a second.
+        float mx = X - x0, my = Y - y0;
+        if (want > 0.3f * maxV && _unstickT <= 0 && mx * mx + my * my < 0.0625f * step * step) _stuckT += dt;
+        else _stuckT = MathF.Max(0, _stuckT - 2 * dt);
+        if (_stuckT > 1f) { _stuckT = 0; _unstickT = 2f; _unstickH = ClearestWay(); }
+    }
+
+    /// <summary>The heading with the most open water a body length and two out from here, of sixteen (the way out of a pocket).</summary>
+    private float ClearestWay()
+    {
+        float best = float.MinValue, bestA = Heading;
+        for (int k = 0; k < 16; k++)
+        {
+            float a = k * MathF.Tau / 16, ca = MathF.Cos(a), sa = MathF.Sin(a);
+            float score = _w.RoomG(X + ca * Len * 1.2f, Y + sa * Len * 1.2f, _wide * 0.5f) + 0.5f * _w.RoomG(X + ca * Len * 2.4f, Y + sa * Len * 2.4f, _wide * 0.5f);
+            if (score > best) { best = score; bestA = a; }
+        }
+        return bestA;
     }
 
     /// <summary>Moves it a little toward whichever of eight ways has water and the most room (used only when every step is refused).</summary>

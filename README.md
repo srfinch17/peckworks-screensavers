@@ -231,7 +231,9 @@ travelling wave (the cattails and irises sway with it stiffly).
   head turns, the body does not), dabbles (tips up, head under, tail clear of the water), preens
   (head back over the shoulder), flaps (the wings open from the shoulders, flung wide three times, a little spray, a tail wag),
   and stops and looks back for a straggler. The ducklings follow her trail in a line (two abreast
-  when there are many), and now and then one of them does something cute, never two at once: one
+  when there are many), each pointing a body length ahead of its own place on her trail and
+  matching her pace with a gentle closing on the gap, never more than a third faster than her
+  cruise, and now and then one of them does something cute, never two at once: one
   lags to peck at something and scrambles to catch up, two bump and spin, one pecks a petal, one
   dabbles where the minnows flash, all dabble bottoms
   up, all bunch under her chin, or she flaps and they scatter and come back. If the snake comes near
