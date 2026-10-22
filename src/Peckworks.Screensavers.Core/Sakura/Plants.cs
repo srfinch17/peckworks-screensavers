@@ -1002,7 +1002,8 @@ public sealed class Boughs
 {
     private const int Tile = 4;
     private readonly int[][] _spans;                            // per row: pairs of (first x, last x) of the stretches a live bough pixel can reach, walked by Draw
-    private const byte StillByte = 51;                          // below a fifth of the full sway a pixel is "still": with the tip at 26 px it moves under a pixel at a full lean, so it is baked into the backdrop
+    private const byte StillByte = 77;                          // below three tenths of the full sway a pixel is "still" (with the tip at 26 px it would move at most a pixel or two at a full lean) and is baked into the backdrop; the outer boughs over the water are the ones the eye follows
+    private readonly float[] _lastShiftBase, _lastShiftTip;     // the shifts the kept sheet was last made with: in a lull nothing has moved and the shifting is skipped
     private readonly int _w, _h, _y0, _y1, _margin, _tw, _th;
     private readonly uint[] _rb, _ag;                           // the sheet, premultiplied and packed two channels to a number (see Lawn)
     private readonly byte[] _amp;                               // 0 to 255 per pixel: how far out along a bough it is (0 at a root)
@@ -1129,7 +1130,8 @@ public sealed class Boughs
         int n = roots.Length;
         _base = new float[n]; _baseV = new float[n]; _tip = new float[n]; _tipV = new float[n];
         _shiftBase = new float[n]; _shiftTip = new float[n];
-        for (int t = 0; t < n; t++) _base[t] = _tip[t] = wind.LeanAt(roots[t].X, roots[t].Y);   // start at rest in today's breeze, not with a lurch from zero
+        _lastShiftBase = new float[n]; _lastShiftTip = new float[n];
+        for (int t = 0; t < n; t++) { _base[t] = _tip[t] = wind.LeanAt(roots[t].X, roots[t].Y); _lastShiftBase[t] = _lastShiftTip[t] = float.NaN; }   // start at rest in today's breeze, not with a lurch from zero; the sheet not yet made
         Update(0);
     }
 
@@ -1172,11 +1174,19 @@ public sealed class Boughs
         int parity = _frame & 1;
         bool every = _frame < 2;
         _frame++;
+        // Has anything moved since the kept sheet was last shifted? Under a sixteenth of a pixel on
+        // every spring (a lull, or the top of a swing) and the sheet is laid as it is: the shifting
+        // is the dear half, and the boughs spend much of their time nearly still.
+        bool moved = every;
+        for (int t = 0; t < _roots.Length && !moved; t++)
+            moved = !(MathF.Abs(_shiftBase[t] - _lastShiftBase[t]) < 1f / 16 && MathF.Abs(_shiftTip[t] - _lastShiftTip[t]) < 1f / 16);
+        if (moved)
+            for (int t = 0; t < _roots.Length; t++) { _lastShiftBase[t] = _shiftBase[t]; _lastShiftTip[t] = _shiftTip[t]; }
         Parallel.For(_y0, _y1 + 1, y =>
         {
             int[] spans = _spans[y];
             if (spans.Length == 0) return;
-            bool sway = every || (y & 1) == parity;
+            bool sway = every || (moved && (y & 1) == parity);
             for (int s = 0; s < spans.Length; s += 2)
             for (int x = spans[s], x1 = spans[s + 1]; x <= x1; x++)
             {

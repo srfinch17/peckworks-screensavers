@@ -615,14 +615,18 @@ the wind's lean at the trunk, one swinging in 2.6 s for the thick base and one i
 tips, so a gust bends the boughs over and they swing back past upright and settle, as a branch
 does. The picture is sampled between pixels (four neighbours blended), so the motion is smooth
 at any fraction of a pixel; the shifting is done on alternate rows into a kept sheet and the kept
-sheet laid over the picture every frame; 8-pixel tiles that no live pixel can reach by its own sway
-are skipped; and the parts that hardly move at all (under a fifth of the full sway: the crowns and
-the thick wood near the trunks, under a pixel of motion at a full lean) are painted into the
+sheet laid over the picture every frame; each row is walked only along the stretches (spans of
+4-pixel tiles) a live pixel can reach by its own sway; in a lull, when no spring has moved a
+sixteenth of a pixel since the sheet was last shifted, the shifting is skipped and the sheet is
+laid as it is; and the parts that hardly move at all (under three tenths of the full sway: the
+crowns and the thick wood near the trunks, a pixel or two at a full lean) are painted into the
 backdrop once when the scene is built and never laid live, with the whole sheet kept as the source
 so a live pixel at the zone's edge samples a neighbour that is there (cleared, it showed as a dark
 seam along the edge). The first version resampled every row's whole painted stretch, which spans
-both trees: ten milliseconds at 1440p; now about 440 thousand live pixels in 770 thousand tile
-pixels, and `PECKWORKS_STARTLOG` prints both. Two things it does not do, said plainly: the branches' shadows on the
+both trees: ten milliseconds at 1440p; now about 390 thousand live pixels in 680 thousand span
+pixels (`PECKWORKS_STARTLOG` prints both), about 3 ms at 1440p while the boughs move, which is
+the floor of this approach (the blossom is out over the water, not near the trunks, so widening
+the still zone from a fifth to three tenths freed only one pixel in nine). Two things it does not do, said plainly: the branches' shadows on the
 water are painted once and do not move with them (a soft dappled shadow shifting a few pixels is
 not missed), and anything that passes BEHIND a branch (a koi, a dragonfly, a low petal) is cut at
 the branch's resting footprint (`Pond.Open`), so for the few pixels a bough has swung away from,
