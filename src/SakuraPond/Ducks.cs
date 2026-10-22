@@ -2400,7 +2400,7 @@ internal enum KDoing
 ///
 /// THE FOUR GATES. VISIBLE: yellow and brown on blue-green water. PERSPECTIVE: a
 /// ground-plane teardrop squashed by the view and lifted a hair (0.005u). TURNING:
-/// rigid, on an eased turn rate. MOVEMENT: a tiny fast paddle, a line behind
+/// rigid, on an eased turn rate. MOVEMENT: a small paddle (a gentle sway, never a wag), a line behind
 /// its mother, never a slide.
 /// </summary>
 internal sealed class Duckling : Body
@@ -2643,10 +2643,14 @@ internal sealed class Duckling : Body
         bool tip = Doing == KDoing.Dabble ? (T > Delay && Mind.Left > 0.5f) : WantTip;
         _tip += ((tip ? 1f : 0f) - _tip) * (1 - MathF.Exp(-dt * 7f));
         _headAlpha = Math.Clamp(1 - Smooth(_tip) * 1.5f, 0.1f, 1f);
-        // The paddle: tiny and fast; from above you see the body rock a hair. Faster when it hurries.
+        // The paddle, seen from above: a slow, shallow sway of the body, about a degree each way, one sway every 0.7 s or so.
+        // (It used to be 0.07 radian, four degrees each way, at six to ten beats a second. The whole drawn picture is one rigid
+        // stamp turned by the heading, so that was the shaking he saw: the head flicking left and right nineteen times a
+        // second while the steering heading, the thing every metric read, sat dead calm. Think of a toy boat on a string: a
+        // fast big wag looks like a tremble, a slow small one looks like a gentle bob.) Faster a little when it hurries.
         float moving = Math.Min(1, Speed / MathF.Max(1e-3f, _u * 0.06f));
-        _phase = (_phase + MathF.Tau * (6f + 4f * moving) * dt) % MathF.Tau;
-        _rock = MathF.Sin(_phase) * 0.07f * Math.Min(1, 0.3f + moving);
+        _phase = (_phase + MathF.Tau * (1.2f + 0.5f * moving) * dt) % MathF.Tau;
+        _rock = MathF.Sin(_phase) * 0.02f * Math.Min(1, 0.3f + moving);
         if (scrambling)
         {
             // Half running on the water: a ring now and then off the feet.

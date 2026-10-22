@@ -241,7 +241,8 @@ and drifts in a lull, so no two fall the same way.
   and stops and looks back for a straggler. The ducklings follow her trail in a line (two abreast
   when there are many), each pointing a body length ahead of its own place on her trail and
   matching her pace with a gentle closing on the gap, never more than a third faster than her
-  cruise, and now and then one of them does something cute, never two at once: one
+  cruise (each sways a degree or so with the paddle, once every 0.7 s or so: a fast four degree
+  wag read as the ducklings shaking), and now and then one of them does something cute, never two at once: one
   lags to peck at something and scrambles to catch up, two bump and spin, one pecks a petal, one
   dabbles where the minnows flash, all dabble bottoms
   up, all bunch under her chin, or she flaps and they scatter and come back. If the snake comes near

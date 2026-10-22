@@ -743,7 +743,10 @@ of her trail just ahead of where it is, in the same shape. A slide along an edge
 toward the slid way rather than copying it (a two radian snap in one frame, then a circle back),
 the feelers search the whole way round, and a duckling wanting to go and getting nowhere for a
 second (a pocket between two pads and the cattails, where it paddled on the spot) swims the clearest
-of sixteen ways out for two seconds, as a grown duck does. The cute things are the
+of sixteen ways out for two seconds, as a grown duck does. The paddle's sway of the body is a degree each
+way about every 0.7 s; at four degrees and six to ten beats a second (round twenty-five) the whole rigid picture
+flicked about its middle nineteen times a second while the steering heading, which every metric read, sat
+calm: that was the "shaking". The cute things are the
 director's: a weighted dice picks one (never two at once, the last one much less likely), sets the
 ducklings' doings and runs it a phase at a time. A straggler (more than 0.15u from her and more
 than 0.07u behind its place) makes her stop and look back until it is in place. A duck is solid to
