@@ -121,7 +121,7 @@ These are in the code comments too; here they are in one place.
 
 | Animal | Dials | Doings | Interrupts |
 |--------|-------|--------|------------|
-| Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt); hunger (a mood); a liking for every other fish (starts from the dials, grows with time close, fades apart: pairs and trios) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch, Shy, Leap, Snatch (a tadpole it came upon: `Snatch`) | being chased, a dragonfly's tap, a petal settling (when hungry), a swallow's shadow, a bump from another body, a neighbour's splash |
+| Koi (`src/SakuraPond/Koi.cs`) | energy, sociability, curiosity (dealt); hunger (a mood); a liking for every other fish (starts from the dials, grows with time close, fades apart: pairs and trios) | Wander, Rest, Investigate, Follow, Chase, Flee, Flinch, Shy, Leap, Snatch (a tadpole it came upon: `Snatch`), Tease (a dash at a school of minnows for about a second that sends the school bursting apart, then a glide to a stop) | being chased, a dragonfly's tap, a petal settling (when hungry), a swallow's shadow, a bump from another body, a neighbour's splash |
 | Goldfish (`Koi.cs`, `Koi.Kind.Goldfish`) | the same three dials, dealt over koi and goldfish together | the koi's, with Follow doubled toward another goldfish, no Chase at a koi, a shallower Rest | the koi's, with a flinch reach 1.5 times as far |
 | Lizards (`src/SakuraPond/Lizard.cs`) | bold, energy (sliced, paired) | Hidden, Dash (Roam, Drink, Charge, Flee, Stalk), Freeze, Bask, Drink, Face, Dodge, Caught | a meeting, the snake (only if it is seen: ahead or beside, or on top of it), a strike (dodge or held), a swallow's shadow |
 | Mice (`src/SakuraPond/Mouse.cs`) | timid, greedy (sliced, paired) | Hidden, Scurry, Sniff, SitUp, Groom, Nibble, Drink, Jump, Caught | the snake's head (only if seen), a strike (a jump or held), a lizard's nose, a swallow's shadow |
@@ -198,6 +198,16 @@ turtle's Approach, once it is lined up beside its perch, swaps the bank reflex a
 to the reflexes and the turtle has to swim right up to it. It is the only place a mind quiets
 a reflex, it holds within about three body lengths of the perch, and a refused step there still
 ends the approach.
+
+"Arrived" is never smaller than the animal's own turning circle (round 25, the shoreline pass). Two animals orbited a
+target that their arrival test sat INSIDE the circle of: a fed snake retreating along its crumbs (0.025u, 18 px, against a
+creep of 27 px a second and a turn of a radian a second: a circle 27 px across) and a frog swimming in beside its perch (17 px
+gate, 14 to 22 px circles, 30 s of swimming until the timeout). The arrival radius is now the larger of the old one and the
+animal's circle (`1.3 x speed` for the snake; the frog's gate widened to 0.75 of a body length and 2 radians of heading,
+since its climb is a hop that turns it anyway). Check any new "arrived" test with: speed over turn rate, against the radius.
+A creature that is on the LAND takes the stalk's narrow margin (0.02u), not the swimmer's 0.035u (`Snake.HeadOnLand`): it got
+in through the gaps between the bank rocks at the stalk's margin, and with the wide one every gap read as shut, so after a
+meal it circled the lawn for one to two and a half minutes (stress seeds 5 and 21; 0 of 5 stress seeds after).
 
 ## 8. Moving in three dimensions (Core/Minds/Space.cs)
 

@@ -152,7 +152,12 @@ and drifts in a lull, so no two fall the same way.
   second clear of the water (it rises up the screen with its shadow left on the water, the way
   a falling petal or a perched turtle shows its height), a splash of rings and flung drops, and
   the fish nearby flinch from it; then it dives to get over itself. About one a minute or two
-  somewhere in the pond, more from an energetic fish, never from a goldfish. The lizards and the snake think
+  somewhere in the pond, more from an energetic fish, never from a goldfish. Once in a few minutes a big koi
+  near a school of minnows, with the school ahead of its nose, TEASES it: a real dash of about a second at the
+  school (half as fast again as any other rush), and as its head reaches them the school EXPLODES, every minnow
+  bolting straight away from the head so the shoal bursts into a ring, then gathers itself again a little way
+  off and drifts on; the koi glides to a stop, turns slowly away and rests or wanders on;
+  it never catches or eats anything, and only one fish plays at a time. The lizards and the snake think
   the same way, on the same shared parts
   (`Core/Minds`); how to give any animal in any saver a mind is [docs/MINDS.md](docs/MINDS.md).
 - Two **schools of minnows**, a dozen or so tiny fish each, hang just under the surface and move

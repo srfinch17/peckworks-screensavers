@@ -1004,6 +1004,15 @@ internal sealed class Snake : Body
         return best;
     }
 
+    /// <summary>Is the head on the land corner (the lawn, the sand, a bank rock)? A snake on the land takes the stalk's margin: it got in
+    /// by the gaps between the bank rocks at 0.02u, and at the swimmer's 0.035u every gap read as shut, so after a meal it circled the lawn
+    /// (seed 5 stress: 150 s; seed 21: 68 s) with nothing to retreat along when the stalk's crumbs had been overwritten.</summary>
+    private bool HeadOnLand()
+    {
+        int ix = (int)_x, iy = (int)_y;
+        return ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Land[iy * _pond.Width + ix];
+    }
+
     /// <summary>Is the straight line from the head to a point clear, with the stalk's margin (0.015u) all the way? Sampled every 0.015u.</summary>
     private bool LineClear(PointF to)
     {
@@ -1131,7 +1140,7 @@ internal sealed class Snake : Body
         // heading for the far side of the pond.
         // Stalking or chasing a miss it goes closer past rocks to get at what sits on them (0.02u, not 0.035u; less and the body swung into the stone).
         // A retreat keeps to the gaps a stalk came in by, so it takes the stalk's margin too.
-        float look = _len * 0.8f + _speed * 0.8f, margin = _u * (_doing is Doing.Stalk or Doing.Miss || Retreating ? 0.02f : 0.035f);    // wider than the weave's swing, so the body clears too
+        float look = _len * 0.8f + _speed * 0.8f, margin = _u * (_doing is Doing.Stalk or Doing.Miss || Retreating || HeadOnLand() ? 0.02f : 0.035f);    // wider than the weave's swing, so the body clears too
         float clearAhead = _blocked ? 0 : ClearAlong(_heading, look);
         // A fright swings it away from what touched it, but never into something
         // else: the nearer an obstacle, the less the swing counts (an early
@@ -1229,7 +1238,12 @@ internal sealed class Snake : Body
                 // crumb along the way it can reach in a straight clear line, and goes for that one.
                 for (int j = _wayN - 1; j > _wayI; j--)
                     if (LineClear(_way[j])) { _wayI = j; break; }
-                if (Dist(new PointF(_x, _y), _way[_wayI]) < _u * 0.025f) _wayI++;
+                // Arrived: within the crumb's own 0.025u, but never closer than the snake's TURNING CIRCLE. A fed snake creeps at
+                // 0.6 of a cruise (27 px a second at 720 lines) and turns at most a radian a second, so it cannot make a circle
+                // under 27 px across: with the old flat 18 px it went round and round a crumb 34 px away until the 25 s ran out
+                // (seed 5, stress: the retreat from the lawn never reached its first crumb, and the snake then circled the
+                // sealed lawn for two minutes). Like a car told to stop within a lane's width of a post it cannot turn that tight to reach.
+                if (Dist(new PointF(_x, _y), _way[_wayI]) < MathF.Max(_u * 0.025f, 1.3f * _speed)) _wayI++;
                 if (_retreatT > 25f || !(_doing == Doing.Explore && _phase == 0 || _doing == Doing.Cross)) _wayI = _wayN;
             }
         }

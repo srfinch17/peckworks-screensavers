@@ -93,6 +93,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng, settings.KoiPlayPercent / 100f, _petals, settings.GoldfishCount);   // the koi (and goldfish) nose at and eat the floating petals
         _petals.Landed = (x, y) => _koi.Notice(x, y, petal: true);                                                                // and the hungry ones come when one settles
         _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _ripples, _rng);
+        _koi.Minnows = _minnows;   // the big koi may rush a school of minnows for the fun of it
         _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng, _petals);   // a floating turtle nibbles at a petal
         _snake = new Snake(_pond, _ripples, settings.MinnowSchools > 0 ? _minnows : null, settings.SnakePercent / 100f, _rng);
         _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng, settings.MinnowSchools > 0 ? _minnows : null, _koi);

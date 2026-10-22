@@ -1321,7 +1321,10 @@ internal sealed class Frog : Body
                 float faceIn = GroundHeading(-_dirIn.X, -_dirIn.Y);
                 near = _lined && dStage < _len * 2.5f;
                 // Arrived, pointing at the perch, and at the surface: climb out.
-                if (_lined && dStage < _len * 0.45f && MathF.Abs(Wrap(_heading - faceIn)) < 0.8f && _z < 0.02f) { BeginClimb(); return; }
+                // Arrived: within 0.75 of a body length of the spot, not 0.45, and pointing within 2 radians of the perch, not 0.8. A frog under way turns about 14 to 22 px wide (a kick's burst of
+                // 35 to 55 px a second against a turn of 2.5 radians a second), so against a 17 px gate it ORBITED the spot at 17 to 25 px
+                // for the whole 30 s of the swim and gave up (a frog circling the rock it wanted, seed 3: 'swim gave up' at the timeout).
+                if (_lined && dStage < _len * 0.75f && MathF.Abs(Wrap(_heading - faceIn)) < 2.0f && _z < 0.02f) { BeginClimb(); return; }
             }
             else if (_hasGoal && dg < _u * 0.05f)
             {

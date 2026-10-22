@@ -38,6 +38,13 @@ internal sealed class KoiSchool
     public KoiSchool(Pond pond, int count, Ripples ripples, bool[] where, Random rng, float play = 1, Petals? petals = null, int goldfish = 0)
     {
         _pond = pond;
+        // Instrument hooks, both unset in the real pond: PECKWORKS_TEASE multiplies the tease's chance (so a look
+        // run finds one within a minute), PECKWORKS_TEASELOG names a file that gets a line per tease and scatter,
+        // with the frame's second, so a frame dump can be aimed at it. An EMPTY value is read as unset.
+        string? often = Environment.GetEnvironmentVariable("PECKWORKS_TEASE");
+        if (!string.IsNullOrEmpty(often) && float.TryParse(often, System.Globalization.CultureInfo.InvariantCulture, out float f)) Koi.TeaseOften = f;
+        string? teaseLog = Environment.GetEnvironmentVariable("PECKWORKS_TEASELOG");
+        if (!string.IsNullOrEmpty(teaseLog)) Koi.TeaseLog = line => File.AppendAllText(teaseLog, $"{_clock:F2} {line}\r\n");
         int koi = Math.Max(0, count);
         _fish = new Koi[koi + Math.Max(0, goldfish)];
         float[] energy = Traits.Deal(rng, _fish.Length), social = Traits.Deal(rng, _fish.Length), curious = Traits.Deal(rng, _fish.Length);
@@ -67,8 +74,11 @@ internal sealed class KoiSchool
     /// startles). The scene keeps one list and refills it, so nothing is
     /// allocated here per frame.
     /// </param>
+    private double _clock;                                   // seconds since the scene began, for the instrument log only
+
     public void Update(float dt, Turtles? turtles = null, IReadOnlyList<Body>? surface = null)
     {
+        _clock += dt;
         // The bodies in the water this frame: the fish, every turtle that is in (not up on a perch), then the surface bodies.
         IReadOnlyList<Turtle> ts = turtles?.All ?? [];
         IReadOnlyList<Body> extra = surface ?? [];
@@ -80,6 +90,7 @@ internal sealed class KoiSchool
         for (int i = 0; i < ts.Count; i++) if (ts[i].InWater) _bodies[next++] = ts[i];
         for (int i = 0; i < extra.Count; i++) _bodies[next++] = extra[i];
 
+        _teasePond.Tick(dt);
         foreach (Koi k in _fish) k.Update(dt, _fish, _bodies);
 
         // Nobody inside anybody: two fish that overlap are each pushed half
@@ -168,6 +179,11 @@ internal sealed class KoiSchool
     /// <summary>The pond's tadpoles: a fish that happens upon one may chase and eat it. Set once by the scene.</summary>
     public Tadpoles? Prey { set { foreach (Koi k in _fish) k.Prey = value; } }
 
+    private readonly Cooldown _teasePond = new();         // one tease in the pond at a time, and not twice within ten seconds
+
+    /// <summary>The schools of minnows the big koi may rush for the fun of it. Set once by the scene, after the minnows are made.</summary>
+    public Minnows? Minnows { set { foreach (Koi k in _fish) k.Shoals(value, _teasePond); } }
+
     public void Notice(float x, float y, bool petal = false)
     {
         foreach (Koi k in _fish) k.Notice(x, y, petal);
@@ -194,7 +210,7 @@ internal sealed class KoiSchool
             // A plain loop into a kept array: the LINQ version made a new array and an iterator chain every frame.
             _headList.Clear();
             foreach (Koi f in _fish)
-                if (Light.DepthOf(f.Z) < 0.06f) { _headList.Add(f.Head); _headList.Add(f.Middle); }
+                if (Light.DepthOf(f.Z) < 0.06f || f.Teasing) { _headList.Add(f.Head); _headList.Add(f.Middle); }   // (a koi rushing a shoal is a threat from a little deeper too: it is still on its way up)
             return Scratch.Keep(ref _heads, _headList);
         }
     }
@@ -492,6 +508,7 @@ internal sealed class Koi : Body
         Shy,           // it bumped into another animal: a short swim away from it, up or down as well as aside
         Leap,          // a burst up to the surface and a jump clear of the water, a splash, then down again
         Snatch,        // it came upon a tadpole or froglet and singled it out: a few seconds' chase, and a gulp if the mouth gets there
+        Tease,         // a big fish near a school of minnows rushes it for about a second for the fun of it (never catches, never eats), then glides to a stop
     }
     private readonly Snatch _snatch;                      // the chance meal in hand (Tadpoles.cs): who it is after, how long it will bother, when it may look again
     private readonly Func<Tadpole, bool> _canReach;       // which prey is in water a koi can get into
@@ -533,6 +550,29 @@ internal sealed class Koi : Body
     private const float LikeGrow = 1f / 60f;              // per second, at full match and full sociability, while close (soft: slower as it nears 1); a minute or two side by side makes a friend (at 1/150 a pond watched for ten minutes made none)
     private const int PartyMax = 3;                       // no more than this many keep company together (a trio, never a shoal)
     private readonly Cooldown _chaseCool = new();         // no chase again until this has run out
+    // ---- THE TEASE (a rush at a school of minnows) ----
+    // FEYNMAN VERSION: a big koi drifting past a shoal of tiny fish now and then gets the urge to run at it, the way
+    // a dog runs at a flock of pigeons: not to catch anything, just to watch them explode. It rises toward the
+    // surface, swims flat out at the shoal's middle for about a second (the minnows already flee any koi head near
+    // the surface, so they burst away on their own), then stops trying: a short glide as the speed bleeds off, a slow
+    // turn away, and it rests or wanders on. Only a koi (a goldfish is no bigger than a few minnows' lengths and
+    // the joke is the size difference). Rare: a roll once a second, only when everything lines up, a cooldown for the
+    // fish and one for the whole pond.
+    private readonly Cooldown _teaseCool = new();         // this fish may not tease again until this has run out
+    private readonly Random _teaseRng;                    // its OWN dice for the tease, seeded from its dials (the scene's shared dice never move, so no other roll in the pond changes)
+    private Cooldown? _teasePond;                         // shared by the whole school: one tease in the pond at a time, and not twice within ten seconds
+    private Minnows? _minnows;                            // the shoals it may play with (set by the school once the minnows exist)
+    private float _teaseLook = 1;                         // seconds until the next once-a-second look for a shoal
+    private float _teaseGlide;                            // above zero: the rush is over and this many seconds of gliding remain
+    private float _teaseX, _teaseY;                       // the shoal's middle, ground pixels (read afresh every frame of the rush)
+    private float _teaseSide = 1;                         // which way it turns away when the rush ends (+1 or -1)
+    private bool _teaseScattered;                         // this tease has already sent the school flying
+    private float _teaseRun;                              // seconds into the rush
+
+    /// <summary>An instrument hook (null in the real pond): called with a line when a tease begins and when it scatters a school.</summary>
+    public static Action<string>? TeaseLog;
+    /// <summary>Tease rate: the chance per eligible second is this times its dials. 1 in the real pond; an instrument may raise it.</summary>
+    public static float TeaseOften = 1f;
     private readonly Cooldown _flinchCool = new();        // no flinch at a shadow again until this has run out
     private readonly Cooldown _shyCool = new();           // no shying from a bump again until this has run out (two fish side by side touch every frame)
     private readonly Cooldown _fleeCool = new();          // no fresh flee for a moment after one ends (a chaser swinging round would restart it every few seconds)
@@ -561,6 +601,12 @@ internal sealed class Koi : Body
 
     /// <summary>Is it in the air right now (a leap)? Then KoiSchool paints it over everything on the water (DrawOut) and nothing in the water may touch it.</summary>
     public bool Airborne => _airFor > 0;
+
+    /// <summary>In the rush part of a tease (the minnows treat it as a threat even a little below the surface).</summary>
+    public bool Teasing => _doing == Doing.Tease && _teaseGlide <= 0 && Z < 0.3f;
+
+    /// <summary>The school hands over the shoals it may play with and the pond-wide tease cooldown.</summary>
+    internal void Shoals(Minnows? minnows, Cooldown pond) { _minnows = minnows; _teasePond = pond; }
 
     /// <summary>How high it is above the water right now, in u (0 in the water), for logs and tests.</summary>
     public float Height => _air;
@@ -658,6 +704,9 @@ internal sealed class Koi : Body
         _snatch = new Snatch(gold ? "goldfish" : "koi", Snatch.Seed((int)(_energy * 1e6f), (int)(_social * 1e6f), (int)(_curious * 1e6f), index));
         _canReach = t => _pond.RoomAt(t.Nose.X, t.Nose.Y) >= _len * 0.6f;   // the same room a thing it noses at must have (Notice); made once, so a look makes no garbage   // an energetic fish cruises faster (a goldfish a little slower, in its own body lengths: it is a small fish)
         _chaseCool.Start(30 + 90 * (float)rng.NextDouble());   // nobody chases in the first half minute
+        _teaseRng = new Random(Snatch.Seed((int)(_energy * 1e6f) ^ 0x7EA5E, (int)(_curious * 1e6f), (int)(_social * 1e6f), index + 977));   // a fixed mix, never HashCode.Combine (that one is salted per process)
+        _teaseCool.Start(30 + 60 * _energy);                   // nobody teases in the first half minute; from the dials, no roll
+        _teaseLook = 0.1f * (index % 10);                      // spread the fish's looks over the second, from the index, no roll
         _w1 = 0.11f + 0.12f * (float)rng.NextDouble(); _w2 = 0.31f + 0.2f * (float)rng.NextDouble();
         _p1 = (float)(rng.NextDouble() * MathF.Tau); _p2 = (float)(rng.NextDouble() * MathF.Tau);
         _hunger = 0.2f + 0.6f * _p1 / MathF.Tau;          // some are peckish from the start, none famished (from a roll already made, so the scene's dice order is unchanged)
@@ -776,7 +825,8 @@ internal sealed class Koi : Body
             }
         }
         Think(dt, school);
-        bool rush = _doing is Doing.Chase or Doing.Flee or Doing.Flinch or Doing.Leap or Doing.Snatch;   // flat out
+        bool teasing = _doing == Doing.Tease;                                    // (the rush part of it flat out; the glide at its end is not)
+        bool rush = _doing is Doing.Chase or Doing.Flee or Doing.Flinch or Doing.Leap or Doing.Snatch || (teasing && _teaseGlide <= 0);   // flat out
         bool still = _doing == Doing.Rest || (_doing == Doing.Investigate && _hold > 0);   // hanging in the water, nosing at something
         // KEEPING PACE. Following a friend (a fond one, not a stranger) the fish does not run its own beat-and-glide
         // clock: it beats when the friend beats and glides when the friend glides, and sets its speed to the friend's
@@ -810,8 +860,9 @@ internal sealed class Koi : Body
         }
         // The mind overrules the rhythm: a chase is all beating, a rest is all glide,
         // and a gulp from deep down is a swim up to the surface, not a float up.
-        _swimming = rush || turnAround || (company ? _partner!._swimming || ex > _len * 0.8f : _beating && !still) || (_gulping && Z > 0.2f) || _doing == Doing.Shy;
-        float targetSpeed = rush ? _len * _cruise * 1.6f : _swimming ? _len * _cruise : still ? _len * 0.07f : _len * 0.16f;
+        _swimming = rush || turnAround || (company ? _partner!._swimming || ex > _len * 0.8f : _beating && !still) || (_gulping && Z > 0.2f) || _doing == Doing.Shy || teasing;
+        // A tease's rush is a real dash, half as fast again as any other rush: the game is the big fish's burst at the shoal.
+        float targetSpeed = teasing && _teaseGlide <= 0 ? _len * _cruise * 2.4f : rush ? _len * _cruise * 1.6f : _swimming ? _len * _cruise : still ? _len * 0.07f : _len * 0.16f;
         if (company) targetSpeed = Math.Clamp(_partner!._speed + 0.8f * ex, _len * 0.05f, _len * _cruise * 1.7f);
         // A chaser close to a quarry that is off to one side SLOWS to turn in: at
         // full burst its turning circle is 40 px wide and a small fish swimming at
@@ -820,7 +871,7 @@ internal sealed class Koi : Body
         // it closes on a fish with a swing of the body, not a lap.
         if (_doing == Doing.Chase && _partner != null && Near(_partner, 1.5f) && MathF.Abs(Wrap(MathF.Atan2(_partner._y - _y, _partner._x - _x) - _heading)) > 0.5f)
             targetSpeed *= 0.45f;
-        _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (rush ? 2.2f : _swimming ? 1.1f : 0.45f)));
+        _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (rush || teasing ? 2.2f : _swimming ? 1.1f : 0.45f)));   // (the tease's glide eases at the rush's own rate: speed is never written at the state change, only eased)
         float targetAmp = rush ? _len * 0.11f : _swimming ? _len * 0.085f : _len * 0.022f;
         _amp += (targetAmp - _amp) * (1 - MathF.Exp(-dt * 2.5f));
         float beatsPerSecond = (rush ? 2.3f : _swimming ? 1.5f : 0.7f) * _beatMul;
@@ -1017,7 +1068,7 @@ internal sealed class Koi : Body
         // times the distance swum, so the course is a straight line in three
         // dimensions, and the easing takes over again once the way is clear.
         float zNext = _dodge != 0 && !refused ? Z + _dodge * step / DepthPx
-                                              : Z + (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping || _doing == Doing.Leap ? 0.6f : forBed ? 0.8f : 0.18f)));
+                                              : Z + (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping || _doing is Doing.Leap or Doing.Tease ? 0.6f : forBed ? 0.8f : 0.18f)));
         zNext = Math.Clamp(zNext, 0, cap);
         // Rising moves the picture UP the screen and sinking moves it DOWN
         // (Light.Sink), so both are held to a share of the fish's own forward
@@ -1147,6 +1198,7 @@ internal sealed class Koi : Body
         _shyCool.Tick(dt);
         _fleeCool.Tick(dt);
         _snatch.Tick(dt);
+        _teaseCool.Tick(dt);
 
         // A tadpole or froglet in sight while it idles: it may single one out. Only from a wander or a look
         // (never from a rest, a chase, a flee, a leap), only when the mouth is free, and not for minutes after
@@ -1159,6 +1211,36 @@ internal sealed class Koi : Body
         if (Prey != null && _doing is Doing.Wander or Doing.Investigate && !_gulping && !_bumping && !Airborne
             && _snatch.Look(Prey, Head, _pond.U * 0.12f, 0.03f + 0.12f * _curious * _energy, dt, 6f, 240 + 360 * (1 - _energy), surfaceOnly: false, ok: _canReach))   // (at 0.05 + 0.2 and 180 to 480 s the fish took 12 tadpoles an hour on a seed whose clutch lay in their reach: a clutch of eleven down to three in twenty minutes)
             Begin(Doing.Snatch);
+
+        // A SHOAL OF MINNOWS NEAR, and the mood takes it: once a second, only from an idle moment (a wander or a look
+        // on the way) in the upper water, with the mouth free, nothing else chasing in the pond (AnyChasing counts a
+        // tease), its own cooldown and the pond's both run out, and a shoal in view within a fifth of the pond's unit
+        // (a rush of a second only covers about a body length, so the shoal has to be that close for the rush to
+        // reach it). Its own dice (_teaseRng), weighted by energy and curiosity.
+        _teaseLook -= dt;
+        if (_teaseLook <= 0)
+        {
+            _teaseLook = 1;
+            if (_kind == Kind.Koi && _minnows != null && _teasePond != null && _doing is Doing.Wander or Doing.Investigate && !_gulping && !_bumping && !Airborne
+                && _hold <= 0 && Z < 0.3f && _teaseCool.Ready && _teasePond.Ready && !AnyChasing(school))
+            {
+                PointF me = ToScreen(_x, _y);
+                if (InWater(me) && _minnows.NearestSchoolWithin(me.X, me.Y, _pond.U * 0.2f, out PointF shoal))
+                {
+                    // The shoal must be AHEAD (within about 60 degrees of its nose): a fish cannot turn on the spot, and the first run had it
+                    // swimming off on a wide circle from a shoal behind it, the distance growing through the whole rush.
+                    (float sgx, float sgy) = ToGround(shoal.X, shoal.Y);
+                    float sdx = sgx - _x, sdy = sgy - _y, sd = MathF.Sqrt(sdx * sdx + sdy * sdy);
+                    bool ahead = sd > 1e-3f && sdx * MathF.Cos(_heading) + sdy * MathF.Sin(_heading) >= 0.5f * sd;
+                    float chance = !ahead ? 0f : 0.035f * TeaseOften * (0.4f + _energy) * (0.4f + _curious) * _play;
+                    if (_teaseRng.NextDouble() < chance)
+                    {
+                        (_teaseX, _teaseY) = ToGround(shoal.X, shoal.Y);
+                        Begin(Doing.Tease);
+                    }
+                }
+            }
+        }
 
         // Someone is after me: the moment a chaser is close behind, flee (whatever I was doing, except already fleeing).
         // Not again within two seconds of a flee ending: a chaser swinging round faced it, then away, then at it
@@ -1231,6 +1313,46 @@ internal sealed class Koi : Body
                 if (!_snatch.Chase(Prey!, Head, _len * 0.25f)) Begin(Doing.Wander);
                 else { _zTarget = MathF.Min(_zCap, _snatch.Prey.Z); _depthTimer = 5; }
                 break;
+            case Doing.Tease:
+                if (_teaseGlide > 0)
+                {
+                    // The glide: the rush is over, the speed bleeds off (eased in Update), the nose swings slowly away.
+                    // Then it rests or wanders on, a short rest more likely for a lazy fish.
+                    _teaseGlide -= dt;
+                    if (_teaseGlide <= 0) Begin(_teaseRng.NextDouble() < 0.7 - 0.5 * _energy ? Doing.Rest : Doing.Wander);
+                }
+                else
+                {
+                    // The rush: the shoal's middle moves (it is scattering), so ask afresh. If the shoal has gone out
+                    // of view or out of reach, or the second is up, the game is over and the glide begins.
+                    PointF me = ToScreen(_x, _y);
+                    if (!_mind.Over && _minnows != null && _minnows.NearestSchoolWithin(me.X, me.Y, _pond.U * 0.5f, out PointF shoal))
+                    {
+                        (_teaseX, _teaseY) = ToGround(shoal.X, shoal.Y);
+                        // THE EXPLOSION. The minnows flee any koi head on their own, but at a rush's speed the
+                        // school was always clear before the koi arrived and only eased aside: no game to see.
+                        // So once the head comes within reach of the shoal's middle, the school is told to
+                        // scatter (every fish bursting straight away from the head, then gathering again a
+                        // little way off), once per tease.
+                        _teaseRun += dt;
+                        if (!_teaseScattered && _teaseRun >= 0.25f)                  // (not in the first quarter second: the dash is seen first, then the burst)
+                        {
+                            PointF head = Head;
+                            float hx = head.X - shoal.X, hy = head.Y - shoal.Y;
+                            if (hx * hx + hy * hy < _pond.U * _pond.U * 0.12f * 0.12f)
+                            {
+                                _teaseScattered = _minnows.Scatter(head.X, head.Y, _pond.U * 0.2f);
+                                TeaseLog?.Invoke($"scatter {head.X:F0} {head.Y:F0}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _teaseGlide = 0.6f;
+                        _teaseSide = _teaseRng.Next(2) * 2 - 1;
+                    }
+                }
+                break;
             case Doing.Leap:
                 // The burst: flat out toward the surface. Once its back is at the
                 // top AND it is up to speed (a fish that was hanging at a petal
@@ -1264,6 +1386,10 @@ internal sealed class Koi : Body
         {
             case Doing.Chase:
                 return (_partner!._x, _partner._y, 1.1f);
+            case Doing.Tease:
+                if (_teaseGlide > 0)       // swinging slowly away: a point a few lengths off to one side of where it faces
+                    return (_x + MathF.Cos(_heading + _teaseSide * 0.9f) * _len * 3, _y + MathF.Sin(_heading + _teaseSide * 0.9f) * _len * 3, 0.35f);
+                return (_teaseX, _teaseY, 1.0f);                                  // at the shoal's middle, read afresh each frame
             case Doing.Snatch:
                 return (_snatch.Prey.X, _snatch.Prey.Y, 1.2f);                 // the prey's nose, ground pixels: it moves, so this is read afresh every frame
             case Doing.Flee:
@@ -1346,7 +1472,7 @@ internal sealed class Koi : Body
     /// <summary>Is any fish in the school chasing or being chased right now? (A loop: the LINQ Any allocated a closure at every decision.)</summary>
     private static bool AnyChasing(IEnumerable<Koi> school)
     {
-        foreach (Koi k in school) if (k._doing is Doing.Chase or Doing.Flee) return true;
+        foreach (Koi k in school) if (k._doing is Doing.Chase or Doing.Flee or Doing.Tease) return true;   // (a tease counts: one piece of play in the pond at a time, and nobody is chased through a tease)
         return false;
     }
 
@@ -1400,8 +1526,18 @@ internal sealed class Koi : Body
         _partner = partner;
         _mate = null;                                                              // (a wander that is beside a friend sets this again, in NewGoal)
         _hold = 0;
+        _teaseGlide = 0;                                                           // whatever it begins, a tease's glide is over (a bump, a flinch or the end of the glide itself)
         switch (doing)
         {
+            case Doing.Tease:
+                _mind.Begin(doing, 0.8f + 0.8f * (float)_teaseRng.NextDouble());   // "a second": 0.8 to 1.6 s of rush, then the glide
+                _teaseScattered = false;
+                _teaseRun = 0;
+                TeaseLog?.Invoke($"tease {ToScreen(_x, _y).X:F0} {ToScreen(_x, _y).Y:F0} shoal {ToScreen(_teaseX, _teaseY).X:F0} {ToScreen(_teaseX, _teaseY).Y:F0}");
+                _teaseCool.Start(20 + 40 * (float)_teaseRng.NextDouble());
+                _teasePond?.Start(10);
+                Depth(0.08f, 6);                                                   // up toward the surface, where the shoal is (the depth rules and the bed's clamp keep the last word)
+                break;
             case Doing.Snatch:
                 _mind.Begin(doing, 6.5f);                                          // a little longer than the chase's own patience: the chase ends itself
                 break;
@@ -1680,7 +1816,7 @@ internal sealed class Koi : Body
     /// </summary>
     public void Notice(float x, float y, bool petal = false)
     {
-        if (_doing is Doing.Chase or Doing.Flee or Doing.Leap or Doing.Snatch) return;      // (a tap or a petal reached a fish IN THE AIR once and turned its leap into a look, mid-arc; a fish after a tadpole has eyes only for it)
+        if (_doing is Doing.Chase or Doing.Flee or Doing.Leap or Doing.Snatch or Doing.Tease) return;      // (a tap or a petal reached a fish IN THE AIR once and turned its leap into a look, mid-arc; a fish after a tadpole has eyes only for it)
         float chance = petal ? 0.3f * _hunger * _hunger * _play : 0.25f + 0.7f * _curious * _play;   // a petal: only a really hungry fish, and not every time (every fish answering every petal made a pond of fish nosing at petals)
         if (_doing == Doing.Follow && _partner != null) chance *= 1 - 0.7f * Company(Liking(_partner));   // fast with a friend: a tap or a petal turns its head less often (at 0.7 of a friend, about half)
         if (_rng.NextDouble() > chance) return;

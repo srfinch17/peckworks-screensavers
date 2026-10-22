@@ -52,6 +52,43 @@ internal sealed class Minnows
         foreach (School s in _schools) s.Draw(fb);
     }
 
+    /// <summary>
+    /// The nearest school whose middle is within "reach" pixels of this point AND in view (open water, not under a
+    /// branch or a pad), or false. A koi asks this before it goes to play with a school (Koi.Tease): it reads, it
+    /// never changes anything. No allocation: the middle comes back through the out argument.
+    /// </summary>
+    public bool NearestSchoolWithin(float x, float y, float reach, out PointF centre)
+    {
+        centre = default;
+        float bestD = reach * reach;
+        bool found = false;
+        foreach (School s in _schools)
+        {
+            if (!s.CentreInView) continue;
+            float dx = s.Centre.X - x, dy = s.Centre.Y - y, d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; centre = s.Centre; found = true; }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// A big fish has rushed a school: the nearest school in view within "reach" (screen pixels) of (x, y) bursts
+    /// apart from that point and then gathers itself again a little way off. True if a school was there to scatter.
+    /// </summary>
+    public bool Scatter(float x, float y, float reach)
+    {
+        School? best = null;
+        float bestD = reach * reach;
+        foreach (School s in _schools)
+        {
+            if (!s.CentreInView) continue;
+            float dx = s.Centre.X - x, dy = s.Centre.Y - y, d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; best = s; }
+        }
+        best?.Scatter(x, y);
+        return best != null;
+    }
+
     private School? _lastLured;
 
     /// <summary>Something touched the water here (screen pixels): the nearest school, if near enough, rushes to it.</summary>
@@ -90,7 +127,14 @@ internal sealed class Minnows
 /// <summary>One school: a dozen or so minnows and the mood they share.</summary>
 internal sealed class School
 {
-    private enum Mood { Drift, Rush, Mill }
+    private enum Mood
+    {
+        Drift,      // idling toward a spot of its own
+        Rush,       // flat out to a lure (a dragonfly's tap)
+        Mill,       // round and round the lure
+        Scatter,    // a koi has rushed the school: every fish bursts straight away from its head, flat out
+        Regroup,    // the burst over, the fish gather again a little way off, then drift on
+    }
 
     private readonly Pond _pond;
     private readonly Random _rng;
@@ -106,6 +150,9 @@ internal sealed class School
 
     /// <summary>The middle of the school, screen pixels.</summary>
     public PointF Centre { get; private set; }
+
+    /// <summary>Is the school's middle on open water that can be seen (a safe place to look up, and a pixel inside the picture)?</summary>
+    public bool CentreInView => Centre.X >= 0 && Centre.Y >= 0 && Centre.X < _pond.Width && Centre.Y < _pond.Height && InView(Centre.X, Centre.Y);
 
     public School(Pond pond, bool[] where, Ripples ripples, Random rng, int count)
     {
@@ -161,6 +208,30 @@ internal sealed class School
         _timer = 5;
     }
 
+    // Where the big fish's head was when it rushed the school (ground pixels), and where the school gathers after.
+    private float _scX, _scY, _rgX, _rgY;
+
+    /// <summary>
+    /// A koi has rushed the school from (x, y) (screen pixels): the school explodes. For most of a second every
+    /// fish swims flat out straight away from that point (so the school fans out in a ring, the way a shoal bursts
+    /// when a big fish lunges), then they gather again a short way off on the far side from the koi and drift on.
+    /// A school already scattering or gathering is scattered afresh (the koi may rush twice).
+    /// </summary>
+    public void Scatter(float x, float y)
+    {
+        (_scX, _scY) = Minnow.ToGround(_pond, x, y);
+        float ax = _cx - _scX, ay = _cy - _scY, l = MathF.Max(1e-3f, MathF.Sqrt(ax * ax + ay * ay));
+        // The gathering point: on from the school's middle, away from the koi, a tenth of the screen's unit.
+        _rgX = _cx + ax / l * _u * 0.1f; _rgY = _cy + ay / l * _u * 0.1f;
+        PointF rg = Minnow.ToScreen(_pond, _rgX, _rgY);
+        if (!(rg.X >= 0 && rg.Y >= 0 && rg.X < _pond.Width && rg.Y < _pond.Height && InView(rg.X, rg.Y) && _pond.RoomAt(rg.X, rg.Y) >= _u * 0.06f))
+        {
+            _rgX = _cx; _rgY = _cy;                                                // no room that way: gather where the school was
+        }
+        _mood = Mood.Scatter;
+        _timer = 0.6f + 0.3f * (float)_rng.NextDouble();
+    }
+
     public void Update(float dt, PointF[] koiHeads)
     {
         // Where the school is now: the mean of its fish.
@@ -202,6 +273,18 @@ internal sealed class School
                 }
                 if (_timer <= 0) { _mood = Mood.Drift; NewTarget(); }
                 break;
+            case Mood.Scatter:
+                // Flat out, each fish on its own line away from the koi's head (handed out below).
+                pace = 12f;
+                if (_timer <= 0) { _mood = Mood.Regroup; _timer = 4; }
+                break;
+            case Mood.Regroup:
+                // Back together at the gathering point, briskly, then the ordinary drift.
+                _tx = _rgX; _ty = _rgY;
+                pace = 4f;
+                float rx = _cx - _rgX, ry = _cy - _rgY;
+                if (_timer <= 0 || rx * rx + ry * ry < _u * _u * 0.03f * 0.03f) { _mood = Mood.Drift; NewTarget(); }
+                break;
             default:
                 pace = 1.3f;
                 float gx = _cx - _tx, gy = _cy - _ty;
@@ -216,7 +299,13 @@ internal sealed class School
                 float a = _orbit + f.RingPlace, r = _u * 0.045f * f.RingRadius;
                 tx = _lx + MathF.Cos(a) * r; ty = _ly + MathF.Sin(a) * r;
             }
-            f.Update(dt, _fish, tx, ty, pace, koiHeads);
+            else if (_mood == Mood.Scatter)
+            {
+                // Straight away from the koi's head: a point well beyond the fish on the line from the head through it.
+                float ox = f.X - _scX, oy = f.Y - _scY, l = MathF.Max(1e-3f, MathF.Sqrt(ox * ox + oy * oy));
+                tx = f.X + ox / l * _u * 0.2f; ty = f.Y + oy / l * _u * 0.2f;
+            }
+            f.Update(dt, _fish, tx, ty, pace, koiHeads, bolting: _mood == Mood.Scatter);
         }
     }
 
@@ -293,7 +382,8 @@ internal sealed class Minnow : Body
     }
 
     /// <param name="pace">How hard the school is swimming, body lengths a second.</param>
-    public void Update(float dt, Minnow[] school, float tx, float ty, float pace, PointF[] koiHeads)
+    /// <param name="bolting">The school is scattering from a koi: the pull to the target (straight away from it) counts for more than the schooling, and the fish goes flat out.</param>
+    public void Update(float dt, Minnow[] school, float tx, float ty, float pace, PointF[] koiHeads, bool bolting = false)
     {
         // ---- The flocking rules, summed into one "which way" vector ----
         // 0. Keep going: a fish prefers the way it is already swimming, so the pushes below
@@ -357,7 +447,7 @@ internal sealed class Minnow : Body
         if (_fidget <= 0) { _burst = 0.3f; _fidget = 1 + 3 * (float)_rng.NextDouble(); }
         _burst -= dt;
         float target = _len * pace * _jitter * (_burst > 0 && pace < 2 ? 3f : 1f);
-        if (fleeing) target = _len * 10f;
+        if (fleeing || bolting) target = _len * 10f;
         _speed += (target - _speed) * (1 - MathF.Exp(-dt * (target > _speed ? 5f : 2.5f)));   // quick off the mark, slower to settle
 
         // ---- Going round a wall ----
