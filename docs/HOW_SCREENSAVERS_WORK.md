@@ -110,7 +110,7 @@ src/
     Program.cs                     Main(), plus the definition (draws at most 2560 wide)
     SakuraPondScene.cs             the layers, back to front
     PondPainter.cs                 paints the pond bed and water, lily pads, branches and their shadows; calls the shore painter
-    Shore.cs                       paints the corner of land: the lawn's mottled ground and carpet (clover and moss patches, worn earth), the sand edge, rocks that look like rocks, the fallen log
+    Shore.cs                       paints the corner of land: the lawn's mottled ground and carpet (clover and moss patches, worn earth), the sand edge, rocks that look like rocks, the island and the small rock formation, the fallen log (off by default)
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
     Minnows.cs                     schools of tiny fish that move as one, and rush to the dragonfly's rings
@@ -1384,6 +1384,19 @@ The cap alone goes into the blockers: a wall to the koi, a thing for a turtle to
 stone's shoulders from full depth a little outside it to nothing at the cap's rim, so a fish
 crossing it rises up and over and goes round the top, with its shadow on the stone. `Pond.Island`
 holds the stone and its cap; `Pond.IslandPerch` and `Pond.LogPerch` say who is sitting on them.
+
+*The small rock formation (2026-10-23).* The owner's word: "remove the log entirely and instead give
+me a very small island, or rock formation". The log is now a setting ("Fallen log", off by default;
+the code stays), and in its place `ShorePainter.PlaceFormation` puts one small stone toward the lower
+left of the pond (of several hundred random spots in the lower left half that are open water a fifth
+of u from the bank, under open sky and clear of the island, the one nearest the lower left corner),
+with two or three little caps evenly round its middle so no two touch. It is painted with the island's
+own three steps (`IslandStone`, `IslandCap` once per cap, `WrapIsland` over the union of the caps,
+handed a radius stretched 1.4x so the fade between the caps reaches far enough that the stone stays one
+stone and not a dark cloud per cap), each cap goes into the blockers and into `Pond.Rocks` (so every
+animal's obstacle list has it without a new list), and the bed climbs to each cap's rim (`Hill`, once
+per cap; the lowest hill wins between them). `Pond.Formation` holds it. Placement is counted, never
+assumed: the start log prints it, 12 of 12 seeds at 1920x1080.
 
 *The lawn is finished every other frame.* The carpet of blades and the tufts are the two dearest
 things in the whole pond to draw, and grass moves slowly (a gust takes seconds to cross the

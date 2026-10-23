@@ -34,6 +34,17 @@ internal readonly record struct Log(PointF Centre, float Angle, float Length, fl
 internal readonly record struct Island(PointF Centre, float Radius, PointF Cap, float CapRadius);
 
 /// <summary>
+/// A small rock formation out in the water at the lower left, where the
+/// fallen log used to lie (2026-10-23, his word: "remove the log entirely and
+/// instead give me a very small island, or rock formation"): one small
+/// submerged stone, painted and wrapped like the island's, with two or three
+/// little dry caps breaking the surface. Each cap is a rock in Pond.Rocks (so
+/// every animal's obstacle list has it) and in the blockers; the bed climbs
+/// the stone to each cap's rim as it does the island's.
+/// </summary>
+internal readonly record struct Formation(Island Stone, PointF[] Caps, float[] CapRadii);
+
+/// <summary>
 /// Everything the moving things need to know about the painted pond. The
 /// painter works it out once; the koi, the petals, the dragonflies and the
 /// birds only ever READ it.
@@ -133,6 +144,9 @@ internal sealed class Pond
     /// <summary>The fallen log, if the seed placed one (nearly always).</summary>
     public required Log? Log { get; init; }
 
+    /// <summary>The small rock formation at the lower left (in the log's place when the log is off), if the seed found room for one.</summary>
+    public required Formation? Formation { get; init; }
+
     /// <summary>The island rock out in the water, if the seed found room for one (nearly always).</summary>
     public required Island? Island { get; init; }
 
@@ -214,7 +228,8 @@ internal static class PondPainter
     private static readonly Color Shallow = Color.FromArgb(86, 140, 118);
     private static readonly Color Sky = Color.FromArgb(200, 218, 228);
 
-    public static Pond Paint(int w, int h, Random rng)
+    /// <param name="fallenLog">A fallen log at the lower left (the "Fallen log" setting); without it a small rock formation stands there.</param>
+    public static Pond Paint(int w, int h, Random rng, bool fallenLog = false)
     {
         float u = Math.Min(h, w * 9f / 16f);
         PointF centre = new(w * 0.5f, h * 0.5f);
@@ -274,7 +289,7 @@ internal static class PondPainter
         // The log at the lower left: beached across the water's edge when the land is there
         // (painted now, so the water wraps its wet end like a rock's), or floating out on the
         // water when the land is in the other corner (painted after the wrap: it floats, it does not sink).
-        Log? log = ShorePainter.PlaceLog(bank, corner, leftCorner, inPond, rocks, cattailsSpotHint: null, w, h, u, rng);
+        Log? log = fallenLog ? ShorePainter.PlaceLog(bank, corner, leftCorner, inPond, rocks, cattailsSpotHint: null, w, h, u, rng) : null;
         if (log is Log beached && !beached.Afloat) ShorePainter.Log(g, gb, gn, beached, u, rng);
         WrapWater(bmp, beforeRocks, Read(blockers), inPond, dist, DistanceToEdge(inPond.Select(p => !p).ToArray(), w, h, edgeIsBank: false), w, h, u);
         if (log is Log afloat && afloat.Afloat) ShorePainter.Log(g, gb, gn, afloat, u, rng);
@@ -295,12 +310,32 @@ internal static class PondPainter
             WrapIsland(bmp, beforeIsland, stone, cap, isle, w, h, u);
             rocks.Add(new BankRock(isle.Cap, isle.CapRadius, InWater: true));   // the snake keeps off the cap; the lizard never sees an in-water rock
         }
+        // The small rock formation at the lower left, where the log lay (none while the log is on): the same
+        // painting as the island's, a stone going under with little dry caps, each cap a rock to every animal.
+        Formation? formation = fallenLog ? null : ShorePainter.PlaceFormation(inPond, dist, shade, island, w, h, u, rng);
+        if (formation is Formation form)
+        {
+            uint[] beforeForm = Read(bmp);
+            bool[] stone = ShorePainter.IslandStone(g, form.Stone, w, h, u, rng);
+            bool[] caps = new bool[w * h];
+            for (int k = 0; k < form.Caps.Length; k++)
+            {
+                bool[] one = ShorePainter.IslandCap(g, gb, form.Stone with { Cap = form.Caps[k], CapRadius = form.CapRadii[k] }, w, h, u, rng);
+                for (int i = 0; i < caps.Length; i++) caps[i] |= one[i];
+                rocks.Add(new BankRock(form.Caps[k], form.CapRadii[k], InWater: true));
+            }
+            // The wrap fades the stone by its distance from the nearest cap; with two or three caps half a
+            // radius apart that fade must reach further than the island's, or the stone between the caps
+            // is gone and each cap sits in a dark cloud of its own (the first render): the radius handed
+            // to the wrap is stretched so the fade reaches about nine tenths of the stone's radius.
+            WrapIsland(bmp, beforeForm, stone, caps, form.Stone with { Radius = form.Stone.Radius * 1.4f, Cap = form.Caps[0], CapRadius = form.CapRadii[0] }, w, h, u);
+        }
         PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
         List<(PointF Root, float Toward)> irises = IrisSpots(gn, Read(noGrassSheet), inPond, bank, corner, cattails, u, w, h, rng);   // after the rocks and the sand: on the lawn behind them
 
         // ---- 4: on the water ----
         var pads = new List<LilyPad>();
-        LilyPads(g, gp, pads, inPond, dist, cattails, island, w, h, u, rng);
+        LilyPads(g, gp, pads, inPond, dist, cattails, island, formation?.Stone, w, h, u, rng);
 
         // ---- 5: branch shadows, then the branches ----
         px = Read(bmp);
@@ -390,22 +425,12 @@ internal static class PondPainter
         // The island is a hill, not a disc: the bed climbs its painted shoulders
         // from full depth a little outside the stone to nothing at the cap's rim,
         // so a fish crossing it rises up and over and goes round the dry top.
-        if (island is Island hill)
-        {
-            float outer = hill.Radius + u * 0.05f, inner = hill.CapRadius;
-            int x0 = Math.Max(0, (int)(hill.Cap.X - outer)), x1 = Math.Min(w - 1, (int)(hill.Cap.X + outer));
-            int y0 = Math.Max(0, (int)(hill.Cap.Y - outer)), y1 = Math.Min(h - 1, (int)(hill.Cap.Y + outer));
-            for (int y = y0; y <= y1; y++)
-                for (int x = x0; x <= x1; x++)
-                {
-                    float dx = x + 0.5f - hill.Cap.X, dy = y + 0.5f - hill.Cap.Y;
-                    float d = (MathF.Sqrt(dx * dx + dy * dy) - inner) / (outer - inner);
-                    if (d >= 1) continue;
-                    float f = d <= 0 ? 0 : d * d * (3 - 2 * d);
-                    int i = y * w + x;
-                    floor[i] = (byte)Math.Min(floor[i], (int)(f * 255));
-                }
-        }
+        // (The rock formation's stone is a hill the same way, once per cap: the
+        // bed under it is the lowest of the hills, so between two caps it stays
+        // shallow.)
+        if (island is Island hill) Hill(floor, hill.Cap, hill.Radius + u * 0.05f, hill.CapRadius, w, h);
+        if (formation is Formation fm)
+            for (int k = 0; k < fm.Caps.Length; k++) Hill(floor, fm.Caps[k], fm.Stone.Radius + u * 0.04f, fm.CapRadii[k], w, h);
 
         // The heap: every pixel a drifted petal touched that is still open water in the finished picture (a rock or the
         // log painted over it later is not water, so it is left out; the branch shade darkened it, and the backdrop pixel
@@ -420,7 +445,7 @@ internal static class PondPainter
             Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(),
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
-            Rocks = rocks, Log = log, Island = island,
+            Rocks = rocks, Log = log, Island = island, Formation = formation,
         };
     }
 
@@ -578,7 +603,7 @@ internal static class PondPainter
     /// middle (the notch real lily pads have), seen at our slant, so a little
     /// flatter than round. Veins run out from the middle.
     /// </summary>
-    private static void LilyPads(Graphics g, Graphics gb, List<LilyPad> pads, bool[] inPond, int[] dist, PointF cattails, Island? island, int w, int h, float u, Random rng)
+    private static void LilyPads(Graphics g, Graphics gb, List<LilyPad> pads, bool[] inPond, int[] dist, PointF cattails, Island? island, Island? formation, int w, int h, float u, Random rng)
     {
         int clusters = 3;
         int tries = 0;
@@ -591,6 +616,7 @@ internal static class PondPainter
             if (pads.Any(p => Math.Abs(p.Center.X - x) + Math.Abs(p.Center.Y - y) < u * 0.45f)) continue;
             if (Math.Abs(cattails.X - x) + Math.Abs(cattails.Y - y) < u * 0.22f) continue;        // not among the cattails
             if (island is Island isle && Dist(isle.Centre, new PointF(x, y)) < isle.Radius + u * 0.2f) continue;   // not on or against the island rock
+            if (formation is Island fm && Dist(fm.Centre, new PointF(x, y)) < fm.Radius + u * 0.15f) continue;     // nor the rock formation's stone
             clusters--;
             int n = 8 + rng.Next(8);
             for (int k = 0; k < n; k++)
@@ -860,6 +886,27 @@ internal static class PondPainter
             px[i] = (uint)(r << 16 | g << 8 | b);
         }
         Write(bmp, px);
+    }
+
+    /// <summary>
+    /// Raises the bed into a hill under a stone: full depth at "outer" from the
+    /// cap, climbing (smoothly) to nothing at the cap's rim ("inner"), so a fish
+    /// crossing rises up and over and goes round the dry top.
+    /// </summary>
+    private static void Hill(byte[] floor, PointF cap, float outer, float inner, int w, int h)
+    {
+        int x0 = Math.Max(0, (int)(cap.X - outer)), x1 = Math.Min(w - 1, (int)(cap.X + outer));
+        int y0 = Math.Max(0, (int)(cap.Y - outer)), y1 = Math.Min(h - 1, (int)(cap.Y + outer));
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                float dx = x + 0.5f - cap.X, dy = y + 0.5f - cap.Y;
+                float d = (MathF.Sqrt(dx * dx + dy * dy) - inner) / (outer - inner);
+                if (d >= 1) continue;
+                float f = d <= 0 ? 0 : d * d * (3 - 2 * d);
+                int i = y * w + x;
+                floor[i] = (byte)Math.Min(floor[i], (int)(f * 255));
+            }
     }
 
     /// <summary>

@@ -172,6 +172,10 @@ One rule lives in the saver, not the kit, because it is about how THIS pond is d
 `Light.HoldDepth` (Sakura Pond's `Light.cs`) holds any swimmer's rise or sink to what its own
 forward motion can hide on the screen, since depth moves the picture up and down the screen
 there. The koi and the turtle both call it; a saver that draws depth another way writes its own.
+The share is never under a third (round 27): with the nose straight down the screen a rise still
+moves the nose forward at two thirds of its speed, which does not read as backward, and at the old
+"none at all" a fish heading down the screen toward the island's slope could not rise to clear it,
+every step onto the bed was refused, and it hung nose-on to the stone for seconds on every seed.
 ONE EXEMPTION, on purpose: a FLOATING turtle is buoyant and rises at a fixed slow rate (0.03 of
 the pond's depth a second, up to about 5 px a second at 720 lines) whichever way it faces. Held
 to its own forward motion, which is nothing while it floats, it never surfaced (24 floats in 47
@@ -245,7 +249,11 @@ the same gap its feelers call clear, or it sits on the clamp's boundary where it
 between wall and clear. And refuse a step onto a bed with no water for the animal at its depth
 (`Koi.Update`'s step rule), as a step onto land is refused: an animal that cannot rise as fast as
 the bed comes up (a resting fish barely rises at all, by the slide rule) stops at the stone's foot
-and turns, instead of being lifted over it by the clamp in one hop.
+and turns, instead of being lifted over it by the clamp in one hop. And a cornered animal must be
+ABLE to turn: the turning-circle floor scales the turn rate with the speed, and a cornered fish
+slows, so the slower it got the less it could turn and the longer it stayed cornered (68 frames
+nose-on to the island at a quarter radian a second). Cornered, a koi pivots at up to 0.9 radians a
+second and never slows below an eighth of a length a second.
 
 **Step 3. Call `Feelers.Best` when something is in the way.** `Feelers.Along(room, from, dir, look)`
 samples the room at 0.12, 0.35, 0.65 and 1.0 of the feeler (the near sample is so a small thing

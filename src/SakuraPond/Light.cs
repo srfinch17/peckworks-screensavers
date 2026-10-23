@@ -78,12 +78,17 @@ internal static class Light
     /// it swims is seen sliding up the screen whichever way its nose points,
     /// and one heading down the screen is seen going backward, tail first.
     /// The allowed rise is half the forward motion with the nose across the
-    /// screen, none at all with the nose straight down it (every pixel of rise
-    /// would be a pixel backward), all of it with the nose straight up it (the
-    /// rise only adds to the way it is going); a sink is the mirror. The same
-    /// rule for every swimmer: the koi had it, and the turtle, which did not,
-    /// was seen drifting down the screen on a dive (34 backward frames in a
-    /// 36 s run) and up it while it floated still.
+    /// screen, a third of it with the nose straight down it (the nose still
+    /// advances two thirds of its speed on the screen, so it never reads as
+    /// going backward), all of it with the nose straight up it (the rise only
+    /// adds to the way it is going); a sink is the mirror. The same rule for
+    /// every swimmer: the koi had it, and the turtle, which did not, was seen
+    /// drifting down the screen on a dive (34 backward frames in a 36 s run)
+    /// and up it while it floated still.
+    /// (Until 2026-10-23 the share with the nose straight down was 0.02, no
+    /// rise at all: a fish heading down the screen toward the island's slope
+    /// could not rise to clear it, every step onto the bed was refused, and it
+    /// hung nose-on against the stone for seconds at a time, on every seed.)
     /// </summary>
     /// <param name="z">The depth now (0 surface, 1 the pond's full depth).</param>
     /// <param name="zNext">The depth it wants this frame.</param>
@@ -93,12 +98,12 @@ internal static class Light
     {
         if (zNext < z)
         {
-            float share = MathF.Max(0.02f, 0.5f * (1 - MathF.Sin(heading)));
+            float share = MathF.Max(0.35f, 0.5f * (1 - MathF.Sin(heading)));
             return MathF.Max(zNext, z - dt * share * speed / (Pond.DepthU * u * Sink));
         }
         if (zNext > z)
         {
-            float share = MathF.Max(0.02f, 0.5f * (1 + MathF.Sin(heading)));
+            float share = MathF.Max(0.35f, 0.5f * (1 + MathF.Sin(heading)));
             return MathF.Min(zNext, z + dt * share * speed / (Pond.DepthU * u * Sink));
         }
         return zNext;

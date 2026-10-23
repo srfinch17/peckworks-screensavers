@@ -329,10 +329,14 @@ and drifts in a lull, so no two fall the same way.
   often vanishes (a short fade) for 10 to 40 seconds and comes back out at the same spot. Each has
   two dials rolled once: a TIMID one flees sooner and from further, freezes more and leaves
   sooner; a GREEDY one stays longer, nibbles more and drinks more.
-- A fallen **log** lies at the lower left, different every time: beached across the water's edge
-  with one end in the grass and the other in the shallows when the land is in that corner, or
-  drifting out on the water when it is not. Bark streaks, cracks, a knot or two, moss on top, and
-  the cut end's rings where it faces us.
+- A small **rock formation** stands out in the water toward the lower left, different every time:
+  one small stone going under, painted and wrapped like the island's, with two or three little dry
+  caps breaking the surface, each cap a rock to every animal (the fish rise up and over its
+  shoulders and round the caps).
+- A fallen **log** can lie at the lower left instead (the "Fallen log" setting, off by default),
+  different every time: beached across the water's edge with one end in the grass and the other
+  in the shallows when the land is in that corner, or drifting out on the water when it is not.
+  Bark streaks, cracks, a knot or two, moss on top, and the cut end's rings where it faces us.
 
 Settings: draw width (sharpness against smoothness), petals, number of koi (ten by default), number of goldfish (three by default), how playful the koi are (0 means they only cruise and rest),
 number of minnow schools (0 means no game), number of turtles, number of frogs (two by default),

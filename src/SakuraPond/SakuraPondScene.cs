@@ -67,8 +67,9 @@ internal sealed class SakuraPondScene : IScreensaverScene
         var startClock = System.Diagnostics.Stopwatch.StartNew();
         string? startLog = Environment.GetEnvironmentVariable("PECKWORKS_STARTLOG");
         void Lap(string what) { if (!string.IsNullOrEmpty(startLog)) File.AppendAllText(startLog, $"{what} {startClock.Elapsed.TotalMilliseconds:F0} ms\r\n"); }
-        _pond = PondPainter.Paint(width, height, _rng);
+        _pond = PondPainter.Paint(width, height, _rng, settings.FallenLog);
         Lap("painter");
+        Lap(_pond.Formation is Formation fm ? $"formation at {fm.Stone.Centre.X:F0},{fm.Stone.Centre.Y:F0} r {fm.Stone.Radius:F0} caps {fm.Caps.Length}" : "formation none");   // (a placement is counted, never assumed)
         float u = _pond.U;
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];

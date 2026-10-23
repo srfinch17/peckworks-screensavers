@@ -51,6 +51,14 @@ internal sealed class KoiSchool
             var writer = new StreamWriter(motionLog) { AutoFlush = false };
             Koi.MotionLog = line => writer.WriteLine(line);
             AppDomain.CurrentDomain.ProcessExit += (_, _) => writer.Flush();
+            // And the land mask the step rule refuses (rocks, caps, bank), as a PGM beside the log, so a reader can
+            // split every number by the nose's distance to land ("the fish behave oddly near rocks").
+            using var pgm = new FileStream(motionLog + ".land.pgm", FileMode.Create);
+            byte[] head = System.Text.Encoding.ASCII.GetBytes($"P5\n{pond.Width} {pond.Height}\n255\n");
+            pgm.Write(head);
+            byte[] body = new byte[pond.Land.Length];
+            for (int i = 0; i < body.Length; i++) body[i] = pond.Land[i] ? (byte)255 : (byte)0;
+            pgm.Write(body);
         }
         if (Environment.GetEnvironmentVariable("PECKWORKS_NUDGECAP") == "0") Koi.NudgeCap = false;
         int koi = Math.Max(0, count);
@@ -475,6 +483,8 @@ internal sealed class Koi : Body
     private float _x, _y, _heading, _speed, _amp, _phase;
     private float _turnRate;                              // how fast it is turning now, radians a second (eased toward what the steering asks, so the path has no kinks)
     private float _nudgeLeft;                             // how far the school may still shove it this frame, pixels (a length a second, all shoves together; set each Update)
+    private float _logRoomAhead, _logRoomHere, _logCap, _logZWant, _logZRaw;   // the step and depth rules' inputs this frame, kept only for MotionLog
+    private int _logCause;                                // why the step was refused this frame: 0 not, 1 land, 2 the bed, 3 closing room (MotionLog)
     private float _wakeRun;                               // pixels swum since the last wavelet of its bow wake (Ripples.Wake)
     private bool _beating;                                // the beat-and-glide rhythm's own clock: beating now?
     private bool _swimming;                               // actually beating this frame (the rhythm, overruled by the mind: a chase beats, a rest glides)
@@ -993,8 +1003,17 @@ internal sealed class Koi : Body
         // nearly still at a petal could swing its heading right round in a
         // second and creep off through its own body, tail first to the eye.
         float most = (cornered ? 1.4f : 0.45f) + _speed / (_len * 0.5f) * 0.6f;
-        most = MathF.Min(most, MathF.Max(0.12f, _speed / (_len * (cornered ? 0.3f : 0.4f))));
-        if (cornered) _speed *= 1 - 0.6f * dt;
+        // A cornered fish PIVOTS: it slows (below), and the turning-circle floor
+        // shrank its turn rate with its speed, so the slower it got the less it
+        // could turn, the less it turned the longer it stayed cornered, and a
+        // koi stood nose-on to the island's slope for 68 frames with its turn
+        // rate under a quarter radian a second (seed 5, 40 s, on the motion log:
+        // the owner's "swimming straight into it and not knowing how to turn").
+        // A real koi cornered swings its head round with its pectorals at about a
+        // radian a second whatever its speed; so cornered, the floor is 0.9, and
+        // the speed never decays below an eighth of a length a second.
+        most = MathF.Min(most, MathF.Max(cornered ? 0.9f : 0.12f, _speed / (_len * (cornered ? 0.3f : 0.4f))));
+        if (cornered) _speed = MathF.Max(_len * 0.12f, _speed * (1 - 0.6f * dt));
         // The turn is not applied raw: the RATE of turn eases toward what the
         // steering asks over about an eighth of a second. The steering's sum
         // (a goal pull, feelers that find a different best heading from one
@@ -1022,6 +1041,12 @@ internal sealed class Koi : Body
         // stops at the stone's foot and turns, instead of being lifted over it.
         bool refused = OnLand(next) || Z > 0.9f * BedUnder(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step)
                        || (roomNext <= _len * 0.15f && roomNext < roomHere && RoomAlong(_heading, _len * 0.5f) <= roomHere);
+        if (MotionLog != null)
+        {
+            // The step rule's own inputs, for the log (which rule refused, and what the feelers read).
+            _logRoomAhead = roomAhead; _logRoomHere = roomHere;
+            _logCause = !refused ? 0 : OnLand(next) ? 1 : Z > 0.9f * BedUnder(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step) ? 2 : 3;
+        }
         if (!refused)
         {
             _x += MathF.Cos(_heading) * step;
@@ -1117,6 +1142,7 @@ internal sealed class Koi : Body
         // was left out of the floor; the body's own hop is a pixel or three);
         // a bed steeper than the fish can climb at its speed is a wall to its
         // feelers (RoomAround), so it turns or climbs before it is lifted.
+        if (MotionLog != null) { _logCap = cap; _logZWant = zWant; _logZRaw = zNext; }   // the depth rule's inputs, for the log
         Z = Light.HoldDepth(Z, zNext, _heading, _speed, dt, _pond.U);
         if (_gulping && Z < 0.05f)
         {
@@ -1166,7 +1192,8 @@ internal sealed class Koi : Body
         {
             // The whole drawn spine after the columns, as x:y pairs (a goldfish's index is offset by 100 so no two fish share a row key).
             var sb = new System.Text.StringBuilder(512);
-            sb.Append(FormattableString.Invariant($"{LogClock:F3},{(_kind == Kind.Goldfish ? 100 + _index : _index)},{_x:F2},{_y:F2},{_heading:F4},{_turnRate:F4},{_speed:F2},{Z:F4},{_doing},{_dodge:F2},{Spine[0].X:F2},{Spine[0].Y:F2},{(refused ? 1 : 0)}"));
+            // Columns 13 to 18: roomAhead, roomHere (pixels the feelers read), the refusal's cause, the bed's cap, the depth wanted, the depth before the slide rule.
+            sb.Append(FormattableString.Invariant($"{LogClock:F3},{(_kind == Kind.Goldfish ? 100 + _index : _index)},{_x:F2},{_y:F2},{_heading:F4},{_turnRate:F4},{_speed:F2},{Z:F4},{_doing},{_dodge:F2},{Spine[0].X:F2},{Spine[0].Y:F2},{(refused ? 1 : 0)},{_logRoomAhead:F1},{_logRoomHere:F1},{_logCause},{_logCap:F4},{_logZWant:F4},{_logZRaw:F4}"));
             for (int i = 0; i < Spine.Length; i++) sb.Append(FormattableString.Invariant($",{Spine[i].X:F2}:{Spine[i].Y:F2}"));
             MotionLog(sb.ToString());
         }

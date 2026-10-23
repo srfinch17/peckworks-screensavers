@@ -326,6 +326,60 @@ internal static class ShorePainter
     }
 
     /// <summary>
+    /// Chooses where the small rock formation stands: out in the water at the
+    /// lower left of the screen (where the fallen log used to lie), a stone
+    /// half the island's size with two or three little caps on it, each cap
+    /// half way out from the stone's middle and evenly round it, so no two
+    /// caps touch. Open water a little way out from the bank, under open sky,
+    /// clear of the island. Null if no spot is found (a very odd screen).
+    /// </summary>
+    public static Formation? PlaceFormation(bool[] inPond, int[] dist, byte[] shade, Island? island, int w, int h, float u, Random rng)
+    {
+        float r = u * (0.055f + 0.02f * (float)rng.NextDouble());
+        int n = 2 + rng.Next(2);
+        // Of several hundred random spots in the lower left half of the pond that pass the tests,
+        // the one nearest the lower left corner wins: when the land is in that corner the open
+        // water begins well up and across from it (the first version searched a box by the corner
+        // and found nothing on two seeds in three), and when the land is in the other corner the
+        // formation sits out near the edge as the floating log did.
+        PointF best = default; float bestScore = float.MaxValue;
+        for (int tries = 0; tries < 600; tries++)
+        {
+            float x = w * (0.05f + 0.45f * (float)rng.NextDouble()), y = h * (0.42f + 0.5f * (float)rng.NextDouble());
+            int i = (int)y * w + (int)x;
+            if (!inPond[i] || dist[i] < u * 0.2f * 10) continue;
+            bool shaded = false;
+            for (int k = 0; k < 12 && !shaded; k++)
+            {
+                float a = k * MathF.Tau / 12, sx = x + MathF.Cos(a) * r * 1.3f, sy = y + MathF.Sin(a) * r * 1.3f;
+                int si = Math.Clamp((int)sy, 0, h - 1) * w + Math.Clamp((int)sx, 0, w - 1);
+                shaded = shade[si] > 0 || shade[i] > 0;
+            }
+            if (shaded) continue;
+            if (x < r + u * 0.05f || x > w - r - u * 0.05f || y < r + u * 0.05f || y > h - r - u * 0.08f) continue;
+            if (island is Island isle && Dist(isle.Centre, new PointF(x, y)) < isle.Radius + r + u * 0.1f) continue;
+            float score = Dist(new PointF(x, y), new PointF(0, h)) * (0.9f + 0.2f * (float)rng.NextDouble());
+            if (score < bestScore) { bestScore = score; best = new PointF(x, y); }
+        }
+        if (bestScore < float.MaxValue)
+        {
+            float x = best.X, y = best.Y;
+            var caps = new PointF[n];
+            var capR = new float[n];
+            float a0 = (float)(rng.NextDouble() * MathF.Tau);
+            for (int k = 0; k < n; k++)
+            {
+                float a = a0 + k * MathF.Tau / n + 0.3f * ((float)rng.NextDouble() - 0.5f);
+                float d = r * (0.35f + 0.1f * (float)rng.NextDouble());
+                caps[k] = new PointF(x + MathF.Cos(a) * d, y + MathF.Sin(a) * d - r * 0.1f);
+                capR[k] = r * (0.22f + 0.08f * (float)rng.NextDouble());
+            }
+            return new Formation(new Island(new PointF(x, y), r, caps[0], capR[0]), caps, capR);
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Paints the island's stone: the whole boulder, painted as any rock is
     /// but bare (no moss, no lichen: it is going under water), into the
     /// picture only (nothing into the blockers: under water it is no wall,

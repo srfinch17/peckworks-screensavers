@@ -8,7 +8,7 @@ namespace SakuraPond;
 /// </summary>
 public sealed class SakuraPondSettings : ScreensaverSettings
 {
-    private readonly IntSetting _petals, _koi, _goldfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _frogs, _tadpoles, _crayfish, _ducks, _drawWidth;
+    private readonly IntSetting _petals, _koi, _goldfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _frogs, _tadpoles, _crayfish, _ducks, _log, _drawWidth;
 
     public SakuraPondSettings() : base("SakuraPond")
     {
@@ -28,6 +28,7 @@ public sealed class SakuraPondSettings : ScreensaverSettings
         _tadpoles = Add(nameof(TadpoleClutches), "Tadpole clutches", 0, 3, 1);
         _crayfish = Add(nameof(CrayfishPercent), "Crayfish", 0, 300, 100, "%");
         _ducks = Add(nameof(DuckPercent), "Ducks", 0, 300, 0, "%");   // off by default since 2026-10-23 (his word: "turn off the ducks for now"); the slider brings them back
+        _log = Add(nameof(FallenLog), "Fallen log", 0, 1, 0);          // off by default since 2026-10-23 ("the log just feels outta place"; the code stays, 1 brings it back); a small rock formation stands where it lay
         // 1920 since the boughs sway (round twenty-five): on a 4K screen the new build at 2048 took two pages on one
         // frame in ten during a gust where the old took one in forty; at 1920 it costs what the old did at 2048,
         // and 1920 against 2048 enlarged to 3840 is not a difference the eye finds on this soft, painterly scene.
@@ -48,6 +49,9 @@ public sealed class SakuraPondSettings : ScreensaverSettings
 
     /// <summary>How often a duck (often with ducklings) swims by. 100 = every several minutes, 0 = never.</summary>
     public int DuckPercent => _ducks.Value;
+
+    /// <summary>1 = a fallen log lies at the lower left (beached or afloat); 0 = no log, a small rock formation stands out in the water there instead.</summary>
+    public bool FallenLog => _log.Value != 0;
 
     /// <summary>How many field mice live in the bank's grass (each with its own nerve). 0 = none.</summary>
     public int MouseCount => _mice.Value;
