@@ -280,7 +280,12 @@ second or two (the doing `Shy`), away and up or down as well as aside, on a cool
   the same stretch, and the same "enough". Two definitions of clear is a fish that dodges and then
   keeps dodging.
 - **A recoil, not a jump.** Cap the push per frame to what the animal swims (a body length a
-  second). Shoved out in one frame, fish hopped sideways, which reads as a slide.
+  second). Shoved out in one frame, fish hopped sideways, which reads as a slide. Cap ALL the
+  shoves of one frame together, inside the animal (`Koi.Nudge`), not each shove where it is
+  made: two passes and a sideways fallback each took a full share. And hold the up-or-down part
+  to what moves the picture about a pixel (a depth change shifts the whole drawn fish down or up
+  the screen): a surface koi under a body nothing moves was pushed down and trimmed back up by
+  the surface every frame, a five to ten pixel hop, up, down, up, while it hung nearly still.
 - **Move the whole body.** `Nudge` shifts the trail the spine is laid along, not just the head;
   moving the head alone left crossed tails crossed for seconds.
 - **When every feeler is blocked, the search returns the heading it has, which is no turn.**

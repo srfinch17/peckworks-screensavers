@@ -1023,6 +1023,7 @@ public sealed class Boughs
     // arrays, and every frame all rows are laid over the picture from them,
     // which is cheap. The same halving the lawn's carpet uses.
     private readonly uint[] _swayRb, _swayAg;
+    private readonly float[] _lastShift;                  // per pixel: the shift it was last taken at (a pixel moved under a sixteenth since is left as it is)
     private int _frame;
 
     /// <summary>How many pixels are laid live each frame (bough pixels outside the still zone), and how many pixels the live tiles hold: the cost, in numbers a log can carry.</summary>
@@ -1127,6 +1128,8 @@ public sealed class Boughs
             _spans[y] = run.ToArray();
         }
         _swayRb = new uint[argb.Length]; _swayAg = new uint[argb.Length];
+        _lastShift = new float[argb.Length];
+        Array.Fill(_lastShift, -1e9f);                      // far from any shift: every live pixel is taken afresh the first time
         int n = roots.Length;
         _base = new float[n]; _baseV = new float[n]; _tip = new float[n]; _tipV = new float[n];
         _shiftBase = new float[n]; _shiftTip = new float[n];
@@ -1197,6 +1200,18 @@ public sealed class Boughs
                     float a = _amp[i] / 255f;
                     int t = _tree[i];
                     float shift = (_shiftBase[t] * (1 - a) + _shiftTip[t] * a) * a;
+                    // Taken afresh only when this pixel's own shift has moved a
+                    // sixteenth of a pixel since it was last taken (the same
+                    // tolerance as the lull rule for the whole sheet, pixel by
+                    // pixel): the wood near a trunk and the inner blossom creep
+                    // far slower than the tips, and most frames most of them
+                    // have not moved enough to show, so their last picture
+                    // stands. The tips, at a pixel or more a frame, are taken
+                    // every time. Measured: 1.57 to 1.43 ms a frame at 1080p on the
+                    // same 20 s of one scene, twice each (a tenth off, not a half:
+                    // the blossom's outer half moves enough nearly every frame).
+                    if (MathF.Abs(shift - _lastShift[i]) < 1f / 16) goto lay;
+                    _lastShift[i] = shift;
                     float fx = x - shift * sx, fy = y - shift * sy;
                     int ix = (int)MathF.Floor(fx), iy = (int)MathF.Floor(fy);
                     if (ix < 0 || iy < 0 || ix + 1 >= w || iy + 1 >= h) { _swayAg[i] = 0; _swayRb[i] = 0; continue; }
@@ -1206,6 +1221,7 @@ public sealed class Boughs
                     _swayAg[i] = ((_ag[j] * w00 + _ag[j + 1] * w10 + _ag[j + w] * w01 + _ag[j + w + 1] * w11) >> 8) & 0x00FF00FF;
                     _swayRb[i] = ((_rb[j] * w00 + _rb[j + 1] * w10 + _rb[j + w] * w01 + _rb[j + w + 1] * w11) >> 8) & 0x00FF00FF;
                 }
+                lay:
                 uint ag = _swayAg[i];
                 int alpha = (int)(ag >> 16);
                 if (alpha < 2) continue;

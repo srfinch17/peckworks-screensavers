@@ -48,7 +48,7 @@ internal static class Light
     /// a fish; deeper than most of the water near the bank, so fish there are
     /// always seen.
     /// </summary>
-    public const float SeeU = 0.26f;
+    public const float SeeU = 0.30f;   // 0.26 until 2026-10-23: he asked to see "a little tiny bit" deeper
 
     /// <summary>How deep a thing at Z (0 at the surface, 1 at the pond's full depth) is, in u.</summary>
     public static float DepthOf(float z) => z * Pond.DepthU;
@@ -58,11 +58,15 @@ internal static class Light
 
     /// <summary>
     /// How lost in the water a thing at Z is: 0 seen clearly, 1 gone (the
-    /// murk mixes it toward the water's colour by this much). A little even at
-    /// the surface (the water is never glass), then rising with depth, a touch
-    /// slowly at first so the top of the water stays clear, to 1 at SeeU.
+    /// murk mixes it toward the water's colour by this much). Some even at
+    /// the surface (the water is never glass: a fish right under it still
+    /// takes a little of the water's colour, which is half of what says
+    /// "under water" rather than "lying on a teal sheet"), then rising with
+    /// depth, a touch slowly at first so the top of the water stays clear, to
+    /// 1 at SeeU. (Until 2026-10-23 the floor was 0.06 and the curve 1.5: the
+    /// topmost fish looked out of the water and the deep ones were lost sooner.)
     /// </summary>
-    public static float Murk(float z) => 0.06f + 0.94f * MathF.Pow(Math.Clamp(DepthOf(z) / SeeU, 0, 1), 1.5f);
+    public static float Murk(float z) => 0.14f + 0.86f * MathF.Pow(Math.Clamp(DepthOf(z) / SeeU, 0, 1), 1.6f);
 
     /// <summary>How far down the screen a thing at Z is drawn from the water above it, in pixels (see Sink).</summary>
     public static float SinkPx(float z, float u) => DepthOf(z) * u * Sink;

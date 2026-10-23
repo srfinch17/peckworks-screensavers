@@ -120,7 +120,7 @@ src/
     Frog.cs                        the frogs: sitting on pads, rocks and the bank, leaping, kicking, floating, diving, climbing out
     Crayfish.cs                    a crayfish that comes out from under a bank rock, walks the shallow bed, feeds, and flips backward from a fish
     Petals.cs                      petals falling from the blossom, landing, floating
-    Ripples.cs                     rings spreading on the water
+    Ripples.cs                     rings spreading on the water, and the bow waves of swimmers at the surface
     Dragonflies.cs                 hover, dart, perch, dip, and the game with the minnows
     Swallows.cs                    swooping visits to drink
     Snake.cs                       a snake swimming across, now and then, feeling its way round things
@@ -251,6 +251,19 @@ separate cores, each band painting, row by row, the rings that cross it, in the 
 two cores ever touch the same pixel, and the picture is pixel for pixel the old one (checked by a
 frame diff at two seeds, 0 pixels). 0.84 ms to 0.35; a frame with only a few rows of ring is painted
 straight through, because handing work to the thread pool costs more than it saves then.
+
+*The bow waves (2026-10-23).* The owner's note: the topmost fish "look like they aren't even in the
+water at all", and the pond must stay calm. So the surface shows only where something disturbs it.
+Any swimmer with its back at the surface (a koi or turtle shallower than `Koi.WakeZ`, the snake, a
+swimming frog) calls `Ripples.Wake` every frame, and every 0.012u of travel it leaves a WAVELET: a
+thin, faint, slow ring of which only the BACK half is drawn (the half behind the heading the swimmer
+had when it left it). A point moving faster than its rings spread leaves them lined up in a V behind
+it, which is what a bow wave is; a slow swimmer leaves rounder arcs. The wavelets ride the same
+prepared-ring machinery as the gulp rings (one more flag per prepared ring, a half-plane test per
+pixel), so they cost nothing the section timer can see. They are decoration: when the pond is near
+its ring cap, or the wake list (96) is full, a wavelet is skipped so a gulp or a landing petal
+always finds a slot. The snake's older rule, a ring off its head every 0.4 s, now fires only while it
+is frightened.
 
 *Drawing smaller on purpose.* A saver built from a small photo can say `MaxRenderWidth`: on a
 wider screen it draws its sheet at that width and Windows stretches it to fill the screen

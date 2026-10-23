@@ -354,6 +354,7 @@ internal sealed class Frog : Body
 
     // ---- where it is ----
     private float _x, _y, _heading;                        // the body's middle, ground pixels; ground radians
+    private float _wakeRun;                                // pixels swum since the last wavelet of its bow wave (Ripples.Wake)
     private float _speed, _turnRate;
     private float _wet;                                    // seconds since it last sat on something: the longer, the keener to get out
     private float _z;                                      // depth: 0 at the surface, 1 as deep as a koi goes
@@ -666,6 +667,9 @@ internal sealed class Frog : Body
         _pose += (_poseWant - _pose) * (1 - MathF.Exp(-dt * 20f));
         EaseArms(dt);
         LaySpine();
+        // Swimming at the surface it pushes a small bow wave ahead of its nose (Ripples.Wake), a fainter one than a koi's.
+        if (_doing == Doing.Swim && _hop == HopKind.None && _z < Koi.WakeZ)
+            _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, 0.3f * (1 - 0.6f * _z / Koi.WakeZ));
     }
 
     // ================================================================ threats

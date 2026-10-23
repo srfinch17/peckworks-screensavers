@@ -890,7 +890,7 @@ internal static class PondPainter
         int[] inStone = DistanceToEdge(stone, w, h, edgeIsBank: false);               // tenths of a pixel in from the stone's own edge
         int[] inCap = DistanceToEdge(cap, w, h, edgeIsBank: false);                   // the same for the cap
         int[] outCap = DistanceToEdge(cap.Select(c => !c).ToArray(), w, h, edgeIsBank: false);   // for pixels outside the cap: how far from its rim
-        float fade = isle.Radius * 0.45f * 10, band = u * 0.012f * 10, reach = (isle.Radius - isle.CapRadius) * 0.85f * 10;
+        float fade = isle.Radius * 0.45f * 10, band = u * 0.012f * 10, reach = (isle.Radius - isle.CapRadius) * 0.7f * 10;
         int x0 = Math.Max(0, (int)(isle.Centre.X - isle.Radius * 1.8f)), x1 = Math.Min(w - 1, (int)(isle.Centre.X + isle.Radius * 1.8f));
         int y0 = Math.Max(0, (int)(isle.Centre.Y - isle.Radius * 1.8f)), y1 = Math.Min(h - 1, (int)(isle.Centre.Y + isle.Radius * 1.8f));
         for (int y = y0; y <= y1; y++)
@@ -899,12 +899,18 @@ internal static class PondPainter
                 int i = y * w + x;
                 uint c = px[i], o = before[i];
                 int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
+                int or_ = (int)((o >> 16) & 0xFF), og = (int)((o >> 8) & 0xFF), ob = (int)(o & 0xFF);
                 if (cap[i])
                 {
-                    // The dry top: untouched but for the wet band just inside its rim.
-                    float wet = Math.Clamp(1 - inCap[i] / band, 0, 1);
+                    // The dry top: untouched but for the wet band just inside its rim,
+                    // which is the bank rocks' own wet flank (WrapWater): mixed toward
+                    // the water darkened by a third, fully at the rim. Until 2026-10-23
+                    // the cap was only dimmed a little there, so its rim stayed a crisp
+                    // dry edge against the stone going under, and the cap read as a
+                    // rock pasted on top of a smudge ("tacked on later").
+                    float wet = Math.Clamp(1 - inCap[i] / band, 0, 1) * 0.85f;
                     if (wet <= 0) continue;
-                    r = (int)(r * (1 - 0.3f * wet)); g = (int)(g * (1 - 0.26f * wet)); b = (int)(b * (1 - 0.2f * wet));
+                    r += (int)((or_ * 0.6f - r) * wet); g += (int)((og * 0.62f - g) * wet); b += (int)((ob * 0.66f - b) * wet);
                     px[i] = (uint)(r << 16 | g << 8 | b);
                     continue;
                 }
@@ -913,17 +919,19 @@ internal static class PondPainter
                 float kCap = Math.Clamp(outCap[i] / reach, 0, 1), kEdge = 1 - Math.Clamp(inStone[i] / fade, 0, 1);
                 float k = MathF.Max(kCap, kEdge);
                 float sink = k * k * (3 - 2 * k);                                       // how far gone into the water: a stone for a while, then water
-                float line = Math.Clamp(1 - outCap[i] / band, 0, 1) * 0.3f;             // the dark line where the surface meets the stone
+                float dark = MathF.Pow(sink, 0.6f);                                     // the darkening comes first (a stone a hand's depth down is already dim), the water's colour later
+                float line = Math.Clamp(1 - outCap[i] / band, 0, 1) * 0.2f;             // the dark line where the surface meets the stone
                 // The stone under water: red dimmed most, blue least (the water takes the warm colours
                 // first), so even at the rim the stone is bluer than its dry self, and far down it is
-                // the water's own hue before the mix finishes it.
-                r = (int)(r * (0.55f - 0.4f * sink - line)); g = (int)(g * (0.72f - 0.37f * sink - line)); b = (int)(b * (0.85f - 0.3f * sink - line));
-                float dk = 0.5f + 0.5f * sink, mix = 0.3f + 0.7f * MathF.Pow(sink, 1.1f);
+                // the water's own hue before the mix finishes it. Just under the surface, round the
+                // cap, the stone is still nearly as bright as its dry top: that shoulder is what
+                // joins the cap to the boulder (at 0.55 it was a dim ring and the cap floated on it).
+                r = (int)(r * (0.72f - 0.57f * dark - line)); g = (int)(g * (0.8f - 0.45f * dark - line)); b = (int)(b * (0.88f - 0.33f * dark - line));
+                float dk = 0.5f + 0.5f * sink, mix = 0.22f + 0.78f * MathF.Pow(sink, 1.1f);
                 // The water it mixes toward: darkened near the top, and a touch greener and bluer
                 // there too, but that touch fades with the stone: where the stone is gone the mix
                 // goes to the plain water, or a faint blue ring would outline every island.
                 float tint = 1 - sink;
-                int or_ = (int)((o >> 16) & 0xFF), og = (int)((o >> 8) & 0xFF), ob = (int)(o & 0xFF);
                 r += (int)((or_ * dk - r) * mix); g += (int)((og * (dk + 0.04f * tint) - g) * mix); b += (int)((ob * (dk + 0.08f * tint) - b) * mix);
                 px[i] = (uint)(Math.Clamp(r, 0, 255) << 16 | Math.Clamp(g, 0, 255) << 8 | Math.Clamp(b, 0, 255));
             }

@@ -180,6 +180,11 @@ public static class ScreensaverApp
         int frames = 0;
         var lastSixty = new Queue<double>();   // the last 60 frame times, oldest first: a one-second window that slides along
         double windowSum = 0, worstSecond = 0, slowestFrame = 0, before = 0;
+        // PECKWORKS_FRAMETIMES names a file: every frame's cost after the warm-up second, one number
+        // per line, in milliseconds. An average and a worst frame cannot show a pattern (every other
+        // frame dear, a spike every N frames); a list of all of them can.
+        string? frameTimes = Environment.GetEnvironmentVariable("PECKWORKS_FRAMETIMES");
+        using var frameTimesOut = string.IsNullOrEmpty(frameTimes) ? null : new StreamWriter(frameTimes);
         for (double t = 0; t < seconds; t += step)
         {
             timer.Start();
@@ -195,6 +200,7 @@ public static class ScreensaverApp
             before = now;
             SaveFrameIfAsked(frame, t);
             if (frames <= 60) continue;                         // the first second is warm-up, not the scene
+            frameTimesOut?.WriteLine(took.ToString("F3", System.Globalization.CultureInfo.InvariantCulture));
             slowestFrame = Math.Max(slowestFrame, took);
             lastSixty.Enqueue(took);
             windowSum += took;

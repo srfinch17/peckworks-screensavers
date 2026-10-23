@@ -27,7 +27,7 @@ public sealed class SakuraPondSettings : ScreensaverSettings
         _frogs = Add(nameof(FrogCount), "Frogs", 0, 4, 2);
         _tadpoles = Add(nameof(TadpoleClutches), "Tadpole clutches", 0, 3, 1);
         _crayfish = Add(nameof(CrayfishPercent), "Crayfish", 0, 300, 100, "%");
-        _ducks = Add(nameof(DuckPercent), "Ducks", 0, 300, 100, "%");
+        _ducks = Add(nameof(DuckPercent), "Ducks", 0, 300, 0, "%");   // off by default since 2026-10-23 (his word: "turn off the ducks for now"); the slider brings them back
         // 1920 since the boughs sway (round twenty-five): on a 4K screen the new build at 2048 took two pages on one
         // frame in ten during a gust where the old took one in forty; at 1920 it costs what the old did at 2048,
         // and 1920 against 2048 enlarged to 3840 is not a difference the eye finds on this soft, painterly scene.

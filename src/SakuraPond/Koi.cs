@@ -45,6 +45,14 @@ internal sealed class KoiSchool
         if (!string.IsNullOrEmpty(often) && float.TryParse(often, System.Globalization.CultureInfo.InvariantCulture, out float f)) Koi.TeaseOften = f;
         string? teaseLog = Environment.GetEnvironmentVariable("PECKWORKS_TEASELOG");
         if (!string.IsNullOrEmpty(teaseLog)) Koi.TeaseLog = line => File.AppendAllText(teaseLog, $"{_clock:F2} {line}\r\n");
+        string? motionLog = Environment.GetEnvironmentVariable("PECKWORKS_KOILOG");
+        if (!string.IsNullOrEmpty(motionLog))
+        {
+            var writer = new StreamWriter(motionLog) { AutoFlush = false };
+            Koi.MotionLog = line => writer.WriteLine(line);
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => writer.Flush();
+        }
+        if (Environment.GetEnvironmentVariable("PECKWORKS_NUDGECAP") == "0") Koi.NudgeCap = false;
         int koi = Math.Max(0, count);
         _fish = new Koi[koi + Math.Max(0, goldfish)];
         float[] energy = Traits.Deal(rng, _fish.Length), social = Traits.Deal(rng, _fish.Length), curious = Traits.Deal(rng, _fish.Length);
@@ -91,6 +99,7 @@ internal sealed class KoiSchool
         for (int i = 0; i < extra.Count; i++) _bodies[next++] = extra[i];
 
         _teasePond.Tick(dt);
+        Koi.LogClock = _clock;
         foreach (Koi k in _fish) k.Update(dt, _fish, _bodies);
 
         // Nobody inside anybody: two fish that overlap are each pushed half
@@ -144,6 +153,15 @@ internal sealed class KoiSchool
                     }
                     if (pass == 0) { a.Bumped(push); b?.Bumped(-push); }
                 }
+        if (Koi.MotionLog != null)
+        {
+            // The instrument's own row: what overlap is LEFT after the shoves this frame (pairs still touching, and the deepest).
+            int pairs = 0; float deepest = 0;
+            for (int i = 0; i < count; i++)
+                for (int j = i + 1; j < count; j++)
+                    if (!(i >= n && j >= n) && Chain.Touch(_bodies[i].Shape, _bodies[j].Shape, out _, out float d)) { pairs++; deepest = MathF.Max(deepest, d); }
+            Koi.MotionLog(FormattableString.Invariant($"T,{_clock:F3},{pairs},{deepest:F2}"));
+        }
     }
 
     /// <summary>Pushes a out of b by "depth" along "push", no more than "most" each: half each for two fish, the whole way for a fish in a turtle (b null: the heavier is not moved).</summary>
@@ -456,6 +474,8 @@ internal sealed class Koi : Body
 
     private float _x, _y, _heading, _speed, _amp, _phase;
     private float _turnRate;                              // how fast it is turning now, radians a second (eased toward what the steering asks, so the path has no kinks)
+    private float _nudgeLeft;                             // how far the school may still shove it this frame, pixels (a length a second, all shoves together; set each Update)
+    private float _wakeRun;                               // pixels swum since the last wavelet of its bow wake (Ripples.Wake)
     private bool _beating;                                // the beat-and-glide rhythm's own clock: beating now?
     private bool _swimming;                               // actually beating this frame (the rhythm, overruled by the mind: a chase beats, a rest glides)
     private float _beatTimer, _depthTimer, _gulpTimer, _zTarget;
@@ -571,6 +591,17 @@ internal sealed class Koi : Body
 
     /// <summary>An instrument hook (null in the real pond): called with a line when a tease begins and when it scatters a school.</summary>
     public static Action<string>? TeaseLog;
+    /// <summary>
+    /// An instrument hook (null in the real pond): called once per fish per frame with its
+    /// steering and its drawn nose, so a run can be read for kinks and jitter (PECKWORKS_KOILOG).
+    /// Columns: clock, index, x, y, heading, turnRate, speed, Z, doing, dodge, noseX, noseY, refused.
+    /// </summary>
+    public static Action<string>? MotionLog;
+    /// <summary>The per-frame cap on the school's shoves (Nudge). True in the real pond; an instrument run sets PECKWORKS_NUDGECAP=0 to measure what it changes.</summary>
+    public static bool NudgeCap = true;
+    /// <summary>The school's clock, set before each frame's updates, for MotionLog's first column.</summary>
+    public static double LogClock;
+    private readonly int _index;
     /// <summary>Tease rate: the chance per eligible second is this times its dials. 1 in the real pond; an instrument may raise it.</summary>
     public static float TeaseOften = 1f;
     private readonly Cooldown _flinchCool = new();        // no flinch at a shadow again until this has run out
@@ -625,6 +656,9 @@ internal sealed class Koi : Body
 
     /// <summary>How deep a body may be, in u, and still shove the floating petals (Petals.PushAside): a quarter of the pond's full depth, where a fish is still drawn clear and nearly full size.</summary>
     public const float PushDepth = 0.1f;
+
+    /// <summary>Shallower than this (Z, 0 at the surface) a swimmer's back is at the surface and it leaves a bow wave (Ripples.Wake).</summary>
+    public const float WakeZ = 0.08f;   // 0.08 of 0.4u is about a koi's half width: its back is at the surface
 
     // The trail the head has swum, newest last, in ground pixels. A ring
     // buffer: a fixed row of slots used round and round, so remembering never
@@ -710,6 +744,7 @@ internal sealed class Koi : Body
         _w1 = 0.11f + 0.12f * (float)rng.NextDouble(); _w2 = 0.31f + 0.2f * (float)rng.NextDouble();
         _p1 = (float)(rng.NextDouble() * MathF.Tau); _p2 = (float)(rng.NextDouble() * MathF.Tau);
         _hunger = 0.2f + 0.6f * _p1 / MathF.Tau;          // some are peckish from the start, none famished (from a roll already made, so the scene's dice order is unchanged)
+        _index = index;
         (_palette, _pattern, _fin, _finAlpha, _metal) = gold ? GoldfishVariety(index, rng) : Variety(index, rng);
         _skin = Skin();
         _skinBlur = Blur(_skin);
@@ -1121,6 +1156,20 @@ internal sealed class Koi : Body
             Remember(new PointF(_x, _y), Z);
 
         LaySpine();
+        _nudgeLeft = _len * dt;
+        // Its bow wave: with its back up at the surface a swimming fish pushes a
+        // small V of ripples ahead of its nose (the one thing in a calm pond that
+        // says where the surface is). Fainter the deeper its back and the slower it goes.
+        if (_air <= 0 && Z < WakeZ)
+            _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, 0.5f * MathF.Min(1, _speed / (_len * _cruise)) * (1 - 0.6f * Z / WakeZ));
+        if (MotionLog != null)
+        {
+            // The whole drawn spine after the columns, as x:y pairs (a goldfish's index is offset by 100 so no two fish share a row key).
+            var sb = new System.Text.StringBuilder(512);
+            sb.Append(FormattableString.Invariant($"{LogClock:F3},{(_kind == Kind.Goldfish ? 100 + _index : _index)},{_x:F2},{_y:F2},{_heading:F4},{_turnRate:F4},{_speed:F2},{Z:F4},{_doing},{_dodge:F2},{Spine[0].X:F2},{Spine[0].Y:F2},{(refused ? 1 : 0)}"));
+            for (int i = 0; i < Spine.Length; i++) sb.Append(FormattableString.Invariant($",{Spine[i].X:F2}:{Spine[i].Y:F2}"));
+            MotionLog(sb.ToString());
+        }
     }
 
     private static float Wrap(float a) => MathF.IEEERemainder(a, MathF.Tau);
@@ -1933,8 +1982,30 @@ internal sealed class Koi : Body
         // And never onto land: the steps a fish swims are refused onto a rock
         // (Update), but a shove had no such test, and a fish pushed onto a
         // stone's rim has every step refused from then on.
+        // And no faster than the eye accepts, all the shoves of one frame
+        // together: a length a second across the water, and up or down only
+        // what moves the picture about a pixel a frame (a change of depth
+        // shifts the whole drawn fish down or up the screen, Light.Sink). The
+        // school caps each shove, but a frame may bring two passes and a
+        // sideways fallback, and a surface fish shy of a neighbour was pushed
+        // down and trimmed back up by a fiftieth of the pond's depth every
+        // frame: a five to ten pixel hop, up, down, up, while it hung nearly
+        // still (seed 5, 53.8 s, on the motion log). That is the "little
+        // jitter" he saw; the overlap still resolves, a frame or two later.
+        if (NudgeCap)
+        {
+            float l = by.Length();
+            if (l > _nudgeLeft) { by *= l > 1e-6f ? _nudgeLeft / l : 0; l = _nudgeLeft; }
+            _nudgeLeft -= l;
+            float zMost = 1f / Light.Sink;                                         // one screen pixel of sink, in the chain's depth pixels
+            by.Z = Math.Clamp(by.Z, -zMost, zMost);
+        }
         PointF pushed = ToScreen(_x + by.X, _y + by.Y);
-        if (OnLand(pushed) || 0.9f * FloorAt(pushed) < Z - 0.02f) { by.X = 0; by.Y = 0; }
+        // (0.005 since 2026-10-23, about a pixel of screen, the same limit as the vertical part of the push above.
+        // A guard, not a fix: the one lift the log still shows, 0.014 in a frame three times in 90 s on seed 5, is
+        // LaySpine's clamp reading the bed under the TAIL after a sideways shove, which this test of the head's spot
+        // cannot see; a three pixel hop, left as is.)
+        if (OnLand(pushed) || 0.9f * FloorAt(pushed) < Z - 0.005f) { by.X = 0; by.Y = 0; }
         _x += by.X; _y += by.Y;
         float dz = by.Z / DepthPx;
         // An upward push is held to what the SHALLOWEST remembered point can

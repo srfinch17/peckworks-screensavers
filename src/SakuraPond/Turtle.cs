@@ -157,6 +157,7 @@ internal sealed class Turtle : Body
     private readonly Petals? _petals;                     // the floating petals, to nibble at while it floats
 
     private float _x, _y, _heading, _speed, _phase, _stroke = 1;   // _stroke: 1 paddling, 0 legs still
+    private float _wakeRun;                                          // pixels swum since the last wavelet of its bow wave (Ripples.Wake)
     private float _turnRate;                              // how fast it is turning, radians a second: eased, never set outright (see Swim)
     private float _neck;                                  // the head's turn on the neck, radians to the left of the shell's heading (it leads a turn; it looks about while basking)
     private float _dodge;                                 // the climb (negative) or dive (positive) its feelers chose this frame, z per unit forward
@@ -478,6 +479,9 @@ internal sealed class Turtle : Body
         _neck += (neckWant - _neck) * (1 - MathF.Exp(-dt * 4f));
 
         LaySpine();
+        // Paddling with its shell at the surface it pushes a small bow wave ahead of its nose (Ripples.Wake), as a koi does.
+        if (InWater && Z < Koi.WakeZ)
+            _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, 0.5f * MathF.Min(1, _speed / (_len * 0.4f)) * (1 - 0.6f * Z / Koi.WakeZ));
     }
 
     // ============================== SWIMMING ==============================

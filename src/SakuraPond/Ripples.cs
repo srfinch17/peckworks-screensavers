@@ -29,13 +29,34 @@ internal sealed class Ripples
 
     private readonly List<Ring> _rings = new();
 
+    /// <summary>
+    /// One wavelet of a bow wave: a small ring that starts at a swimmer's nose
+    /// and spreads, but only its BACK half is drawn (Fx, Fy is the way the
+    /// swimmer was heading when it was left behind). A moving nose leaves a
+    /// string of these, and the back halves of rings left by a point moving
+    /// faster than they spread line up into a V behind it: that is what a bow
+    /// wave is (a boat's wake, a duck's), and it is the one thing in a calm
+    /// pond that says where the surface is. Drawn thin and faint; the pond
+    /// stays calm.
+    /// </summary>
+    private struct Wavelet
+    {
+        public float X, Y, Fx, Fy, Age, Strength;
+    }
+    private readonly List<Wavelet> _wake = new();
+    private const int MostWake = 96;                // wavelets in the pond at once: about eight swimmers' worth
+    private const float WakeStep = 0.012f;          // u swum between one wavelet and the next
+    private const float WakeLife = 1.5f;            // seconds a wavelet lasts
+
     /// <summary>A ring worked out for this frame's draw: everything DrawRow needs, computed once per ring, not per row.</summary>
     private struct Prep
     {
         public float X, Y, Radius, Band, A, Outer, Inner;
         public int Y0, Y1;
+        public float Fx, Fy;                        // a wavelet: only the half behind this direction is drawn
+        public bool Half;
     }
-    private readonly Prep[] _prep = new Prep[Most];
+    private readonly Prep[] _prep = new Prep[Most + MostWake];
     private int _prepCount;
     private FrameBuffer? _fb;
     private readonly Pond _pond;
@@ -92,6 +113,26 @@ internal sealed class Ripples
         });
     }
 
+    /// <summary>
+    /// A swimmer with its back at the surface calls this every frame; it
+    /// leaves a wavelet of its bow wave every WakeStep of travel (so a thing
+    /// hanging still leaves none). "travelled" is the caller's own counter of
+    /// pixels swum since its last wavelet. x, y is the nose on the screen,
+    /// heading the ground heading in radians, speed in pixels a second.
+    /// Strength 0.5 is a koi at its cruise; the wave is decoration, so when the
+    /// pond is near its ring cap, or the wake list is full, it is skipped.
+    /// </summary>
+    public void Wake(ref float travelled, float x, float y, float heading, float speed, float dt, float strength)
+    {
+        travelled += speed * dt;
+        if (travelled < _pond.U * WakeStep) return;
+        travelled = 0;
+        if (strength < 0.02f || _wake.Count >= MostWake || Crowded) return;
+        int ix = (int)x, iy = (int)y;
+        if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height || !_pond.Water[iy * _pond.Width + ix]) return;
+        _wake.Add(new Wavelet { X = x, Y = y, Fx = MathF.Cos(heading), Fy = MathF.Sin(heading), Strength = strength });
+    }
+
     public void Update(float dt)
     {
         for (int i = _rings.Count - 1; i >= 0; i--)
@@ -100,6 +141,13 @@ internal sealed class Ripples
             r.Age += dt;
             if (r.Age >= r.Life) { _rings.RemoveAt(i); continue; }
             _rings[i] = r;
+        }
+        for (int i = _wake.Count - 1; i >= 0; i--)
+        {
+            Wavelet v = _wake[i];
+            v.Age += dt;
+            if (v.Age >= WakeLife) { _wake.RemoveAt(i); continue; }
+            _wake[i] = v;
         }
     }
 
@@ -131,6 +179,22 @@ internal sealed class Ripples
             int y0 = Math.Max(0, (int)(r.Y - ry)), y1 = Math.Min(fb.Height - 1, (int)(r.Y + ry));
             if (y1 < y0) continue;
             _prep[_prepCount++] = new Prep { X = r.X, Y = r.Y, Radius = radius, Band = band, A = a, Outer = outer, Inner = inner, Y0 = y0, Y1 = y1 };
+            rows += y1 - y0 + 1;
+        }
+        // The wavelets of the bow waves: thin, slow, faint rings, the back half of each.
+        float u = _pond.U;
+        foreach (Wavelet v in _wake)
+        {
+            float life = v.Age / WakeLife;
+            float radius = u * 0.002f + u * 0.022f * v.Age;
+            float band = MathF.Max(1.2f, u * 0.0014f * (1 + 2 * life));
+            float a = v.Strength * 0.6f * (1 - life) * (1 - life) * MathF.Min(1, v.Age * 8);   // a koi at its cruise starts at 0.3, a gulp's ring at 0.22, but on a band half as wide
+            if (a < 0.005f) continue;
+            float outer = radius + band * 2.5f, inner = MathF.Max(0, radius - band * 2.5f);
+            float ry = outer * Squash;
+            int y0 = Math.Max(0, (int)(v.Y - ry)), y1 = Math.Min(fb.Height - 1, (int)(v.Y + ry));
+            if (y1 < y0) continue;
+            _prep[_prepCount++] = new Prep { X = v.X, Y = v.Y, Radius = radius, Band = band, A = a, Outer = outer, Inner = inner, Y0 = y0, Y1 = y1, Fx = v.Fx, Fy = v.Fy, Half = true };
             rows += y1 - y0 + 1;
         }
         if (_prepCount == 0) return;
@@ -171,19 +235,21 @@ internal sealed class Ripples
         float xi2 = p.Inner * p.Inner - dy * dy;
         float xi = xi2 > 0 ? MathF.Sqrt(xi2) : 0;
         // Two spans on this row: the left arc and the right arc (one span if the row is past the hole).
-        Span(fb.Pixels, fb.Width, y, p.X - xo, p.X - xi, p.X, dy, p.Radius, p.Band, p.A);
-        Span(fb.Pixels, fb.Width, y, p.X + xi, p.X + xo, p.X, dy, p.Radius, p.Band, p.A);
+        Span(fb.Pixels, fb.Width, y, p.X - xo, p.X - xi, p.X, dy, p.Radius, p.Band, p.A, p.Half, p.Fx, p.Fy);
+        Span(fb.Pixels, fb.Width, y, p.X + xi, p.X + xo, p.X, dy, p.Radius, p.Band, p.A, p.Half, p.Fx, p.Fy);
     }
 
-    private void Span(uint[] px, int w, int y, float from, float to, float cx, float dy, float radius, float band, float a)
+    private void Span(uint[] px, int w, int y, float from, float to, float cx, float dy, float radius, float band, float a, bool half, float fx, float fy)
     {
         int x0 = Math.Max(0, (int)from), x1 = Math.Min(w - 1, (int)to);
         int row = y * w;
+        float ahead = radius * 0.2f;                                         // a wavelet: nothing further ahead of its origin than this is drawn
         for (int x = x0; x <= x1; x++)
         {
             int i = row + x;
             if (!_where[i]) continue;
             float dx = x + 0.5f - cx;
+            if (half && dx * fx + dy * fy > ahead) continue;                 // the front half of a wavelet, where the swimmer itself is
             float d = (MathF.Sqrt(dx * dx + dy * dy) - radius) / band;     // 0 on the crest, negative inside
             int k = (int)((d - ProfileFrom) / ProfileStep);
             if (k < 0 || k >= Profile.Length) continue;                  // too far from the crest to show

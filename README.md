@@ -105,7 +105,11 @@ and drifts in a lull, so no two fall the same way.
   smaller, hazier, softer and dimmer than one at the top, so when one passes over another you
   can tell from above which is over which, and the near one leaves a soft dark echo of itself
   on the deeper one's back where they overlap. They slip under the lily pads, and now and then
-  come up to gulp at the surface, leaving a ring. The pond is deep enough to hide a fish: the
+  come up to gulp at the surface, leaving a ring. A fish swimming with its back at the surface
+  pushes a small bow wave ahead of its nose, a thin V of faint ripples trailing behind it (the
+  turtle, the snake and a swimming frog leave one too): the one thing in a calm pond that says
+  where the surface is, so the topmost fish read as just under it, not lying on it. Even at the
+  top a fish takes a little of the water's colour. The pond is deep enough to hide a fish: the
   fish swim at any depth the bed allows, go smaller and hazier the deeper they are, and then out
   of sight. They steer over, under and round each other in three dimensions, and if two do touch
   they bump (a short recoil, then a shy swim away) rather than pass through. The 3D navigation
@@ -121,7 +125,9 @@ and drifts in a lull, so no two fall the same way.
   it, a paddling turtle, the snake) shoves the petals in its way aside, and they glide off and
   slow; a fish swimming under them leaves them be.
 - **An island rock** stands out in the open water: a boulder that goes down deep, darker and
-  bluer the deeper it goes until the water hides it, with a small dry cap breaking the surface.
+  bluer the deeper it goes until the water hides it, with a small dry cap breaking the surface:
+  the cap's rim is wet, and the stone just under the surface round it is still nearly as bright
+  as the cap, so the dry top reads as the top of the same boulder.
   The koi swim up and over its shoulders and round the cap. Once in a while one rises slowly until its back brushes the
   surface from below, and three thin, slow rings slip off it as it glides on.
 - **Goldfish** (three by default, a "Goldfish" knob from 0 to 6) share the pond with the koi: a short, deep-bodied
@@ -235,7 +241,7 @@ and drifts in a lull, so no two fall the same way.
   and is solid to nothing: everything swims over it. A tadpole within a few steps on the bed it walks
   at, briskly, and eats if its claws reach it; then it stands and feeds. Each visit has its own two dials, how bold
   and how hungry. The "Crayfish" knob sets how often it comes out (0 for never).
-- **Ducks** swim by now and then: usually a mother with three to six ducklings, sometimes a drake and
+- **Ducks** (off by default for now; the "Ducks" setting brings them back) swim by now and then: usually a mother with three to six ducklings, sometimes a drake and
   a hen, sometimes a lone drake, of one of four species (the eastern spot-billed duck, mallard,
   mandarin, common teal), each with its own colours seen from above (the mandarin drake's two
   orange sails, the mallard drake's green head and white neck ring). A duck comes in from beyond one
@@ -334,7 +340,7 @@ number of dragonflies, how often the swallows visit, how often the snake crosses
 lizards there are (0 to 3), how often the lizards come out (Lizard visits), how many field
 mice live in the grass (0 to 3), how many clutches of tadpoles wriggle in the shallows (0 to 3,
 one by default), how often the crayfish comes out from under its rock, and how often a duck
-family swims by.
+family swims by (never, by default).
 
 On a screen wider than the "Draw width" setting (1920 pixels by default) it draws at that width
 and Windows enlarges the picture: the scene is soft and painterly, so the enlarging loses little,

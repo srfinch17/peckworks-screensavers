@@ -201,6 +201,7 @@ internal sealed class Snake : Body
     // Where its head is (screen pixels, before the weave is added), which
     // way it is going, how fast, and how far it has come (the weave's clock).
     private float _x, _y, _heading, _speed, _travelled;
+    private float _wakeRun;                                // pixels swum since the last wavelet of its bow wave (Ripples.Wake)
     private PointF _goal;                                  // the point beyond the far edge it is making for
     private float _wakeTimer, _next, _alive;
     private float _flee, _fleeAway;                        // startle: seconds left, and the way away
@@ -1277,15 +1278,19 @@ internal sealed class Snake : Body
         var head = new PointF(_x - hy * weave, _y + hx * weave * Ripples.Squash);
         if (Dist(head, _trail[_trailHead]) > _len / 150) Remember(head);
 
-        // The wake: little rings pushed out from its head while it is in the water.
+        // A frightened snake thrashes: rings pushed out from its head while it flees. (Until 2026-10-23 it
+        // rang its head every 0.4 s whenever it swam; its ordinary wake is now the bow wave below, Ripples.Wake,
+        // the same thin V every swimmer at the surface leaves, so the pond stays calm.)
         _wakeTimer -= dt;
         int ix = (int)head.X, iy = (int)head.Y;
-        if (_wakeTimer <= 0 && ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Water[iy * _pond.Width + ix])
+        if (_wakeTimer <= 0 && fear > 0.05f && ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Water[iy * _pond.Width + ix])
         {
             _ripples.Add(head.X, head.Y, 0.4f + 0.2f * fear);
             _wakeTimer = 0.4f - 0.2f * fear;
         }
         LaySpine(head);
+        // Swimming, its head pushes a small bow wave (Ripples.Wake), as a koi's does at the surface.
+        if (InWater) _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, 0.5f * MathF.Min(1, _speed / _cruise));
         if (_poseK != 0 || _pullK != 0) ApplyPose();
         if (_doing == Doing.Swallow && _target != null)
         {
