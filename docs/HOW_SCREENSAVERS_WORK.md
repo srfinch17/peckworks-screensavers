@@ -1101,6 +1101,21 @@ lunges for 0.35 s (cut short if the nose ends up behind the head) at 0.6u a seco
 lunge never closes), with a ring off the head; the catch is the nose within 0.02u of the head. A
 touch, a hunt, a tadpole diving out of reach or the visit ending drops the chase, and it rests four to eight minutes after any chase.
 
+*The snake gets hungry* (round twenty-seven). `Snake._hunger` runs from 0 (full) to 1 (famished), is kept across visits and
+rises with the clock (0 to 1 in 8 to 14 minutes, a bold snake sooner; the rate is worked out from the two dials, never rolled).
+A lizard or a mouse brings it to 0, a tadpole or froglet down by 0.15 to 0.25, a minnow by 0.1 to 0.15. Above 0.5 the wait
+between visits runs faster (twice as fast at 1); above 0.3 ("peckish") the prowl's face in the dice, how far prey is noticed
+(0.9u grows to 1.44u), the chance of going to look and the tadpole look all grow, and the minnow Hunt exists at all (below 0.3 it
+never strikes at a minnow). The Hunt aims at the nearest single fish (`Minnows.NearestFish`), lunges from 0.125u (just outside the
+0.11u at which a minnow bolts) when the fish is within 20 degrees of dead ahead, 0.35 s at 0.6u a second; the outcome is rolled
+at the launch (50 percent, 70 for a bold snake) and when it lands the jaws take the nearest minnow within 0.028u (`Minnows.Take`:
+a school never drops below four, the taken fish is simply gone, and a newcomer joins from a water pixel on the picture's edge three
+to six minutes later from the school's own dice). A take, like a caught tadpole, is a 0.7 s gulp: the snake brings itself up short,
+the head swells a little, the neck bows, a small ring leaves the head; no bulge. A famished snake (0.8 and over) may strike three
+times a visit and a hungry one stays a little longer. A crossing or an explore that has had its head on the lawn for 30 s heads
+for the nearest edge of the picture (`WatchLawn`): a hungry snake goes to the land corner more often and could be trapped in the
+pocket between the bank rocks and the edge.
+
 *Five skins and a hunt.* Each visit wears one of five skins (`Snake.Colour(s, v)`: a shimahebi,
 aodaisho, yamakagashi, hibakari or karasuhebi), picked from the two dials already rolled at the door
 (`(bold*1000 + 7*nerve*1000) mod 5`), never from a new roll, because one extra roll there would move

@@ -89,6 +89,62 @@ internal sealed class Minnows
         return best != null;
     }
 
+    /// <summary>A school is never hunted down below this many fish, and a taken fish is replaced by a newcomer 3 to 6 minutes later.</summary>
+    private const int LeastFish = 4;
+
+    /// <summary>
+    /// Like NearestSchool, but only a school with more than four fish alive (a hungry snake has nothing to take from
+    /// a school of four) and without the dragonfly's courtesy of skipping the school teased last.
+    /// </summary>
+    public PointF? NearestHuntable(float x, float y)
+    {
+        PointF? best = null;
+        float bestD = float.MaxValue;
+        foreach (School s in _schools)
+        {
+            if (s.Live <= LeastFish) continue;
+            float dx = s.Centre.X - x, dy = s.Centre.Y - y, d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; best = s.Centre; }
+        }
+        return best;
+    }
+
+    /// <summary>The nose of the nearest living minnow (of a school that can spare one) within "within" pixels of (x, y), screen pixels. For a snake to aim at.</summary>
+    public bool NearestFish(float x, float y, float within, out PointF nose)
+    {
+        nose = default;
+        float bestD = within * within;
+        bool found = false;
+        foreach (School s in _schools)
+        {
+            if (s.Live <= LeastFish) continue;
+            Minnow? f = s.NearestLive(x, y, ref bestD);
+            if (f != null) { nose = f.Nose; found = true; }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// The jaws of something closed here (screen pixels): the nearest living minnow whose nose is within reachPx of the
+    /// point is gone, and true comes back. A school never drops below four. The school goes on with one fewer, and a
+    /// newcomer swims in from the picture's edge three to six minutes later (so the pond does not empty over a night).
+    /// </summary>
+    public bool Take(float x, float y, float reachPx)
+    {
+        School? from = null;
+        Minnow? fish = null;
+        float bestD = reachPx * reachPx;
+        foreach (School s in _schools)
+        {
+            if (s.Live <= LeastFish) continue;
+            Minnow? f = s.NearestLive(x, y, ref bestD);
+            if (f != null) { fish = f; from = s; }
+        }
+        if (fish == null || from == null) return false;
+        from.Remove(fish);
+        return true;
+    }
+
     private School? _lastLured;
 
     /// <summary>Something touched the water here (screen pixels): the nearest school, if near enough, rushes to it.</summary>
@@ -147,9 +203,58 @@ internal sealed class School
     private float _lx, _ly;              // the lure: where the water was touched, ground pixels
     private float _timer, _orbit;
     private float _cx, _cy;              // the school's middle, ground pixels
+    private readonly Random _own;        // this school's own dice (a newcomer's place and wait): never the scene's, so a taken fish moves no other roll
+    private int _live;                   // fish alive (the rest were taken and have not been replaced yet)
 
     /// <summary>The middle of the school, screen pixels.</summary>
     public PointF Centre { get; private set; }
+
+    /// <summary>How many fish are alive in it.</summary>
+    public int Live => _live;
+
+    /// <summary>The living fish whose nose is nearest to (x, y) and closer than the squared distance in "best2" (which is lowered to the new best). Null if none.</summary>
+    public Minnow? NearestLive(float x, float y, ref float best2)
+    {
+        Minnow? found = null;
+        foreach (Minnow f in _fish)
+        {
+            if (f.Gone) continue;
+            PointF n = f.Nose;
+            float dx = n.X - x, dy = n.Y - y, d2 = dx * dx + dy * dy;
+            if (d2 < best2) { best2 = d2; found = f; }
+        }
+        return found;
+    }
+
+    /// <summary>A fish was taken: it is gone, and a newcomer will join in three to six minutes.</summary>
+    public void Remove(Minnow f)
+    {
+        f.Gone = true;
+        f.BackIn = 180f + 180f * (float)_own.NextDouble();
+        _live--;
+    }
+
+    /// <summary>
+    /// A newcomer for a taken fish's place: a water pixel on the picture's edge (in view, no branch over it), the nose one
+    /// pixel inside and the body trailing out beyond the edge, heading for the school. False if no such pixel was found this
+    /// frame (it tries again next frame).
+    /// </summary>
+    private bool Rejoin(Minnow f)
+    {
+        for (int tries = 0; tries < 30; tries++)
+        {
+            int side = _own.Next(4);
+            float along = (float)_own.NextDouble();
+            int ix = side == 0 ? 1 : side == 1 ? _pond.Width - 2 : (int)(along * (_pond.Width - 4)) + 2;
+            int iy = side == 2 ? 1 : side == 3 ? _pond.Height - 2 : (int)(along * (_pond.Height - 4)) + 2;
+            if (!InView(ix, iy)) continue;
+            (float gx, float gy) = Minnow.ToGround(_pond, ix, iy);
+            f.Place(gx, gy, MathF.Atan2(_cy - gy, _cx - gx));
+            f.Gone = false;
+            return true;
+        }
+        return false;
+    }
 
     /// <summary>Is the school's middle on open water that can be seen (a safe place to look up, and a pixel inside the picture)?</summary>
     public bool CentreInView => Centre.X >= 0 && Centre.Y >= 0 && Centre.X < _pond.Width && Centre.Y < _pond.Height && InView(Centre.X, Centre.Y);
@@ -177,6 +282,8 @@ internal sealed class School
             float a = (float)(rng.NextDouble() * MathF.Tau), d = _u * 0.045f * MathF.Sqrt((float)rng.NextDouble());
             _fish[i] = new Minnow(pond, where, rng, _cx + MathF.Cos(a) * d, _cy + MathF.Sin(a) * d, heading + 0.5f * ((float)rng.NextDouble() - 0.5f));
         }
+        _live = count;
+        _own = new Random(unchecked(count * 7919 + (int)home.X * 31 + (int)home.Y * 17 + 12345));
         Centre = home;
         NewTarget();
     }
@@ -236,8 +343,18 @@ internal sealed class School
     {
         // Where the school is now: the mean of its fish.
         float sx = 0, sy = 0;
-        foreach (Minnow f in _fish) { sx += f.X; sy += f.Y; }
-        _cx = sx / _fish.Length; _cy = sy / _fish.Length;
+        int alive = 0;
+        foreach (Minnow f in _fish)
+        {
+            if (f.Gone)
+            {
+                f.BackIn -= dt;
+                if (f.BackIn <= 0 && Rejoin(f)) _live++;
+                continue;
+            }
+            sx += f.X; sy += f.Y; alive++;
+        }
+        _cx = sx / MathF.Max(1, alive); _cy = sy / MathF.Max(1, alive);
         Centre = Minnow.ToScreen(_pond, _cx, _cy);
 
         // The shared mood, and how hard the school swims in it (body lengths a second).
@@ -267,8 +384,8 @@ internal sealed class School
                 _nipTimer -= dt;
                 if (_nipTimer <= 0)
                 {
-                    PointF nose = _fish[_rng.Next(_fish.Length)].Nose;
-                    _ripples.Add(nose.X, nose.Y, 0.12f);
+                    Minnow nipper = _fish[_rng.Next(_fish.Length)];
+                    if (!nipper.Gone) { PointF nose = nipper.Nose; _ripples.Add(nose.X, nose.Y, 0.12f); }
                     _nipTimer = 0.3f + 0.6f * (float)_rng.NextDouble();
                 }
                 if (_timer <= 0) { _mood = Mood.Drift; NewTarget(); }
@@ -293,6 +410,7 @@ internal sealed class School
         }
         foreach (Minnow f in _fish)
         {
+            if (f.Gone) continue;
             float tx = _tx, ty = _ty;
             if (_mood == Mood.Mill)
             {
@@ -311,7 +429,7 @@ internal sealed class School
 
     public void Draw(FrameBuffer fb)
     {
-        foreach (Minnow f in _fish) f.Draw(fb);
+        foreach (Minnow f in _fish) if (!f.Gone) f.Draw(fb);
     }
 }
 
@@ -346,6 +464,19 @@ internal sealed class Minnow : Body
 
     /// <summary>Where its nose is on the screen.</summary>
     public PointF Nose => Spine[0];
+
+    /// <summary>Taken by a snake: not drawn, not in the flock, until a newcomer is put in its place (BackIn seconds from the take).</summary>
+    public bool Gone { get; set; }
+    public float BackIn;
+
+    /// <summary>Starts this fish afresh with its nose at (x, y) ground pixels and its body trailing straight out behind (a newcomer).</summary>
+    public void Place(float x, float y, float heading)
+    {
+        X = x; Y = y; _heading = heading; _speed = _len * 1.3f; _wallSide = 0; _trailCount = 0; _flash = 0;
+        for (int i = 12; i >= 0; i--)
+            Remember(new PointF(X - MathF.Cos(_heading) * _len * i / 8f, Y - MathF.Sin(_heading) * _len * i / 8f));
+        LaySpine();
+    }
 
     public Minnow(Pond pond, bool[] where, Random rng, float x, float y, float heading) : base(Points)
     {
@@ -398,7 +529,7 @@ internal sealed class Minnow : Body
         float near = _u * 0.08f, close = _len * 1.4f;
         foreach (Minnow o in school)
         {
-            if (o == this) continue;
+            if (o == this || o.Gone) continue;
             float ox = o.X - X, oy = o.Y - Y, d2 = ox * ox + oy * oy;
             if (d2 > near * near) continue;
             ax += MathF.Cos(o._heading); ay += MathF.Sin(o._heading); n++;

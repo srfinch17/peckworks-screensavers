@@ -108,11 +108,23 @@ namespace SakuraPond;
 /// It rests four to eight minutes after any chase, caught or not. The chase is only a goal and a pace: the
 /// feelers, the wall of the picture's edge and the "never stuck" step rule steer it as always, so a
 /// tadpole behind a rock is simply not reached, and a touch from another animal ends the chase.
+///
+/// AND AN APPETITE (round twenty-seven; the owner: "occasionally if it feels hungry, it will eat one or more of these
+/// things"). Think of anyone who has skipped lunch: they do not stalk the fridge at once, but as the hours go by they
+/// start looking, they notice food from further off, and they will have a snack, then another, until they are full.
+/// The snake keeps a HUNGER dial from 0 (full) to 1 (famished) across visits. It creeps up with the clock (from 0 to
+/// 1 in eight to fourteen minutes of pond time, a bolder snake sooner, worked out from the two dials and never rolled)
+/// and a meal brings it down: a lizard or a mouse to nothing, a tadpole or froglet by a fifth, a minnow by an eighth.
+/// What hunger changes: above a half the wait before the next visit shrinks (at 1 it is half as long); the prowl's
+/// face in the dice grows, prey is noticed from further off and the dice for going to look land more often; the
+/// tadpole look is likelier and the rest after a chase shorter; below 0.3 it never strikes at a minnow, above it the
+/// minnow Hunt is a real lunge that TAKES the fish its jaws reach (Minnows.Take, a quick gulp and a small ring, no
+/// bulge: a minnow is a mouthful), and a hungry snake hunts again, up to two or three strikes a visit, until it is
+/// under 0.3 again. The lizard and mouse hunt itself (Stalk, Strike, Swallow, Miss) is exactly as before.
 /// </summary>
 internal sealed class Snake : Body
 {
     private const int Points = 44;
-    private const float StrikeFor = 0.6f;                 // seconds a strike lasts
     private const float SnatchLunge = 0.35f;              // seconds a lunge at a tadpole lasts (at 0.6u a second: up to 0.21u, from 0.12u away)
 
     private readonly Pond _pond;
@@ -191,6 +203,40 @@ internal sealed class Snake : Body
     private readonly Func<Tadpole, bool> _ahead;            // "is it in front of the head?" made once, so a look allocates nothing
     private int _snatchSeen;                               // how many catches the snatch had counted when this chase began (to tell a catch from a give-up)
     internal Tadpoles? Prey { get; set; }                  // the pond's tadpoles (set by the scene; null in a pond without any)
+
+    // ---- THE APPETITE ---- (see the class comment)
+    private float _hunger = 0.3f;                          // 0 full to 1 famished, kept across visits (the Snake object lives on; _live only toggles)
+    private float _hungerSecs = 660f;                      // seconds from full to famished; dealt from the two dials at each visit (never rolled)
+    private float _gulp;                                   // seconds left of the swallow after a mouthful (a tadpole or a minnow)
+    private int _minnowTakes;                              // minnows taken this visit
+    private float _landT;                                  // seconds the head has been on the lawn while crossing or exploring (the way out of it, below)
+    private bool _minnowWin;                               // the lunge in progress was rolled at its launch to land (a quick fish still gets away)
+    private const float GulpFor = 0.7f;
+    private const float LungeSpeed = 0.6f;                 // the minnow lunge, in u a second (a tadpole's is the same): a minnow bolts at about a third of that
+    private const float MinnowLunge = 0.35f;               // seconds a lunge at a minnow lasts
+    /// <summary>Instruments only: how much faster than the real pond hunger rises. 1 in the real pond.</summary>
+    internal static float Appetite = 1f;
+    /// <summary>For the instruments and the drawing's docs: hunger now, 0 to 1.</summary>
+    public float Hunger => _hunger;
+    /// <summary>For the instruments: meals so far by kind, and the last one (a counter that goes up, what, hunger before and after).</summary>
+    public int AteLizard, AteMouse, AteTadpole, AteMinnow, MealSeq;
+    public string MealKind = "";
+    public float MealBefore, MealAfter;
+
+    /// <summary>0 at and below a hunger of 0.3, 1 when famished: how far past "peckish" it is.</summary>
+    private float Want => Math.Clamp((_hunger - 0.3f) / 0.7f, 0f, 1f);
+    /// <summary>How many strikes a visit may hold: two, or three when famished.</summary>
+    private int MaxStrikes => _hunger >= 0.8f ? 3 : 2;
+
+    /// <summary>A meal: hunger drops by "drop" (1 or more: full), and the instruments are told.</summary>
+    private void Ate(string kind, float drop)
+    {
+        MealBefore = _hunger;
+        _hunger = drop >= 1f ? 0f : MathF.Max(0f, _hunger - drop);
+        MealAfter = _hunger; MealKind = kind; MealSeq++;
+        switch (kind) { case "lizard": AteLizard++; break; case "mouse": AteMouse++; break; case "tadpole": AteTadpole++; break; default: AteMinnow++; break; }
+        Note("ate:" + kind);
+    }
 
     // For the instruments only (nothing in the drawing or the mind reads these): the last thing that
     // happened in the hunt, as a fixed word, and a counter that goes up each time.
@@ -272,6 +318,8 @@ internal sealed class Snake : Body
         _bold = Traits.Roll(_rng); _nerve = Traits.Roll(_rng);
         _cruise = _u * 0.06f * (1.15f - 0.3f * _bold);    // a nervous snake swims a little quicker, a bold one more leisurely
         _fleeFor = 1.8f + 1.6f * _nerve;                  // and stays frightened longer
+        _hungerSecs = 840f - 360f * (0.6f * _bold + 0.4f * _nerve);   // hungry sooner when bold: eight (bold) to fourteen (timid) minutes from full to famished
+        _minnowTakes = 0; _gulp = 0; _landT = 0;
         _exploreLeft = 1 + _rng.Next(3); _huntsLeft = 1 + _rng.Next(2); _basked = false; _legs = 0;
         // The skin comes from the two dials already rolled (a fresh roll would move every later roll in the scene),
         // and so does the hunt's own dice, so a meeting never touches the scene's Random.
@@ -317,15 +365,18 @@ internal sealed class Snake : Body
     private void Decide()
     {
         _legs++;
-        PointF? school = _huntsLeft > 0 && _minnows != null ? _minnows.NearestSchool(_x, _y) : null;
+        // The minnow hunt is for a snake that is at least peckish (0.3), and only of a school that can spare a fish.
+        float want = Want;
+        PointF? school = _huntsLeft > 0 && _hunger >= 0.3f && _minnowTakes < MaxStrikes && _minnows != null ? _minnows.NearestHuntable(_x, _y) : null;
         float wExplore = _exploreLeft > 0 ? 0.7f + 0.5f * (1 - _nerve) : 0;
-        float wHunt = school != null ? 0.15f + 1.1f * _bold : 0;
+        float wHunt = school != null ? (0.15f + 1.1f * _bold) * (0.2f + 1.0f * want) : 0;
         float wBask = !_basked && LogReady() ? 0.15f + 0.9f * _bold : 0;
         float wCross = 0.3f + 1.2f * _nerve + 0.4f * _legs;
         // A bold snake with a lizard or a mouse out on the bank has a face for going to look (Prowl): not a
         // promise of a hunt, only a walk to where the meeting could happen.
-        PointF? meal = !_fed && _strikes < 2 && _prowls < 3 ? NearestPrey(_u * 2f) : null;
-        float wProwl = meal != null ? 1.2f + 2f * _bold : 0;
+        PointF? meal = !_fed && _strikes < MaxStrikes && _prowls < (_hunger >= 0.8f ? 4 : 3) ? NearestPrey(_u * (2f + want)) : null;
+        float wProwl = meal != null ? (1.2f + 2f * _bold) * (1f + 2f * want) : 0;   // a hungry snake goes to look
+        wCross *= 1f - 0.5f * want;                        // and is in less of a hurry to leave
         if (_fed)
         {
             // A snake that has eaten would sooner lie in the sun, or swim about a while with its meal on show (an Explore goal is
@@ -334,7 +385,7 @@ internal sealed class Snake : Body
             if (_exploreLeft <= 0) _exploreLeft = 1;                           // one more look round, meal on show, even if its list was spent
             wHunt = 0; wExplore = 3f * (0.7f + 0.5f * (1 - _nerve)); wBask *= 3; wCross *= 0.3f;
         }
-        if (_alive > 200) wExplore = wHunt = wBask = wProwl = 0;    // a long visit ends now
+        if (_alive > 200 + 120 * want) wExplore = wHunt = wBask = wProwl = 0;    // a long visit ends now (a famished one stays a little longer)
         int pick = Dice.Pick(_rng, [wHunt, wBask, wExplore, wCross, wProwl]);
         if (_fed && pick == 3 && _alive <= 200 && BeginExplore()) return;   // a fed snake keeps its meal on show: it explores before it crosses (the roll is made all the same)
         switch (pick)
@@ -441,10 +492,31 @@ internal sealed class Snake : Body
     /// <summary>How far from the log's middle its head lies when it is basking: near the far end, or less if the snake is shorter than the log.</summary>
     private float LieHead(Log log) => MathF.Min(log.Length * 0.42f, _len * 0.5f);
 
+    /// <summary>
+    /// THE WAY OUT OF THE LAWN. A hungry snake goes to look at prey on the land corner more often, and now and then it
+    /// ends up in the pocket between the bank rocks and the picture's edge with no crumb of open water to walk back to (it
+    /// came in over the edge): its crossing then circled the lawn for twelve minutes on one run (round 27, seed 5, hunger
+    /// four times quicker). A crossing or an explore whose head has been on the land for half a minute gives up its goal
+    /// and heads straight for the nearest edge of the picture, which is open to it (Clear leaves the goal's edge unwalled),
+    /// and the visit ends there as any crossing does.
+    /// </summary>
+    private void WatchLawn(float dt)
+    {
+        if (!(_doing == Doing.Cross || (_doing == Doing.Explore && _phase == 0)) || !HeadOnLand()) { _landT = 0; return; }
+        _landT += dt;
+        if (_landT < 30f) return;
+        _landT = 0;
+        float toL = _x, toR = _pond.Width - _x, toT = _y, toB = _pond.Height - _y, m = MathF.Min(MathF.Min(toL, toR), MathF.Min(toT, toB));
+        _mind.Begin(Doing.Cross); _phase = 0; Note("leave");
+        _wayN = _wayI = 0;
+        _goal = m == toL ? new PointF(-_u * 0.6f, _y) : m == toR ? new PointF(_pond.Width + _u * 0.6f, _y) : m == toT ? new PointF(_x, -_u * 0.6f) : new PointF(_x, _pond.Height + _u * 0.6f);
+    }
+
     /// <summary>Keeps the current doing going, moves it on a step, or ends it.</summary>
     private void Think(float dt)
     {
         _mind.Tick(dt);
+        WatchLawn(dt);
         var head = new PointF(_x, _y);
         switch (_doing)
         {
@@ -460,22 +532,45 @@ internal sealed class Snake : Body
                 else if (Dist(head, _goal) < _u * 0.08f || _mind.Over) Decide();
                 break;
             case Doing.Hunt:
-                // The school drifts about, so keep the aim on it (but ignore a jump to a different school).
-                if (_minnows!.NearestSchool(_x, _y) is PointF now && Dist(now, _prey) < _u * 0.25f) _prey = now;
+                // The school drifts about, so keep the aim on it (but ignore a jump to a different school). Near enough, the
+                // aim is the nearest single fish (a lunge goes at one fish, not at the middle of a cloud of them).
+                if (_minnows!.NearestHuntable(_x, _y) is PointF now && Dist(now, _prey) < _u * 0.25f) _prey = now;
                 _goal = _prey;
                 if (_phase == 0)
                 {
-                    if (Dist(head, _prey) < _u * 0.12f)
+                    bool aimed = _minnows.NearestFish(head.X, head.Y, _u * 0.2f, out PointF fish);
+                    if (aimed) _goal = fish;
+                    // The lunge at 0.6u a second cannot steer, so it goes only when the fish is nearly dead ahead (20 degrees),
+                    // and from just outside the 0.11u at which a minnow bolts from a head.
+                    if (aimed && Dist(head, fish) < _u * 0.125f && MathF.Abs(Wrap(MathF.Atan2(fish.Y - head.Y, fish.X - head.X) - _heading)) < 0.35f)
                     {
-                        _phase = 1; _strikeT = StrikeFor; _huntsLeft--;
+                        _phase = 1; _strikeT = MinnowLunge; _huntsLeft--; Note("lunge:minnow");
+                        // The outcome is rolled at the launch, as the lizard's is: about six in ten, a bold snake a little better.
+                        _minnowWin = _huntRng.NextDouble() < 0.5f + 0.2f * _bold;
                         _ripples.Add(Spine[0].X, Spine[0].Y, 0.9f);        // the lunge pushes the water
                     }
                     else if (_mind.Over) { _huntsLeft--; Decide(); }
                 }
-                else
+                else if (_phase == 1)
                 {
                     _strikeT -= dt;
-                    if (_strikeT <= 0) { _ripples.Add(Spine[0].X, Spine[0].Y, 0.7f); Decide(); }
+                    _mouth = 1.3f;                                          // jaws wide on the way in
+                    // The jaws close on the nearest fish within reach (0.028u: a minnow is 0.02u long).
+                    if (_minnowWin && _minnows.Take(Spine[0].X, Spine[0].Y, _u * 0.028f))
+                    {
+                        Ate("minnow", 0.1f + 0.05f * (float)_huntRng.NextDouble());
+                        _minnowTakes++;
+                        _phase = 2; _strikeT = GulpFor; _gulp = GulpFor;
+                        _ripples.Add(Spine[0].X, Spine[0].Y, 0.45f);        // a small ring where it took it
+                        // Still properly hungry (0.6 and over) and the visit has room: another hunt may follow ("one or more").
+                        if (_hunger >= 0.6f) _huntsLeft = Math.Max(_huntsLeft, 1);
+                    }
+                    else if (_strikeT <= 0) { _mouth = 1; _ripples.Add(Spine[0].X, Spine[0].Y, 0.7f); Decide(); }
+                }
+                else
+                {
+                    _strikeT -= dt;                                         // the gulp: slow, jaws closing on the mouthful
+                    if (_strikeT <= 0) Decide();
                 }
                 break;
             case Doing.Bask:
@@ -537,7 +632,10 @@ internal sealed class Snake : Body
         // make up its mind, and almost never begin. From 0.15u it has about a second of approach.
         // A bold snake looks sooner (0.08 to 0.28 a second: a few seconds beside the clutch) and rests less after a
         // chase (4 minutes bold, 8 nervous). Five seconds' patience. Only what is up near the top of the water.
-        if (!_snatch.Look(Prey, mouth, _u * 0.15f, 0.08f + 0.2f * _bold, dt, 5f, 240f + 240f * _nerve, surfaceOnly: true, ok: _ahead)) return;
+        // A hungry snake looks likelier (up to four times), a little further and rests less after a chase (never goes LOOKING
+        // for tadpoles: it is still only what is at its nose as it swims about).
+        float want = Want;
+        if (!_snatch.Look(Prey, mouth, _u * 0.15f * (1f + 0.5f * want), (0.08f + 0.2f * _bold) * (1f + 3f * want), dt, 5f + 2f * want, (240f + 240f * _nerve) * (1f - 0.6f * want), surfaceOnly: true, ok: _ahead)) return;
         _snatchSeen = _snatch.Caught;
         _mind.Begin(Doing.Snatch, 9f);                      // the patience is the Snatch's (5 s); this is only a backstop
         _phase = 0; _strikeT = 1; _goal = _snatch.Prey.Nose;
@@ -558,7 +656,12 @@ internal sealed class Snake : Body
         {
             // Caught or given up (or the prey was taken by another: lost). A catch rings once at the head; either
             // way the snake carries on with whatever it rolls next, and is not "fed" (a tadpole is a mouthful).
-            if (_snatch.Caught != _snatchSeen) _ripples.Add(head.X, head.Y, 0.9f);
+            if (_snatch.Caught != _snatchSeen)
+            {
+                _ripples.Add(head.X, head.Y, 0.9f);
+                Ate("tadpole", 0.15f + 0.1f * (float)_huntRng.NextDouble());
+                _gulp = GulpFor;
+            }
             _snatchSeen = _snatch.Caught;
             Decide();
             return;
@@ -649,7 +752,7 @@ internal sealed class Snake : Body
     /// </summary>
     private void Scan()
     {
-        if (_fed || _strikes >= 2 || (_lizards == null && _mice == null)) return;
+        if (_fed || _strikes >= MaxStrikes || (_lizards == null && _mice == null)) return;
         if (!(_doing is Doing.Cross or Doing.Explore or Doing.Hunt || (_doing == Doing.Bask && _phase == 0))) return;
         PointF head = Spine[0];
         if (head.X < 0 || head.Y < 0 || head.X >= _pond.Width || head.Y >= _pond.Height) return;   // a meeting is on the picture (a lizard at the edge was snatched from nothing)
@@ -671,7 +774,7 @@ internal sealed class Snake : Body
                 if (WasRolled(p) && !prowling) continue;
                 if (_rolledCount < _rolled.Length && !WasRolled(p)) _rolled[_rolledCount++] = p;
                 Meetings++;
-                if (!prowling && _huntRng.NextDouble() >= 0.5 + 0.4 * _bold) { Note("meet:no"); continue; }
+                if (!prowling && _huntRng.NextDouble() >= 0.5 + 0.4 * _bold + 0.2 * Want) { Note("meet:no"); continue; }
                 _target = p; Stalks++; p.Stalked = true;
                 _mind.Begin(Doing.Stalk, 25); _phase = 0; _goal = nose; _stalkT = 0;
                 _speed = MathF.Min(_speed, _cruise * 0.5f);      // the creep begins at once (a prowl is brisk, and the speed only eases down slowly)
@@ -689,8 +792,9 @@ internal sealed class Snake : Body
     /// </summary>
     private void Notice()
     {
-        if (_fed || _strikes >= 2 || _prowls >= 3 || (_lizards == null && _mice == null)) return;
+        if (_fed || _strikes >= MaxStrikes || _prowls >= (_hunger >= 0.8f ? 4 : 3) || (_lizards == null && _mice == null)) return;
         if (!(_doing == Doing.Cross || (_doing == Doing.Explore && _phase == 0))) return;
+        float want = Want;
         PointF head = Spine[0];
         for (int pass = 0; pass < 2; pass++)
         {
@@ -698,12 +802,12 @@ internal sealed class Snake : Body
             for (int i = 0; i < n; i++)
             {
                 IPrey p = pass == 0 ? _lizards![i] : _mice![i];
-                if (!p.Huntable || Dist(head, p.PreyNose) > _u * 0.9f) continue;
+                if (!p.Huntable || Dist(head, p.PreyNose) > _u * 0.9f * (1f + 0.6f * want)) continue;   // a hungry snake notices from further
                 bool seen = false;
                 for (int k = 0; k < _lookedCount; k++) if (ReferenceEquals(_looked[k], p)) { seen = true; break; }
                 if (seen) continue;
                 if (_lookedCount < _looked.Length) _looked[_lookedCount++] = p;
-                if (_huntRng.NextDouble() < 0.5 + 0.5 * _bold) { BeginProwl(p.PreyNose); return; }
+                if (_huntRng.NextDouble() < Math.Min(1.0, 0.5 + 0.5 * _bold + 0.5 * want)) { BeginProwl(p.PreyNose); return; }
             }
         }
     }
@@ -836,6 +940,7 @@ internal sealed class Snake : Body
             {
                 _target?.Finish();
                 float size = _target?.MealSize ?? 0.33f;
+                Ate(_target is Mouse ? "mouse" : "lizard", 1f);
                 _target = null; _fed = true; _mouth = 1;
                 _bulgeBase = size; _bulgeT = 0; _bulgeTravel = 20 + 10 * (float)_huntRng.NextDouble();
                 Note("swallowed");
@@ -1050,6 +1155,7 @@ internal sealed class Snake : Body
     public void Update(float dt, ReadOnlySpan<PointF> animals, Lizards? lizards = null, Mice? mice = null)
     {
         _lizards = lizards; _mice = mice;
+        _hunger = MathF.Min(1f, _hunger + dt * Appetite / _hungerSecs);      // hunger creeps up whether it is on screen or not
         _snatch.Tick(dt);                                                    // the rest after a chase runs whether it is on screen or not
         // ANY other doing taking over (a fright, a hunt, the jam breaker, the visit ending) ends a chase in progress: one
         // check here covers every Begin that could replace it. (It also frees the tadpole it had singled out for the others.)
@@ -1059,7 +1165,8 @@ internal sealed class Snake : Body
         {
             // Drawn out by prey: while a lizard or a mouse is out on the bank the wait for the next visit runs twice as
             // fast (a snake comes to where there is something to eat). Without it, most prowls arrived after the prey had gone.
-            _next -= dt * (NearestPrey() != null ? 2f : 1f);
+            // And a snake past half hungry comes out sooner: at famished the wait runs twice as fast.
+            _next -= dt * (NearestPrey() != null ? 2f : 1f) / (1f - 0.5f * Math.Clamp((_hunger - 0.5f) * 2f, 0f, 1f));
             if (_next <= 0 && _often > 0) { Begin(); _next = (150 + 150 * (float)_rng.NextDouble()) / _often; }
             return;
         }
@@ -1104,6 +1211,7 @@ internal sealed class Snake : Body
         Notice();
         LookForTadpole(dt);
         Think(dt);
+        UpdateGulp(dt);
         UpdateBulge(dt);
         if (_doing == Doing.Bask && _phase == 2) { UpdateLie(dt); return; }    // lying still: the spine is laid by the pose, nothing steers
 
@@ -1114,11 +1222,12 @@ internal sealed class Snake : Body
         float pace = _doing == Doing.Hunt && _phase == 0 ? StalkPace() : _doing == Doing.Bask && _phase == 1 ? 0.6f
                    : _doing == Doing.Stalk ? 0.4f : _doing == Doing.Miss ? 1.3f : _doing == Doing.Snatch ? 1.4f : _doing == Doing.Explore && _phase == 1 ? 1.7f : 1f;
         if (_fed) pace *= 0.6f;
-        float wantSpeed = striking ? (_doing == Doing.Snatch ? _u * 0.6f : _u * 0.18f) : _cruise * pace * (1 + 2.2f * fear);
+        if (_gulp > 0) pace *= 0.35f;                                                     // a mouthful: it slows to swallow
+        float wantSpeed = striking ? _u * LungeSpeed : _cruise * pace * (1 + 2.2f * fear);
         // The chase after a miss holds off at 0.08u from the prey's nose (the prey is faster, and its tail is between its nose and
         // the jaws: without this the jaws ran onto a fleeing lizard's tail with nothing happening, a bite that was not one).
         if (_doing == Doing.Miss && _phase == 1 && _target != null && Dist(Spine[0], _target.PreyNose) < _u * 0.08f) wantSpeed = 0;
-        _speed += (wantSpeed - _speed) * (1 - MathF.Exp(-dt * (striking ? 14f : fear > 0 ? 6f : 1.2f)));   // a lunge gets up to speed almost at once
+        _speed += (wantSpeed - _speed) * (1 - MathF.Exp(-dt * (striking ? 14f : _gulp > 0 ? 9f : fear > 0 ? 6f : 1.2f)));   // a lunge gets up to speed almost at once; a mouthful brings it up short (it is at lunge speed when the jaws close, and coasting on through the school would not read as a swallow)
         // Holding still for a strike, a mouthful or the look-about after a miss: not a crawl, a stop.
         if (_doing is Doing.Strike or Doing.Swallow || (_doing == Doing.Miss && _phase == 0)) _speed = 0;
 
@@ -1299,6 +1408,21 @@ internal sealed class Snake : Body
             float thrash = _phase == 0 ? 3f : 2.2f - 1.6f * _swallowed;
             _target.Hold(Spine[0], _preyDir, _swallowed, thrash, dt);
         }
+    }
+
+    /// <summary>
+    /// The gulp after a mouthful (a tadpole or a minnow): for 0.7 s the head swells a little as the jaws work and the neck
+    /// bows in a small S (the strike's pose, a quarter as deep), then settles. No bulge: a minnow is a mouthful. The
+    /// strike, the swallow and the miss own the mouth while they run, so a gulp that meets one of them is dropped.
+    /// </summary>
+    private void UpdateGulp(float dt)
+    {
+        if (_gulp <= 0) return;
+        _gulp = MathF.Max(0f, _gulp - dt);
+        if (_doing is Doing.Strike or Doing.Swallow or Doing.Miss) { _gulp = 0; return; }
+        float k = 1f - _gulp / GulpFor, s = MathF.Sin(MathF.PI * k);
+        _mouth = 1f + 0.3f * s; _poseK = 0.25f * s; _pullK = 0;
+        if (_gulp <= 0) { _mouth = 1; _poseK = 0; }
     }
 
     /// <summary>Counts the meal on its way down the body: it moves from behind the head to the middle, then slowly shrinks.</summary>

@@ -304,6 +304,12 @@ and drifts in a lull, so no two fall the same way.
   by a new one (new temper) two to five minutes later. A snake that is only swimming across, with a
   tadpole or froglet at the top of the water right at its nose, may single that one out for a few
   seconds' chase and a lunge (never looked for, and it rests four to eight minutes after any chase).
+  The snake also gets HUNGRY: a dial from full to famished that rises over eight to fourteen minutes of
+  pond time and drops with a meal (a lizard or mouse to nothing, a tadpole a fifth, a minnow an eighth).
+  A hungry snake comes out sooner, goes to look at prey from further off and creeps up on a school of minnows
+  and really lunges: about six in ten catch one (the school goes on one fish fewer, and a newcomer swims in from
+  the picture's edge three to six minutes later), with a quick gulp, a small ring and no bulge. A famished one
+  may strike three times in a visit; a full one does none of it.
 - Two **lizards** (kanahebi, the Japanese grass lizard with the very long tail) each come out on
   the bank every couple of minutes: a dash, dead still, another dash, over the grass and up onto a
   rock to bask, its body and tail throwing an S-wave as it runs and its sprawling legs (a knee bent
