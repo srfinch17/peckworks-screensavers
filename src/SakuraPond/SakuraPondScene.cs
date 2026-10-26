@@ -164,7 +164,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Lap();                   // the laps of Update, named "update: ..." in the section table (free unless PECKWORKS_SECTIONS is set)
         _wind.Update(dt);                 // first: everything below reads it
         _boughs.Update(dt);
-        _pond.Shore.Update(dt);           // the water's edge moves: the drinkers below ask it where the water is
+        _pond.Shore.Update(dt, _ripples); // the water's edge moves (and a ring reaching the sand washes up it): the drinkers below ask it where the water is
         Sections.Mark("update: wind");
         // The fish steer round the turtles and the swimming snake, and are pushed out of
         // them if they meet (last frame's spines: near enough). The snake is solid too:

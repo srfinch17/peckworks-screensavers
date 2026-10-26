@@ -69,7 +69,63 @@ internal sealed class KoiSchool
                 ? new Koi(pond, ripples, where, rng, i, (energy[i], social[i], curious[i]), play, petals)
                 : new Koi(pond, ripples, where, rng, i - koi, (energy[i], social[i], curious[i]), play, petals, Koi.Kind.Goldfish);   // its own number among the goldfish picks its colouring
         foreach (Koi k in _fish) k.Meet(_fish);               // each fish opens its notebook of who it likes (a match of the dials: no dice)
+        foreach (Koi k in _fish) k.Puff = AddPuff;            // a fish rooting in the deep bed stirs up a puff of silt, drawn here under every fish
         Room(_fish.Length);
+    }
+
+    // ==================== SILT ====================
+    // A koi nosing into the deep bed (Doing.Forage) stirs a small cloud of silt that
+    // rises, spreads and settles over a few seconds: the one thing down there that
+    // says "it is doing something", since the fish itself is a hazy shape at that
+    // depth. Drawn before the fish (it is on the bed, under all of them), only on
+    // open water, as a soft disc of the bed's pale silt seen through the murk.
+    private struct Silt { public float X, Y, R, Z; public double Born; }
+    private readonly List<Silt> _silt = new();
+    private const float SiltLife = 3.5f;
+
+    private void AddPuff(float x, float y, float len, float z)
+    {
+        Koi.TeaseLog?.Invoke(FormattableString.Invariant($"puff {x:F0} {y:F0} z {z:F2}"));   // (the instrument log, when PECKWORKS_TEASELOG names a file: a dump can be aimed at a puff)
+        if (_silt.Count >= 8) return;
+        _silt.Add(new Silt { X = x, Y = y + len * 0.08f, R = len * 0.7f, Z = z, Born = _clock });
+    }
+
+    private void DrawSilt(FrameBuffer fb)
+    {
+        uint[] px = fb.Pixels; bool[] water = _pond.Water, open = _pond.Open;
+        for (int p = _silt.Count - 1; p >= 0; p--)
+        {
+            Silt q = _silt[p];
+            float age = (float)(_clock - q.Born);
+            if (age >= SiltLife) { _silt.RemoveAt(p); continue; }
+            float life = age / SiltLife;
+            float radius = q.R * (0.4f + 0.6f * MathF.Sqrt(life));              // billows out quickly, then drifts
+            float murk = Light.Murk(q.Z);
+            // Strong enough to be seen through the murk (the first version, at half this and dimmed by the murk
+            // like the fish, lifted a 45 px disc by a fifth of a grey level: a puff nobody could see). The silt
+            // rises off the bed, so it is a little less lost than the fish that stirred it.
+            float alpha = 0.9f * MathF.Pow(1 - life, 1.5f) * (1 - 0.3f * murk) * MathF.Min(1, age * 3);
+            if (alpha < 0.01f) continue;
+            // The bed's silt, pale and greyish, taken part way toward the deep water's colour by the murk at that depth.
+            int cr = (int)(152 + (22 - 152) * murk * 0.45f), cg = (int)(146 + (66 - 146) * murk * 0.45f), cb = (int)(118 + (72 - 118) * murk * 0.45f);
+            float ry = radius * Ripples.Squash;
+            float cy = q.Y - q.R * 0.15f * life;                                  // and it drifts up a little as it spreads
+            int x0 = Math.Max(0, (int)(q.X - radius)), x1 = Math.Min(fb.Width - 1, (int)(q.X + radius));
+            int y0 = Math.Max(0, (int)(cy - ry)), y1 = Math.Min(fb.Height - 1, (int)(cy + ry));
+            for (int y = y0; y <= y1; y++)
+            {
+                float dy = (y + 0.5f - cy) / ry;
+                for (int x = x0; x <= x1; x++)
+                {
+                    float dx = (x + 0.5f - q.X) / radius, d2 = dx * dx + dy * dy;
+                    if (d2 >= 1) continue;
+                    int i = y * fb.Width + x;
+                    if (!water[i] || !open[i]) continue;
+                    float f = 1 - d2;
+                    px[i] = FrameBuffer.Blend(px[i], cr, cg, cb, f * f * alpha);
+                }
+            }
+        }
     }
 
     /// <summary>Scratch for the draw order big enough for n actors (the fish, and the turtles once Draw sees them). Grows once, never per frame.</summary>
@@ -309,6 +365,7 @@ internal sealed class KoiSchool
         if (all == 0) return;
         Room(all);
         if (_mask.Length != fb.Width * fb.Height) _mask = new bool[fb.Width * fb.Height];
+        if (_silt.Count > 0) DrawSilt(fb);                          // the silt a forager stirred up: on the bed, under every fish
         int m = 0;                                                  // how many are in the order (the fish in view, and the turtles)
         for (int i = 0; i < n; i++)
         {
@@ -505,6 +562,7 @@ internal sealed class Koi : Body
     private int _dropCount;
     private struct Drop { public float X, Y, Vx, Vy, H, Vh; }
     private float _goalX, _goalY, _goalTimer;            // where it is idly heading, ground pixels, and until when
+    internal Action<float, float, float, float>? Puff;   // the school's silt puffs: (nose x, nose y on the screen, its length, its Z) when it roots in the deep bed
     private double _time;
 
     // ---- THE MIND ----
@@ -538,6 +596,7 @@ internal sealed class Koi : Body
         Shy,           // it bumped into another animal: a short swim away from it, up or down as well as aside
         Leap,          // a burst up to the surface and a jump clear of the water, a splash, then down again
         Snatch,        // it came upon a tadpole or froglet and singled it out: a few seconds' chase, and a gulp if the mouth gets there
+        Forage,        // down to the deep bed: a slow cruise from one deep spot to the next, a pause nosing in the silt at each (a puff of it rises), then back up to the light
         Tease,         // a big fish near a school of minnows rushes it for about a second for the fun of it (never catches, never eats), then glides to a stop
     }
     private readonly Snatch _snatch;                      // the chance meal in hand (Tadpoles.cs): who it is after, how long it will bother, when it may look again
@@ -872,7 +931,7 @@ internal sealed class Koi : Body
         Think(dt, school);
         bool teasing = _doing == Doing.Tease;                                    // (the rush part of it flat out; the glide at its end is not)
         bool rush = _doing is Doing.Chase or Doing.Flee or Doing.Flinch or Doing.Leap or Doing.Snatch || (teasing && _teaseGlide <= 0);   // flat out
-        bool still = _doing == Doing.Rest || (_doing == Doing.Investigate && _hold > 0);   // hanging in the water, nosing at something
+        bool still = _doing == Doing.Rest || (_doing is Doing.Investigate or Doing.Forage && _hold > 0);   // hanging in the water, nosing at something
         // KEEPING PACE. Following a friend (a fond one, not a stranger) the fish does not run its own beat-and-glide
         // clock: it beats when the friend beats and glides when the friend glides, and sets its speed to the friend's
         // plus a push to close whatever gap there is between where it is and its slot, along its own heading
@@ -907,7 +966,7 @@ internal sealed class Koi : Body
         // and a gulp from deep down is a swim up to the surface, not a float up.
         _swimming = rush || turnAround || (company ? _partner!._swimming || ex > _len * 0.8f : _beating && !still) || (_gulping && Z > 0.2f) || _doing == Doing.Shy || teasing;
         // A tease's rush is a real dash, half as fast again as any other rush: the game is the big fish's burst at the shoal.
-        float targetSpeed = teasing && _teaseGlide <= 0 ? _len * _cruise * 2.4f : rush ? _len * _cruise * 1.6f : _swimming ? _len * _cruise : still ? _len * 0.07f : _len * 0.16f;
+        float targetSpeed = teasing && _teaseGlide <= 0 ? _len * _cruise * 2.4f : rush ? _len * _cruise * 1.6f : _swimming ? _len * _cruise * (_doing == Doing.Forage ? 0.6f : 1f) : still ? _len * 0.07f : _len * 0.16f;   // (a forager cruises the bed at six tenths)
         if (company) targetSpeed = Math.Clamp(_partner!._speed + 0.8f * ex, _len * 0.05f, _len * _cruise * 1.7f);
         // A chaser close to a quarry that is off to one side SLOWS to turn in: at
         // full burst its turning circle is 40 px wide and a small fish swimming at
@@ -1252,6 +1311,26 @@ internal sealed class Koi : Body
         _goalTimer = 12 + 18 * (float)_rng.NextDouble();
     }
 
+    /// <summary>
+    /// A deep spot near by (between "from" and "to" body lengths away, over a bed at least 150/255 of full depth and with
+    /// swimming room) for a forager's next pause, so a forage is several pauses and not one long swim; false if none
+    /// turned up in thirty tries (the caller falls back to NewGoal(deep: true)). The goal timer is set as NewGoal sets it.
+    /// </summary>
+    private bool NewGoalNear(float from, float to)
+    {
+        for (int tries = 0; tries < 30; tries++)
+        {
+            float a = (float)(_rng.NextDouble() * MathF.Tau), r = _len * (from + (to - from) * (float)_rng.NextDouble());
+            PointF s = ToScreen(_x + MathF.Cos(a) * r, _y + MathF.Sin(a) * r);
+            if (s.X < 0 || s.Y < 0 || s.X >= _pond.Width || s.Y >= _pond.Height) continue;
+            if (_pond.RoomAt(s.X, s.Y) < _len * 0.4f || _pond.Floor[(int)s.Y * _pond.Width + (int)s.X] < 150) continue;
+            (_goalX, _goalY) = ToGround(s.X, s.Y);
+            _goalTimer = 12 + 18 * (float)_rng.NextDouble();
+            return true;
+        }
+        return false;
+    }
+
     // ==================== THE MIND ====================
     //
     // FEYNMAN VERSION: a koi has one thing on its mind at a time (a Doing), a
@@ -1352,7 +1431,7 @@ internal sealed class Koi : Body
                     // depth as it changes (a stranger is followed at the depth it began at, as before), though never into the
                     // deep rest where both would be out of sight.
                     float c = _partner != null ? Company(Liking(_partner)) : 0;
-                    if (_mind.Over || _partner == null || (c > 0.05f && _partner._doing == Doing.Rest) || !Near(_partner, (_kind == Kind.Goldfish ? 14f : 4f) * (1 + c))) Decide(school);   // a goldfish keeps a friend in mind from further, in its own small lengths
+                    if (_mind.Over || _partner == null || (c > 0.05f && _partner._doing is Doing.Rest or Doing.Forage) || !Near(_partner, (_kind == Kind.Goldfish ? 14f : 4f) * (1 + c))) Decide(school);   // a goldfish keeps a friend in mind from further, in its own small lengths
                     else if (c > 0.05f) Depth(MathF.Min(0.4f, MathF.Max(0.05f, _partner.Z + 0.1f)), 2);
                 }
                 break;
@@ -1377,6 +1456,33 @@ internal sealed class Koi : Body
                     if (_targetIsPetal && !_gulping && !_bumping) { _gulping = true; _zTarget = 0; }
                 }
                 else if (_mind.Over) Decide(school);
+                break;
+            case Doing.Forage:
+                {
+                    // Down on the bed: a slow cruise from one deep spot to the next, and at each a pause with the nose
+                    // in the silt (a puff of it rises, if the water there is deep); when its time is up, back up to
+                    // the light. The bed's own rules (the cap and the margin in Update) keep it a little above the floor.
+                    float fdx = _goalX - _x, fdy = _goalY - _y;
+                    // A forage begun in the middle of a gulp (Depth gives way to the gulp) keeps asking for the deep once the mouth is free.
+                    if (_hold <= 0 && _zTarget < 0.5f && !_gulping && !_bumping) Depth(0.65f, _mind.Left + 5);
+                    if (_hold > 0)
+                    {
+                        _hold -= dt;
+                        if (_hold <= 0)
+                        {
+                            if (_mind.Over) { Begin(Doing.Wander); break; }
+                            if (!NewGoalNear(1.5f, 4f)) NewGoal(deep: true);       // the next pause a few lengths on (the first forage run swam a whole pond to one goal and paused once)
+                            Depth(0.55f + 0.25f * (float)_rng.NextDouble(), _mind.Left + 5);
+                        }
+                    }
+                    else if (fdx * fdx + fdy * fdy < _len * _len * 0.5f)
+                    {
+                        _hold = 1.5f + 2.5f * (float)_rng.NextDouble();
+                        Depth(_zCap, 10);                                                        // right down to the bed (the clamp keeps it a little above)
+                        if (_floor > 0.6f) Puff?.Invoke(Spine[0].X, Spine[0].Y, _len, Z);       // the deep bed only: the shallows' sand is the crayfish's
+                    }
+                    else if (_mind.Over) Begin(Doing.Wander);
+                }
                 break;
             case Doing.Rest:
             case Doing.Shy:
@@ -1511,6 +1617,8 @@ internal sealed class Koi : Body
                 return (_shyX, _shyY, 0.8f);
             case Doing.Rest:
                 return (_goalX, _goalY, 0.25f);
+            case Doing.Forage:
+                return (_goalX, _goalY, _hold > 0 ? 0.15f : 0.45f);          // nosing at the bed it barely steers; between spots a wander's pull
             case Doing.Leap:
                 return (_x + MathF.Cos(_heading) * _len * 4, _y + MathF.Sin(_heading) * _len * 4, 0.3f);   // straight on: the burst is a straight run
             default:
@@ -1576,7 +1684,10 @@ internal sealed class Koi : Body
         if (friendRests && _doing != Doing.Rest) wRest *= 1 + 2 * company;   // a friend hanging deep and still: the thing to do is hang beside it (but not rest after rest after rest: one rest beside it, then on; chained, a pair sat 44 s)
         float wFollow = friend != null && !friendRests ? (0.1f + 0.7f * _social) * _play * (gold && friend._kind == Kind.Goldfish ? 2f : 1f) * (1 + 4 * company) : 0;   // a goldfish follows a goldfish twice as readily: that is the shoal; a close friend up to five times (a fondness of 0.6 is about half way)
         float wChase = chaseOn ? (0.1f + 0.7f * _social * _energy) * _play : 0;
-        switch (Dice.Pick(_rng, [wChase, wFollow, wLook, wRest, wWander]))
+        // A koi goes down to root in the deep bed now and then (the curious more, the hungry more, and not straight after
+        // one); a goldfish keeps to the light (its own cap would stop it short of the bed anyway).
+        float wForage = _kind == Kind.Koi ? (0.1f + 0.3f * _curious) * (0.7f + 0.6f * _hunger) * (_doing == Doing.Forage ? 0.2f : 1f) : 0;
+        switch (Dice.Pick(_rng, [wChase, wFollow, wLook, wRest, wForage, wWander]))
         {
             case 0: Begin(Doing.Chase, quarry); break;
             case 1:
@@ -1591,6 +1702,7 @@ internal sealed class Koi : Body
                 break;
             case 2 when PickTarget(): Begin(Doing.Investigate); break;        // nothing worth a look in reach: it wanders instead
             case 3: Begin(Doing.Rest); break;
+            case 4: Begin(Doing.Forage); break;
             default: Begin(Doing.Wander); break;
         }
     }
@@ -1653,6 +1765,11 @@ internal sealed class Koi : Body
                     if (_mate != null) z = _mate._zTarget + 0.04f + 0.08f * r;                // resting beside a friend: a little under it, so the pair is still close in depth
                     Depth(z, _mind.Left);
                 }
+                break;
+            case Doing.Forage:
+                _mind.Begin(doing, 25 + 25 * (float)_rng.NextDouble());            // half a minute or so down there, spot to spot
+                if (!NewGoalNear(2f, 5f)) NewGoal(deep: true);                     // the first pause a few lengths on, over a deep bed
+                Depth(0.55f + 0.25f * (float)_rng.NextDouble(), _mind.Left + 5);   // deep: a hazy shape moving over the bed (Light.SeeU), never quite lost
                 break;
             case Doing.Shy:
                 _mind.Begin(doing, 1.2f + 0.8f * (float)_rng.NextDouble());        // a short swim away (the place and depth were set by Bumped)
@@ -1892,7 +2009,7 @@ internal sealed class Koi : Body
     /// </summary>
     public void Notice(float x, float y, bool petal = false)
     {
-        if (_doing is Doing.Chase or Doing.Flee or Doing.Leap or Doing.Snatch or Doing.Tease) return;      // (a tap or a petal reached a fish IN THE AIR once and turned its leap into a look, mid-arc; a fish after a tadpole has eyes only for it)
+        if (_doing is Doing.Chase or Doing.Flee or Doing.Leap or Doing.Snatch or Doing.Tease or Doing.Forage) return;      // (a tap or a petal reached a fish IN THE AIR once and turned its leap into a look, mid-arc; a fish after a tadpole has eyes only for it; a fish down on the bed sees nothing at the surface: the first forage run had nine forages, five of them cut short inside seconds by a petal)
         float chance = petal ? 0.3f * _hunger * _hunger * _play : 0.25f + 0.7f * _curious * _play;   // a petal: only a really hungry fish, and not every time (every fish answering every petal made a pond of fish nosing at petals)
         if (_doing == Doing.Follow && _partner != null) chance *= 1 - 0.7f * Company(Liking(_partner));   // fast with a friend: a tap or a petal turns its head less often (at 0.7 of a friend, about half)
         if (_rng.NextDouble() > chance) return;

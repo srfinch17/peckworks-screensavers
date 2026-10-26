@@ -254,6 +254,8 @@ internal sealed class Snake : Body
     private readonly Cooldown _calm = new();               // no startle again until this has run out
     private bool _live, _blocked;                          // _blocked: last frame's step was refused
     private float _blockedT;                               // how long in a row the step has been refused
+    private float _spin;                                   // how far round the heading has turned lately, radians, signed (an orbit shows here as a whole circle; see the orbit breaker in Update)
+    private float _detour;                                 // seconds left of swimming on with no pull toward the goal, after an orbit was broken
 
     public Snake(Pond pond, Ripples ripples, Minnows? minnows, float often, Random rng) : base(Points)
     {
@@ -404,18 +406,22 @@ internal sealed class Snake : Body
     /// the room grid reads under 0.035u) first walks its crumbs back to the last one in open water. Nothing
     /// happens when the head is already in the open, or when no crumb within the last forty is.
     /// </summary>
-    private void MaybeRetreat()
+    private void MaybeRetreat() => Retreat(force: false);
+
+    /// <summary>The retreat itself; "force" skips the room test (the orbit breaker: a pocket on the lawn reads as roomy to the grid and is still a pocket). True if a way was found.</summary>
+    private bool Retreat(bool force)
     {
         _wayN = _wayI = 0;
-        if (!(_doing == Doing.Explore && _phase == 0 || _doing == Doing.Cross)) return;
-        if (_pond.RoomAt(_x, _y) >= _u * 0.035f) return;
+        if (!(_doing == Doing.Explore && _phase == 0 || _doing == Doing.Cross)) return false;
+        if (!force && _pond.RoomAt(_x, _y) >= _u * 0.035f) return false;
         int n = Math.Min(_crumbCount, _way.Length);
         for (int k = 0; k < n; k++)
         {
             int i = (_crumbHead - k + _crumbX.Length) % _crumbX.Length;
             _way[k] = new PointF(_crumbX[i], _crumbY[i]);
-            if (_crumbRoom[i] >= _u * 0.06f) { _wayN = k + 1; _retreatT = 0; Note("retreat"); return; }
+            if (_crumbRoom[i] >= _u * 0.06f) { _wayN = k + 1; _retreatT = 0; Note("retreat"); return true; }
         }
+        return false;
     }
 
     /// <summary>Go and look: swim toward the prey (heading for it, so it is ahead of the snake when they meet) and let the meeting happen, or not, on the way.</summary>
@@ -506,6 +512,12 @@ internal sealed class Snake : Body
         _landT += dt;
         if (_landT < 30f) return;
         _landT = 0;
+        LeaveByNearestEdge();
+    }
+
+    /// <summary>A crossing to the nearest edge of the picture (open to it, see Clear): the land corner touches two edges, so from the lawn this way out always exists.</summary>
+    private void LeaveByNearestEdge()
+    {
         float toL = _x, toR = _pond.Width - _x, toT = _y, toB = _pond.Height - _y, m = MathF.Min(MathF.Min(toL, toR), MathF.Min(toT, toB));
         _mind.Begin(Doing.Cross); _phase = 0; Note("leave");
         _wayN = _wayI = 0;
@@ -1239,6 +1251,10 @@ internal sealed class Snake : Body
         // every time and the prowl toured the pond's far side instead of arriving. A retreat pulls the same, crumb to crumb.
         bool prowling = _doing == Doing.Explore && _phase == 1;
         float pull = striking ? 2.5f : _doing == Doing.Bask && _phase == 1 ? 1.5f : _doing is Doing.Stalk or Doing.Miss or Doing.Snatch || prowling || Retreating ? 1.8f : 0.5f;
+        // A DETOUR (the orbit breaker below fired): the pull toward the goal is off for a few seconds and the snake simply
+        // swims on, steering round whatever is in the way, so it comes out past the thing it was circling before the goal
+        // takes hold of it again. A hunt, a stalk, a strike or a chase keeps its pull: those aim at a moving animal, not a spot.
+        if (_detour > 0 && !striking && !(_doing is Doing.Stalk or Doing.Strike or Doing.Swallow or Doing.Miss or Doing.Snatch or Doing.Hunt)) pull = 0;
         PointF goal = Retreating ? _way[_wayI] : _goal;
         float turn = Wrap(MathF.Atan2(goal.Y - _y, goal.X - _x) - _heading) * pull;
         if (!striking && !Retreating && !(_doing == Doing.Bask && _phase == 1) && _doing is not (Doing.Stalk or Doing.Strike or Doing.Swallow or Doing.Miss or Doing.Snatch)) turn += 0.2f * MathF.Sin(_alive * 0.35f);
@@ -1250,7 +1266,9 @@ internal sealed class Snake : Body
         // heading for the far side of the pond.
         // Stalking or chasing a miss it goes closer past rocks to get at what sits on them (0.02u, not 0.035u; less and the body swung into the stone).
         // A retreat keeps to the gaps a stalk came in by, so it takes the stalk's margin too.
-        float look = _len * 0.8f + _speed * 0.8f, margin = _u * (_doing is Doing.Stalk or Doing.Miss || Retreating || HeadOnLand() ? 0.02f : 0.035f);    // wider than the weave's swing, so the body clears too
+        // On a detour it feels its way closer (the look cut to two fifths): the full look sees the rim of the pocket it is in
+        // on every heading and steers along it, which is the orbit the detour is meant to leave.
+        float look = (_len * 0.8f + _speed * 0.8f) * (_detour > 0 ? 0.4f : 1f), margin = _u * (_doing is Doing.Stalk or Doing.Miss || Retreating || HeadOnLand() ? 0.02f : 0.035f);    // wider than the weave's swing, so the body clears too
         float clearAhead = _blocked ? 0 : ClearAlong(_heading, look);
         // A fright swings it away from what touched it, but never into something
         // else: the nearer an obstacle, the less the swing counts (an early
@@ -1296,7 +1314,28 @@ internal sealed class Snake : Body
             turn += Wrap(best - _heading) * (1.5f + 3f * urgency);
             most = MathF.Max(most, 2.2f);
         }
-        _heading = Wrap(_heading + Math.Clamp(turn, -most, most) * dt);
+        float swung = Math.Clamp(turn, -most, most) * dt;
+        _heading = Wrap(_heading + swung);
+        // ---- The orbit breaker ----
+        // A goal on the far side of a lily pad cluster: the pull toward the goal turns the head one way, the avoidance
+        // round the pads turns it the same way, and the head goes round and round the cluster at full speed in a circle
+        // a third of a body length across, with the body laid along that circle: a snake balled up on a lily pad (seed 7
+        // natural, 2026-10-26: a 12.6 s orbit of 100 by 76 pixels at 720p, nothing blocking it, four shorter ones either side).
+        // The heading's turning is summed with an eight second memory; a whole circle and a bit (6.9 radians, more than any
+        // honest turn round a stone) means an orbit. The answer: THE WAY OUT IS THE WAY IN, a retreat along its crumbs to
+        // the last one in open water, forced (the lawn pocket it circled read as roomy to the room grid, 0.06u of clear on
+        // every side, so the ordinary retreat test passed it by: a pull-free detour alone left seed 7 circling 13 s, since
+        // the goal pull was not the only thing turning it, the avoidance round the pocket's rim was). With no crumb in
+        // open water to walk back to, a detour: no pull for four seconds (above) and it simply swims on.
+        _spin = _spin * MathF.Exp(-dt / 8f) + swung;
+        _detour = MathF.Max(0, _detour - dt);
+        if (MathF.Abs(_spin) > 6.9f)
+        {
+            _spin = 0;
+            if (!Retreating && Retreat(force: true)) Note("orbit:retreat");
+            else if (HeadOnLand() && !(_doing is Doing.Strike or Doing.Swallow or Doing.Stalk or Doing.Miss)) { LeaveByNearestEdge(); Note("orbit:leave"); }   // on the lawn with no crumb to walk back on: out by the nearest edge, which the land corner touches (seed 3 stress kept a 6 s orbit there through a detour)
+            else { _detour = 4f; _wayI = _wayN; Note("orbit:detour"); }
+        }
 
         // ---- Forward, unless the next step would be inside something ----
         float step = _speed * dt;

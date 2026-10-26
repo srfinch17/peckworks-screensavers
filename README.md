@@ -74,10 +74,13 @@ bigger than the view: still water fills the screen under cherry branches in full
 only shore in sight is a corner of lawn at the bottom (left or right, the seed decides). Rocks
 of every size sit along the water's edge, each with a sunny face, a shaded face, moss and lichen,
 a dark wet flank just inside the rim where the water meets each one and a dark thread in the
-water round its foot, so the water goes round every stone; between the stones the water LAPS at
-a strip of sand and pebbles, a slow swell travelling along the bank that climbs the sand a
-finger's width and falls back, leaving a dark wet band that dries in a few seconds, and a lizard
-or a mouse drinking at the edge backs off when a swell reaches its nose; clumps of iris leaves stand on the lawn behind the
+water round its foot, so the water goes round every stone and stops at the ground (a stone on the
+bank is never tinted along the bank's own curve); between the stones the water LAPS at a strip of
+sand and pebbles, a swell travelling along the bank that runs up the sand a finger's width with a
+thread of foam at its edge and drains back slowly, leaving a dark wet band that dries in a few
+seconds, climbs the foot of each stone the same way, and washes further up when a ring on the
+water (a koi's gulp, a frog's splash) reaches the bank; a lizard or a mouse drinking at the edge
+backs off when a swell reaches its nose; clumps of iris leaves stand on the lawn behind the
 stones, arching out over them toward the water; a clump of cattails stands in the shallows, brown
 heads nodding; lily pads and water lilies float in the calm water nearby; and the branches throw
 dappled shadows on the water. The lawn is a meadow corner in a breeze, different on every seed:
@@ -143,7 +146,9 @@ and drifts in a lull, so no two fall the same way.
   across the school, so near-twins are rare): how
   energetic it is (how much it beats rather than glides, how fast it cruises), how sociable, and
   how curious. From those it decides, one thing at a time, what to do next: wander, rest deep and
-  still, go and nose at something (a floating petal, which it may gulp down, the rim of a lily
+  still, go down and forage along the deep bed (half a minute of slow cruising from one deep spot
+  to the next, a pause at each with its nose in the silt and a puff of it rising, a hazy shape
+  doing something down where the pond is darkest), go and nose at something (a floating petal, which it may gulp down, the rim of a lily
   pad, the foot of the cattails, the side of the floating log, or the spot where a dragonfly just
   tapped the water), swim along behind and beside a friend, or now and then burst after another
   fish, which speeds up and swerves away until the chaser loses interest. Only one chase runs in

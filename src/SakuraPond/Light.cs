@@ -48,7 +48,7 @@ internal static class Light
     /// a fish; deeper than most of the water near the bank, so fish there are
     /// always seen.
     /// </summary>
-    public const float SeeU = 0.30f;   // 0.26 until 2026-10-23: he asked to see "a little tiny bit" deeper
+    public const float SeeU = 0.36f;   // 0.26 until 2026-10-23 ("a little tiny bit" deeper), 0.30 until 2026-10-26 ("make the deep parts a little more visible")
 
     /// <summary>How deep a thing at Z (0 at the surface, 1 at the pond's full depth) is, in u.</summary>
     public static float DepthOf(float z) => z * Pond.DepthU;

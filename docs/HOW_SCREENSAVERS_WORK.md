@@ -678,19 +678,30 @@ cool, greenish, light and dark. Then the WATER IS LAID BACK OVER the stones (`Po
 a rock in a pond is not pasted on top of the water, its flanks slope into it. For every pixel of a
 rock on the water side of the bank, a THIN band just inside the rock's own rim (half a percent of
 u) goes dark and a little blue, the wet flank, and the water just outside the rim goes dark too,
-the surface meeting the flank in shadow, so the water visibly goes round the stone; a stone
-standing out in the shallows also takes on up to half the water's colour, darkened, once the water
-under it is deep enough, its top still breaking the surface. (The first wrap mixed a band a tenth
-of a stone wide toward the water at 85 percent: every stone on the shore had its water side turned
-to a teal ghost with the bank's line cutting straight across it, which the owner read as the
-water's boundary going over the top of the rocks.)
+the surface meeting the flank in shadow, so the water visibly goes round the stone; both fade out
+where the rim comes to the sand, so the waterline ends at the ground. A stone ON THE BANK (any
+ground under its disc) gets nothing else: until the twenty-ninth round the part of such a stone
+that lay past the bank's curve was tinted toward the water by the depth there and the part on the
+sand side was dimmed in a strip along the curve, and a 6x crop showed the bank's line running
+straight across the stone's face with a paler half beyond it, which the owner read as "the water
+line on top of the rock". A stone the bank runs under is a stone standing on the ground with water
+against its far flank, and its wet rim is the whole of its waterline. Only a stone standing out in
+the shallows (no ground under it) still sinks: it takes on up to half the water's colour, darkened,
+once the water under it is deep enough, its top still breaking the surface. (The first wrap mixed a
+band a tenth of a stone wide toward the water at 85 percent: every stone on the shore had its water
+side turned to a teal ghost with the bank's line cutting straight across it.)
 
 *The water's edge, alive (`Shoreline.cs`).* Where the pond meets the sand nothing is painted as a
 line. Think of a ruler laid across the water's edge at every point along the bank: zero at the
 painted edge, minus up the sand, plus out into the water. Each frame the water sits at a different
 mark on that ruler, a swell of three slow rhythms (4.5, 2.9 and 7 seconds) travelling along the
-bank, about a hundredth of u each way at most; a pixel beyond the mark is under water, one before
-it is bare. Every pixel within reach of the edge was given two colours when the shore was built: a
+bank, 0.013u each way at most; a pixel beyond the mark is under water, one before it is bare. The
+swell is not a plain sine: watch a pond's edge and the water runs UP the sand quickly and drains
+back slowly, so each rhythm is a sine with its crest pushed forward (a rounded sawtooth), and the
+pale thread at the edge is brightest while the edge is advancing (foam rides the run-up, not the
+drain). A ring on the water that reaches the bank washes up it: `Ripples.Surge` says how hard the
+rings are pushing at each of 256 points along the bank, and that is added to the swell there (a
+koi's gulp by the sand sends a visible wash up the beach; a ring far out never arrives). Every pixel within reach of the edge was given two colours when the shore was built: a
 sand pixel's wet colour is the shallowest water painted over it by the painter's own water recipe,
 a water pixel's bare colour is wet sand. Each frame the shore writes only the pixels whose state
 differs from the backdrop (the backdrop copy already put the rest down), mixes the five pixels
@@ -699,14 +710,19 @@ remembers WETNESS per pixel: sand the water has just left stays dark and dries b
 seconds. That memory is what makes a lap readable: the water's own colour over sand is nearly the
 water's colour, so the edge alone barely shows; the dark band it leaves is what the eye follows. A
 fixed wobble along the bank is baked into the picture at rest, so the painter's smooth curve runs
-a little further up the sand here and less there. Stones and lily pads are left out: the waterline
-on a stone runs round its own rim and does not move. The same object answers the animals: WetNow
+a little further up the sand here and less there. The water side of every stone's rim is in the
+band too, measured in from the stone's own rim: when the swell runs up the sand it runs up the
+stone's foot as well (the stone darkens and goes bluer under the skin of water, and dries from
+that), so the waterline on a stone moves with the water instead of sitting painted on it. Lily
+pads are left out: they float. The same object answers the animals: WetNow
 (is this point under water this frame), EverWet (can the water ever reach it) and EverDry (can it
 ever be bare; a tadpole clutch never settles there). A lizard or a mouse drinks as close to the
 edge as the rest edge allows, and when a swell reaches its nose it scuttles back about two thirds
 of a body and thinks again. Cost: one compare per band pixel and a write only where the state
-changed; the band is a few thousand pixels at 720p and about ten thousand at 1080p, because the
-rocks cover most of the bank and only the sand between them is in it.
+changed; with the stones' feet in it and the wash's allowance the band is about 85,000 pixels at
+1440p (shore section 1.0 ms there, 0.2 before the feet and the wash; about 0.6 ms at the 1920 draw
+width). The lever left, if it is ever needed: the band's eight arrays streamed as one, or four
+chunks on four cores.
 
 *Cattails.* One clump stands in the shallows a little way out from the bank: stiff stems with
 velvety brown heads and a pale spike, and long leaves between them that splay and bend over. It is
@@ -1170,7 +1186,17 @@ away on one seed). Without that the goal lay beyond
 the rocks, the picture's edge was a wall, the feelers found only ways ALONG the pocket, and the snake
 paced it for 73 s ("only move in circles on that land"). A snake inside two things at once (the edge
 wall and a rock) TURNS toward the way out at most 4 radians a second instead of facing it outright:
-set outright, the way out flipped between the two every frame and the head shook. The stalk itself
+set outright, the way out flipped between the two every frame and the head shook. THE ORBIT
+BREAKER (round twenty-nine): a goal on the far side of a lily pad cluster, or of the bank rocks
+while it is on the lawn, makes the pull toward the goal and the avoidance round the obstacle turn
+the head the same way, and the head goes round and round at full speed in a circle a third of a
+body length across with the body laid along it (the owner saw "the snake balled up on a lily pad";
+the timeline found a 12.6 s orbit of 100 by 76 pixels at 720p on the lawn, nothing blocking it).
+The snake sums how far its heading has turned with an eight second memory (`_spin`); a whole
+circle and a bit (6.9 radians, more than any honest turn round a stone) is an orbit, and the
+answer is a DETOUR: for four seconds the pull is off and it simply swims on, steering round
+whatever is in the way, so it comes out past the thing it was circling; a retreat along crumbs is
+given up at the same time (its crumb may be the thing being circled). The stalk itself
 creeps at a third of a cruise with the weave at a quarter, the feelers still on. The stalk is dropped
 if the prey's nose gets further than 0.2u (it ran or hid; counted as abandoned). At 0.05u it Strikes:
 the neck is drawn back into an S for a third of a second (a drawing-only offset laid over the front
@@ -1302,10 +1328,18 @@ of the pond can hide a fish. A fish may be at any depth the bed allows, and thre
 under the surface is drawn smaller the further it is from the eye (`Light.Scale`, about six tenths
 of its size at the limit of sight), the way a coin at the bottom of a pool looks smaller than the
 same coin in your hand. `Light.Murk` mixes it toward the water's own colour, a little at the top
-and more and more with depth. `SeeU` (0.26u) is the depth where the murk reaches all the way: past
-it the fish is not painted at all, it is lost in the water until it rises. Deeper also means lower
-on the screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier, lower, and
-then gone.
+and more and more with depth. `SeeU` (0.36u; 0.26 then 0.30 in earlier rounds, raised each time
+the owner asked to see "a little more" of the deep) is the depth where the murk reaches all the
+way: past it the fish is not painted at all, it is lost in the water until it rises. Deeper also
+means lower on the screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier,
+lower, and then gone. The painted bed keeps a ghost of its texture even in the deepest water (a
+twentieth of it shows through, `PondPainter.PourWater`), so the deep is a place and not a flat
+colour, and the koi go down there: now and then a koi FORAGES (`Doing.Forage`), diving to the
+bed in the middle of the pond and cruising slowly from one deep spot to the next, pausing at each
+with its nose in the silt; a puff of silt rises where it roots (`KoiSchool.DrawSilt`, a soft disc
+of the bed's pale colour seen through the murk, drawn under every fish), billows out and settles
+over a few seconds. At that depth the fish is a hazy shape, never quite lost, and the puff is what
+says it is doing something. The curious and the hungry forage more; a goldfish never does.
 
 *Three-dimensional steering and bumping.* The fish steer in all three directions with the engine's
 steering kit (`Core/Minds/Space.cs`). Each animal keeps a `Body.Shape`, a `Chain`: a string of

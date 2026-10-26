@@ -133,6 +133,34 @@ internal sealed class Ripples
         _wake.Add(new Wavelet { X = x, Y = y, Fx = MathF.Cos(heading), Fy = MathF.Sin(heading), Strength = strength });
     }
 
+    /// <summary>
+    /// How hard the rings are pushing at each of a line of points this frame
+    /// (the shore asks, with the points along the bank): for every ring whose
+    /// crest is within "band" pixels of a point, its strength, faded as the
+    /// ring fades, is added to that point's entry (capped at 1.5). A koi's
+    /// gulp near the sand sends its ring up the beach as a wash; a ring far out
+    /// never arrives. Cheap: a few rings by a few hundred points.
+    /// </summary>
+    public void Surge(PointF[] at, float[] into, float band)
+    {
+        Array.Clear(into);
+        foreach (Ring r in _rings)
+        {
+            float life = r.Age / r.Life;
+            float a = r.Strength * (1 - life) * (1 - life);
+            if (a < 0.01f) continue;
+            float radius = r.Start + r.Speed * r.Age;
+            for (int k = 0; k < at.Length; k++)
+            {
+                float dx = at[k].X - r.X, dy = (at[k].Y - r.Y) / Squash;
+                float d = MathF.Sqrt(dx * dx + dy * dy) - radius;
+                if (d < -band || d > band) continue;
+                float f = 1 - MathF.Abs(d) / band;
+                into[k] = MathF.Min(1.5f, into[k] + a * f * f);
+            }
+        }
+    }
+
     public void Update(float dt)
     {
         for (int i = _rings.Count - 1; i >= 0; i--)
