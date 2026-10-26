@@ -39,6 +39,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Random _rng = HappeningDirector.SceneRandom();   // new dice every launch, unless PECKWORKS_SEED asks for a repeat
     private readonly Pond _pond;
     private readonly bool[] _waterInView;     // open water that no branch hides
+    private readonly bool[] _waterInViewDeep; // the same less the island's and the formation's collars and caps (Pond.StoneTop): the stencil for a swimmer deeper than a quarter of the pond, which those stones stand in front of
     private readonly Wind _wind;
     private readonly Boughs _boughs;
     private readonly Ripples _ripples;
@@ -69,11 +70,14 @@ internal sealed class SakuraPondScene : IScreensaverScene
         void Lap(string what) { if (!string.IsNullOrEmpty(startLog)) File.AppendAllText(startLog, $"{what} {startClock.Elapsed.TotalMilliseconds:F0} ms\r\n"); }
         _pond = PondPainter.Paint(width, height, _rng, settings.FallenLog);
         Lap("painter");
+        Lap(_pond.Island is Island isle ? $"island at {isle.Centre.X:F0},{isle.Centre.Y:F0} r {isle.Radius:F0} cap {isle.Cap.X:F0},{isle.Cap.Y:F0} r {isle.CapRadius:F0}" : "island none");   // (the island too: a reader crops it by these numbers)
         Lap(_pond.Formation is Formation fm ? $"formation at {fm.Stone.Centre.X:F0},{fm.Stone.Centre.Y:F0} r {fm.Stone.Radius:F0} caps {fm.Caps.Length}" : "formation none");   // (a placement is counted, never assumed)
         Lap($"shore band {_pond.Shore.Count} px, reach {_pond.Shore.Reach:F1} px");                                                                                                   // (the lapping edge is counted too)
         float u = _pond.U;
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
+        _waterInViewDeep = new bool[_waterInView.Length];
+        for (int i = 0; i < _waterInView.Length; i++) _waterInViewDeep[i] = _waterInView[i] && !_pond.StoneTop[i];
         _wind = new Wind(0.26f, u, Light.View);                   // to the right and a little toward us
         // The cherry boughs sway in that wind: full sway 0.7u out from a trunk, the tips swinging 0.018u at a full lean.
         _boughs = new Boughs(width, height, _pond.Branches, _pond.TreeRoots, u * 0.7f, u * 0.018f, _wind, Light.View, _pond.Pixels);   // the still parts go into the backdrop here
@@ -92,11 +96,11 @@ internal sealed class SakuraPondScene : IScreensaverScene
             _irises.Add(root, Flipbook.IrisClump(u * 0.11f, toward, _rng), 0.45f, 40);
 
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _wind, _rng);
-        _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng, settings.KoiPlayPercent / 100f, _petals, settings.GoldfishCount);   // the koi (and goldfish) nose at and eat the floating petals
+        _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _waterInViewDeep, _rng, settings.KoiPlayPercent / 100f, _petals, settings.GoldfishCount);   // the koi (and goldfish) nose at and eat the floating petals
         _petals.Landed = (x, y) => _koi.Notice(x, y, petal: true);                                                                // and the hungry ones come when one settles
         _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _ripples, _rng);
         _koi.Minnows = _minnows;   // the big koi may rush a school of minnows for the fun of it
-        _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng, _petals);   // a floating turtle nibbles at a petal
+        _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _waterInViewDeep, _rng, _petals);   // a floating turtle nibbles at a petal
         _snake = new Snake(_pond, _ripples, settings.MinnowSchools > 0 ? _minnows : null, settings.SnakePercent / 100f, _rng);
         _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng, settings.MinnowSchools > 0 ? _minnows : null, _koi);
         _lizards = new Lizards(_pond, settings.LizardCount, _ripples, settings.LizardPercent / 100f, _rng, _dragonflies);   // a lizard stalks a dragonfly sitting on a rock

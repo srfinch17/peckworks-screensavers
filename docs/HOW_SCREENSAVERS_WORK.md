@@ -746,8 +746,21 @@ painted once (several, for the wingbeat) and stamped at any angle every frame (`
 reading the picture smoothly between its pixels so a slow turn never steps. Never flipped. The
 turtle is rigid too, but it lives in the water with the koi, so it uses the same spine drawing
 as the koi with a STRAIGHT spine that turns as one piece: that way it gets the same haze with
-depth, the same branch shadows and the same squash for free. Its legs are four small ovals
-swinging from under the shell's rim, the diagonal pairs in step, as a pond turtle paddles. The
+depth, the same branch shadows and the same squash for free. Its legs are JOINTED (an upper
+leg from the hip, a lower leg from the elbow or knee, a webbed foot) and they row the way the
+film of painted turtles and sliders says a pond turtle rows (Rivera and Blob, Journal of
+Experimental Biology): the diagonal pairs together (front left with back right, then the other
+pair; only a sea turtle flaps both front flippers at once, and `Turtle.PairOffset` is that one
+difference), the sweep back the LONG part of the cycle (56 percent, `ThrustShare`), the leg
+straight and the foot spread on the push, and the leg folded at the elbow and the foot closed
+to a blade on the way forward (`Fold`). A front leg sweeps a smaller arc than a back leg. A
+cruising turtle rows in bouts of two to six seconds and then holds its legs trailing and
+coasts for a second or two (`_bout`, `_gliding`; the bouts' lengths come from a hash of its
+dials, not the scene's dice); a dive, an approach or a chase keeps rowing. (Until 2026-10-26
+night the legs were straight rods pivoting at the shell with the push a 35 percent snap and
+the return a slow drift, always rowing: "janky and unnatural". The owner's guess was that
+both feet move in unison; the papers say that is the sea turtle, and the pond slider's
+alternate.) The
 head and neck are the one part that bends: they turn about the shell's front by a neck angle
 that leads a turn (about half the turn's rate) and looks about while it basks, so the shell no
 longer swings for a head turn. Its rate of turn is eased over a sixth of a second (a shell has
@@ -764,7 +777,12 @@ animal's own forward motion can hide. Two turtles that meet are pushed apart hal
 *The turtle has a mind and two places to sit.* Like the koi it runs on the shared `Core/Minds`
 parts: two dials dealt at birth (`_sunny`: how often it hauls out and how long it sits;
 `_nerve`: how soon it slips back in when the snake comes near), a `Doing` (Cruise, Float, Dive,
-Approach, Climb, Bask, Slip) and weighted dice in `Decide()`. A haul-out is PLANNED first (a
+Approach, Climb, Bask, Slip) and weighted dice in `Decide()`. A dive goes right down (0.6 to
+1.0 of the pond, the bed's clamp and its own margin deciding where it stops) for 14 to 30 s,
+and is nearly twice as likely from a cruise as it was (2026-10-26 night, "make animals swim
+down to the bottom": one dive in five minutes on one seed before, four on one seed after).
+`PECKWORKS_TURTLELOG` names a file for a line per turtle per frame (where, how deep, heading,
+turn rate, speed, stroke phase, doing), the instrument the gait was measured with. A haul-out is PLANNED first (a
 point on open water beside the perch, a second one further out on the same line so it arrives
 pointing the right way, where the shell's middle will rest) and refused if the straight swim in
 is not clear of the bank or another turtle holds the perch. The island cap is approached from
@@ -1346,20 +1364,27 @@ of the pond can hide a fish. A fish may be at any depth the bed allows, and thre
 under the surface is drawn smaller the further it is from the eye (`Light.Scale`, about six tenths
 of its size at the limit of sight), the way a coin at the bottom of a pool looks smaller than the
 same coin in your hand. `Light.Murk` mixes it toward the water's own colour, a little at the top
-and more and more with depth. `SeeU` (0.44u; 0.26, 0.30 then 0.36 in earlier rounds, raised each
-time the owner asked to see "a little more" of the deep, the last time "make the water a little
-more transparent so i can kinda see what's going on down there") is the depth where the murk would
-reach all the way; it is now past the pond's full depth (0.40u), so nothing on the bed is ever
-quite lost: a fish resting on the bottom is a ghost, not gone. Deeper also means lower on the
-screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier and lower. The
-painted bed keeps a ghost of its texture even in the deepest water (a twelfth of it shows
-through, `PondPainter.PourWater`), so the deep is a place and not a flat
-colour, and the koi go down there: now and then a koi FORAGES (`Doing.Forage`), diving to the
-bed in the middle of the pond and cruising slowly from one deep spot to the next, pausing at each
-with its nose in the silt; a puff of silt rises where it roots (`KoiSchool.DrawSilt`, a soft disc
-of the bed's pale colour seen through the murk, drawn under every fish), billows out and settles
-over a few seconds. At that depth the fish is a hazy shape, never quite lost, and the puff is what
-says it is doing something. The curious and the hungry forage more; a goldfish never does.
+and more and more with depth. `SeeU` (0.70u; 0.26, 0.30, 0.36 then 0.44 in earlier rounds,
+raised each time the owner asked to see more of the deep, the last time "again. make the water
+more transparent") is the depth where the murk would reach all the way; it is well past the
+pond's full depth (0.40u), so a fish on the bed keeps nearly half of its own colour. Deeper also
+means lower on the screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier
+and lower. The painted bed shows through the deepest water by two fifths (`PondPainter.BedClear`,
+one curve for the pebbles and for a submerged stone), and the deep bed has small dark stones
+lying in its silt (`Pebbles`, rolled by their own dice so the scene's hold), so the deep is a
+place and not a flat colour. (Measured in a box of deep water, the earlier steps of that curve,
+a twentieth to a twelfth, had moved the picture by about two grey levels: the bed's green-tinted
+colour is close to the deep water's own, and the deep bed was silt alone, with nothing to see
+through the water to. What the owner had been seeing change was the fish. Four asks in four
+days; the lesson is to measure a step in the pixels before doubling it.) The koi go down there:
+now and then a koi FORAGES (`Doing.Forage`), diving to the bed itself in the middle of the pond
+(a twelfth of its length of water under it while it noses, a fifth between spots; three tenths
+elsewhere) and cruising slowly from one deep spot to the next, pausing at each with its nose in
+the silt; a puff of silt rises where it roots (`KoiSchool.DrawSilt`, a soft disc of the bed's
+pale colour seen through the murk, drawn under every fish), billows out and settles over a few
+seconds. The curious and the hungry forage more, and twice as readily since 2026-10-26 night
+(on five-minute runs every fish on one seed and ten of thirteen on another went down, about a
+sixth of their time); a goldfish half as often, and it may go to 0.8 of the pond now.
 
 *Three-dimensional steering and bumping.* The fish steer in all three directions with the engine's
 steering kit (`Core/Minds/Space.cs`). Each animal keeps a `Body.Shape`, a `Chain`: a string of
@@ -1468,17 +1493,32 @@ blossom: the branches' shadow map is made before the island is placed and the sp
 sky). The stone is painted as any rock is, whole and bare (no moss: green survived the water as a
 lime glow), the cap on top of it as a small rock of its own with faces, creases, grain and moss, and
 THEN the water is laid back over both (`WrapIsland`). The cap keeps a wet band just inside its own
-rim, the waterline every bank rock has, and no shadow on the water. The stone is faded by two
-distances, whichever has it further gone: out from the cap's rim down the flank, and in from the
-stone's own painted edge, so the fade ends exactly where the painting does on every side. Going
-down, the stone gets darker (less light reaches it and less comes back) and bluer (the water takes
-the warm colours first), and takes on more of the water's colour, until only water is left; it is
-darker than the water everywhere but the thin wet band at the waterline, and the touch of extra
-blue in the mix fades with the stone, so its edge ends as plain water with no ring. Along the
-cap's rim a dark line: the surface meeting the stone.
+rim, the waterline every bank rock has, and no shadow on the water. The stone is ONE OBJECT with
+its cap, in depth as well as in paint (2026-10-26 night, after the owner watched a turtle "swim
+under the top, but over the bottom" and said "the top of the rock is just floating in the water"
+and "making the rock one object might be the way to go"). Its depth at every pixel is the hill
+the bed climbs under the swimmers (`Hill`): at the surface on a COLLAR round the cap (half a cap
+radius wide, read from the cap's painted rim so it follows the lumps), then down to full depth a
+little outside the stone. Nothing swims between the cap and its collar, because there is no water
+there. The stone is painted through that depth: mixed toward the water around it by the bed's own
+curve (`BedClear`) with a faster fade of its own below (gone by half the pond's depth, where the
+painting ends), green-tinted, and darkening fast down the flank (red most, blue least), so the
+collar is nearly as bright as the cap and the flank is a dark slope that is darker than the
+water, which is what a boulder under murky water looks like; and every point of it is DRAWN SUNK,
+down the screen by its depth exactly as a fish at that depth is (`Light.SinkPx`), the ground rows
+stretched to fill and the nearest point winning at each screen pixel, so the far side of the
+boulder slides in under the cap and the near flank trails below its place on the ground. A deep
+forager, sunk a fifth of u, is therefore never painted across a flank that stands above it, and
+a swimmer deeper than a quarter of the pond is drawn through a stencil that leaves out the
+stones' collars and caps (`Pond.StoneTop`, the scene's deep water stencil), so the stone hides
+what is behind it. (Three renders on the way: the stone through the bed's curve alone was a pale
+slab lighter than the deep water; mixed toward the pond's colour for water of the mound's own
+depth it was the pale green of the shallows, a ghost; a box of 1.5 radii left the formation's
+drop shadow on the water as a dark wedge.) Along the cap's rim a dark line: the surface meeting
+the stone.
 The cap alone goes into the blockers: a wall to the koi, a thing for a turtle to haul out onto
 (the turtle reads the cap's painted shape from the blockers, not a circle). `Pond.Floor` climbs the
-stone's shoulders from full depth a little outside it to nothing at the cap's rim, so a fish
+stone's shoulders from full depth a little outside it to nothing at the collar, so a fish
 crossing it rises up and over and goes round the top, with its shadow on the stone. `Pond.Island`
 holds the stone and its cap; `Pond.IslandPerch` and `Pond.LogPerch` say who is sitting on them.
 
@@ -1489,8 +1529,8 @@ left of the pond (of several hundred random spots in the lower left half that ar
 of u from the bank, under open sky and clear of the island, the one nearest the lower left corner),
 with two or three little caps evenly round its middle so no two touch. It is painted with the island's
 own three steps (`IslandStone`, `IslandCap` once per cap, `WrapIsland` over the union of the caps,
-handed a radius stretched 1.4x so the fade between the caps reaches far enough that the stone stays one
-stone and not a dark cloud per cap), each cap goes into the blockers and into `Pond.Rocks` (so every
+its depth read from the NEAREST cap's rim, so the stone between two caps stays shallow and in sight,
+one stone and not a dark cloud per cap), each cap goes into the blockers and into `Pond.Rocks` (so every
 animal's obstacle list has it without a new list), and the bed climbs to each cap's rim (`Hill`, once
 per cap; the lowest hill wins between them). `Pond.Formation` holds it. Placement is counted, never
 assumed: the start log prints it, 12 of 12 seeds at 1920x1080.

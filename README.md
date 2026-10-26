@@ -132,9 +132,14 @@ and drifts in a lull, so no two fall the same way.
   slow; a fish swimming under them leaves them be.
 - **An island rock** stands out in the open water: a boulder that goes down deep, darker and
   bluer the deeper it goes until the water hides it, with a small dry cap breaking the surface:
-  the cap's rim is wet, and the stone just under the surface round it is still nearly as bright
-  as the cap, so the dry top reads as the top of the same boulder.
-  The koi swim up and over its shoulders and round the cap. Once in a while one rises slowly until its back brushes the
+  the cap's rim is wet, the stone just under the surface round it is nearly as bright as the cap,
+  and the stone is drawn sunk by its depth the way every fish is, so the dry top is the top of the
+  same boulder and nothing swims between them; a fish deep behind the cap is hidden by it.
+  The koi swim up and over its shoulders and round the cap, and the water is clear enough now
+  that the bed and its stones show through the deepest part.
+  The turtle rows as a pond slider does (the diagonal pairs together, a long push, a folded leg
+  on the way forward) and coasts between bouts; the koi, the goldfish and the turtle go down to
+  the bed to forage and dive far more often. Once in a while one rises slowly until its back brushes the
   surface from below, and three thin, slow rings slip off it as it glides on.
 - **Goldfish** (three by default, a "Goldfish" knob from 0 to 6) share the pond with the koi: a short, deep-bodied
   wakin under half a koi's length, orange-red, red and white, or a pale calico, trailing a long see-through forked tail

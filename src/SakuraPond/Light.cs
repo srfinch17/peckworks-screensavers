@@ -48,7 +48,7 @@ internal static class Light
     /// a fish; deeper than most of the water near the bank, so fish there are
     /// always seen.
     /// </summary>
-    public const float SeeU = 0.44f;   // 0.26 until 2026-10-23 ("a little tiny bit" deeper), 0.30 until 2026-10-26 ("make the deep parts a little more visible"), 0.36 until the same evening ("make the water a little more transparent so i can kinda see what's going on down there"): past the pond's full depth now, so nothing on the bed is ever quite lost
+    public const float SeeU = 0.70f;   // 0.26 until 2026-10-23 ("a little tiny bit" deeper), 0.30 until 2026-10-26 ("make the deep parts a little more visible"), 0.36 until the same evening ("make the water a little more transparent so i can kinda see what's going on down there"), 0.44 until later that evening ("again. make the water more transparent": the fourth ask, so the step is twice the last one, and the painted bed's step was made to show at last, see PondPainter.BedClear): well past the pond's full depth now, so a fish on the bed keeps nearly half of its own colour
 
     /// <summary>How deep a thing at Z (0 at the surface, 1 at the pond's full depth) is, in u.</summary>
     public static float DepthOf(float z) => z * Pond.DepthU;
@@ -66,7 +66,7 @@ internal static class Light
     /// 1 at SeeU. (Until 2026-10-23 the floor was 0.06 and the curve 1.5: the
     /// topmost fish looked out of the water and the deep ones were lost sooner.)
     /// </summary>
-    public static float Murk(float z) => 0.14f + 0.86f * MathF.Pow(Math.Clamp(DepthOf(z) / SeeU, 0, 1), 1.45f);   // (1.6 until 2026-10-26 evening: the middle depths cleared a little with the water)
+    public static float Murk(float z) => 0.14f + 0.86f * MathF.Pow(Math.Clamp(DepthOf(z) / SeeU, 0, 1), 1.3f);   // (1.6 until 2026-10-26 evening, 1.45 until later that evening: the middle depths clear a little more each time the water does)
 
     /// <summary>How far down the screen a thing at Z is drawn from the water above it, in pixels (see Sink).</summary>
     public static float SinkPx(float z, float u) => DepthOf(z) * u * Sink;

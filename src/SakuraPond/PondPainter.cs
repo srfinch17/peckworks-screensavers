@@ -138,6 +138,17 @@ internal sealed class Pond
     /// <summary>The land: the corner of ground, everything on it included (grass, sand, rocks, the log). The lizard runs only here.</summary>
     public required bool[] Land { get; init; }
 
+    /// <summary>
+    /// Screen pixels where a stone's DRAWN surface (the island's and the formation's, sunk by
+    /// depth as the fish are, WrapIsland) is within a quarter of the pond's depth of the top:
+    /// the caps and the collars round them. A swimmer deeper than that is behind the stone
+    /// there, so it is drawn through a stencil that leaves these out (the scene's deep water
+    /// stencil) and the stone hides it, as a rock hides a fish behind it. Without this a deep
+    /// forager whose sunk picture landed on the collar was painted across it, 17 to 26 s per
+    /// five minutes of koi noses on the first runs: the floating cap in another costume.
+    /// </summary>
+    public required bool[] StoneTop { get; init; }
+
     /// <summary>The rocks on the bank, for the lizard to climb and bask on.</summary>
     public required IReadOnlyList<BankRock> Rocks { get; init; }
 
@@ -312,12 +323,13 @@ internal static class PondPainter
         float shadowX = u * 0.035f, shadowY = u * 0.05f;      // sun up and to the left: shadows fall down and right
         byte[] shade = BranchShadow(w, h, u, seed, shadowX, shadowY);
         Island? island = ShorePainter.PlaceIsland(inPond, dist, shade, log, w, h, u, rng);
+        bool[] stoneTop = new bool[w * h];                   // the stones' drawn surface near the top (Pond.StoneTop), filled by the wraps
         if (island is Island isle)
         {
             uint[] beforeIsland = Read(bmp);
             bool[] stone = ShorePainter.IslandStone(g, isle, w, h, u, rng);
             bool[] cap = ShorePainter.IslandCap(g, gb, isle, w, h, u, rng);
-            WrapIsland(bmp, beforeIsland, stone, cap, isle, w, h, u);
+            WrapIsland(bmp, beforeIsland, stone, cap, isle, dist, isle.Radius + u * 0.05f, isle.CapRadius * 0.5f, stoneTop, w, h, u);   // the same hill the bed climbs (below): one shape for the picture and for the swimmers
             rocks.Add(new BankRock(isle.Cap, isle.CapRadius, InWater: true));   // the snake keeps off the cap; the lizard never sees an in-water rock
         }
         // The small rock formation at the lower left, where the log lay (none while the log is on): the same
@@ -334,11 +346,11 @@ internal static class PondPainter
                 for (int i = 0; i < caps.Length; i++) caps[i] |= one[i];
                 rocks.Add(new BankRock(form.Caps[k], form.CapRadii[k], InWater: true));
             }
-            // The wrap fades the stone by its distance from the nearest cap; with two or three caps half a
-            // radius apart that fade must reach further than the island's, or the stone between the caps
-            // is gone and each cap sits in a dark cloud of its own (the first render): the radius handed
-            // to the wrap is stretched so the fade reaches about nine tenths of the stone's radius.
-            WrapIsland(bmp, beforeForm, stone, caps, form.Stone with { Radius = form.Stone.Radius * 1.4f, Cap = form.Caps[0], CapRadius = form.CapRadii[0] }, w, h, u);
+            // The wrap reads the stone's depth from the nearest cap's rim, so between two caps half a radius
+            // apart the stone stays shallow and in sight, one stone with two tops (the first render, which
+            // faded each cap on its own, left each in a dark cloud of its own). The hill is the one the bed
+            // climbs under the fish (Hill, below), with the same numbers.
+            WrapIsland(bmp, beforeForm, stone, caps, form.Stone with { Cap = form.Caps[0], CapRadius = form.CapRadii[0] }, dist, form.Stone.Radius + u * 0.04f, form.CapRadii[0] * 0.4f, stoneTop, w, h, u);
         }
         PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
         List<(PointF Root, float Toward)> irises = IrisSpots(gn, Read(noGrassSheet), inPond, bank, corner, cattails, u, w, h, rng);   // after the rocks and the sand: on the lawn behind them
@@ -439,14 +451,23 @@ internal static class PondPainter
                 }
         }
         // The island is a hill, not a disc: the bed climbs its painted shoulders
-        // from full depth a little outside the stone to nothing at the cap's rim,
-        // so a fish crossing it rises up and over and goes round the dry top.
+        // from full depth a little outside the stone to nothing at a COLLAR round
+        // the cap (half a cap radius wide; two fifths on the formation's smaller
+        // caps), so a fish crossing it rises up and over and goes round the dry
+        // top. The collar is the stone's shoulder just under the surface, where
+        // the painting (WrapIsland, the same hill) shows it nearly as bright as
+        // the cap: with the hill reaching the cap's own rim, a turtle paddled
+        // along that shoulder a hand's depth down, drawn over the stone and
+        // under the cap, and the cap read as a lid floating above its boulder
+        // ("there's a gap, like the top of the rock is just floating in the
+        // water", 2026-10-26: 8 s of it in one five-minute run on seed 5).
+        // Now nothing swims between the top and its stone.
         // (The rock formation's stone is a hill the same way, once per cap: the
         // bed under it is the lowest of the hills, so between two caps it stays
         // shallow.)
-        if (island is Island hill) Hill(floor, hill.Cap, hill.Radius + u * 0.05f, hill.CapRadius, w, h);
+        if (island is Island hill) Hill(floor, hill.Cap, hill.Radius + u * 0.05f, hill.CapRadius * 1.5f, w, h);
         if (formation is Formation fm)
-            for (int k = 0; k < fm.Caps.Length; k++) Hill(floor, fm.Caps[k], fm.Stone.Radius + u * 0.04f, fm.CapRadii[k], w, h);
+            for (int k = 0; k < fm.Caps.Length; k++) Hill(floor, fm.Caps[k], fm.Stone.Radius + u * 0.04f, fm.CapRadii[k] * 1.4f, w, h);
 
         // The heap: every pixel a drifted petal touched that is still open water in the finished picture (a rock or the
         // log painted over it later is not water, so it is left out; the branch shade darkened it, and the backdrop pixel
@@ -458,7 +479,7 @@ internal static class PondPainter
         {
             Width = w, Height = h, U = u,
             Pixels = beforeBranches, Branches = boughs, TreeRoots = treeRoots,
-            Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(),
+            Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(), StoneTop = stoneTop,
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
             Rocks = rocks, Log = log, Island = island, Formation = formation,
@@ -553,6 +574,22 @@ internal static class PondPainter
             using var b = new SolidBrush(Color.FromArgb(200, stone));
             g.FillEllipse(b, p.X - r, p.Y - r * 0.75f, r * 2, r * 1.5f);
         }
+        // And out in the deep: fewer, smaller, darker stones lying in the silt (a pond's bed under deep
+        // water is silt with stones in it). Until 2026-10-26 night the deep bed was silt alone, which is
+        // why four asks to "make the water more transparent" had each moved the picture by two grey
+        // levels: there was nothing down there to see through the water to. These stones roll their
+        // OWN dice, seeded from the screen's size, so the scene's shared dice are not moved (every roll
+        // after them would have moved, and the island with it, on every seed).
+        var deepRng = new Random(w * 7919 + h * 104729);
+        for (int i = 0; i < count / 2; i++)
+        {
+            PointF p = WaterPoint(inPond, w, h, deepRng, k => dist[k] >= shallow);
+            float r = u * (0.002f + 0.007f * (float)Math.Pow(deepRng.NextDouble(), 2));   // (0.004 to 0.02 in the first render: big pale discs, polka dots over the whole deep)
+            int k0 = 70 + deepRng.Next(50);
+            Color stone = Color.FromArgb(k0, k0 - 4 - deepRng.Next(10), k0 - 18 - deepRng.Next(14));
+            using var b = new SolidBrush(Color.FromArgb(200, stone));
+            g.FillEllipse(b, p.X - r, p.Y - r * 0.75f, r * 2, r * 1.5f);
+        }
     }
 
     /// <summary>
@@ -588,7 +625,6 @@ internal static class PondPainter
         float full = u * 0.24f * 10f;                       // depth reaches its deepest this far from the bank (dist is in tenths)
         for (int y = 0; y < h; y++)
         {
-            float skyShare = 0.20f * MathF.Pow(Math.Clamp(1 - (float)y / h, 0, 1), 1.4f) + 0.03f;
             for (int x = 0; x < w; x++)
             {
                 int i = y * w + x;
@@ -597,23 +633,48 @@ internal static class PondPainter
                 d = d * d * (3 - 2 * d);                     // smoothstep: the slope eases in from the edge and flattens in the middle
                 depth[i] = (byte)(d * 255);
 
-                // Water's own colour at this depth.
-                float wr = Shallow.R + (Deep.R - Shallow.R) * d, wg = Shallow.G + (Deep.G - Shallow.G) * d, wb = Shallow.B + (Deep.B - Shallow.B) * d;
-                // The bed, seen through the water: green-tinted, and less of it the deeper we look.
-                uint c = px[i];
-                float br = ((c >> 16) & 0xFF) * 0.62f, bg = ((c >> 8) & 0xFF) * 0.8f, bb = (c & 0xFF) * 0.74f;
-                // (A floor of a twentieth, and a gentler curve, since 2026-10-26: the deepest water keeps a ghost of
-                // the bed's texture instead of going to one flat colour; "make the deep parts a little more visible".)
-                // (And a twelfth from the same evening: "make the water a little more transparent so i can kinda see what's going on down there".)
-                float clear = 0.12f + 0.75f * MathF.Pow(1 - d, 1.15f);
-                float r = wr + (br - wr) * clear, gg = wg + (bg - wg) * clear, b = wb + (bb - wb) * clear;
                 // (No dark line at the edge here: the edge is alive, Shoreline paints it every frame.)
-                // A little of the sky's light on top.
-                float s = skyShare * (0.5f + 0.5f * d);
-                r += (Sky.R - r) * s; gg += (Sky.G - gg) * s; b += (Sky.B - b) * s;
-                px[i] = (uint)(((int)r << 16) | ((int)gg << 8) | (int)b);
+                px[i] = WaterOver(px[i], d, BedClear(d), y, h, 1);
             }
         }
+    }
+
+    /// <summary>
+    /// How much of the bed shows through water of depth d (0 the edge, 1 the
+    /// pond's full depth), 0 to 1. One curve for everything that lies on the
+    /// bed: the pebbles (PourWater) and a submerged stone (WrapIsland), so a
+    /// stone is exactly as visible as the bed beside it would be at its depth.
+    /// Two fifths still shows at the bottom. (A twentieth until 2026-10-26,
+    /// "make the deep parts a little more visible"; a twelfth that evening,
+    /// "make the water a little more transparent so i can kinda see what's
+    /// going on down there"; two fifths later that night, "again. make the
+    /// water more transparent": the fourth ask in four days. Measured in a
+    /// box of deep water, the step from a twentieth to a twelfth had moved
+    /// the picture by about two grey levels, because the bed's green-tinted
+    /// colour is close to the deep water's own; what he had been seeing
+    /// change was the fish (Light.SeeU), never the bed. This step is the
+    /// first that shows: the pebbles are a texture in the deep, not a ghost.)
+    /// </summary>
+    private static float BedClear(float d) => 0.4f + 0.48f * (1 - d);
+
+    /// <summary>
+    /// The water laid over one pixel of the bed: the water's own colour at
+    /// depth d (clear teal near the edge, dark teal in the middle), the bed
+    /// under it green-tinted and showing through by "clear" (BedClear, or less
+    /// where a painting fades out), a little of the sky's light on top (more
+    /// toward the far side of the pond, see PourWater's skyShare), and the
+    /// whole dimmed by "dim" (1 for none: the island's waterline uses it).
+    /// </summary>
+    private static uint WaterOver(uint bed, float d, float clear, int y, int h, float dim)
+    {
+        float skyShare = 0.20f * MathF.Pow(Math.Clamp(1 - (float)y / h, 0, 1), 1.4f) + 0.03f;
+        float wr = Shallow.R + (Deep.R - Shallow.R) * d, wg = Shallow.G + (Deep.G - Shallow.G) * d, wb = Shallow.B + (Deep.B - Shallow.B) * d;
+        float br = ((bed >> 16) & 0xFF) * 0.62f, bg = ((bed >> 8) & 0xFF) * 0.8f, bb = (bed & 0xFF) * 0.74f;
+        float r = wr + (br - wr) * clear, g = wg + (bg - wg) * clear, b = wb + (bb - wb) * clear;
+        float s = skyShare * (0.5f + 0.5f * d);
+        r += (Sky.R - r) * s; g += (Sky.G - g) * s; b += (Sky.B - b) * s;
+        r *= dim; g *= dim; b *= dim;
+        return (uint)(Math.Clamp((int)r, 0, 255) << 16 | Math.Clamp((int)g, 0, 255) << 8 | Math.Clamp((int)b, 0, 255));
     }
 
     /// <summary>
@@ -977,73 +1038,156 @@ internal static class PondPainter
     ///
     /// The CAP keeps a waterline round its own rim, the way every bank rock
     /// has one (WrapWater): a thin band just inside its edge is darkened, wet.
-    /// The STONE is faded by two distances, whichever has it further gone:
-    /// out from the cap's rim (down the flank) and in from the stone's OWN
-    /// painted edge (so the fade ends exactly where the painting does, on
-    /// every side; measured from the cap alone, the stone's top edge was still
-    /// showing when the fade ran out). Two things happen to a stone as it goes
-    /// down: less light reaches it and less comes back, so it gets DARKER, and
-    /// the water takes the warm colours first, so it gets BLUER (red is dimmed
-    /// most, blue least); and the water between it and the eye adds its own
-    /// colour, more the deeper, until only water is left. It is never made
-    /// paler than the water (a light stone mixed with dark water is fog).
-    /// Along the cap's rim, outside it, a dark line: where the surface meets
-    /// the stone. Anything the painting touched outside the stone (its drop
-    /// shadow and the cap's, on the water) is put back: a boulder's shadow
-    /// falls on the bed far below, out of sight.
+    /// The STONE goes under by its distance out from the cap's rim (down the
+    /// flank), and fades out over the last fifth of its radius in from its OWN
+    /// painted edge (so the painting ends in water on every side; measured
+    /// from the cap alone, the stone's top edge was still showing when the
+    /// fade ran out). The stone under the water is painted
+    /// by the pond's own recipe for the bed (WaterOver and BedClear): its depth
+    /// at each pixel is the hill the bed climbs under the swimmers (Hill: at
+    /// the surface on a collar round the cap, full depth where the stone ends),
+    /// and it shows through the water exactly as much as the pebbles would at
+    /// that depth: green-tinted, darker and bluer going down, two fifths still
+    /// showing at the bottom; and every point of it is DRAWN SUNK, down the
+    /// screen by its depth as a fish at that depth is (Light.SinkPx), so the
+    /// deep flank trails below its place on the ground and the far side of
+    /// the boulder hides under the cap. So the cap sits on bright stone, the
+    /// stone is one boulder to the bottom, and nothing swims between the two (until
+    /// 2026-10-26 the stone had a fade of its own that reached plain water
+    /// seven tenths of the way down the flank, and a turtle paddled along the
+    /// shoulder a hand's depth down, under the cap and over the stone: "the
+    /// top of the rock is just floating in the water"). Over the last fifth of
+    /// its radius the stone fades out from its own painted edge, so the painting
+    /// ends in water. Along the cap's rim, outside it, a dark line: where the
+    /// surface meets the stone. Anything the painting touched outside the stone
+    /// (its drop shadow and the cap's, on the water) is put back: a boulder's
+    /// shadow falls on the bed far below, out of sight.
     /// </summary>
-    private static void WrapIsland(Bitmap bmp, uint[] before, bool[] stone, bool[] cap, Island isle, int w, int h, float u)
+    /// <param name="dist">Tenths of a pixel from the bank, for the water's own depth here (PourWater's number).</param>
+    /// <param name="hillOuter">Pixels from the cap's centre at which the stone's hill reaches full depth: the number handed to Hill for the bed.</param>
+    /// <param name="collar">Pixels out from the cap's painted rim over which the stone is still at the surface (Hill's inner radius less the cap's).</param>
+    /// <param name="stoneTop">Filled: the screen pixels where the stone's drawn surface is within a quarter of the pond's depth of the top, and the cap (Pond.StoneTop).</param>
+    private static void WrapIsland(Bitmap bmp, uint[] before, bool[] stone, bool[] cap, Island isle, int[] dist, float hillOuter, float collar, bool[] stoneTop, int w, int h, float u)
     {
-        uint[] px = Read(bmp);
+        uint[] px = Read(bmp);                                                          // the stone and its cap, painted whole, each at its place on the ground
+        uint[] outPx = (uint[])px.Clone();                                              // what the water leaves of them
         int[] inStone = DistanceToEdge(stone, w, h, edgeIsBank: false);               // tenths of a pixel in from the stone's own edge
         int[] inCap = DistanceToEdge(cap, w, h, edgeIsBank: false);                   // the same for the cap
         int[] outCap = DistanceToEdge(cap.Select(c => !c).ToArray(), w, h, edgeIsBank: false);   // for pixels outside the cap: how far from its rim
-        float fade = isle.Radius * 0.45f * 10, band = u * 0.012f * 10, reach = (isle.Radius - isle.CapRadius) * 0.7f * 10;
-        int x0 = Math.Max(0, (int)(isle.Centre.X - isle.Radius * 1.8f)), x1 = Math.Min(w - 1, (int)(isle.Centre.X + isle.Radius * 1.8f));
-        int y0 = Math.Max(0, (int)(isle.Centre.Y - isle.Radius * 1.8f)), y1 = Math.Min(h - 1, (int)(isle.Centre.Y + isle.Radius * 1.8f));
+        float edge = isle.Radius * 0.2f * 10, band = u * 0.012f * 10, full = u * 0.24f * 10;
+        float slope = MathF.Max(1, hillOuter - isle.CapRadius - collar);              // pixels from the collar's edge down to full depth
+        float sinkMax = Light.SinkPx(1, u);                                            // how far down the screen the deepest part of the stone is drawn
+        // The box: the stone, the drop shadows the rock painter threw down and to the right of it and of the
+        // caps (0.05u, put back to water below), and the sunk flank under it. (A box of 1.5 radii left the far
+        // end of the formation's shadow on the water as a dark wedge: the first render of the sunk stone.)
+        float reach = isle.Radius + u * 0.1f;
+        int x0 = Math.Max(0, (int)(isle.Centre.X - reach)), x1 = Math.Min(w - 1, (int)(isle.Centre.X + reach));
+        int y0 = Math.Max(0, (int)(isle.Centre.Y - reach)), y1 = Math.Min(h - 1, (int)(isle.Centre.Y + reach + sinkMax) + 2);
+        int bw = x1 - x0 + 1;
+        // How deep the stone is at a ground pixel: the hill the bed climbs under the fish (Hill),
+        // read from the cap's PAINTED rim so the collar follows the cap's lumps, and never deeper
+        // than the water itself is (near the bank the pond is shallow and so is the stone).
+        float DepthAt(int k)
+        {
+            float hd = Math.Clamp((outCap[k] / 10f - collar) / slope, 0, 1);
+            float hill = hd * hd * (3 - 2 * hd);
+            float wd = Math.Clamp(dist[k] / full, 0, 1);
+            wd = wd * wd * (3 - 2 * wd);
+            return MathF.Min(hill, wd);
+        }
+        // 1. Everything the painting touched in the box goes back to water. The stone is painted
+        //    again below, in its sunk place; its drop shadow and the cap's, on the water, are gone
+        //    for good: a boulder's shadow falls on the bed far below, out of sight.
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++)
             {
                 int i = y * w + x;
+                if (!cap[i]) outPx[i] = before[i];
+            }
+        // 2. The stone, SUNK. A point of the stone at depth d is drawn down the screen by its depth
+        //    (Light.SinkPx), exactly as a fish at that depth is: the collar round the cap stays where
+        //    it is, the deep flank is drawn well below its place on the ground, and the far side of
+        //    the boulder slides in under the cap and is hidden by it. Each ground pixel fills the
+        //    screen rows from its own sunk place to the next ground row's, so the stretch leaves no
+        //    gaps, and at any screen pixel the nearest (shallowest) point of the stone wins (zbuf).
+        //    (Until 2026-10-26 night the stone was drawn flat, at its place on the ground, while the
+        //    fish over it were drawn sunk: a forager at the bed, sunk a fifth of u, was painted across
+        //    the stone's upper flank, which stands above it, and the cap looked to float.)
+        float[] zbuf = new float[bw * (y1 - y0 + 1)];
+        Array.Fill(zbuf, 2f);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                int i = y * w + x;
+                if (!stone[i] || cap[i]) continue;
+                float depth = DepthAt(i);
+                uint c = px[i];
+                int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
+                // How much of the stone shows through that much water, from the bed's own curve
+                // (BedClear, one curve for the pebbles and the stone) with the stone's faster fade
+                // below, and fading out over the last fifth of the stone's radius from its own
+                // painted edge so the painting ends in water and not a step.
+                float kEdge = 1 - Math.Clamp(inStone[i] / edge, 0, 1);
+                // The flank darkens fast going down, red most and blue least (it slopes away from
+                // the light, and the water takes the warm colours first), and the murk takes it
+                // faster than it takes the flat bed: a bright collar, a dark slope, then water by
+                // half the pond's depth, which is where the painted stone ends. (Through the bed's
+                // recipe alone a flat grey stone at half depth was lighter than the deep water
+                // round it, and the whole mound was a pale green ghost with a cap on it: the first
+                // two renders of this change. A boulder rising out of murky water is seen at its
+                // top and lost on the way down; the bed's own curve is for a bed lit from above.)
+                float dk = Math.Clamp(depth / 0.55f, 0, 1);
+                dk = dk * dk * (3 - 2 * dk);
+                float clear = BedClear(depth) * (1 - dk) * (1 - dk) * (1 - kEdge * kEdge);
+                float line = Math.Clamp(1 - outCap[i] / band, 0, 1) * 0.2f;         // the dark line where the surface meets the stone
+                // The stone's colour under the water: green-tinted as the bed is (WaterOver's tint),
+                // darkened for its depth, and the surface's dark line at the cap's rim. It is mixed
+                // toward the water AROUND it (the pixel the water wrap painted there, dark teal out
+                // in the deep), never toward the pond's colour for water of the mound's own depth:
+                // that colour is the pale green of the shallows, and a mound of pale shallow-water
+                // colour in the dark deep was the ghost the first renders showed (the water over a
+                // boulder is shallow, but the eye reads the pond's colour as the water's, and the
+                // stone's own fade below is what says "deep" instead).
+                float sr = r * (1 - 0.8f * dk) * 0.62f * (1 - line), sg = g * (1 - 0.72f * dk) * 0.8f * (1 - line), sb = b * (1 - 0.62f * dk) * 0.74f * (1 - line);
+                float sink = depth * sinkMax;
+                float sinkBelow = y < y1 && stone[i + w] && !cap[i + w] ? DepthAt(i + w) * sinkMax : sink;
+                int sy0 = y + (int)sink, sy1 = Math.Max(sy0, y + (int)sinkBelow);
+                for (int sy = sy0; sy <= sy1 && sy <= y1; sy++)
+                {
+                    int j = sy * w + x;
+                    if (cap[j]) continue;                                               // the dry top is nearest the eye of all: nothing is drawn over it
+                    int k = (sy - y0) * bw + (x - x0);
+                    if (depth >= zbuf[k]) continue;
+                    zbuf[k] = depth;
+                    uint o = before[j];
+                    float wr = (o >> 16) & 0xFF, wg = (o >> 8) & 0xFF, wb = o & 0xFF;
+                    int rr = (int)(wr + (sr - wr) * clear), gg = (int)(wg + (sg - wg) * clear), bb = (int)(wb + (sb - wb) * clear);
+                    outPx[j] = (uint)(Math.Clamp(rr, 0, 255) << 16 | Math.Clamp(gg, 0, 255) << 8 | Math.Clamp(bb, 0, 255));
+                }
+            }
+        // The stone's drawn surface near the top, for the swimmers' deep stencil (Pond.StoneTop).
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+                if (cap[y * w + x] || zbuf[(y - y0) * bw + (x - x0)] < 0.25f) stoneTop[y * w + x] = true;
+        // 3. The dry top, in place and over everything: untouched but for the wet band just inside
+        //    its rim, which is the bank rocks' own wet flank (WrapWater): mixed toward the water
+        //    darkened by a third, fully at the rim. Until 2026-10-23 the cap was only dimmed a little
+        //    there, so its rim stayed a crisp dry edge against the stone going under, and the cap read
+        //    as a rock pasted on top of a smudge ("tacked on later").
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                int i = y * w + x;
+                if (!cap[i]) continue;
+                float wet = Math.Clamp(1 - inCap[i] / band, 0, 1) * 0.85f;
+                if (wet <= 0) continue;
                 uint c = px[i], o = before[i];
                 int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
                 int or_ = (int)((o >> 16) & 0xFF), og = (int)((o >> 8) & 0xFF), ob = (int)(o & 0xFF);
-                if (cap[i])
-                {
-                    // The dry top: untouched but for the wet band just inside its rim,
-                    // which is the bank rocks' own wet flank (WrapWater): mixed toward
-                    // the water darkened by a third, fully at the rim. Until 2026-10-23
-                    // the cap was only dimmed a little there, so its rim stayed a crisp
-                    // dry edge against the stone going under, and the cap read as a
-                    // rock pasted on top of a smudge ("tacked on later").
-                    float wet = Math.Clamp(1 - inCap[i] / band, 0, 1) * 0.85f;
-                    if (wet <= 0) continue;
-                    r += (int)((or_ * 0.6f - r) * wet); g += (int)((og * 0.62f - g) * wet); b += (int)((ob * 0.66f - b) * wet);
-                    px[i] = (uint)(r << 16 | g << 8 | b);
-                    continue;
-                }
-                if (c == o) continue;
-                if (!stone[i]) { px[i] = o; continue; }                                 // a shadow on the water: gone
-                float kCap = Math.Clamp(outCap[i] / reach, 0, 1), kEdge = 1 - Math.Clamp(inStone[i] / fade, 0, 1);
-                float k = MathF.Max(kCap, kEdge);
-                float sink = k * k * (3 - 2 * k);                                       // how far gone into the water: a stone for a while, then water
-                float dark = MathF.Pow(sink, 0.6f);                                     // the darkening comes first (a stone a hand's depth down is already dim), the water's colour later
-                float line = Math.Clamp(1 - outCap[i] / band, 0, 1) * 0.2f;             // the dark line where the surface meets the stone
-                // The stone under water: red dimmed most, blue least (the water takes the warm colours
-                // first), so even at the rim the stone is bluer than its dry self, and far down it is
-                // the water's own hue before the mix finishes it. Just under the surface, round the
-                // cap, the stone is still nearly as bright as its dry top: that shoulder is what
-                // joins the cap to the boulder (at 0.55 it was a dim ring and the cap floated on it).
-                r = (int)(r * (0.72f - 0.57f * dark - line)); g = (int)(g * (0.8f - 0.45f * dark - line)); b = (int)(b * (0.88f - 0.33f * dark - line));
-                float dk = 0.5f + 0.5f * sink, mix = 0.22f + 0.78f * MathF.Pow(sink, 1.1f);
-                // The water it mixes toward: darkened near the top, and a touch greener and bluer
-                // there too, but that touch fades with the stone: where the stone is gone the mix
-                // goes to the plain water, or a faint blue ring would outline every island.
-                float tint = 1 - sink;
-                r += (int)((or_ * dk - r) * mix); g += (int)((og * (dk + 0.04f * tint) - g) * mix); b += (int)((ob * (dk + 0.08f * tint) - b) * mix);
-                px[i] = (uint)(Math.Clamp(r, 0, 255) << 16 | Math.Clamp(g, 0, 255) << 8 | Math.Clamp(b, 0, 255));
+                r += (int)((or_ * 0.6f - r) * wet); g += (int)((og * 0.62f - g) * wet); b += (int)((ob * 0.66f - b) * wet);
+                outPx[i] = (uint)(r << 16 | g << 8 | b);
             }
-        Write(bmp, px);
+        Write(bmp, outPx);
     }
 
     /// <summary>

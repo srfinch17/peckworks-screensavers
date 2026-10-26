@@ -35,7 +35,8 @@ internal sealed class KoiSchool
     /// together, so with no goldfish the dice fall exactly as they did before
     /// there were any.
     /// </param>
-    public KoiSchool(Pond pond, int count, Ripples ripples, bool[] where, Random rng, float play = 1, Petals? petals = null, int goldfish = 0)
+    /// <param name="whereDeep">The water stencil for a fish deeper than a quarter of the pond: "where" less the stones' collars and caps (Pond.StoneTop), which stand in front of such a fish.</param>
+    public KoiSchool(Pond pond, int count, Ripples ripples, bool[] where, bool[] whereDeep, Random rng, float play = 1, Petals? petals = null, int goldfish = 0)
     {
         _pond = pond;
         // Instrument hooks, both unset in the real pond: PECKWORKS_TEASE multiplies the tease's chance (so a look
@@ -66,8 +67,8 @@ internal sealed class KoiSchool
         float[] energy = Traits.Deal(rng, _fish.Length), social = Traits.Deal(rng, _fish.Length), curious = Traits.Deal(rng, _fish.Length);
         for (int i = 0; i < _fish.Length; i++)
             _fish[i] = i < koi
-                ? new Koi(pond, ripples, where, rng, i, (energy[i], social[i], curious[i]), play, petals)
-                : new Koi(pond, ripples, where, rng, i - koi, (energy[i], social[i], curious[i]), play, petals, Koi.Kind.Goldfish);   // its own number among the goldfish picks its colouring
+                ? new Koi(pond, ripples, where, whereDeep, rng, i, (energy[i], social[i], curious[i]), play, petals)
+                : new Koi(pond, ripples, where, whereDeep, rng, i - koi, (energy[i], social[i], curious[i]), play, petals, Koi.Kind.Goldfish);   // its own number among the goldfish picks its colouring
         foreach (Koi k in _fish) k.Meet(_fish);               // each fish opens its notebook of who it likes (a match of the dials: no dice)
         foreach (Koi k in _fish) k.Puff = AddPuff;            // a fish rooting in the deep bed stirs up a puff of silt, drawn here under every fish
         Room(_fish.Length);
@@ -525,6 +526,7 @@ internal sealed class Koi : Body
     private readonly Pond _pond;
     private readonly Ripples _ripples;
     private readonly bool[] _where;
+    private readonly bool[] _whereDeep;                   // the same less the stones' collars and caps: the stencil when it is deeper than a quarter of the pond (see Draw)
     private readonly Random _rng;
     private readonly float _len, _wide;                   // body length and half its widest width, ground pixels
     private readonly float _cruise;                       // this fish's beat speed, body lengths a second
@@ -780,19 +782,20 @@ internal sealed class Koi : Body
 
     /// <param name="dials">Its personality, each 0 to 1: energy, sociability, curiosity (dealt by KoiSchool so the school is a spread).</param>
     /// <param name="kind">Koi or goldfish. For a goldfish, "index" counts among the goldfish (it picks the colouring).</param>
-    public Koi(Pond pond, Ripples ripples, bool[] where, Random rng, int index, (float Energy, float Social, float Curious) dials, float play = 1, Petals? petals = null, Kind kind = Kind.Koi) : base(Points)
+    public Koi(Pond pond, Ripples ripples, bool[] where, bool[] whereDeep, Random rng, int index, (float Energy, float Social, float Curious) dials, float play = 1, Petals? petals = null, Kind kind = Kind.Koi) : base(Points)
     {
         _kind = kind;
         bool gold = kind == Kind.Goldfish;
         _finEnd = gold ? 1.55f : 1.3f;
         _beatMul = gold ? 1.3f : 1;
         _gulpMul = gold ? 0.5f : 1;
-        _zCap = gold ? 0.45f : 1;
+        _zCap = gold ? 0.8f : 1;                              // (0.45 until 2026-10-26 night: a goldfish now goes down to the bed too, on a forage, though not to the very bottom of the middle)
         _swayCap = gold ? 1.25f : 2f;
         _finFade = gold ? 0.22f : 0;
         _pond = pond;
         _ripples = ripples;
         _where = where;
+        _whereDeep = whereDeep;
         _rng = rng;
         _play = play;
         _petals = petals;
@@ -1178,8 +1181,12 @@ internal sealed class Koi : Body
         // by a floor step and the clamp lifted it in two pixel hops (one near
         // frame in ten), with its feelers reading "wall" and "clear" by turns.
         // Over a bed of full depth the margin changes nothing (a rest reaches
-        // 0.75 at most); in the shallows it keeps a fish off the bottom.
-        float margin = 0.3f * _len / DepthPx;
+        // 0.75 at most); in the shallows it keeps a fish off the bottom. A
+        // FORAGER is the exception: nosing in the silt it is nearly on the bed
+        // (a twelfth of its length of water under it), and between its spots a
+        // fifth, so "swim down to the bottom" means the bottom (with three
+        // tenths it hung a third of the pond's depth up over any slope).
+        float margin = (_doing == Doing.Forage ? (_hold > 0 ? 0.08f : 0.18f) : 0.3f) * _len / DepthPx;
         float zWant = MathF.Min(_zTarget, cap - margin);
         bool forBed = Z > cap - margin - 0.03f;
         // Easing toward the depth it wants; or, when the feelers chose a climb
@@ -1464,7 +1471,7 @@ internal sealed class Koi : Body
                     // the light. The bed's own rules (the cap and the margin in Update) keep it a little above the floor.
                     float fdx = _goalX - _x, fdy = _goalY - _y;
                     // A forage begun in the middle of a gulp (Depth gives way to the gulp) keeps asking for the deep once the mouth is free.
-                    if (_hold <= 0 && _zTarget < 0.5f && !_gulping && !_bumping) Depth(0.65f, _mind.Left + 5);
+                    if (_hold <= 0 && _zTarget < 0.5f && !_gulping && !_bumping) Depth(0.9f, _mind.Left + 5);
                     if (_hold > 0)
                     {
                         _hold -= dt;
@@ -1472,7 +1479,7 @@ internal sealed class Koi : Body
                         {
                             if (_mind.Over) { Begin(Doing.Wander); break; }
                             if (!NewGoalNear(1.5f, 4f)) NewGoal(deep: true);       // the next pause a few lengths on (the first forage run swam a whole pond to one goal and paused once)
-                            Depth(0.55f + 0.25f * (float)_rng.NextDouble(), _mind.Left + 5);
+                            Depth(0.8f + 0.2f * (float)_rng.NextDouble(), _mind.Left + 5);   // right down (the bed's own clamp and the forager's small margin set where it stops)
                         }
                     }
                     else if (fdx * fdx + fdy * fdy < _len * _len * 0.5f)
@@ -1685,8 +1692,10 @@ internal sealed class Koi : Body
         float wFollow = friend != null && !friendRests ? (0.1f + 0.7f * _social) * _play * (gold && friend._kind == Kind.Goldfish ? 2f : 1f) * (1 + 4 * company) : 0;   // a goldfish follows a goldfish twice as readily: that is the shoal; a close friend up to five times (a fondness of 0.6 is about half way)
         float wChase = chaseOn ? (0.1f + 0.7f * _social * _energy) * _play : 0;
         // A koi goes down to root in the deep bed now and then (the curious more, the hungry more, and not straight after
-        // one); a goldfish keeps to the light (its own cap would stop it short of the bed anyway).
-        float wForage = _kind == Kind.Koi ? (0.1f + 0.3f * _curious) * (0.7f + 0.6f * _hunger) * (_doing == Doing.Forage ? 0.2f : 1f) : 0;
+        // one); a goldfish half as often (it keeps mostly to the light). Twice the weight since 2026-10-26 night ("make
+        // animals swim down to the bottom and swim around sometimes", the second ask: on the five-minute runs before it
+        // five or six koi in ten had foraged at all, for 1 to 90 s each).
+        float wForage = (0.2f + 0.6f * _curious) * (0.7f + 0.6f * _hunger) * (_doing == Doing.Forage ? 0.2f : 1f) * (_kind == Kind.Koi ? 1f : 0.5f);
         switch (Dice.Pick(_rng, [wChase, wFollow, wLook, wRest, wForage, wWander]))
         {
             case 0: Begin(Doing.Chase, quarry); break;
@@ -1769,7 +1778,7 @@ internal sealed class Koi : Body
             case Doing.Forage:
                 _mind.Begin(doing, 25 + 25 * (float)_rng.NextDouble());            // half a minute or so down there, spot to spot
                 if (!NewGoalNear(2f, 5f)) NewGoal(deep: true);                     // the first pause a few lengths on, over a deep bed
-                Depth(0.55f + 0.25f * (float)_rng.NextDouble(), _mind.Left + 5);   // deep: a hazy shape moving over the bed (Light.SeeU), never quite lost
+                Depth(0.8f + 0.2f * (float)_rng.NextDouble(), _mind.Left + 5);     // to the bed itself: a hazy shape moving over it (Light.SeeU), never lost (0.55 to 0.8 until 2026-10-26 night, "swim down to the bottom")
                 break;
             case Doing.Shy:
                 _mind.Begin(doing, 1.2f + 0.8f * (float)_rng.NextDouble());        // a short swim away (the place and depth were set by Bumped)
@@ -2762,7 +2771,10 @@ internal sealed class Koi : Body
         float scull = _swimming ? 0.22f * beat : 0.25f, alt = _swimming ? 0 : 0.2f * beat;
         Fins(fb, 4, 0.2f, 0.12f, 0.95f + scull, alt, mark);
         Fins(fb, 11, 0.11f, 0.065f, 0.75f + scull * 0.5f, alt * 0.5f, mark);
-        Paint(fb, _where, _pond.Sun, _murkAt[0], soft, _pond.Pixels, mark: mark, murkAt: _murkAt);
+        // Deeper than a quarter of the pond, the island's collar and cap stand in front of it: drawn through the
+        // stencil that leaves them out, so the stone hides it there (Pond.StoneTop).
+        bool[] st = Z > 0.25f ? _whereDeep : _where;
+        Paint(fb, st, _pond.Sun, _murkAt[0], soft, _pond.Pixels, mark: mark, murkAt: _murkAt);
         // The eyes: a small dark dot on each side of the head.
         PointF e0 = Spine[1], e1 = Spine[2];
         float ex = e1.X - e0.X, ey = e1.Y - e0.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));
@@ -2770,7 +2782,7 @@ internal sealed class Koi : Body
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
         {
             var c = new PointF(e0.X - ey / el * HalfWidth[1] * 0.62f * side, e0.Y + ex / el * HalfWidth[1] * 0.62f * side);
-            Oval(fb, _where, c, 0, er, er, 24, 26, 28, 0.95f, _murkAt[1] * 0.7f, _pond.Sun, water: _pond.Pixels);
+            Oval(fb, st, c, 0, er, er, 24, 26, 28, 0.95f, _murkAt[1] * 0.7f, _pond.Sun, water: _pond.Pixels);
         }
     }
 

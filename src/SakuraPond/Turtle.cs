@@ -9,7 +9,8 @@ internal sealed class Turtles
     private readonly Turtle[] _all;
 
     /// <param name="petals">The floating petals, for a floating turtle to nibble at (null: none).</param>
-    public Turtles(Pond pond, int count, Ripples ripples, bool[] where, Random rng, Petals? petals = null)
+    /// <param name="whereDeep">The water stencil for a turtle deeper than a quarter of the pond: "where" less the stones' collars and caps (Pond.StoneTop), which stand in front of it.</param>
+    public Turtles(Pond pond, int count, Ripples ripples, bool[] where, bool[] whereDeep, Random rng, Petals? petals = null)
     {
         _all = new Turtle[Math.Max(0, count)];
         // Two dials each, dealt (Core/Minds Traits.Deal) so no two turtles are near-twins: one
@@ -20,8 +21,19 @@ internal sealed class Turtles
         bool[] perchMask = new bool[pond.Land.Length];
         if (_all.Length > 0)
             for (int i = 0; i < perchMask.Length; i++) perchMask[i] = pond.Land[i] && pond.Open[i];
-        for (int i = 0; i < _all.Length; i++) _all[i] = new Turtle(pond, ripples, where, rng, sunny[i], nerve[i], perchMask, petals);
+        for (int i = 0; i < _all.Length; i++) _all[i] = new Turtle(pond, ripples, where, whereDeep, rng, sunny[i], nerve[i], perchMask, petals) { Index = i };
         foreach (Turtle t in _all) t.MeetPeers(_all);
+        // The instrument log, unset in the real pond: PECKWORKS_TURTLELOG names a file that gets one line per turtle per
+        // frame (where it is, how deep, its heading and how fast that is changing, its speed, where its legs are in the
+        // stroke, what it is doing), the way PECKWORKS_KOILOG does for the fish. A reader turns that into the doing-share
+        // table, the dive count, the turn's jitter and the speed's lurch, and names the second to dump frames at.
+        string? motionLog = Environment.GetEnvironmentVariable("PECKWORKS_TURTLELOG");
+        if (!string.IsNullOrEmpty(motionLog))
+        {
+            var writer = new StreamWriter(motionLog) { AutoFlush = false };
+            Turtle.MotionLog = line => writer.WriteLine(line);
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => writer.Flush();
+        }
     }
 
     /// <param name="snakeHead">The snake's head if one is out (a basking turtle slips into the water when it comes close), else null.</param>
@@ -137,6 +149,12 @@ internal sealed class Turtle : Body
     private const int Points = 14;
     private const int SkinLen = 256, SkinWide = 64;
 
+    /// <summary>The instrument log (PECKWORKS_TURTLELOG, set up by Turtles): one line per turtle per frame. Null in the real pond, and then it costs nothing.</summary>
+    public static Action<string>? MotionLog;
+
+    /// <summary>Which turtle this is in the wrapper's list: the log's second column, so a reader can follow one.</summary>
+    internal int Index { get; init; }
+
     /// <summary>What a turtle can be doing. One at a time; Decide() picks the next when the current one ends.</summary>
     private enum Doing { Cruise, Float, Dive, Approach, Climb, Bask, Slip, Snatch }   // Snatch: a tadpole or froglet it came upon, chased for a few seconds
 
@@ -149,6 +167,7 @@ internal sealed class Turtle : Body
     private readonly Pond _pond;
     private readonly Ripples _ripples;
     private readonly bool[] _where;
+    private readonly bool[] _whereDeep;                   // the same less the stones' collars and caps: the stencil when it is deeper than a quarter of the pond (see Draw)
     private readonly bool[] _perchMask;                   // dry and in view: where the shadow of a turtle up on a perch may land
     private readonly Random _rng;
     private readonly float _len, _wide;                   // nose to tail tip, and half the shell's width, ground pixels
@@ -157,6 +176,9 @@ internal sealed class Turtle : Body
     private readonly Petals? _petals;                     // the floating petals, to nibble at while it floats
 
     private float _x, _y, _heading, _speed, _phase, _stroke = 1;   // _stroke: 1 paddling, 0 legs still
+    private float _bout;                                             // seconds left of the current rowing bout, or of the glide between bouts (Cruise only, see Swim)
+    private bool _gliding;                                           // between bouts: legs trailing, coasting
+    private uint _boutDice;                                          // the bouts' own little dice (a hash walked from the dealt dials), so the scene's shared dice are not rolled from a per-frame path
     private float _wakeRun;                                          // pixels swum since the last wavelet of its bow wave (Ripples.Wake)
     private float _turnRate;                              // how fast it is turning, radians a second: eased, never set outright (see Swim)
     private float _neck;                                  // the head's turn on the neck, radians to the left of the shell's heading (it leads a turn; it looks about while basking)
@@ -227,17 +249,19 @@ internal sealed class Turtle : Body
     /// <summary>The highest part of the body above the water, 0 to 1 (for logs and tests).</summary>
     public float Height01 => _out;
 
-    public Turtle(Pond pond, Ripples ripples, bool[] where, Random rng, float sunny, float nerve, bool[] perchMask, Petals? petals = null) : base(Points)
+    public Turtle(Pond pond, Ripples ripples, bool[] where, bool[] whereDeep, Random rng, float sunny, float nerve, bool[] perchMask, Petals? petals = null) : base(Points)
     {
         _pond = pond;
         _ripples = ripples;
         _where = where;
+        _whereDeep = whereDeep;
         _perchMask = perchMask;
         _rng = rng;
         _petals = petals;
         _room = RoomAround;
         _sunny = sunny;
         _nerve = nerve;
+        _boutDice = (uint)(sunny * 65535) * 2654435761u ^ (uint)(nerve * 65535) * 40503u;   // the rowing bouts' own dice, from the dials (no roll of the shared rng)
         _snatch = new Snatch("turtle", Snatch.Seed((int)(sunny * 1e6f), (int)(nerve * 1e6f), 2));   // its own dice, from the dealt dials: no roll of the pond's moves
         // Only prey in water a turtle can swim in: the room a cruising goal needs, and a bed under a shell-wide ball
         // deeper than the margin it keeps above the bed. The clutch hangs where the bed is a finger deep; a turtle
@@ -482,6 +506,10 @@ internal sealed class Turtle : Body
         // Paddling with its shell at the surface it pushes a small bow wave ahead of its nose (Ripples.Wake), as a koi does.
         if (InWater && Z < Koi.WakeZ)
             _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, 0.5f * MathF.Min(1, _speed / (_len * 0.4f)) * (1 - 0.6f * Z / Koi.WakeZ));
+        // The instrument's row (see Turtles): the clock, which turtle, the doing, the ground position, the depth, the
+        // heading and its rate, the speed, the stroke's phase and how much the legs move, the feelers' slope, how long
+        // the water has refused its step, and the nose and middle on the screen.
+        MotionLog?.Invoke(FormattableString.Invariant($"F,{_time:F3},{Index},{_doing},{_x:F1},{_y:F1},{_z:F3},{_heading:F3},{_turnRate:F3},{_speed:F2},{_phase:F3},{_stroke:F2},{_dodge:F3},{_refused:F2},{Spine[0].X:F1},{Spine[0].Y:F1},{_out:F2},{Middle.X:F1},{Middle.Y:F1}"));
     }
 
     // ============================== SWIMMING ==============================
@@ -500,14 +528,33 @@ internal sealed class Turtle : Body
         if (_doing == Doing.Snatch && !_snatch.Chase(Prey!, Nose, _len * 0.3f)) { StartCruise(); return; }
         bool floating = _doing == Doing.Float, approach = _doing == Doing.Approach;
 
-        // ---- Paddle, or float and rest ----
-        _stroke += ((floating ? 0f : 1f) - _stroke) * (1 - MathF.Exp(-dt * 1.5f));
+        // ---- Paddle in bouts, glide between, or float and rest ----
+        // A cruising slider does not row without a pause: it rows for a few seconds, then holds its
+        // legs trailing and coasts for a second or two, then rows again (watch one cross a pond). A
+        // dive, an approach to a perch or a chase keeps rowing. The bouts' lengths come from a little
+        // hash walked from the dealt dials, never from the scene's shared dice (a roll on a per-frame
+        // path moves every scene after it).
+        if (_doing == Doing.Cruise)
+        {
+            _bout -= dt;
+            if (_bout <= 0)
+            {
+                _gliding = !_gliding;
+                _boutDice = _boutDice * 1664525u + 1013904223u;
+                float roll = (_boutDice >> 8) / 16777216f;
+                _bout = _gliding ? 0.8f + 1.4f * roll : 2.5f + 3.5f * roll;
+            }
+        }
+        else _gliding = false;
+        bool rowing = !floating && !_gliding;
+        _stroke += ((rowing ? 1f : 0f) - _stroke) * (1 - MathF.Exp(-dt * 1.5f));
         _phase = (_phase + MathF.Tau * 0.9f * dt * _stroke) % MathF.Tau;
-        // Each pair of legs pushes during its quick sweep back (see Stroke); the push is
-        // eased in and out, so the surge is a swell, not a kick.
-        float push = MathF.Max(Thrust(_phase), Thrust(_phase + MathF.PI));
-        float targetSpeed = floating ? 0 : _len * 0.5f * (0.65f + 0.7f * push) * (_doing == Doing.Snatch ? 1.5f : 1f);   // half again as fast after a tadpole
-        _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (floating ? 0.8f : 2.5f)));
+        // Each diagonal pair pushes through its sweep back (see Stroke and Thrust); the two pushes
+        // overlap a little, so the surge is a long swell, not a kick. Gliding, the shell coasts
+        // down toward a slow drift and the next bout picks it up again.
+        float push = MathF.Max(Thrust(_phase), Thrust(_phase + MathF.PI)) * _stroke;
+        float targetSpeed = floating ? 0 : _gliding ? _len * 0.5f * 0.35f : _len * 0.5f * (0.65f + 0.7f * push) * (_doing == Doing.Snatch ? 1.5f : 1f);   // half again as fast after a tadpole
+        _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (floating ? 0.8f : _gliding ? 0.7f : 2.5f)));
 
         // ---- Steering: a slow wander, a pull toward its goal, and the bank kept off ----
         PointF here = ToScreen(_x, _y);
@@ -797,7 +844,7 @@ internal sealed class Turtle : Body
         Span<float> w = stackalloc float[4];   // Cruise, Float, Dive, Haul out
         w[0] = fromCruise ? 0.3f : 3f;
         w[1] = fromCruise ? 3f : 0f;
-        w[2] = fromCruise ? 1.2f : 0f;
+        w[2] = fromCruise ? 2.2f : 0f;                                  // (1.2 until 2026-10-26 night: one dive in five minutes on one seed, three on another; "make animals swim down to the bottom")
         w[3] = _hauls.Ready && _z < 0.3f ? 0.8f + 5f * _sunny : 0f;     // a sunny turtle takes every chance; from deep water it cruises up first (an approach begun at 0.6 arrived too deep to climb and gave up)
         switch (Dice.Pick(_rng, w))
         {
@@ -807,8 +854,8 @@ internal sealed class Turtle : Body
                 _breathed = false;
                 break;
             case 2:
-                _mind.Begin(Doing.Dive, 8 + 12 * (float)_rng.NextDouble());
-                _zTarget = 0.4f + 0.5f * (float)_rng.NextDouble();      // down to the bed (the floor under it caps this)
+                _mind.Begin(Doing.Dive, 14 + 16 * (float)_rng.NextDouble());   // (8 to 20 s until 2026-10-26 night: long enough now to cross the deep and be seen down there)
+                _zTarget = 0.6f + 0.4f * (float)_rng.NextDouble();      // down to the bed (the floor under it caps this)
                 NewGoal();
                 break;
             case 3:
@@ -1397,7 +1444,7 @@ internal sealed class Turtle : Body
         float murk = Light.Murk(Z) * (1 - MathF.Min(1, 6 * _out));
         if (murk > 0.985f) return;                                               // dived out of sight (Light.SeeU): nothing left to paint
         float soft = MathF.Max(1f, _pond.U * 0.0012f) * (1 + 3 * Z);
-        bool[] stencil = _out >= 0.001f ? _pond.Open : _where;
+        bool[] stencil = _out >= 0.001f ? _pond.Open : Z > 0.25f ? _whereDeep : _where;   // deeper than a quarter of the pond, the island's collar and cap stand in front of it (Pond.StoneTop)
         if (_out > 0.02f)
         {
             // Its shadow on the perch: the sun is up and to the left, so it falls down and to the right
@@ -1409,11 +1456,18 @@ internal sealed class Turtle : Body
         // Legs first, so the shell covers where they join it.
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
         {
-            // Front left with back right, then the other pair: the diagonal pairs share a phase.
-            float front = _phase + (side > 0 ? 0 : MathF.PI), rear = _phase + (side > 0 ? MathF.PI : 0);
-            Leg(fb, stencil, 0.3f, side, 1.22f - 0.7f * Stroke(front) * _stroke - 0.17f * (1 - _stroke), 0.34f, Thrust(front) * _stroke, murk);
+            // Front left with back right, then the other pair: the diagonal pairs share a phase. That
+            // is how a pond slider rows (the papers on painted turtles and sliders: "asynchronous
+            // anteroposterior rowing", the equivalent of a diagonal-sequence walk); only a sea turtle
+            // flaps both front flippers together. (PairOffset is that one difference, should anyone
+            // want a sea turtle's beat.)
+            float front = _phase + (side > 0 ? 0 : PairOffset), rear = _phase + (side > 0 ? PairOffset : 0);
+            // A front leg sweeps from well forward to straight out; a back leg from out to well back,
+            // through a smaller arc. With the legs at rest (floating, gliding, basking) they trail a
+            // little behind those middles. The fold at the elbow or knee is the recovery's.
+            Leg(fb, stencil, 0.3f, side, 1.15f - 0.55f * Stroke(front) * _stroke - 0.12f * (1 - _stroke), 0.34f, Thrust(front) * _stroke, Fold(front) * _stroke, +1, murk);
             // The stretch (while basking) swings one back leg further back and out.
-            Leg(fb, stencil, 0.74f, side, 2.36f - 0.5f * Stroke(rear) * _stroke + 0.26f * (1 - _stroke) + (side > 0 ? 0.4f * _stretch : 0), 0.3f + (side > 0 ? 0.1f * _stretch : 0), Thrust(rear) * _stroke, murk);
+            Leg(fb, stencil, 0.74f, side, 2.3f - 0.45f * Stroke(rear) * _stroke + 0.3f * (1 - _stroke) + (side > 0 ? 0.4f * _stretch : 0), 0.3f + (side > 0 ? 0.1f * _stretch : 0), Thrust(rear) * _stroke, Fold(rear) * _stroke, -1, murk);
         }
         Paint(fb, stencil, _pond.Sun, murk, soft, _pond.Pixels, mark: mark);
         // The eyes: a dark dot each side of the head, toward the front.
@@ -1423,22 +1477,46 @@ internal sealed class Turtle : Body
     }
 
     /// <summary>
-    /// Where a leg is in its stroke, +1 swept forward to -1 swept back: a
-    /// quick sweep back over the first 35% of the cycle (the push), then a
-    /// slow return forward. Both halves are cosine curves that meet with the
-    /// same slope, so the leg never jerks at the turn.
+    /// The phase between the two diagonal pairs: half a cycle, so one pair sweeps back while the other
+    /// comes forward (a slider's rowing). Zero would be a sea turtle's beat, both front legs together.
+    /// </summary>
+    private const float PairOffset = MathF.PI;
+
+    /// <summary>The share of a stroke cycle that is the sweep back (the thrust): 56% in sliders, measured on film (Rivera and Blob); the recovery forward is the other 44%.</summary>
+    private const float ThrustShare = 0.56f;
+
+    /// <summary>
+    /// Where a leg is in its stroke, +1 swept forward to -1 swept back: the
+    /// sweep back (the push, ThrustShare of the cycle) and the return forward
+    /// (the recovery). Both halves are cosine curves that meet with the same
+    /// slope, so the leg never jerks at the turn. (Until 2026-10-26 the push
+    /// was a snap over 35% of the cycle and the return a slow drift: each leg
+    /// flicked back and crept forward, four windscreen wipers out of step,
+    /// "janky and unnatural".)
     /// </summary>
     private static float Stroke(float phase)
     {
         float p = (phase % MathF.Tau + MathF.Tau) % MathF.Tau / MathF.Tau;
-        return p < 0.35f ? MathF.Cos(MathF.PI * p / 0.35f) : -MathF.Cos(MathF.PI * (p - 0.35f) / 0.65f);
+        return p < ThrustShare ? MathF.Cos(MathF.PI * p / ThrustShare) : -MathF.Cos(MathF.PI * (p - ThrustShare) / (1 - ThrustShare));
     }
 
     /// <summary>How hard a leg is pushing right now, 0 to 1: a smooth hump over its sweep back.</summary>
     private static float Thrust(float phase)
     {
         float p = (phase % MathF.Tau + MathF.Tau) % MathF.Tau / MathF.Tau;
-        return p < 0.35f ? MathF.Sin(MathF.PI * p / 0.35f) : 0;
+        return p < ThrustShare ? MathF.Sin(MathF.PI * p / ThrustShare) : 0;
+    }
+
+    /// <summary>
+    /// How folded a leg is at its elbow or knee, 0 straight to 1: a smooth
+    /// hump over the recovery, so the leg comes forward bent and tucked (on
+    /// film a slider lifts the upper arm and brings the foot forward folded,
+    /// edge-on to the water) and straightens again as the push begins.
+    /// </summary>
+    private static float Fold(float phase)
+    {
+        float p = (phase % MathF.Tau + MathF.Tau) % MathF.Tau / MathF.Tau;
+        return p < ThrustShare ? 0 : MathF.Sin(MathF.PI * (p - ThrustShare) / (1 - ThrustShare));
     }
 
     /// <summary>
@@ -1451,8 +1529,15 @@ internal sealed class Turtle : Body
     /// claw. The fan opens on the push and folds on the return. Where the
     /// turtle is drawn too small for toes to be more than a pixel (the
     /// preview, a far dive) the foot is one small oval, as before.
+    /// The leg is JOINTED (since 2026-10-26): the upper leg swings from the
+    /// hip at "angle", and the lower leg hangs from its end at the elbow or
+    /// knee, turned in toward the body by "fold" (0 straight, 1 fully bent,
+    /// a radian) on the recovery, so a leg coming forward is tucked and short
+    /// and a leg pushing back is straight and long, as on film. "foldSign"
+    /// says which way "in" is: a front leg folds back toward the tail (+1), a
+    /// back leg forward toward the head (-1).
     /// </summary>
-    private void Leg(FrameBuffer fb, bool[] stencil, float s, int side, float angle, float length, float spread, float murk)
+    private void Leg(FrameBuffer fb, bool[] stencil, float s, int side, float angle, float length, float spread, float fold, int foldSign, float murk)
     {
         float a = _heading + side * angle;
         float dx = MathF.Cos(a), dy = MathF.Sin(a);
@@ -1461,27 +1546,32 @@ internal sealed class Turtle : Body
         // The hip, just inside the shell's edge, in ground pixels.
         float hw = _wide * Profile(s) * 0.8f * k;
         float hx = _x - hdx * s * _len * k - hdy * side * hw, hy = _y - hdy * s * _len * k + hdx * side * hw;
-        PointF upper = Lift(ToScreen(hx + dx * l * 0.3f, hy + dy * l * 0.3f));
-        PointF lower = Lift(ToScreen(hx + dx * l * 0.62f, hy + dy * l * 0.62f));
-        Oval(fb, stencil, upper, a, l * 0.34f, l * 0.2f, 78, 98, 50, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
-        Oval(fb, stencil, lower, a, l * 0.24f, l * 0.14f, 74, 94, 48, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        PointF upper = Lift(ToScreen(hx + dx * l * 0.25f, hy + dy * l * 0.25f));
+        Oval(fb, stencil, upper, a, l * 0.3f, l * 0.2f, 78, 98, 50, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        // The elbow (or knee) at the end of the upper leg; the lower leg hangs from it, turned in by the fold.
+        float ex = hx + dx * l * 0.48f, ey = hy + dy * l * 0.48f;
+        float b = a + side * foldSign * fold * 1.0f;
+        float bx = MathF.Cos(b), by = MathF.Sin(b);
+        PointF lower = Lift(ToScreen(ex + bx * l * 0.17f, ey + by * l * 0.17f));
+        Oval(fb, stencil, lower, b, l * 0.22f, l * 0.14f, 74, 94, 48, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
         float toe = l * 0.17f;
         if (toe < 2.5f)
         {
             // Too small for toes: one small foot.
-            PointF foot = Lift(ToScreen(hx + dx * l * 0.85f, hy + dy * l * 0.85f));
-            Oval(fb, stencil, foot, a, l * 0.2f, l * (0.12f + 0.06f * spread), 66, 86, 44, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+            PointF foot = Lift(ToScreen(ex + bx * l * 0.4f, ey + by * l * 0.4f));
+            Oval(fb, stencil, foot, b, l * 0.2f, l * (0.12f + 0.06f * spread), 66, 86, 44, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
             return;
         }
         // The palm at the end of the lower leg, then four toes fanned from its far edge (the fan widens as the
-        // foot spreads on the push), a webbing-coloured oval under them, and a dark claw at each tip.
-        float px0 = hx + dx * l * 0.8f, py0 = hy + dy * l * 0.8f;
+        // foot spreads on the push and closes to a blade on the recovery), a webbing-coloured oval under them,
+        // and a dark claw at each tip.
+        float px0 = ex + bx * l * 0.35f, py0 = ey + by * l * 0.35f;
         PointF palm = Lift(ToScreen(px0, py0));
-        Oval(fb, stencil, palm, a, l * 0.13f, l * (0.13f + 0.05f * spread), 70, 90, 46, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
-        float fan = 0.5f + 0.35f * spread;
+        Oval(fb, stencil, palm, b, l * 0.13f, l * (0.11f + 0.07f * spread - 0.04f * fold), 70, 90, 46, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        float fan = 0.5f + 0.35f * spread - 0.3f * fold;
         for (int i = 0; i < 4; i++)
         {
-            float ta = a + (i - 1.5f) * fan / 1.5f * 0.45f;
+            float ta = b + (i - 1.5f) * fan / 1.5f * 0.45f;
             float tdx = MathF.Cos(ta), tdy = MathF.Sin(ta);
             PointF mid = Lift(ToScreen(px0 + tdx * toe * 0.7f, py0 + tdy * toe * 0.7f));
             PointF tip = Lift(ToScreen(px0 + tdx * toe * 1.25f, py0 + tdy * toe * 1.25f));
