@@ -440,7 +440,6 @@ internal sealed class Frog : Body
     private float _gather;                                 // 0 to 1: the hind legs drawn in under the body in a crouch, eased (a frog gathers before it springs)
     private float _poseRate = 20f;                         // how fast the pose eases (a landing on a perch settles slower than a kick)
     private float _floatKickIn, _floatKickT = -1;          // afloat: the lazy half-kick now and then, and seconds into one
-    private float _driftTurn;                              // afloat: a slow wander of the heading
     private float _pivotNext; private bool _pivotQueued;   // a big turn on the spot is two hops: the second waits here
     private bool _blocked;
     private float _refused;
