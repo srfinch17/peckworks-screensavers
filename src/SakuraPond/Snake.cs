@@ -1329,7 +1329,9 @@ internal sealed class Snake : Body
         // open water to walk back to, a detour: no pull for four seconds (above) and it simply swims on.
         _spin = _spin * MathF.Exp(-dt / 8f) + swung;
         _detour = MathF.Max(0, _detour - dt);
-        if (MathF.Abs(_spin) > 6.9f)
+        // (At 6.9 radians, a circle and a bit, the breaker caught the lawn orbit on seed 3 stress after 6.5 s of circling and the
+        // coil was on the picture 7.3 s; at 5.5, seven eighths of a circle, still past any honest turn, it is caught sooner.)
+        if (MathF.Abs(_spin) > 5.5f)
         {
             _spin = 0;
             if (!Retreating && Retreat(force: true)) Note("orbit:retreat");
