@@ -589,6 +589,8 @@ internal sealed class Lizard : Body, IPrey
                 if (_mind.Over) Decide();
                 break;
             case Doing.Drink:
+                // The water lapped up to its nose (Shoreline): a quick step back up the sand, then it thinks again.
+                if (_pond.Shore.WetNow(Spine[0].X, Spine[0].Y)) { Flinch(); break; }
                 // One tiny ring at the water in front of the nose, half a second in: the lip touching the surface.
                 if (!_sipped && _mind.Left < _drinkLen - 0.5f) Sip();
                 if (_mind.Over) Decide();
@@ -908,12 +910,26 @@ internal sealed class Lizard : Body, IPrey
             var p = new PointF(here.X + dx * d, here.Y + dy * d);
             if (!OnScreen(p)) return false;
             if (LandAt(p)) continue;
-            float stop = d - 2 - _wide * 3;                 // the last land step, then a body width and a half back (it stops a few pixels short or long of its spot)
+            float stop = d - 2 - _wide * 1.5f;              // the last land step, then half a body width back: close enough that a swell sometimes reaches the nose (Flinch)
             if (stop < _len * 0.8f) return false;           // already there: it would not even have to turn
             spot = new PointF(here.X + dx * stop, here.Y + dy * stop);
             return _pond.Open[(int)spot.Y * _pond.Width + (int)spot.X];
         }
         return false;
+    }
+
+    /// <summary>
+    /// The water came up to its nose while it drank: it scuttles back up the sand, about two thirds of
+    /// a body, to the first dry ground that the water never reaches, and decides afresh from there (a
+    /// lizard at the edge backs off a wave and comes back for more). Counted by the shore.
+    /// </summary>
+    private void Flinch()
+    {
+        PointF n = Spine[0];
+        float dx = n.X - _pond.Centre.X, dy = n.Y - _pond.Centre.Y, l = MathF.Max(1, MathF.Sqrt(dx * dx + dy * dy));
+        var back = new PointF(n.X + dx / l * _len * 0.7f, n.Y + dy / l * _len * 0.7f);
+        _pond.Shore.Flinch("lizard");
+        if (OnScreen(back) && LandAt(back)) Go(Aim.Roam, back, 1.5f); else Decide();
     }
 
     /// <summary>Lays the spine along the trail (Core/Minds Trail: the body follows the path the head took) with the running wave strongest down the tail.</summary>

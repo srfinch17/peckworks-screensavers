@@ -599,6 +599,8 @@ internal sealed class Mouse : Body, IPrey
                 if (_mind.Over) Decide();
                 break;
             case Doing.Drink:
+                // The water lapped up to its nose (Shoreline): a hop back up the sand, then it thinks again.
+                if (_pond.Shore.WetNow(Spine[0].X, Spine[0].Y)) { Flinch(); break; }
                 // One tiny ring at the water in front of the nose, half a second in: the lip touching the surface.
                 if (!_sipped && _mind.Left < _drinkLen - 0.5f) Sip();
                 if (_mind.Over) Decide();
@@ -922,12 +924,25 @@ internal sealed class Mouse : Body, IPrey
             var p = new PointF(here.X + dx * d, here.Y + dy * d);
             if (!OnScreen(p)) return false;
             if (LandAt(p)) continue;
-            float stop = d - 2 - _len * 0.15f;
+            float stop = d - 2 - _len * 0.06f;              // close enough that a swell sometimes reaches the nose (Flinch)
             if (stop < _len * 0.8f) return false;           // already there: it would not even have to turn
             spot = new PointF(here.X + dx * stop, here.Y + dy * stop);
             return _pond.Open[(int)spot.Y * _pond.Width + (int)spot.X];
         }
         return false;
+    }
+
+    /// <summary>
+    /// The water came up to its nose while it drank: a quick scurry back up the sand, about two thirds
+    /// of a body, to ground the water never reaches, and it decides afresh from there. Counted by the shore.
+    /// </summary>
+    private void Flinch()
+    {
+        PointF n = Spine[0];
+        float dx = n.X - _pond.Centre.X, dy = n.Y - _pond.Centre.Y, l = MathF.Max(1, MathF.Sqrt(dx * dx + dy * dy));
+        var back = new PointF(n.X + dx / l * _len * 0.7f, n.Y + dy / l * _len * 0.7f);
+        _pond.Shore.Flinch("mouse");
+        if (OnScreen(back) && LandAt(back)) Go(Aim.Roam, back, 1.3f); else Decide();
     }
 
     // ==================== THE BODY ====================

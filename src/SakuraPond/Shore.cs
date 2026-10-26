@@ -209,7 +209,6 @@ internal static class ShorePainter
         float ph = (float)(rng.NextDouble() * MathF.Tau), ph2 = (float)(rng.NextDouble() * MathF.Tau);
         var inner = new PointF[bank.Length];
         var core = new PointF[bank.Length];
-        var mid = new PointF[bank.Length];
         for (int i = 0; i < bank.Length; i++)
         {
             PointF p = bank[i];
@@ -219,13 +218,13 @@ internal static class ShorePainter
                 + 0.008f * MathF.Sin(t * 31 + ph2));
             inner[i] = new PointF(p.X + ox / ol * wide, p.Y + oy / ol * wide);
             core[i] = new PointF(p.X + ox / ol * wide * 0.65f, p.Y + oy / ol * wide * 0.65f);
-            mid[i] = new PointF(p.X + ox / ol * wide * 0.4f, p.Y + oy / ol * wide * 0.4f);
         }
         using var strip = Band(bank, inner);
-        using var wet = Band(bank, mid);
         using var keepOut = Band(bank, core);
         using (var sand = new SolidBrush(Color.FromArgb(104, 98, 78))) g.FillPath(sand, strip);
-        using (var damp = new SolidBrush(Color.FromArgb(150, 78, 74, 58))) g.FillPath(damp, wet);
+        // No painted "damp" band along the water any more: with the water's dark edge line it read as one dim
+        // ribbon drawn along the bank. The wet sand is the live shore's doing now (Shoreline): the water laps up
+        // the strip and back and darkens what it has just left, with a ragged edge, not a band along a curve.
         noGrass.FillPath(Brushes.White, keepOut);
         // Pebbles and specks of soil on the sand, each with a touch of shadow.
         GraphicsState st = g.Save();

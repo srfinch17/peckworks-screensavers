@@ -73,8 +73,11 @@ A koi pond seen from above, the way you see one leaning on the rail of a bridge.
 bigger than the view: still water fills the screen under cherry branches in full bloom, and the
 only shore in sight is a corner of lawn at the bottom (left or right, the seed decides). Rocks
 of every size sit along the water's edge, each with a sunny face, a shaded face, moss and lichen,
-their lower flanks darkening under the water as it wraps round them; a strip of damp sand and
-pebbles runs between them and the grass; clumps of iris leaves stand on the lawn behind the
+a dark wet flank just inside the rim where the water meets each one and a dark thread in the
+water round its foot, so the water goes round every stone; between the stones the water LAPS at
+a strip of sand and pebbles, a slow swell travelling along the bank that climbs the sand a
+finger's width and falls back, leaving a dark wet band that dries in a few seconds, and a lizard
+or a mouse drinking at the edge backs off when a swell reaches its nose; clumps of iris leaves stand on the lawn behind the
 stones, arching out over them toward the water; a clump of cattails stands in the shallows, brown
 heads nodding; lily pads and water lilies float in the calm water nearby; and the branches throw
 dappled shadows on the water. The lawn is a meadow corner in a breeze, different on every seed:

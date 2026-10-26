@@ -150,6 +150,15 @@ internal sealed class Pond
     /// <summary>The island rock out in the water, if the seed found room for one (nearly always).</summary>
     public required Island? Island { get; init; }
 
+    /// <summary>
+    /// The water's edge, alive (Shoreline.cs): it laps a few pixels up the sand and back along the whole bank, is
+    /// painted every frame right after the backdrop copy, and answers "is this point under water right now" (WetNow),
+    /// "can the water ever reach it" (EverWet: a place to drink or sit is beyond that) and "can it ever be left bare"
+    /// (EverDry: a tadpole clutch never settles there). The masks above (Water, Land, Floor) are the painted edge at
+    /// rest; the lap moves within Reach of it.
+    /// </summary>
+    public required Shoreline Shore { get; init; }
+
     /// <summary>Who holds the island's cap and the log as a perch right now (Core/Minds Claim): a turtle setting out for one takes it, the snake asks before it climbs onto the log.</summary>
     public Claim IslandPerch { get; } = new();
     public Claim LogPerch { get; } = new();
@@ -291,7 +300,8 @@ internal static class PondPainter
         // water when the land is in the other corner (painted after the wrap: it floats, it does not sink).
         Log? log = fallenLog ? ShorePainter.PlaceLog(bank, corner, leftCorner, inPond, rocks, cattailsSpotHint: null, w, h, u, rng) : null;
         if (log is Log beached && !beached.Afloat) ShorePainter.Log(g, gb, gn, beached, u, rng);
-        WrapWater(bmp, beforeRocks, Read(blockers), inPond, dist, DistanceToEdge(inPond.Select(p => !p).ToArray(), w, h, edgeIsBank: false), w, h, u);
+        int[] landDist = DistanceToEdge(inPond.Select(p => !p).ToArray(), w, h, edgeIsBank: false);   // land side: how far from the water
+        WrapWater(bmp, beforeRocks, Read(blockers), inPond, dist, landDist, w, h, u);
         if (log is Log afloat && afloat.Afloat) ShorePainter.Log(g, gb, gn, afloat, u, rng);
         // The island rock, out in the open water: painted after the wrap (it has a wrap of its
         // own: a stone that goes down deep, with only a small cap dry), and the cap alone goes
@@ -349,6 +359,11 @@ internal static class PondPainter
             uint c = px[i];
             px[i] = (uint)(((int)((c >> 16) & 0xFF) * keep >> 8) << 16 | ((int)((c >> 8) & 0xFF) * keep >> 8) << 8 | ((int)(c & 0xFF) * keep >> 8));
         }
+        // ---- the shore, alive (Shoreline): built from the finished, shaded picture; it bakes its rest state into px ----
+        uint[] blocked = Read(blockers), padded = Read(padSheet), noGrass = Read(noGrassSheet);
+        var skip = new uint[w * h];                                     // where the lapping edge must not paint: stones, the log, the caps, lily pads
+        for (int i = 0; i < skip.Length; i++) skip[i] = Math.Max(blocked[i] & 0xFF, padded[i] & 0xFF);
+        var shore = new Shoreline(px, inPond, dist, landDist, skip, bank, w, h, u);
         Write(bmp, px);
         uint[] beforeBranches = px;
         // The branches go onto a clear sheet of their own: the scene lays that sheet over the
@@ -377,7 +392,6 @@ internal static class PondPainter
         PointF[] treeRoots = [new PointF(-u * 0.04f, -u * 0.01f), new PointF(w + u * 0.05f, h * 0.26f)];   // the two crowns' centres (see Branches)
 
         bool[] open = Brushwork.Unchanged(beforeBranches, final);
-        uint[] blocked = Read(blockers), padded = Read(padSheet), noGrass = Read(noGrassSheet);
         var grassy = new bool[w * h];
         for (int i = 0; i < grassy.Length; i++) grassy[i] = !inPond[i] && (blocked[i] & 0xFF) < 128 && (noGrass[i] & 0xFF) < 128;
         var waterMask = new bool[w * h];
@@ -446,6 +460,7 @@ internal static class PondPainter
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
             Rocks = rocks, Log = log, Island = island, Formation = formation,
+            Shore = shore,
         };
     }
 
@@ -587,8 +602,7 @@ internal static class PondPainter
                 float br = ((c >> 16) & 0xFF) * 0.62f, bg = ((c >> 8) & 0xFF) * 0.8f, bb = (c & 0xFF) * 0.74f;
                 float clear = 0.85f * MathF.Pow(1 - d, 1.4f);
                 float r = wr + (br - wr) * clear, gg = wg + (bg - wg) * clear, b = wb + (bb - wb) * clear;
-                // The wet line: a thin darker band right at the edge.
-                if (dist[i] < u * 0.004f * 10) { r *= 0.8f; gg *= 0.8f; b *= 0.82f; }
+                // (No dark line at the edge here: the edge is alive, Shoreline paints it every frame.)
                 // A little of the sky's light on top.
                 float s = skyShare * (0.5f + 0.5f * d);
                 r += (Sky.R - r) * s; gg += (Sky.G - gg) * s; b += (Sky.B - b) * s;
@@ -855,26 +869,37 @@ internal static class PondPainter
         // further in, and darkened there (a wet flank). A rock standing well
         // out in the pond sinks further: a floor on the mix that rises with
         // the water's depth under it.
-        int[] rockDist = DistanceToEdge(blocked.Select(c => (c & 0xFF) >= 128).ToArray(), w, h, edgeIsBank: false);
-        float band = u * 0.012f * 10, deepFrom = u * 0.02f * 10, deepOver = u * 0.045f * 10;
+        bool[] isRock = blocked.Select(c => (c & 0xFF) >= 128).ToArray();
+        int[] rockDist = DistanceToEdge(isRock, w, h, edgeIsBank: false);                          // inside a stone: how far in from its rim
+        int[] outDist = DistanceToEdge(isRock.Select(p => !p).ToArray(), w, h, edgeIsBank: false);   // outside: how far to the nearest stone
+        // The wet flank is THIN (half a percent of u): the first version mixed a band a tenth of a
+        // stone wide toward the water at 85 percent, and every stone on the shore had its water
+        // side turned to a teal ghost with the bank's line cutting straight across it ("the
+        // boundary goes over the top of rocks, doesn't wrap"). A stone stays a stone: its flank
+        // just inside the rim goes dark and a little blue, the way wet stone does, and the water
+        // just OUTSIDE the rim goes dark too (the surface meeting the flank in shadow), so the
+        // water visibly goes round the stone. A stone out in the shallows still sinks: it takes
+        // up to half the water's colour, darkened, once the water under it is deep enough.
+        float band = u * 0.005f * 10, meniscus = u * 0.004f * 10, deepFrom = u * 0.02f * 10, deepOver = u * 0.045f * 10;
         int splash = (int)(u * 0.006f * 10);
         for (int i = 0; i < px.Length; i++)
         {
-            if ((blocked[i] & 0xFF) < 128) continue;
             uint c = px[i];
             int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
-            if (inPond[i])
+            if (!isRock[i])
             {
-                // Under water a stone looks DARKER and bluer, never paler: the
-                // rim band mixes toward the water darkened by a third (the wet
-                // flank and the dark line where the surface meets it), and a
-                // stone out in the shallows takes on some of the water's own
-                // colour all over, up to about half: its top still breaks the surface.
+                // Water beside a stone's foot: a dark thread round the rim, strongest against it.
+                if (!inPond[i] || outDist[i] >= meniscus) continue;
+                float k = 1 - 0.3f * (1 - outDist[i] / meniscus);
+                r = (int)(r * k); g = (int)(g * k * 1.02f); b = (int)(b * k * 1.05f);
+            }
+            else if (inPond[i])
+            {
                 uint o = before[i];
                 int or_ = (int)((o >> 16) & 0xFF), og = (int)((o >> 8) & 0xFF), ob = (int)(o & 0xFF);
-                float edge = Math.Clamp(1 - rockDist[i] / band, 0, 1) * 0.85f;
-                r += (int)((or_ * 0.6f - r) * edge); g += (int)((og * 0.62f - g) * edge); b += (int)((ob * 0.66f - b) * edge);
-                float sunk = Math.Clamp((waterDist[i] - deepFrom) / deepOver, 0, 1) * 0.5f * (1 - edge);
+                float edge = Math.Clamp(1 - rockDist[i] / band, 0, 1) * 0.8f;
+                r += (int)((r * 0.5f - r) * edge); g += (int)((g * 0.54f - g) * edge); b += (int)((b * 0.66f - b) * edge);
+                float sunk = Math.Clamp((waterDist[i] - deepFrom) / deepOver, 0, 1) * 0.5f;
                 r += (int)((or_ * 0.85f - r) * sunk); g += (int)((og * 0.88f - g) * sunk); b += (int)((ob * 0.9f - b) * sunk);
             }
             else if (landDist[i] < splash)

@@ -70,6 +70,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _pond = PondPainter.Paint(width, height, _rng, settings.FallenLog);
         Lap("painter");
         Lap(_pond.Formation is Formation fm ? $"formation at {fm.Stone.Centre.X:F0},{fm.Stone.Centre.Y:F0} r {fm.Stone.Radius:F0} caps {fm.Caps.Length}" : "formation none");   // (a placement is counted, never assumed)
+        Lap($"shore band {_pond.Shore.Count} px, reach {_pond.Shore.Reach:F1} px");                                                                                                   // (the lapping edge is counted too)
         float u = _pond.U;
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
@@ -148,6 +149,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
                 for (int y = cy * cell; y < Math.Min(h, cy * cell + cell); y++)
                     for (int x = cx * cell; x < Math.Min(w, cx * cell + cell); x++) free[y * w + x] = false;
             }
+        // Nor where the lapping water ever leaves the bed bare (Shoreline): a tadpole settled there would lie on wet sand.
+        for (int i = 0; i < free.Length; i++) if (free[i] && _pond.Shore.EverDry(i)) free[i] = false;
         return free;
     }
 
@@ -161,6 +164,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Lap();                   // the laps of Update, named "update: ..." in the section table (free unless PECKWORKS_SECTIONS is set)
         _wind.Update(dt);                 // first: everything below reads it
         _boughs.Update(dt);
+        _pond.Shore.Update(dt);           // the water's edge moves: the drinkers below ask it where the water is
         Sections.Mark("update: wind");
         // The fish steer round the turtles and the swimming snake, and are pushed out of
         // them if they meet (last frame's spines: near enough). The snake is solid too:
@@ -224,6 +228,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Begin();
         fb.Restore(_pond.Pixels);
         Sections.Mark("backdrop copy");
+        _pond.Shore.Draw(fb);                     // the water lapping at the sand: first, so the lawn's blades overhang it
+        Sections.Mark("shore");
         _lawn.Draw(fb);
         Sections.Mark("lawn");
         _lizards.Draw(fb);

@@ -188,6 +188,17 @@ foreach ($scr in $files) {
     }
 }
 
+# ---- the local CLAUDE.md's size ----
+# Claude Code loads CLAUDE.md into every session and warns when it passes about 40,000
+# characters. On 2026-10-26 it had grown to 184,591 (a round-by-round diary); the diary now lives
+# in the private kit (pond-iterations.md) and this file keeps only rules. This check is the guard
+# that stops it creeping back. The file is gitignored, so a public clone has none and skips this.
+$claudeMd = Join-Path $repo 'CLAUDE.md'
+if (Test-Path $claudeMd) {
+    $chars = (Get-Content $claudeMd -Raw).Length
+    Record 'repo' 'claude-md' ($chars -lt 38000) "$chars characters (limit 38,000; move diary text to the kit)"
+}
+
 Write-Host ""
 $results | Format-Table -AutoSize | Out-Host
 Write-Host "Pictures: $out"

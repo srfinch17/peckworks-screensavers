@@ -111,6 +111,7 @@ src/
     SakuraPondScene.cs             the layers, back to front
     PondPainter.cs                 paints the pond bed and water, lily pads, branches and their shadows; calls the shore painter
     Shore.cs                       paints the corner of land: the lawn's mottled ground and carpet (clover and moss patches, worn earth), the sand edge, rocks that look like rocks, the island and the small rock formation, the fallen log (off by default)
+    Shoreline.cs                   the water's edge, alive: laps up the sand and back along the bank every frame, and tells the animals where the water is right now
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
     Koi.cs                         the koi: swimming, steering, beat and glide, varieties
     Minnows.cs                     schools of tiny fish that move as one, and rush to the dragonfly's rings
@@ -667,18 +668,45 @@ parallel lines.
 
 *Rocks that look like rocks.* A rock is a lumpy ring of 9 to 13 points (two slow waves of radius
 plus jitter), a touch wider than tall because we look down on a rounded lump at a slant. It is
-painted in the order light builds a stone: a soft shadow on the ground to its lower right, a pale
-rim on the water round its wet foot, the body with a gentle rounding toward the sun, then a lit
+painted in the order light builds a stone: a soft shadow on the ground to its lower right, the
+body with a gentle rounding toward the sun, then a lit
 FACE (the rim points on the sunny side joined by a ragged inner edge, filled three times at three
 sizes so its edge is a soft crease) and a dark face on the far side, short crack lines from the
 rim part of the way in, a fine speckle of grain, moss and a spot of lichen on top, a light edge
 where the rim faces the sun and a dark edge where it faces away. Stones are not one grey: warm,
-cool, greenish, light and dark. Then the WATER IS LAID BACK OVER the stones: a rock in a pond is
-not pasted on top of the water, its flanks slope into it. For every pixel of a rock on the water
-side of the bank, a band just inside the rock's own rim is mixed toward the water darkened by a
-third (the wet flank, and the dark line where the surface meets it), and a stone standing out in
-the shallows takes on some of the water's colour all over, up to about half, its top still
-breaking the surface. The waterline so runs round each stone, not straight across it.
+cool, greenish, light and dark. Then the WATER IS LAID BACK OVER the stones (`PondPainter.WrapWater`):
+a rock in a pond is not pasted on top of the water, its flanks slope into it. For every pixel of a
+rock on the water side of the bank, a THIN band just inside the rock's own rim (half a percent of
+u) goes dark and a little blue, the wet flank, and the water just outside the rim goes dark too,
+the surface meeting the flank in shadow, so the water visibly goes round the stone; a stone
+standing out in the shallows also takes on up to half the water's colour, darkened, once the water
+under it is deep enough, its top still breaking the surface. (The first wrap mixed a band a tenth
+of a stone wide toward the water at 85 percent: every stone on the shore had its water side turned
+to a teal ghost with the bank's line cutting straight across it, which the owner read as the
+water's boundary going over the top of the rocks.)
+
+*The water's edge, alive (`Shoreline.cs`).* Where the pond meets the sand nothing is painted as a
+line. Think of a ruler laid across the water's edge at every point along the bank: zero at the
+painted edge, minus up the sand, plus out into the water. Each frame the water sits at a different
+mark on that ruler, a swell of three slow rhythms (4.5, 2.9 and 7 seconds) travelling along the
+bank, about a hundredth of u each way at most; a pixel beyond the mark is under water, one before
+it is bare. Every pixel within reach of the edge was given two colours when the shore was built: a
+sand pixel's wet colour is the shallowest water painted over it by the painter's own water recipe,
+a water pixel's bare colour is wet sand. Each frame the shore writes only the pixels whose state
+differs from the backdrop (the backdrop copy already put the rest down), mixes the five pixels
+either side of the edge softly, lays a pale thread where the water's skin meets the ground, and
+remembers WETNESS per pixel: sand the water has just left stays dark and dries back over about six
+seconds. That memory is what makes a lap readable: the water's own colour over sand is nearly the
+water's colour, so the edge alone barely shows; the dark band it leaves is what the eye follows. A
+fixed wobble along the bank is baked into the picture at rest, so the painter's smooth curve runs
+a little further up the sand here and less there. Stones and lily pads are left out: the waterline
+on a stone runs round its own rim and does not move. The same object answers the animals: WetNow
+(is this point under water this frame), EverWet (can the water ever reach it) and EverDry (can it
+ever be bare; a tadpole clutch never settles there). A lizard or a mouse drinks as close to the
+edge as the rest edge allows, and when a swell reaches its nose it scuttles back about two thirds
+of a body and thinks again. Cost: one compare per band pixel and a write only where the state
+changed; the band is a few thousand pixels at 720p and about ten thousand at 1080p, because the
+rocks cover most of the bank and only the sand between them is in it.
 
 *Cattails.* One clump stands in the shallows a little way out from the bank: stiff stems with
 velvety brown heads and a pale spike, and long leaves between them that splay and bend over. It is
