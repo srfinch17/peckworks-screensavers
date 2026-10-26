@@ -857,9 +857,21 @@ round to face the way it will go), then a flight at an even speed along the grou
 parabola, so it lands where its shadow is. Height is a lift up the screen and a shadow down and
 right (`Light.cs`, the same rule as the petals), and the shadow is painted on the pad or the bank
 where it sits and over the water in a leap. The pose is one number, 0 (legs folded in a Z beside the
-body) to 1 (stretched out behind), eased, and the hops and the swimming kick both drive it. A kick
-is a quick push (the legs sweep out and back, the body surges) and a slow glide (they fold forward),
-about one a second. The FORELEGS are not on that dial: each is three pieces (upper arm, forearm,
+body) to 1 (stretched out behind), eased, and the hops and the swimming kick both drive it. A KICK
+(round thirty) is the real sequence: the THRUST (the legs sweep out and back together over 0.22 s,
+the body surges), the GLIDE with the legs left stretched out behind, together, streamlined, then
+the RECOVERY (the legs draw forward into the Z over 0.26 s, which costs a little speed) and the
+next thrust, about one a second; it turns mostly in the thrust (2.5 radians a second there, 1.0 in
+the glide), the way a frog steers with its kick. Before, the legs folded all through the glide and
+the frog turned as freely gliding as kicking, which read as a sprite sliding. A LEAP gathers first
+(the crouch, 0.24 s: the knees drawn in under the body, the feet back under the hips, the body a
+touch shorter, `_gather`), springs (the legs straight out within the first eighth of the flight)
+and lands in the water with the legs still out, skimming on at most of its flight speed and
+slowing (`_skid`), its first kick coming when the glide is done; only a landing on a perch folds
+the legs, in the last fifth of the flight and the rest of the way as it settles. A turn on the spot
+takes as long as it is big (0.12 s plus 0.22 s per quarter turn) and a turn past a quarter turn is
+two hops with a short rest between (a frog turning right round after a climb once did it in a tenth
+of a second). Afloat it treads water: a lazy half-kick every few seconds. The FORELEGS are not on that dial: each is three pieces (upper arm, forearm,
 hand with three fingers) whose elbow and wrist are eased toward a pose per state (`EaseArms`):
 planted beside the body with the hands set down under the eyes when it sits, swept back along the
 flanks in the flight of a leap, held still along the sides while it swims (a frog swims with its
@@ -872,7 +884,13 @@ so it arrives pointing at it, and it is never planned across a gap narrower than
 water it is solid to the koi (its `Shape`, a chain of beads, goes into the scene's list of
 surface bodies), it steers round the pads (a pad is a wall to a frog, which swims ON the water, and
 no wall to a koi, which swims under), and a swim whose steps are refused for over a second (wedged
-between pads) ends in a hop to open water. A dive is the koi's depth rule (`Light`): smaller, hazier
+between pads) ends in a hop to open water. NOTHING CLIPS (round thirty): a frog in the water is
+pushed clear of the snake, a swimming turtle and a duck by the same chain test every swimmer shares
+(`Frog.PushOff`, the frog being the light one and moving the whole overlap, along the ground plane,
+no faster than two lengths a second), a touch from any of them is a fright, any part of the snake's
+body within a tenth of the screen is a threat (not only its head: a frog once surfaced and floated
+on the snake's back for two seconds), and a dived frog will not come up under one of them (it swims
+on under the water and looks again, up to four times). A dive is the koi's depth rule (`Light`): smaller, hazier
 and sunk down the screen, so a pad can cover it. Frogs are built last in the scene, with dice of
 their own, so adding them moved nothing else. One frog is grown and the rest are young (`Frogs` hands each a size: 1 for the first, about two thirds for the others), smaller and quieter but living exactly the same life.
 
@@ -1328,12 +1346,14 @@ of the pond can hide a fish. A fish may be at any depth the bed allows, and thre
 under the surface is drawn smaller the further it is from the eye (`Light.Scale`, about six tenths
 of its size at the limit of sight), the way a coin at the bottom of a pool looks smaller than the
 same coin in your hand. `Light.Murk` mixes it toward the water's own colour, a little at the top
-and more and more with depth. `SeeU` (0.36u; 0.26 then 0.30 in earlier rounds, raised each time
-the owner asked to see "a little more" of the deep) is the depth where the murk reaches all the
-way: past it the fish is not painted at all, it is lost in the water until it rises. Deeper also
-means lower on the screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier,
-lower, and then gone. The painted bed keeps a ghost of its texture even in the deepest water (a
-twentieth of it shows through, `PondPainter.PourWater`), so the deep is a place and not a flat
+and more and more with depth. `SeeU` (0.44u; 0.26, 0.30 then 0.36 in earlier rounds, raised each
+time the owner asked to see "a little more" of the deep, the last time "make the water a little
+more transparent so i can kinda see what's going on down there") is the depth where the murk would
+reach all the way; it is now past the pond's full depth (0.40u), so nothing on the bed is ever
+quite lost: a fish resting on the bottom is a ghost, not gone. Deeper also means lower on the
+screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier and lower. The
+painted bed keeps a ghost of its texture even in the deepest water (a twelfth of it shows
+through, `PondPainter.PourWater`), so the deep is a place and not a flat
 colour, and the koi go down there: now and then a koi FORAGES (`Doing.Forage`), diving to the
 bed in the middle of the pond and cruising slowly from one deep spot to the next, pausing at each
 with its nose in the silt; a puff of silt rises where it roots (`KoiSchool.DrawSilt`, a soft disc

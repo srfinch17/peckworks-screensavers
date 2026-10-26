@@ -604,7 +604,8 @@ internal static class PondPainter
                 float br = ((c >> 16) & 0xFF) * 0.62f, bg = ((c >> 8) & 0xFF) * 0.8f, bb = (c & 0xFF) * 0.74f;
                 // (A floor of a twentieth, and a gentler curve, since 2026-10-26: the deepest water keeps a ghost of
                 // the bed's texture instead of going to one flat colour; "make the deep parts a little more visible".)
-                float clear = 0.05f + 0.80f * MathF.Pow(1 - d, 1.25f);
+                // (And a twelfth from the same evening: "make the water a little more transparent so i can kinda see what's going on down there".)
+                float clear = 0.12f + 0.75f * MathF.Pow(1 - d, 1.15f);
                 float r = wr + (br - wr) * clear, gg = wg + (bg - wg) * clear, b = wb + (bb - wb) * clear;
                 // (No dark line at the edge here: the edge is alive, Shoreline paints it every frame.)
                 // A little of the sky's light on top.

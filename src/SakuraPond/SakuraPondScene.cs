@@ -206,7 +206,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _lizards.Update(dt, _snake.Live ? _snake.Head : null);   // the lizards run from the snake too
         _mice.Update(dt, _snake.Live ? _snake.Head : null, _lizards.Noses);   // the mice run from the snake and the lizards too
         Sections.Mark("update: lizards, mice");
-        _frogs.Update(dt, _snake.Live ? _snake.Head : null, duckBeads.Length > 0 ? Scratch.Gather(ref _frogThreats, koiHeads, duckBeads) : koiHeads, turtleSpots, _lizards.Noses);   // the frogs leap or dive from all of them (any part of a duck counts as a koi's head: a swimming frog dives from it and never lands on one)
+        _frogs.Update(dt, _snake.Live ? _snake.Head : null, duckBeads.Length > 0 ? Scratch.Gather(ref _frogThreats, koiHeads, duckBeads) : koiHeads, turtleSpots, _lizards.Noses,
+                      _snake.Live ? _snake : null, _turtles.All, _surface);   // the frogs leap or dive from all of them (any part of a duck counts as a koi's head: a swimming frog dives from it and never lands on one); and a swimming frog is pushed clear of the snake, the ducks and the turtles, and flees any part of the snake
         PointF[] bedThreats = Scratch.Gather(ref _bedThreats, _koi.BedHeads, turtleSpots, duckHeads);   // every koi whatever its depth: the fish passing over the shallows are the ones the bed animals must fear
         PointF[] tadThreats = bedThreats;
         if (_snake.Live || _crayfish.Spot != null)   // plus the snake's head, and the crayfish (the one animal that eats them)

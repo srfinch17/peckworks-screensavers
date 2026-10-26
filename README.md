@@ -209,16 +209,20 @@ and drifts in a lull, so no two fall the same way.
   fluttering and now and then swelling in a croak (no sound), with the odd shuffle or hop round
   on the spot to face the water; a bold one snaps at a dragonfly that settles close, or at a froglet (or
   a tadpole up near the top) that comes within a snap of its perch, and eats it if the snout lands on it. Then it
-  leaps: a crouch, the hind legs snapping out behind, an arc a few body lengths long with its
-  shadow left behind on the pad and then the water (the gap is the height), and a splash. It
-  swims with frog kicks (a quick push that surges the body, then a slow glide with the legs
-  folding forward; the arms stay tucked along its sides), floats with its legs hanging and its
-  arms spread, steers round pads and the bank, and climbs
-  out onto another pad or the bank with a short hop and turns to face the water. Frightened by
-  the snake, a koi's head, a turtle, a lizard or a swallow's shadow, a sitting frog leaps in and a
-  swimming one dives (hazy and smaller as it goes down, back up with a tiny ring). A frog in the
-  water is solid to the koi (they steer round it and a fish that meets it is pushed out) and
-  shoves the floating petals aside. Each frog has its own two dials: how bold and how restless.
+  leaps: a crouch that gathers the legs in under it, the spring with the hind legs straight out
+  behind, an arc a few body lengths long with its shadow left behind on the pad and then the water
+  (the gap is the height), a splash, and a skim into the water with the legs still out, slowing,
+  until the first kick. It swims with real frog kicks (the thrust that surges the body, a glide
+  with the legs stretched out behind, then the legs drawn forward for the next; it steers in the
+  kick; the arms stay tucked along its sides), floats with its legs hanging and its arms spread,
+  treading water with a lazy half-kick now and then, steers round pads and the bank, and climbs
+  out onto another pad or the bank with a short hop, settles, and turns to face the water in a
+  hop or two. Frightened by any part of the snake, a koi's head, a turtle, a duck, a lizard or a
+  swallow's shadow, a sitting frog leaps in and a swimming one dives (hazy and smaller as it goes
+  down, back up with a tiny ring, and never up under the snake or a duck). A frog in the water is
+  solid to the koi (they steer round it and a fish that meets it is pushed out), is pushed clear of
+  the snake, the turtles and the ducks, and shoves the floating petals aside. Each frog has its
+  own two dials: how bold and how restless.
 - **Tadpoles** hang in a loose cluster over the bed in the warm shallows near the cattails, tails
   sculling lazily, some grazing at a rock's flank, the bank or a pad's rim. Now and then one bursts
   (curls into a C, whips its tail and shoots a few body lengths, then stops dead); anything big

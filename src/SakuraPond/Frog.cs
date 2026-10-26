@@ -36,6 +36,7 @@ internal sealed class Frogs
     private readonly Frog[] _all;
     private readonly List<FrogPerch> _perches = new();
     private readonly List<Body> _inWater = new();     // the frogs in the water this frame, refilled each Update and never reallocated
+    private readonly List<Body> _solids = new();      // what else is solid in the water this frame (the snake, the ducks, the swimming turtles), for the frogs' questions
 
     /// <param name="where">Open water that no branch hides: where a frog under the surface may show.</param>
     public Frogs(Pond pond, int count, Ripples ripples, bool[] where, Random rng, Dragonflies? dragonflies)
@@ -75,16 +76,44 @@ internal sealed class Frogs
     /// <param name="koiHeads">Points on the koi near the surface (KoiSchool.Heads).</param>
     /// <param name="turtleSpots">A point at each turtle's nose and shell (Turtles.Spots).</param>
     /// <param name="lizardNoses">The nose of each lizard that is out (Lizards.Noses).</param>
-    public void Update(float dt, PointF? snakeHead, PointF[] koiHeads, PointF[] turtleSpots, PointF[] lizardNoses)
+    /// <param name="snake">The snake while it is out (any part of it is a threat to a frog, and its body is solid to a swimming one), else null.</param>
+    /// <param name="turtles">The turtles (the ones in the water are solid to a swimming frog).</param>
+    /// <param name="surface">Everything solid at the surface this frame (the scene's list: the snake, the ducks, the frogs themselves, which are skipped).</param>
+    public void Update(float dt, PointF? snakeHead, PointF[] koiHeads, PointF[] turtleSpots, PointF[] lizardNoses, Body? snake = null, IReadOnlyList<Turtle>? turtles = null, IReadOnlyList<Body>? surface = null)
     {
-        foreach (Frog f in _all) f.Update(dt, snakeHead, koiHeads, turtleSpots, lizardNoses);
+        _solids.Clear();
+        if (surface != null) for (int k = 0; k < surface.Count; k++) if (surface[k] is not Frog) _solids.Add(surface[k]);
+        if (turtles != null) for (int k = 0; k < turtles.Count; k++) if (turtles[k].InWater) _solids.Add(turtles[k]);
+        foreach (Frog f in _all) f.Update(dt, snakeHead, koiHeads, turtleSpots, lizardNoses, snake);
         // Two frogs in the water must not overlap: if their middles are closer than 0.8 of a body
         // length each is eased apart (half the way each, no faster than a body length a second).
         for (int i = 0; i < _all.Length; i++)
             for (int j = i + 1; j < _all.Length; j++)
                 if (_all[i].InWater && _all[j].InWater) Frog.KeepApart(_all[i], _all[j], dt);
+        // NOTHING CLIPS: a frog in the water is pushed clear of the snake, a swimming turtle and a duck
+        // (the frog is the light one; none of them moves for it), and a touch from any of them is a
+        // fright. Until round thirty a surfacing frog floated on top of the snake's body for seconds
+        // (only the head was a threat, and nothing moved it off).
+        foreach (Frog f in _all)
+        {
+            if (!f.InWater) continue;
+            for (int k = 0; k < _solids.Count; k++) f.PushOff(_solids[k], dt);
+        }
         _inWater.Clear();
         foreach (Frog f in _all) if (f.InWater) _inWater.Add(f);
+    }
+
+    /// <summary>Is any point of a solid body in the water (the snake, a duck, a swimming turtle) within r of this screen point? (A dived frog asks before it comes up.)</summary>
+    public bool SolidNear(PointF p, float r)
+    {
+        float r2 = r * r;
+        for (int k = 0; k < _solids.Count; k++)
+        {
+            ReadOnlySpan<PointF> pts = _solids[k].Drawn;
+            for (int i = 0; i < pts.Length; i++)
+                if ((pts[i].X - p.X) * (pts[i].X - p.X) + (pts[i].Y - p.Y) * (pts[i].Y - p.Y) < r2) return true;
+        }
+        return false;
     }
 
     /// <summary>A swallow's shadow swept over the pond here: every frog near it sitting leaps in, one swimming dives.</summary>
@@ -368,6 +397,8 @@ internal sealed class Frog : Body
     // frame, so a tuck or a reach never snaps. Starts planted (sitting).
     private float _elbowF = 0.0f, _elbowO = 0.14f, _wristF = 0.11f, _wristO = 0.08f;
     private float _kickT, _period = 1f, _boost;            // swimming: seconds into this kick, the kick's length, a dive's extra push
+    private float _skid;                                   // the speed a landing carried into the water, dying away
+    private int _diveExtra;                                // how many times this dive was held because something was above the spot
     private float _fx = 1, _fy;                            // cos and sin of the heading, once a frame
     private double _time;
     private float _throat;                                 // how swollen the throat is, 0 to 1
@@ -403,6 +434,14 @@ internal sealed class Frog : Body
     private PointF? _snakeHead;
     private PointF[] _koiHeads = [], _turtleSpots = [], _lizardNoses = [];
     private PointF? _startleAt;
+    private Body? _snake;                                  // the snake while it is out: any part of it frightens a frog
+    private bool _touched;                                 // pushed off another body this frame (PushOff): a fright
+    private PointF _touchAt;
+    private float _gather;                                 // 0 to 1: the hind legs drawn in under the body in a crouch, eased (a frog gathers before it springs)
+    private float _poseRate = 20f;                         // how fast the pose eases (a landing on a perch settles slower than a kick)
+    private float _floatKickIn, _floatKickT = -1;          // afloat: the lazy half-kick now and then, and seconds into one
+    private float _driftTurn;                              // afloat: a slow wander of the heading
+    private float _pivotNext; private bool _pivotQueued;   // a big turn on the spot is two hops: the second waits here
     private bool _blocked;
     private float _refused;
     private int _skipPad = -1;                             // the pad it is swimming to is not an obstacle
@@ -539,7 +578,7 @@ internal sealed class Frog : Body
     /// <summary>How far a point is lifted up the screen at the frog's present height.</summary>
     private float LiftPx => Light.Lift * _height * _u;
 
-    private float BodyLen => _len * Sc * (1 + 0.15f * _pose);
+    private float BodyLen => _len * Sc * (1 + 0.15f * _pose) * (1 - 0.05f * _gather);   // stretched in a spring, a touch shorter gathered for one
 
     /// <summary>Half the body's width at s, ground pixels: a wedge with a blunt nose, widest at the hips, a rounded rump.</summary>
     private float Wid(float s) => _wide * Sc * (1 - 0.12f * _pose) * Profile(s);
@@ -638,10 +677,10 @@ internal sealed class Frog : Body
     /// <param name="koiHeads">Points on the koi near the surface.</param>
     /// <param name="turtleSpots">A point at each turtle's nose and shell.</param>
     /// <param name="lizardNoses">The nose of each lizard that is out.</param>
-    public void Update(float dt, PointF? snakeHead, PointF[] koiHeads, PointF[] turtleSpots, PointF[] lizardNoses)
+    public void Update(float dt, PointF? snakeHead, PointF[] koiHeads, PointF[] turtleSpots, PointF[] lizardNoses, Body? snake = null)
     {
         _time += dt;
-        _snakeHead = snakeHead; _koiHeads = koiHeads; _turtleSpots = turtleSpots; _lizardNoses = lizardNoses;
+        _snakeHead = snakeHead; _koiHeads = koiHeads; _turtleSpots = turtleSpots; _lizardNoses = lizardNoses; _snake = snake;
         _alarm.Tick(dt);
         _mind.Tick(dt);
         _snatch.Tick(dt);
@@ -664,7 +703,10 @@ internal sealed class Frog : Body
         bool standing = _doing == Doing.Sit || _hop == HopKind.Snap;
         _perchLift += ((standing ? 0.005f : 0f) - _perchLift) * (1 - MathF.Exp(-dt * 12f));
         _height = _hopHeight + _perchLift;
-        _pose += (_poseWant - _pose) * (1 - MathF.Exp(-dt * 20f));
+        _pose += (_poseWant - _pose) * (1 - MathF.Exp(-dt * _poseRate));
+        _poseRate += (20f - _poseRate) * (1 - MathF.Exp(-dt * 2f));          // a slowed ease (a landing's settle) drifts back to the quick one
+        float gatherWant = _hop != HopKind.None && _hop != HopKind.Pivot && _hopT < _crouch ? 1f : 0f;
+        _gather += (gatherWant - _gather) * (1 - MathF.Exp(-dt * (gatherWant > 0.5f ? 12f : 30f)));   // drawn in over the crouch, let go at the spring
         EaseArms(dt);
         LaySpine();
         // Swimming at the surface it pushes a small bow wave ahead of its nose (Ripples.Wake), a fainter one than a koi's.
@@ -701,10 +743,26 @@ internal sealed class Frog : Body
     /// a threat 30% nearer. A cooldown after each answer (3 to 6 seconds, 10 to 18 after a fish or a turtle, which keep drifting by) so a
     /// koi keeping pace does not set it off every frame.
     /// </summary>
+    /// <summary>The nearest of a body's drawn points within r of me, if any.</summary>
+    private static bool NearestOn(ReadOnlySpan<PointF> pts, PointF me, float r, out PointF hit)
+    {
+        hit = default;
+        float best = r * r;
+        bool found = false;
+        for (int i = 0; i < pts.Length; i++)
+        {
+            float d = (pts[i].X - me.X) * (pts[i].X - me.X) + (pts[i].Y - me.Y) * (pts[i].Y - me.Y);
+            if (d < best) { best = d; hit = pts[i]; found = true; }
+        }
+        return found;
+    }
+
     private void CheckThreats()
     {
         PointF? shadow = _startleAt;
         _startleAt = null;
+        bool touched = _touched;
+        _touched = false;
         if (_hop is HopKind.Snap or HopKind.Leap or HopKind.Climb || _doing is Doing.Dive or Doing.Leap or Doing.Snap or Doing.Climb) return;
         PointF me = Centre;
         float reach = 1f - 0.3f * _bold;
@@ -712,6 +770,8 @@ internal sealed class Frog : Body
         string? src = null;
         PointF at = default;
         if (_snakeHead is PointF sh && Dist(sh, me) < _u * 0.2f * reach) { src = "snake"; at = sh; }
+        else if (_snake != null && NearestOn(_snake.Drawn, me, _u * 0.1f * reach, out PointF sb)) { src = "snake"; at = sb; }   // any part of the snake's body this close (a frog once surfaced and floated on its back)
+        else if (touched) { src = "touch"; at = _touchAt; }
         else if (shadow is PointF sd) { src = "shadow"; at = sd; }
         else if (sitting && _perch != null && _perch.Kind != PerchKind.Pad && NearAny(_lizardNoses, me, _u * 0.08f * reach, out PointF ln)) { src = "lizard"; at = ln; }
         else if (!sitting && NearAny(_koiHeads, me, _u * 0.04f * reach, out PointF kh)) { src = "koi"; at = kh; }
@@ -723,6 +783,7 @@ internal sealed class Frog : Body
         Log?.Invoke($"threat {src} at={at.X:F0},{at.Y:F0} state={State}");
         // A dive from a fish or a turtle (which keep drifting by) is followed by a longer wait than a flight from a one-off scare.
         _alarm.Start((src is "koi" or "turtle" ? 10 : 3) + (src is "koi" or "turtle" ? 8 : 3) * (float)_rng.NextDouble());
+        if (src is "koi" or "turtle") _wet += 12f;                     // chased under by the fish twice over, it wants out of the water sooner (one frog dived five times in forty seconds where the koi were)
         if (sitting) { if (!BeginLeap(at, src)) _alarm.Start(1f); }
         else BeginDive(at);
     }
@@ -777,11 +838,23 @@ internal sealed class Frog : Body
         if (_pivotIn <= 0 && _hop == HopKind.None)
         {
             float to;
-            if (_faceFirst) { to = _faceOut; _faceFirst = false; }
+            if (_pivotQueued) { to = _pivotNext; _pivotQueued = false; }
+            else if (_faceFirst) { to = _faceOut; _faceFirst = false; }
             else if (_rng.NextDouble() < 0.65) to = _faceOut + ((float)_rng.NextDouble() - 0.5f) * 1.2f;
             else to = _heading + (_rng.Next(2) == 0 ? 1 : -1) * (0.35f + 1.2f * (float)_rng.NextDouble());
-            if (MathF.Abs(Wrap(to - _heading)) > 0.1f) BeginHop(HopKind.Pivot, _x, _y, _x, _y, 0, 0.15f, 0.003f * _u, to);
-            _pivotIn = (7 + 18 * (float)_rng.NextDouble()) / boldMul * (1.2f - 0.5f * _restless);
+            // A turn on the spot takes as long as it is big (0.12 s plus 0.22 s per 90 degrees), and a turn past 90
+            // degrees is TWO hops with a short rest between (a frog turning right round after a climb did it in a
+            // tenth of a second in one hop, which read as a flip).
+            float by = Wrap(to - _heading);
+            if (MathF.Abs(by) > 1.6f)
+            {
+                _pivotNext = to; _pivotQueued = true;
+                by = MathF.Sign(by) * MathF.Min(MathF.Abs(by) * 0.55f, 1.4f);
+                to = _heading + by;
+                _pivotIn = 0.35f + 0.45f * (float)_rng.NextDouble();
+            }
+            else _pivotIn = (7 + 18 * (float)_rng.NextDouble()) / boldMul * (1.2f - 0.5f * _restless);
+            if (MathF.Abs(by) > 0.1f) BeginHop(HopKind.Pivot, _x, _y, _x, _y, 0, 0.12f + 0.14f * MathF.Abs(by), 0.0035f * _u, to);
         }
 
         // A dragonfly settled close, or a froglet (or a tadpole up near the top) within a snap of the perch: a
@@ -891,7 +964,13 @@ internal sealed class Frog : Body
             _x = _ax + (_bx - _ax) * q;
             _y = _ay + (_by - _ay) * q;
             _hopHeight = 4 * _hmax * q * (1 - q) / _u;
-            _poseWant = _hopT < tc ? 0f : q < 0.2f ? Smooth(q / 0.2f) : q < 0.7f ? 1f : 1f - 0.75f * Smooth((q - 0.7f) / 0.3f);
+            // The crouch gathers (the legs drawn in under the body, _gather, eased in Update); the spring is quick (the legs
+            // straight out within the first eighth of the flight) and they stay out: a leap into water lands gliding with
+            // the legs still stretched, and only a landing on a perch folds them, in the last fifth of the flight, the
+            // rest of the way once it is down (EndHop). Until round thirty the legs folded three quarters of the way
+            // before every landing and snapped to folded on the water: a stop-and-start.
+            bool toPerch = _hop == HopKind.Climb || (_hop == HopKind.Snap && !_snapToWater);
+            _poseWant = _hopT < tc ? 0f : q < 0.12f ? Smooth(q / 0.12f) : !toPerch || q < 0.8f ? 1f : 1f - 0.6f * Smooth((q - 0.8f) / 0.2f);
         }
         else
         {
@@ -917,26 +996,31 @@ internal sealed class Frog : Body
     private void EndHop()
     {
         HopKind kind = _hop;
+        float flightSpeed = _hopDur - _crouch > 1e-3f ? Dist(new PointF(_ax, _ay), new PointF(_bx, _by)) / (_hopDur - _crouch) : 0;
         _hop = HopKind.None; _hopHeight = 0;
-        _poseWant = 0;
         switch (kind)
         {
             case HopKind.Pivot:
                 _heading = Wrap(_h1);
+                _poseWant = 0;
                 break;
             case HopKind.Snap:
                 _x = _bx; _y = _by;
-                if (_snapToWater) { Splash(); BeginSwim(); }
-                else _mind.Begin(Doing.Sit, _savedLeft);
+                if (_snapToWater) { Splash(); BeginSwim(); _skid = flightSpeed * 0.7f; }
+                else { _mind.Begin(Doing.Sit, _savedLeft); _poseWant = 0; _poseRate = 9f; }
                 break;
             case HopKind.Leap:
+                // Into the water with the legs still out: it skims on at most of its flight speed, slowing, gliding,
+                // and the first kick comes when the glide is done (SwimOrFloat).
                 _x = _bx; _y = _by;
                 Splash();
                 BeginSwim();
+                _skid = flightSpeed * 0.8f;
                 break;
             case HopKind.Climb:
                 _x = _bx; _y = _by;
                 Arrive();
+                _poseWant = 0; _poseRate = 7f;                      // the legs fold the rest of the way as it settles, a third of a second, not a snap
                 break;
         }
     }
@@ -999,7 +1083,7 @@ internal sealed class Frog : Body
                 _perch = null;
                 _mind.Begin(Doing.Leap);
                 _speed = 0;
-                BeginHop(HopKind.Leap, _x, _y, gx, gy, flight, 0.12f, hmax, a);
+                BeginHop(HopKind.Leap, _x, _y, gx, gy, flight, 0.24f, hmax, a);     // (a crouch of 0.12 until round thirty: too quick for the gather to be seen)
                 Log?.Invoke($"leap src={src} from={from} to={land.X:F0},{land.Y:F0} d={d:F3}");
                 return true;
             }
@@ -1194,7 +1278,8 @@ internal sealed class Frog : Body
     private void BeginSwim()
     {
         _mind.Begin(Doing.Swim, 30f);
-        _kickT = 0; _period = 0.9f + 0.2f * (float)_rng.NextDouble();
+        _kickT = Thrust + 0.05f; _period = 1.0f + 0.3f * (float)_rng.NextDouble();   // in the glide, legs out: the landing's skim; the first kick after the recovery
+        _poseWant = 1f;
         _z = 0; _zTarget = 0; _rising = false; _speed = _u * 0.05f;
         _refused = 0; _blocked = false;
         if (!_hasGoal) PlanGoal(true);
@@ -1213,7 +1298,7 @@ internal sealed class Frog : Body
         ReleaseGoal();
         _mind.Begin(Doing.Dive, 3.5f + 5 * (float)_rng.NextDouble());
         _zTarget = 0.2f + 0.1f * (float)_rng.NextDouble();
-        _rising = false;
+        _rising = false; _diveExtra = 0;
         _kickT = 0; _boost = 1f;
         PointF nose = Nose;
         _ripples.Add(nose.X, nose.Y, 0.3f);
@@ -1250,29 +1335,54 @@ internal sealed class Frog : Body
     /// step refused if it would be onto land or a pad; a refused step forces the
     /// avoidance turn next frame.
     /// </summary>
+    private const float Thrust = 0.22f, Recover = 0.26f;   // seconds: the kick's power stroke, and the legs' recovery before the next
+
     private void SwimOrFloat(float dt)
     {
         bool floating = _doing == Doing.Float, diving = _doing == Doing.Dive;
         float vPush = _u * (diving ? 0.095f : 0.08f), vGlide = _u * 0.02f;
 
         // ---- the kick ----
+        float push = 0.25f;                                        // how much of its turning it may do this frame: most in the thrust (a frog steers with its kick), least in the glide
         if (floating)
         {
             _speed *= MathF.Exp(-dt * 3f);
             if (_speed < _u * 0.0003f) _speed = 0;
-            _poseWant = 0.5f + 0.07f * MathF.Sin((float)(_time % 1000.0) * 1.3f);
-            _kickT = 0;
+            // Afloat the legs hang half open; now and then one lazy half-kick (the legs close and open again over half
+            // a second, a small push) keeps it where it is, the way a frog at the surface treads water.
+            _floatKickIn -= dt;
+            if (_floatKickT < 0 && _floatKickIn <= 0) { _floatKickT = 0; _floatKickIn = 3 + 5 * (float)_rng.NextDouble(); }
+            float hang = 0.5f + 0.07f * MathF.Sin((float)(_time % 1000.0) * 1.3f);
+            if (_floatKickT >= 0)
+            {
+                _floatKickT += dt;
+                float k = _floatKickT / 0.55f;
+                if (k >= 1) { _floatKickT = -1; _poseWant = hang; }
+                else { _poseWant = hang + 0.4f * MathF.Sin(MathF.PI * k); _speed = MathF.Max(_speed, _u * 0.015f * MathF.Sin(MathF.PI * k)); }
+            }
+            else _poseWant = hang;
+            _kickT = Thrust + 0.05f;                                // a swim begun from a float starts gliding with the legs out, and kicks when the recovery comes round
         }
         else
         {
+            // A REAL KICK: the THRUST (the legs sweep out and back together over 0.22 s, the body surges), then the GLIDE
+            // with the legs left stretched out behind, together, streamlined, then the RECOVERY (the legs draw forward
+            // into the Z over 0.26 s, which costs a little speed) and the next thrust. Until round thirty the legs folded
+            // all through the glide, so the frog spent most of each second gliding with its legs tucked, which is not how
+            // a frog swims; and it turned as freely in the glide as in the kick, which read as a sprite sliding.
             _kickT += dt;
-            if (_kickT >= _period) { _kickT -= _period; _period = 0.85f + 0.3f * (float)_rng.NextDouble(); }
-            float c = _kickT;
-            float kick = c < 0.25f ? Smooth(c / 0.25f) : MathF.Exp(-(c - 0.25f) * 3.5f);
+            if (_kickT >= _period) { _kickT -= _period; _period = 0.95f + 0.35f * (float)_rng.NextDouble(); }
+            float c = _kickT, recoverFrom = _period - Recover;
+            float kick = c < Thrust ? Smooth(c / Thrust) : MathF.Exp(-(c - Thrust) * 3.2f);
             _boost = MathF.Max(0, _boost - dt / 0.9f);
-            _speed = vGlide + (vPush - vGlide) * kick + _u * 0.07f * _boost;
-            _poseWant = c < 0.25f ? Smooth(c / 0.25f) : c < 0.9f ? 1 - Smooth((c - 0.25f) / 0.65f) : 0f;
+            float drag = c > recoverFrom ? 1 - 0.35f * Smooth((c - recoverFrom) / Recover) : 1f;
+            _speed = (vGlide + (vPush - vGlide) * kick) * drag + _u * 0.07f * _boost;
+            _poseWant = c < Thrust ? Smooth(c / Thrust) : c < recoverFrom ? 1f - 0.08f * Smooth((c - Thrust) / 0.3f) : 0.92f * (1 - Smooth((c - recoverFrom) / Recover));
+            push = c < Thrust ? 1f : c > recoverFrom ? 0.6f : 0.25f;
         }
+        // The speed a landing carried into the water: it skims on, slowing, and the first kick comes when the glide is done.
+        _skid *= MathF.Exp(-dt * 2.5f);
+        if (_skid > _speed) _speed = _skid;
 
         // ---- the doing's own business ----
         PointF here = Centre;
@@ -1286,7 +1396,18 @@ internal sealed class Frog : Body
         }
         else if (diving)
         {
-            if (!_rising && _mind.Over) { _rising = true; _zTarget = 0; }
+            if (!_rising && _mind.Over)
+            {
+                // Not up under the snake, a duck or a turtle: with one over the spot it swims on under the water a while
+                // longer (up to four times) and looks again. (A frog once came up and floated on the snake's back.)
+                if (_diveExtra < 4 && _owner.SolidNear(Centre, _len * 1.5f))
+                {
+                    _diveExtra++; _mind.Left = 1.5f;
+                    _goalX = _x + _fx * _u * 0.15f; _goalY = _y + _fy * _u * 0.15f; _hasGoal = true;
+                    Log?.Invoke("dive held: something above");
+                }
+                else { _rising = true; _zTarget = 0; }
+            }
             if (_rising && _z < 0.03f)
             {
                 PointF nose = Nose;
@@ -1339,8 +1460,7 @@ internal sealed class Frog : Body
 
             {
                 turn = Wrap(aim - _heading) * 1.4f;
-                float push = _kickT < 0.25f ? 1f : 0.35f;
-                most = (1.1f + 1.4f * push);
+                most = 0.5f + 2.0f * push;                                // 2.5 rad/s in the thrust, 1.0 in the glide, 1.7 in the recovery
                 // Feel for the smallest turn that clears something in the way.
                 float look = _len * 2.2f + _speed * 0.5f, margin = _len * (near ? 0.12f : 0.55f);
                 float clearAhead = _blocked ? 0 : ClearAlong(_heading, look);
@@ -1485,7 +1605,7 @@ internal sealed class Frog : Body
         float face = MathF.Atan2(gy - _y, gx - _x);
         _mind.Begin(Doing.Climb);
         _speed = 0; _z = 0;
-        BeginHop(HopKind.Climb, _x, _y, gx, gy, 0.32f, 0.1f, 0.012f * _u, face);
+        BeginHop(HopKind.Climb, _x, _y, gx, gy, 0.32f, 0.16f, 0.012f * _u, face);
         Log?.Invoke($"climb to={PerchLabel(p)}");
     }
 
@@ -1512,6 +1632,31 @@ internal sealed class Frog : Body
         float push = MathF.Min(a._len * dt, (want - d) * 0.5f);
         a.Shove(-dx / d * push, -dy / d * push);
         b.Shove(dx / d * push, dy / d * push);
+    }
+
+    /// <summary>
+    /// Pushed clear of another body in the water (the snake, a turtle, a duck) by the chain test every
+    /// swimmer here shares (Core/Minds Chain.Touch): the whole overlap, this frog alone moving, no faster
+    /// than two body lengths a second, along the ground plane (a frog cannot be pushed up out of the
+    /// water, so a push that is mostly vertical becomes a sideways one, away from the other's middle).
+    /// A touch is a fright too: a swimming or floating frog dives from it (its own alarm permitting).
+    /// </summary>
+    public void PushOff(Body other, float dt)
+    {
+        if (!Chain.Touch(Shape, other.Shape, out System.Numerics.Vector3 push, out float depth)) return;
+        float px = push.X, py = push.Y, l = MathF.Sqrt(px * px + py * py);
+        if (l < 0.3f)
+        {
+            ReadOnlySpan<PointF> o = other.Drawn;
+            PointF mid = o[o.Length / 2], me = Centre;
+            px = me.X - mid.X; py = me.Y - mid.Y; l = MathF.Sqrt(px * px + py * py);
+            if (l < 1e-3f) { px = -_fy; py = _fx; l = 1; }
+        }
+        px /= l; py /= l;
+        float move = MathF.Min(depth, _len * 2f * dt);
+        Shove(px * move, py * move * Ripples.Squash);
+        _touched = true;
+        _touchAt = other.Drawn[other.Drawn.Length / 2];
     }
 
     private void Shove(float sx, float sy)
@@ -1705,13 +1850,14 @@ internal sealed class Frog : Body
     /// </summary>
     private void HindLeg(FrameBuffer fb, bool[] stencil, int side, float L, float murk)
     {
-        float p = Smooth(_pose);
+        float p = Smooth(_pose), g = _gather;
         float splay = _doing == Doing.Float ? 1.5f : 1f;
         (float hx, float hy) = RawGround(0.70f, 0.6f * side);
         float ox = -_fy * side, oy = _fx * side;                                  // the unit vector out to this side, ground plane
-        float tf = Lerp(0.17f, -0.36f, p) * L, to = Lerp(0.24f, 0.07f, p) * splay * L;
+        // Gathered (the crouch before a spring): the knees drawn in under the body and the feet pulled back under the hips.
+        float tf = Lerp(Lerp(0.17f, 0.07f, g), -0.36f, p) * L, to = Lerp(0.24f, 0.07f, p) * splay * L * (1 - 0.3f * g);
         float sf = Lerp(-0.30f, -0.40f, p) * L, so = Lerp(-0.04f, 0.04f, p) * splay * L;
-        float ff = Lerp(0.20f, -0.20f, p) * L, fo = Lerp(0.03f, 0.08f, p) * splay * L;
+        float ff = Lerp(0.20f * (1 - 0.4f * g), -0.20f, p) * L, fo = Lerp(0.03f, 0.08f, p) * splay * L;
         float kx = hx + _fx * tf + ox * to, ky = hy + _fy * tf + oy * to;
         float ax = kx + _fx * sf + ox * so, ay = ky + _fy * sf + oy * so;
         float fx = ax + _fx * ff + ox * fo, fy = ay + _fy * ff + oy * fo;
