@@ -71,6 +71,11 @@ internal sealed class SakuraPondScene : IScreensaverScene
         void Lap(string what) { if (!string.IsNullOrEmpty(startLog)) File.AppendAllText(startLog, $"{what} {startClock.Elapsed.TotalMilliseconds:F0} ms\r\n"); }
         _pond = PondPainter.Paint(width, height, _rng, settings.FallenLog);
         Lap("painter");
+        // The masks the animals steer by, as pictures, when PECKWORKS_MASKDUMP names a folder (free otherwise):
+        // an instrument. A minnow that circled for ever in a pocket between the formation's caps (2026-10-27)
+        // was found by flood-filling the room grid from the open water and listing what the fill never reached.
+        string? maskDump = Environment.GetEnvironmentVariable("PECKWORKS_MASKDUMP");
+        if (!string.IsNullOrEmpty(maskDump)) DumpMasks(maskDump);
         Lap(_pond.Island is Island isle ? $"island at {isle.Centre.X:F0},{isle.Centre.Y:F0} r {isle.Radius:F0} cap {isle.Cap.X:F0},{isle.Cap.Y:F0} r {isle.CapRadius:F0}" : "island none");   // (the island too: a reader crops it by these numbers)
         Lap(_pond.Formation is Formation fm ? $"formation at {fm.Stone.Centre.X:F0},{fm.Stone.Centre.Y:F0} r {fm.Stone.Radius:F0} caps {fm.Caps.Length}" : "formation none");   // (a placement is counted, never assumed)
         Lap(_pond.Formation2 is Formation fm2 ? $"formation2 at {fm2.Stone.Centre.X:F0},{fm2.Stone.Centre.Y:F0} r {fm2.Stone.Radius:F0} caps {fm2.Caps.Length}" : "formation2 none");
@@ -234,6 +239,32 @@ internal sealed class SakuraPondScene : IScreensaverScene
 
     // The Sections marks cost nothing unless PECKWORKS_SECTIONS names a
     // file; then a snapshot run writes what each part of the frame costs.
+    /// <summary>
+    /// Writes the steering masks as grey pictures (PGM, one byte a pixel: a format any script reads
+    /// with no library) into a folder: Water, Open, Land and StoneTop as 0 or 255, and the room grid
+    /// sampled at every pixel (RoomAt, pixels of water around that spot, capped at 255). An instrument
+    /// for PECKWORKS_MASKDUMP, never on in a real run.
+    /// </summary>
+    private void DumpMasks(string folder)
+    {
+        Directory.CreateDirectory(folder);
+        int w = _pond.Width, h = _pond.Height;
+        void Pgm(string name, Func<int, int, byte> at)
+        {
+            using var f = File.Create(Path.Combine(folder, name + ".pgm"));
+            byte[] head = System.Text.Encoding.ASCII.GetBytes($"P5\n{w} {h}\n255\n");
+            f.Write(head, 0, head.Length);
+            byte[] row = new byte[w];
+            for (int y = 0; y < h; y++) { for (int x = 0; x < w; x++) row[x] = at(x, y); f.Write(row, 0, w); }
+        }
+        Pgm("water", (x, y) => _pond.Water[y * w + x] ? (byte)255 : (byte)0);
+        Pgm("open", (x, y) => _pond.Open[y * w + x] ? (byte)255 : (byte)0);
+        Pgm("land", (x, y) => _pond.Land[y * w + x] ? (byte)255 : (byte)0);
+        Pgm("stonetop", (x, y) => _pond.StoneTop[y * w + x] ? (byte)255 : (byte)0);
+        Pgm("shoal", (x, y) => _pond.StoneShoal[y * w + x] ? (byte)255 : (byte)0);
+        Pgm("room", (x, y) => (byte)Math.Clamp((int)(_pond.RoomAt(x, y) + 0.5f), 0, 255));
+    }
+
     public void Render(FrameBuffer fb)
     {
         Sections.Begin();

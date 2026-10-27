@@ -33,6 +33,13 @@ internal sealed class Minnows
 {
     private readonly School[] _schools;
     private readonly float _u;
+    // THE INSTRUMENT LOG (permanent, free unless PECKWORKS_MINNOWLOG names a file): one row per minnow per frame,
+    // where it is (ground pixels), which way it faces, how fast it is going, whether it is following a wall and on
+    // which side, how much water the room grid gives it where it stands, and whether its step was refused. Added for
+    // "a minnow can swim in there and never get back out. it just spins in fast little circles forever" (2026-10-27):
+    // a spin is a nose confined to a few pixels at speed with the heading going round, which only a log can count.
+    private static readonly System.IO.StreamWriter? MinnowLog = Environment.GetEnvironmentVariable("PECKWORKS_MINNOWLOG") is string lf && lf.Length > 0 ? new System.IO.StreamWriter(lf) { AutoFlush = false } : null;
+    private int _logFrame;
 
     public Minnows(Pond pond, int schools, bool[] where, Ripples ripples, Random rng)
     {
@@ -45,6 +52,12 @@ internal sealed class Minnows
     public void Update(float dt, PointF[] koiHeads)
     {
         foreach (School s in _schools) s.Update(dt, koiHeads);
+        if (MinnowLog != null)
+        {
+            _logFrame++;
+            for (int s = 0; s < _schools.Length; s++) _schools[s].LogRows(MinnowLog, _logFrame, s);
+            if (_logFrame % 600 == 0) MinnowLog.Flush();
+        }
     }
 
     public void Draw(FrameBuffer fb)
@@ -296,12 +309,36 @@ internal sealed class School
     }
 
     /// <summary>Picks somewhere new in open water, in view, for the school to idle toward.</summary>
+    // A STRESS DIAL for the instruments: PECKWORKS_MINNOWGOAL names a stone (island, formation, formation2) and every
+    // school's idle target is that stone's centre, so the minnows crowd its caps for a whole run (naturally they visited
+    // no three-cap formation in fifteen minutes of logs; "a minnow can swim in there and never get back out" needs a run
+    // where they try). The dice roll exactly as they would (the spot is picked, then overridden).
+    private static readonly string? GoalStone = Environment.GetEnvironmentVariable("PECKWORKS_MINNOWGOAL") is string gs && gs.Length > 0 ? gs : null;
+
     private void NewTarget()
     {
+        (PointF Centre, float Radius)? stone = GoalStone switch
+        {
+            "island" when _pond.Island is Island i => (i.Centre, i.Radius),
+            "formation" when _pond.Formation is Formation f => (f.Stone.Centre, f.Stone.Radius),
+            "formation2" when _pond.Formation2 is Formation f2 => (f2.Stone.Centre, f2.Stone.Radius),
+            _ => null
+        };
         for (int tries = 0; tries < 60; tries++)
         {
             float x = (float)_rng.NextDouble() * _pond.Width, y = (float)_rng.NextDouble() * _pond.Height;
             if (_pond.RoomAt(x, y) < _u * 0.1f || !InView(x, y)) continue;
+            if (stone is (PointF sc, float sr))
+            {
+                // A spot in the water within 1.6 radii of the stone, from the school's own dice (the scene's are not moved).
+                for (int k = 0; k < 40; k++)
+                {
+                    float a = (float)(_own.NextDouble() * MathF.Tau), d = sr * (0.8f + 0.8f * (float)_own.NextDouble());
+                    float nx = sc.X + MathF.Cos(a) * d, ny = sc.Y + MathF.Sin(a) * d;
+                    if (nx < 1 || ny < 1 || nx >= _pond.Width - 1 || ny >= _pond.Height - 1 || _pond.RoomAt(nx, ny) < 3 || !InView(nx, ny)) continue;
+                    x = nx; y = ny; break;
+                }
+            }
             (_tx, _ty) = Minnow.ToGround(_pond, x, y);
             break;
         }
@@ -324,6 +361,12 @@ internal sealed class School
     /// when a big fish lunges), then they gather again a short way off on the far side from the koi and drift on.
     /// A school already scattering or gathering is scattered afresh (the koi may rush twice).
     /// </summary>
+    /// <summary>The instrument log's rows for this school's fish (Minnows.Update, when PECKWORKS_MINNOWLOG names a file).</summary>
+    public void LogRows(System.IO.StreamWriter log, int frame, int school)
+    {
+        for (int i = 0; i < _fish.Length; i++) if (!_fish[i].Gone) log.WriteLine(FormattableString.Invariant($"F,{frame},{school},{i},{_mood},{_fish[i].LogRow()}"));
+    }
+
     public void Scatter(float x, float y)
     {
         (_scX, _scY) = Minnow.ToGround(_pond, x, y);
@@ -457,6 +500,11 @@ internal sealed class Minnow : Body
     private readonly PointF[] _trail = new PointF[24];
     private int _trailHead, _trailCount;
     private int _wallSide;                         // 0: free. +1 or -1: following a wall, and which way along it (see Update)
+    private float _wallFor;                        // seconds it has been following: with room round it, two seconds is enough whatever the line to the school says
+    private float _logRoom, _logMoved;             // the room where it stood and how far it stepped this frame (for the log only)
+
+    /// <summary>The instrument log's columns for this fish: x, y (ground), heading, speed, wall side, room here, moved this frame, flash.</summary>
+    public string LogRow() => FormattableString.Invariant($"{X:F1},{Y:F1},{_heading:F3},{_speed:F1},{_wallSide},{_logRoom:F1},{_logMoved:F2},{_flash:F2}");
 
     /// <summary>Where its nose is, ground pixels.</summary>
     public float X { get; private set; }
@@ -595,7 +643,11 @@ internal sealed class Minnow : Body
         // target let the school's pull have it back. A minnow turns in a flick, so the heading is set outright.
         if (_wallSide != 0)
         {
-            if (roomHere >= wall && LineClear(tx, ty)) _wallSide = 0;
+            // Let go when there is room round it AND the school's target is in clear sight, or when it has
+            // followed for two seconds with room round it whatever the line says (a target behind a stone is
+            // never in clear sight: a fish zigzagged on a ridge of open water for 75 s on the stress run).
+            _wallFor += dt;
+            if (roomHere >= wall && (LineClear(tx, ty) || _wallFor > 2f)) { _wallSide = 0; _wallFor = 0; }
             else FollowWall(here);
         }
         float step = _speed * dt, moved = 0;
@@ -609,6 +661,7 @@ internal sealed class Minnow : Body
                 PointF ow = _pond.OpenWay(here.X, here.Y);
                 float alongX = -ow.Y, alongY = ow.X;              // the wall runs across the uphill direction
                 _wallSide = alongX * (tx - X) + alongY * (ty - Y) < 0 ? -1 : 1;
+                _wallFor = 0;
             }
             else _wallSide = -_wallSide;
             FollowWall(here);
@@ -629,6 +682,7 @@ internal sealed class Minnow : Body
         // whole body made them wriggle like worms). The beat follows the distance actually swum this
         // frame, not the speed the fish wanted: a fish that could not move does not pretend to swim.
         float swim = moved / dt;
+        _logRoom = roomHere; _logMoved = moved;
         _phase = (_phase + MathF.Tau * (2.5f + 6f * MathF.Min(1, swim / (_len * 7))) * dt) % MathF.Tau;
         float wantAmp = _len * (0.02f + 0.05f * MathF.Min(1, swim / (_len * 5)));
         _amp += (wantAmp - _amp) * (1 - MathF.Exp(-dt * 4));
@@ -661,7 +715,21 @@ internal sealed class Minnow : Body
         if (l < 1e-4f) return;
         float awayX = ow.X / l, awayY = ow.Y / l;
         float alongX = -awayY * _wallSide, alongY = awayX * _wallSide;
-        _heading = MathF.Atan2(alongY + 0.6f * awayY, alongX + 0.6f * awayX);
+        float want = MathF.Atan2(alongY + 0.6f * awayY, alongX + 0.6f * awayX);
+        // A RIDGE: in a gap between two stones (the formation's caps) the "open way" points at one stone's
+        // wall from one side of the gap's midline and at the other from the other side, so a fish crossing
+        // the midline by a pixel had its heading flipped right round, every frame, and stood vibrating in
+        // the gap for a whole run at full speed ("it just spins in fast little circles forever", 2026-10-27:
+        // four fish for 288 s each on the stress run). A heading that would turn more than a right angle
+        // from the one it has is the ridge, not a wall: keep the side that carries on along the gap (flip
+        // the remembered side, which flips "along" back), and the gap's ends, where the room opens, let
+        // the school's pull have it again. A real dead end still flips the side through the refused step.
+        if (MathF.Abs(Wrap(want - _heading)) > MathF.PI / 2)
+        {
+            _wallSide = -_wallSide;
+            want = MathF.Atan2(-alongY + 0.6f * awayY, -alongX + 0.6f * awayX);
+        }
+        _heading = want;
     }
 
     /// <summary>

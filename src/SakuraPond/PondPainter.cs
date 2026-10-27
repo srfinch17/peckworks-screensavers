@@ -149,6 +149,19 @@ internal sealed class Pond
     /// </summary>
     public required bool[] StoneTop { get; init; }
 
+    /// <summary>
+    /// A stone's shoulder with under 0.45 of the pond's depth of water over it (the island's hill and the
+    /// formations' hills, marked as Hill raises them): no water for a KOI. A koi could swim anywhere
+    /// with any water at all under it, so it foraged, looked and crawled over the pale shoulder right
+    /// up to the cap's collar and hung there at the surface, bright, for seconds at a time: a fish
+    /// lying on the rock, to the eye ("fish still arent handling the rock well", 2026-10-27; on one
+    /// seed 79 standstills of 1.5 s or more at the stones in five minutes, most over a bed under half
+    /// depth). Physically the fish fit; the painting says the shoulder is the stone, so the fish keep
+    /// to where the flank is clearly under water. The bank's own shallows are NOT in this mask (the
+    /// prawns live there and a hungry koi noses down to them); only the stones' hills are.
+    /// </summary>
+    public required bool[] StoneShoal { get; init; }
+
     /// <summary>The rocks on the bank, for the lizard to climb and bask on.</summary>
     public required IReadOnlyList<BankRock> Rocks { get; init; }
 
@@ -435,6 +448,33 @@ internal static class PondPainter
         // past it, but a koi that swam out of view for a minute would be a koi
         // nobody sees. They turn before the edge, as they turn before the shore.
         int[] swimDist = DistanceToEdge(swim, w, h, edgeIsBank: true);
+        // CREVICES CLOSED (round thirty-six). A gap between two of a stone's caps narrower than about 0.032u is no
+        // water to steer in: a minnow that followed a cap's wall into one spun there for a whole run (the room
+        // grid's "open way" flips across a gap's midline), and a koi's feelers read it as a sliver of room to aim
+        // at. A morphological closing of the walls, by a second distance transform: water within r of a wall is
+        // "near"; near water further than r from any water that is NOT near is a crevice, filled in. Run only in a
+        // box round each stone (the boxed transform, a few ms; whole-frame it cost a second of the start at 1080p),
+        // so the bank's own nooks are as they were. Only the room grid changes: the picture, the bed and the Land
+        // mask are untouched (a frog still sits on a cap; a koi's step test reads Land, not this).
+        int crevT = (int)(u * 0.016f * 10);                                             // r, in the transform's tenths of a pixel
+        var near = new bool[w * h];
+        for (int i = 0; i < near.Length; i++) near[i] = swimDist[i] <= crevT;          // walls and the water within r of one
+        bool closedAny = false;
+        foreach (Island? st in (ReadOnlySpan<Island?>)[island, formation?.Stone, formation2?.Stone])
+        {
+            if (st is not Island stone) continue;
+            int boxR = (int)(stone.Radius + u * 0.1f);
+            int bx0 = Math.Max(0, (int)stone.Centre.X - boxR), bx1 = Math.Min(w - 1, (int)stone.Centre.X + boxR);
+            int by0 = Math.Max(0, (int)stone.Centre.Y - boxR), by1 = Math.Min(h - 1, (int)stone.Centre.Y + boxR);
+            int[] toWide = DistanceToEdge(near, w, h, false, bx0, by0, bx1, by1);     // from a near pixel to the nearest wide water, inside the box
+            for (int y = by0; y <= by1; y++)
+                for (int x = bx0; x <= bx1; x++)
+                {
+                    int i = y * w + x;
+                    if (swim[i] && near[i] && toWide[i] > crevT) { swim[i] = false; closedAny = true; }
+                }
+        }
+        if (closedAny) swimDist = DistanceToEdge(swim, w, h, edgeIsBank: true);
         var room = new float[gw * gh];
         for (int gy = 0; gy < gh; gy++)
             for (int gx = 0; gx < gw; gx++)
@@ -480,11 +520,12 @@ internal static class PondPainter
         // (The rock formation's stone is a hill the same way, once per cap: the
         // bed under it is the lowest of the hills, so between two caps it stays
         // shallow.)
-        if (island is Island hill) Hill(floor, hill.Cap, hill.Radius + u * 0.05f, hill.CapRadius * 1.5f, w, h);
+        var stoneShoal = new bool[w * h];                      // the hills' shoulders with too little water for a koi (StoneShoal)
+        if (island is Island hill) Hill(floor, stoneShoal, hill.Cap, hill.Radius + u * 0.05f, hill.CapRadius * 1.5f, w, h);
         if (formation is Formation fm)
-            for (int k = 0; k < fm.Caps.Length; k++) Hill(floor, fm.Caps[k], fm.Stone.Radius + u * 0.04f, fm.CapRadii[k] * 1.4f, w, h);
+            for (int k = 0; k < fm.Caps.Length; k++) Hill(floor, stoneShoal, fm.Caps[k], fm.Stone.Radius + u * 0.04f, fm.CapRadii[k] * 1.4f, w, h);
         if (formation2 is Formation fm2)
-            for (int k = 0; k < fm2.Caps.Length; k++) Hill(floor, fm2.Caps[k], fm2.Stone.Radius + u * 0.04f, fm2.CapRadii[k] * 1.4f, w, h);
+            for (int k = 0; k < fm2.Caps.Length; k++) Hill(floor, stoneShoal, fm2.Caps[k], fm2.Stone.Radius + u * 0.04f, fm2.CapRadii[k] * 1.4f, w, h);
 
         // The heap: every pixel a drifted petal touched that is still open water in the finished picture (a rock or the
         // log painted over it later is not water, so it is left out; the branch shade darkened it, and the backdrop pixel
@@ -496,7 +537,7 @@ internal static class PondPainter
         {
             Width = w, Height = h, U = u,
             Pixels = beforeBranches, Branches = boughs, TreeRoots = treeRoots,
-            Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(), StoneTop = stoneTop,
+            Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(), StoneTop = stoneTop, StoneShoal = stoneShoal,
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
             Rocks = rocks, Log = log, Island = island, Formation = formation, Formation2 = formation2,
@@ -1056,7 +1097,9 @@ internal static class PondPainter
     /// cap, climbing (smoothly) to nothing at the cap's rim ("inner"), so a fish
     /// crossing rises up and over and goes round the dry top.
     /// </summary>
-    private static void Hill(byte[] floor, PointF cap, float outer, float inner, int w, int h)
+    /// <summary>Raises one hill into the bed (see the island note in Paint), and marks its shoulder where the water left
+    /// over it is under 0.45 of the pond's depth (Pond.StoneShoal: a koi keeps off it).</summary>
+    private static void Hill(byte[] floor, bool[] shoal, PointF cap, float outer, float inner, int w, int h)
     {
         int x0 = Math.Max(0, (int)(cap.X - outer)), x1 = Math.Min(w - 1, (int)(cap.X + outer));
         int y0 = Math.Max(0, (int)(cap.Y - outer)), y1 = Math.Min(h - 1, (int)(cap.Y + outer));
@@ -1069,6 +1112,7 @@ internal static class PondPainter
                 float f = d <= 0 ? 0 : d * d * (3 - 2 * d);
                 int i = y * w + x;
                 floor[i] = (byte)Math.Min(floor[i], (int)(f * 255));
+                if (f < 0.45f) shoal[i] = true;
             }
     }
 

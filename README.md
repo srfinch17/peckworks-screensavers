@@ -103,7 +103,8 @@ and drifts in a lull, so no two fall the same way.
   plain red-orange) cruise the whole pond: a few tail beats, then a long glide. Each body bends
   through its turns along the path its head swam, never flipped or slid. They swim at real depths:
   the pond has a bed that slopes up to the bank and to every rock, a fish is never deeper than
-  the water under any part of its body and rises up the slope before the shallows, a deep fish
+  the water under any part of its body and rises up the slope before the shallows (and keeps off
+  a stone's shoulders, where the water would be under half the pond's depth), a deep fish
   sits lower on the screen than the water above it (we look at the pond at a slant) and comes up
   the screen as it rises, and in the shallows it throws a shadow on the bed, a soft echo right
   under it that fades as it rises off the bed (never thrown far: a shadow a body length away

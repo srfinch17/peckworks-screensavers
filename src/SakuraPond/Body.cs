@@ -267,7 +267,18 @@ internal abstract class Body
     /// of a deeper fish it swims over.
     /// </summary>
     protected void PaintShadow(FrameBuffer fb, bool[]? onlyWhere, float dx, float dy, float alpha, float soft, Rectangle? clip = null)
-        => Paint(fb, onlyWhere, null, 0, soft, null, dx, dy, alpha, null, clip);
+    {
+        // Paint tells a shadow from a body by the shadow's strength in 256ths being more than
+        // nothing. A strength under a 256th rounds to nothing, and Paint then painted the BODY,
+        // in full colour, crisp, with no water over it, at the shadow's offset: a second, bright
+        // koi a few pixels down and right of the real one for a frame or two, whenever the
+        // shadow's strength passed through that sliver on its way to zero (the branches' shade
+        // takes it there: "under the branches ... the animals will flash brightly ... and then
+        // glitch", 2026-10-27, found on frame 40 of seed 7 at 720p). A shadow too faint to paint
+        // is not painted at all; every animal's shadow comes through here.
+        if (alpha * 256 < 1) return;
+        Paint(fb, onlyWhere, null, 0, soft, null, dx, dy, alpha, null, clip);
+    }
 
     /// <summary>
     /// This animal's shadow thrown onto something a "gap" below it in the water

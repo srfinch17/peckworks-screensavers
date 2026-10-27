@@ -978,6 +978,22 @@ distance actually swum, so a fish that cannot move does not pretend to swim. The
 is the two halves meeting: a dragonfly asks where the nearest school is, flies over, hovers, skims
 low tapping the water three times (three small rings), and the taps call the school; then it darts
 off far and its timer runs before it plays again, taking the schools in turn.
+Two things were missing from the wall-following until round thirty-six ("a minnow can swim in there and
+never get back out. it just spins in fast littke circles forever", at a formation with three caps). The
+heading it sets comes from the room grid's "open way" (the direction of more room), and in a gap between
+two caps that direction points at one cap from one side of the gap's midline and at the other cap from
+the other side, so a fish crossing the midline by a pixel had its heading flipped right round, every
+frame, and stood vibrating in the gap at full speed (four fish for 288 s each on the stress run, the
+heading through 4300 turns). Now a heading that would turn more than a right angle from the one it has
+is read as the ridge, not a wall, and the remembered side flips so the fish keeps on along the gap; and
+a fish that has followed for two seconds with room round it lets go whatever the line to the school says
+(a target behind a stone is never in clear sight: a fish zigzagged on a ridge of open water for 75 s).
+And the gaps themselves are closed: a crevice between two of a stone's caps narrower than about 0.032u is
+filled in on the room grid by a morphological closing of the walls (a second distance transform, run in
+a box round each stone; the picture, the bed and the Land mask are untouched), so no animal steers
+into a gap it cannot turn in. Measured with every school sent to the three-cap formation for five
+minutes (`PECKWORKS_MINNOWGOAL`): fish-seconds spinning 6030 before, 9 after, the rest of the "spins"
+the mill round a lure that is meant to be there.
 
 *Tadpoles hang, burst and grow up.* A clutch (`Tadpoles.cs`: `Tadpoles` holds clutches, a `Clutch`
 is the cluster, a `Tadpole` is one animal and, later, the froglet it becomes) lives in water shallow
@@ -1272,7 +1288,12 @@ of it as well as under it, and when it is deeper than that bed allows it rises a
 (round thirty-five, "snake gets hung up on prawn somehow. happened near a rock": with the head
 rising only with the bed already under it, every step at a steep slope, a rock's hill where the
 prawns live, was refused until the 5 s jam breaker, the koi's old deadlock in a new body).
-`PECKWORKS_SNAKELOG` names a file for a line per frame (clock, doing, place, depth, speed, the
+`PECKWORKS_MINNOWLOG` names a file for a line per minnow per frame (school, fish, mood, place, heading,
+speed, wall side, room, whether it moved, flash), `PECKWORKS_MINNOWGOAL=island|formation|formation2`
+sends every school's idle target to that stone for a stress run, and `PECKWORKS_MASKDUMP` names a
+folder for the steering masks as PGM pictures (water, open, land, stonetop, shoal, the room grid at
+every pixel) so a script can flood-fill them for a pocket before a mind is blamed (all three round
+thirty-six). `PECKWORKS_SNAKELOG` names a file for a line per frame (clock, doing, place, depth, speed, the
 hunt's note, whether the step was refused, the bed's cap); `PECKWORKS_SNAKEDIVE=1` makes every
 explore and crossing a dive, for the instruments.
 
@@ -1504,6 +1525,20 @@ it could not rise over, "fish still do some weird stuff around the rocks") ends 
 three-second shy toward the deepest water two lengths out, the fish may rise at a slow set rate
 while refused whatever the slide rule says, and for half a minute no goal, rest spot or look is
 chosen within 0.3u of the spot (the first fix chose the same rock to look at and jammed again).
+And a koi KEEPS OFF A STONE'S SHOULDERS (round thirty-six, "fish still arent handling the rock
+well"): a koi could swim anywhere with any water at all under it, so it foraged, looked and crawled
+over the pale shoulder of the island or a formation right up to the cap's collar and hung there at
+the surface, bright, for seconds at a time, which to the eye is a fish lying on the rock (79 and 92
+standstills of 1.5 s or more at the stones in five minutes on two seeds, most over a bed under half
+depth, a forage and a slow wander among them, not only rests). `Pond.StoneShoal` marks every pixel of
+a stone's hill with under 0.45 of the pond's depth of water over it, and the koi's `OnLand` and
+`InWater` read it, so the step rule, the feelers, a push and every goal pick treat the shoulder as a
+wall at once; the bank's own shallows are not in it (the prawns live there). The first run of that
+wall found the oldest deadlock in a new place: the step is refused at the fish's CENTRE, the feelers
+look ahead from the NOSE half a length on, so a fish skimming the shoal's edge at a shallow angle with
+its nose clear was refused every frame and never asked to turn (20 s against the formation, five
+shies, its heading within a tenth of a radian). Now a refused step probes round the centre with the
+step's own tests for the nearest clear heading (`Koi.WayOut`) and the next frame turns to it hard.
 
 *Three-dimensional steering and bumping.* The fish steer in all three directions with the engine's
 steering kit (`Core/Minds/Space.cs`). Each animal keeps a `Body.Shape`, a `Chain`: a string of
@@ -1601,7 +1636,14 @@ petal in the air, a turtle up on a rock), so the owner read it as the fish float
 water. A fish right down on a clear bed still throws the bold close shadow. The koi and the turtles are drawn in one depth order, so a
 turtle (usually near the top) is painted over the koi below it and under a koi that is gulping
 above it; the bed shadows are painted first, under every fish, and fade to nothing in a branch's
-shade. The turtle reads the same floor and sinks on the screen by the same rule;
+shade. (Fading to NOTHING had a trap in it until round thirty-six: `Body.Paint` tells a shadow from
+a body by the shadow's strength in 256ths being more than nothing, so a strength under a 256th, on
+its way to zero under the blossom, painted the BODY, in full colour and crisp with no water over it,
+at the shadow's offset: a second bright koi a few pixels down and right of the hazed one for a frame
+or two, "under the branches ... the animals will flash brightly ... and then glitch". Found on frame
+40 of seed 7 by cropping every deep fish at frames 39, 40 and 41: one fish changed, and its logged
+spine, overlaid, sat above the bright copy by the shadow's offset. `PaintShadow` now paints nothing
+when the strength rounds to nothing, for every animal's shadow.) The turtle reads the same floor and sinks on the screen by the same rule;
 when it dives it follows the same rules as a koi (smaller, hazier, lower, and out of sight past `Light.SeeU`). The floating log is a wall to the koi's
 steering, not something they swim under: what you may see is a deep fish's sunk picture slipping
 under the log's edge, which is what a log floating over a fish looks like.

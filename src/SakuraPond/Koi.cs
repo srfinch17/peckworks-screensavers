@@ -700,6 +700,7 @@ internal sealed class Koi : Body
     private float _avoidX, _avoidY;                       // where it last backed off from (ground), and until when its goals and looks keep clear of it
     private double _avoidUntil;
     private float _stuckFor;                              // seconds its steps have been refused (nosed against something)
+    private float _wayOut = float.NaN;                    // a refused step's answer: the nearest clear heading round the centre, turned to next frame (WayOut)
     private float _dodge;                                 // the climb (negative) or dive (positive) its feelers chose this frame, z per unit forward; 0 = holding its depth
     private Body[] _bodies = [];                          // every body in the water this frame (the school and the turtles), for the feelers
     private Koi[] _school = [];                           // the whole school, kept from Update so an idle goal can be picked near a shoalmate
@@ -1078,6 +1079,14 @@ internal sealed class Koi : Body
             turn += Wrap(best - _heading) * (1f + 3f * urgency);
             cornered = urgency > 0.5f && climb == 0;                                  // a climb or dive is not a corner: no need to slow and swing round
         }
+        // THE REFUSED STEP ITSELF FORCES THE TURN (the kit's rule). The feelers look ahead from the
+        // NOSE; the step is refused at the CENTRE, half a length behind it. A fish skimming a stone's
+        // shoulder at a shallow angle, its nose clear of it, had its step refused every frame and was
+        // never asked to turn: 20 s against the formation on the shoal's first run (seed 3, 259 s), its
+        // heading within a tenth of a radian the whole time, through five shies. So a refused step probes
+        // round the centre with the step's own tests for the nearest clear heading (WayOut), and the
+        // next frame turns to it, hard, as a cornered fish does.
+        if (!float.IsNaN(_wayOut)) { turn += Wrap(_wayOut - _heading) * 4f; cornered = true; _wayOut = float.NaN; }
         // The leap's burst is a climb SWUM at the steepest slope a fish can
         // swim (the dodge's 0.8), not an easing: eased at the gulp's rate from
         // a quarter of the way down it took three and a half seconds to reach
@@ -1165,6 +1174,7 @@ internal sealed class Koi : Body
             // Nose right at the bank: hold here (still turning) rather than swim into it;
             // and after two seconds of that, whatever it was doing is given up.
             _stuckFor += dt;
+            _wayOut = WayOut(step);
             if (_stuckFor > 2) { _stuckFor = 0; Begin(Doing.Wander); }
         }
         float zBefore = Z;
@@ -1320,6 +1330,7 @@ internal sealed class Koi : Body
             // After the spine (so a reader that takes "x:y tokens" still finds them all): the swimming wave's phase, its
             // width and the body length, for measuring the stride (lengths travelled per tail beat) and the wave's speed.
             sb.Append(FormattableString.Invariant($",beat={_phase:F3}:{_amp:F2}:{_len:F1}"));
+            sb.Append(FormattableString.Invariant($",zat={_zAt[0]:F4}:{_zAt[9]:F4}:{_zAt[17]:F4}:{_murkMin:F3}:{_zTop:F4}"));   // the drawn depths (head, middle, tail base), the clearest point's murk and depth: what the picture is painted from
             MotionLog(sb.ToString());
         }
     }
@@ -2138,11 +2149,13 @@ internal sealed class Koi : Body
         Begin(Doing.Investigate);
     }
 
-    /// <summary>The ground, a rock or the log: a koi can never step here. (A lily pad is not land: koi swim under them.)</summary>
+    /// <summary>The ground, a rock or the log, or a stone's shoulder with too little water over it (Pond.StoneShoal): a koi can
+    /// never step here. (A lily pad is not land: koi swim under them.) The step rule, the feelers (RoomAround), a push and every
+    /// placement that calls InWater all read this one test, so the shoulder is a wall to all of them at once.</summary>
     private bool OnLand(PointF p)
     {
         int ix = (int)p.X, iy = (int)p.Y;
-        return ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height || _pond.Land[iy * _pond.Width + ix];
+        return ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height || _pond.Land[iy * _pond.Width + ix] || _pond.StoneShoal[iy * _pond.Width + ix];
     }
 
     /// <summary>Open water in view (not under a pad, not under the branches): where a fish nosing at something can be seen doing it.</summary>
@@ -2169,7 +2182,7 @@ internal sealed class Koi : Body
     private bool InWater(PointF p)
     {
         int ix = (int)p.X, iy = (int)p.Y;
-        return ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _where[iy * _pond.Width + ix];
+        return ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _where[iy * _pond.Width + ix] && !_pond.StoneShoal[iy * _pond.Width + ix];   // (a goal on a stone's shoulder would pull the fish at a wall: see OnLand)
     }
 
     /// <summary>
@@ -2327,6 +2340,29 @@ internal sealed class Koi : Body
         _avoidX = _x; _avoidY = _y; _avoidUntil = _time + 30;
         Begin(Doing.Shy);
         _mind.Begin(Doing.Shy, 3f);                                            // a longer shy than a bump's: time to turn and get clear
+    }
+
+    /// <summary>
+    /// The nearest clear heading for a refused step: the step's own tests (land, a stone's shoulder, the
+    /// bed under the body) probed at three short distances from the CENTRE, in the eight compass directions
+    /// nearest the present heading first and a side at a time, so the smallest turn that clears the thing
+    /// wins. Straight behind if nothing is clear: a fish cannot reverse, but turning toward "behind" swings
+    /// it round in place until a probe ahead is clear.
+    /// </summary>
+    private float WayOut(float step)
+    {
+        for (int k = 1; k <= 3; k++)
+            foreach (int side in (ReadOnlySpan<int>)[1, -1])
+            {
+                float a = _heading + side * k * MathF.PI / 4, ca = MathF.Cos(a), sa = MathF.Sin(a);
+                bool clear = true;
+                foreach (float d in (ReadOnlySpan<float>)[step * 2, _len * 0.2f, _len * 0.45f])
+                {
+                    if (OnLand(ToScreen(_x + ca * d, _y + sa * d)) || Z > 0.9f * BedUnder(_x + ca * d, _y + sa * d)) { clear = false; break; }
+                }
+                if (clear) return a;
+            }
+        return _heading + MathF.PI;
     }
 
     /// <summary>Is this screen point within 0.3u of where it last backed off from, while that memory lasts?</summary>
