@@ -332,8 +332,14 @@ internal static class ShorePainter
     /// caps touch. Open water a little way out from the bank, under open sky,
     /// clear of the island. Null if no spot is found (a very odd screen).
     /// </summary>
-    public static Formation? PlaceFormation(bool[] inPond, int[] dist, byte[] shade, Island? island, int w, int h, float u, Random rng)
+    /// <param name="region">Where to look, as fractions of the screen (left, top, width, height); the lower left half by default.</param>
+    /// <param name="corner">The screen point the winning spot is nearest to; the lower left corner by default.</param>
+    /// <param name="avoid">Another formation's stone to keep clear of (the second formation keeps off the first).</param>
+    public static Formation? PlaceFormation(bool[] inPond, int[] dist, byte[] shade, Island? island, int w, int h, float u, Random rng,
+                                            RectangleF? region = null, PointF? corner = null, Island? avoid = null)
     {
+        RectangleF reg = region ?? new RectangleF(0.05f, 0.42f, 0.45f, 0.5f);
+        PointF near = corner ?? new PointF(0, h);
         float r = u * (0.055f + 0.02f * (float)rng.NextDouble());
         int n = 2 + rng.Next(2);
         // Of several hundred random spots in the lower left half of the pond that pass the tests,
@@ -344,7 +350,7 @@ internal static class ShorePainter
         PointF best = default; float bestScore = float.MaxValue;
         for (int tries = 0; tries < 600; tries++)
         {
-            float x = w * (0.05f + 0.45f * (float)rng.NextDouble()), y = h * (0.42f + 0.5f * (float)rng.NextDouble());
+            float x = w * (reg.X + reg.Width * (float)rng.NextDouble()), y = h * (reg.Y + reg.Height * (float)rng.NextDouble());
             int i = (int)y * w + (int)x;
             if (!inPond[i] || dist[i] < u * 0.2f * 10) continue;
             bool shaded = false;
@@ -357,7 +363,8 @@ internal static class ShorePainter
             if (shaded) continue;
             if (x < r + u * 0.05f || x > w - r - u * 0.05f || y < r + u * 0.05f || y > h - r - u * 0.08f) continue;
             if (island is Island isle && Dist(isle.Centre, new PointF(x, y)) < isle.Radius + r + u * 0.1f) continue;
-            float score = Dist(new PointF(x, y), new PointF(0, h)) * (0.9f + 0.2f * (float)rng.NextDouble());
+            if (avoid is Island other && Dist(other.Centre, new PointF(x, y)) < other.Radius + r + u * 0.12f) continue;
+            float score = Dist(new PointF(x, y), near) * (0.9f + 0.2f * (float)rng.NextDouble());
             if (score < bestScore) { bestScore = score; best = new PointF(x, y); }
         }
         if (bestScore < float.MaxValue)

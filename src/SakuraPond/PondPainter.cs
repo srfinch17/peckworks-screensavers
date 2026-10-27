@@ -118,7 +118,7 @@ internal sealed class Pond
     /// to the bed, the way its painted bed is hidden; near the bank the floor
     /// is shallow and a fish there is always in sight.
     /// </summary>
-    public const float DepthU = 0.4f;
+    public const float DepthU = 0.48f;   // (0.4 until 2026-10-27, "make the pond a little deeper": a fish on the bed is drawn a fifth further down the screen and a touch smaller; Light.SeeU rose with it so it keeps the haze it had)
 
     /// <summary>How much sun reaches each pixel, 0 to 255 (the branches' shadows are darker).</summary>
     public required byte[] Sun { get; init; }
@@ -157,6 +157,9 @@ internal sealed class Pond
 
     /// <summary>The small rock formation at the lower left (in the log's place when the log is off), if the seed found room for one.</summary>
     public required Formation? Formation { get; init; }
+
+    /// <summary>The second rock formation (upper right, 2026-10-27), painted and walled like the first; null when the first found no place.</summary>
+    public required Formation? Formation2 { get; init; }
 
     /// <summary>The island rock out in the water, if the seed found room for one (nearly always).</summary>
     public required Island? Island { get; init; }
@@ -335,21 +338,33 @@ internal static class PondPainter
         // The small rock formation at the lower left, where the log lay (none while the log is on): the same
         // painting as the island's, a stone going under with little dry caps, each cap a rock to every animal.
         Formation? formation = fallenLog ? null : ShorePainter.PlaceFormation(inPond, dist, shade, island, w, h, u, rng);
-        if (formation is Formation form)
+        // A second formation (2026-10-27, "i like the rocks we have. add one more"): the same thing in the upper right
+        // half, nearest the upper right corner, clear of the island and the first. Its dice are its own, seeded from
+        // the first formation's place, so every roll after it (the pads, the cattails, the irises) is what it was.
+        Formation? formation2 = null;
+        if (formation is Formation first)
+        {
+            var rng2 = new Random(unchecked((int)first.Stone.Centre.X * 31 + (int)first.Stone.Centre.Y * 7 + w));
+            formation2 = ShorePainter.PlaceFormation(inPond, dist, shade, island, w, h, u, rng2, new RectangleF(0.5f, 0.08f, 0.45f, 0.42f), new PointF(w, 0), first.Stone);
+            PaintFormation(first, rng);
+            if (formation2 is Formation second) PaintFormation(second, rng2);
+        }
+        // One stone with little dry caps, painted the island's way: the stone bare, each cap a rock of its own and a
+        // blocker, the water wrapped over the union of the caps. The wrap reads the stone's depth from the nearest
+        // cap's rim, so between two caps half a radius apart the stone stays shallow and in sight, one stone with two
+        // tops (the first render, which faded each cap on its own, left each in a dark cloud of its own). The hill is
+        // the one the bed climbs under the fish (Hill, below), with the same numbers.
+        void PaintFormation(Formation form, Random r)
         {
             uint[] beforeForm = Read(bmp);
-            bool[] stone = ShorePainter.IslandStone(g, form.Stone, w, h, u, rng);
+            bool[] stone = ShorePainter.IslandStone(g, form.Stone, w, h, u, r);
             bool[] caps = new bool[w * h];
             for (int k = 0; k < form.Caps.Length; k++)
             {
-                bool[] one = ShorePainter.IslandCap(g, gb, form.Stone with { Cap = form.Caps[k], CapRadius = form.CapRadii[k] }, w, h, u, rng);
+                bool[] one = ShorePainter.IslandCap(g, gb, form.Stone with { Cap = form.Caps[k], CapRadius = form.CapRadii[k] }, w, h, u, r);
                 for (int i = 0; i < caps.Length; i++) caps[i] |= one[i];
                 rocks.Add(new BankRock(form.Caps[k], form.CapRadii[k], InWater: true));
             }
-            // The wrap reads the stone's depth from the nearest cap's rim, so between two caps half a radius
-            // apart the stone stays shallow and in sight, one stone with two tops (the first render, which
-            // faded each cap on its own, left each in a dark cloud of its own). The hill is the one the bed
-            // climbs under the fish (Hill, below), with the same numbers.
             WrapIsland(bmp, beforeForm, stone, caps, form.Stone with { Cap = form.Caps[0], CapRadius = form.CapRadii[0] }, dist, form.Stone.Radius + u * 0.04f, form.CapRadii[0] * 0.4f, stoneTop, w, h, u);
         }
         PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
@@ -357,7 +372,7 @@ internal static class PondPainter
 
         // ---- 4: on the water ----
         var pads = new List<LilyPad>();
-        LilyPads(g, gp, pads, inPond, dist, cattails, island, formation?.Stone, w, h, u, rng);
+        LilyPads(g, gp, pads, inPond, dist, cattails, island, formation?.Stone, formation2?.Stone, w, h, u, rng);
 
         // ---- 5: branch shadows, then the branches ----
         px = Read(bmp);
@@ -468,6 +483,8 @@ internal static class PondPainter
         if (island is Island hill) Hill(floor, hill.Cap, hill.Radius + u * 0.05f, hill.CapRadius * 1.5f, w, h);
         if (formation is Formation fm)
             for (int k = 0; k < fm.Caps.Length; k++) Hill(floor, fm.Caps[k], fm.Stone.Radius + u * 0.04f, fm.CapRadii[k] * 1.4f, w, h);
+        if (formation2 is Formation fm2)
+            for (int k = 0; k < fm2.Caps.Length; k++) Hill(floor, fm2.Caps[k], fm2.Stone.Radius + u * 0.04f, fm2.CapRadii[k] * 1.4f, w, h);
 
         // The heap: every pixel a drifted petal touched that is still open water in the finished picture (a rock or the
         // log painted over it later is not water, so it is left out; the branch shade darkened it, and the backdrop pixel
@@ -482,7 +499,7 @@ internal static class PondPainter
             Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(), StoneTop = stoneTop,
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
-            Rocks = rocks, Log = log, Island = island, Formation = formation,
+            Rocks = rocks, Log = log, Island = island, Formation = formation, Formation2 = formation2,
             Shore = shore,
         };
     }
@@ -623,6 +640,22 @@ internal static class PondPainter
     private static void PourWater(uint[] px, bool[] inPond, int[] dist, byte[] depth, int w, int h, float u)
     {
         float full = u * 0.24f * 10f;                       // depth reaches its deepest this far from the bank (dist is in tenths)
+        // THE BED IS UNEVEN (2026-10-27, "make the depths be uneven, like the pondbed has deeper and shallower
+        // spots"): a handful of broad, soft hollows and humps (bumps a quarter to a third of u across) scale the
+        // depth by up to a quarter either way, and more the further from the bank, so the shallows keep their
+        // slope and the open pond has deeper and shallower places. Everything reads the depth from this one
+        // array (the water's colour, the bed's clearness, the floor the fish feel, the sink and the haze), so a
+        // hump is a real rise of the bed to every swimmer. The bumps roll their OWN dice, seeded from the
+        // screen's size, so nothing else in the scene moved when they came.
+        var bumpRng = new Random(w * 7919 + h * 104729 + 7);
+        const int bumps = 7;
+        float[] bx = new float[bumps], by = new float[bumps], br = new float[bumps], bk = new float[bumps];
+        for (int k = 0; k < bumps; k++)
+        {
+            bx[k] = (float)bumpRng.NextDouble() * w; by[k] = (float)bumpRng.NextDouble() * h;
+            br[k] = 1 / (u * (0.18f + 0.14f * (float)bumpRng.NextDouble()));                  // kept as the reciprocal: a multiply per pixel, not a divide
+            bk[k] = (k % 2 == 0 ? 1 : -1) * (0.6f + 0.4f * (float)bumpRng.NextDouble());   // humps and hollows by turns
+        }
         for (int y = 0; y < h; y++)
         {
             for (int x = 0; x < w; x++)
@@ -631,6 +664,13 @@ internal static class PondPainter
                 if (!inPond[i]) continue;
                 float d = Math.Clamp(dist[i] / full, 0f, 1f);
                 d = d * d * (3 - 2 * d);                     // smoothstep: the slope eases in from the edge and flattens in the middle
+                float n = 0;
+                for (int k = 0; k < bumps; k++)
+                {
+                    float ex = (x - bx[k]) * br[k], ey = (y - by[k]) * br[k], q = ex * ex + ey * ey;
+                    if (q < 4) { float f = 1 - q * 0.25f; n += bk[k] * f * f; }   // a smooth bump, gone two radii out
+                }
+                d = Math.Clamp(d * (1 + 0.18f * Math.Clamp(n, -1, 1) * d), 0, 1);   // (a quarter and tighter bumps on the first run: a forager climbing a hump could not rise as fast as the slope, and jammed)
                 depth[i] = (byte)(d * 255);
 
                 // (No dark line at the edge here: the edge is alive, Shoreline paints it every frame.)
@@ -683,7 +723,7 @@ internal static class PondPainter
     /// middle (the notch real lily pads have), seen at our slant, so a little
     /// flatter than round. Veins run out from the middle.
     /// </summary>
-    private static void LilyPads(Graphics g, Graphics gb, List<LilyPad> pads, bool[] inPond, int[] dist, PointF cattails, Island? island, Island? formation, int w, int h, float u, Random rng)
+    private static void LilyPads(Graphics g, Graphics gb, List<LilyPad> pads, bool[] inPond, int[] dist, PointF cattails, Island? island, Island? formation, Island? formation2, int w, int h, float u, Random rng)
     {
         int clusters = 3;
         int tries = 0;
@@ -697,6 +737,7 @@ internal static class PondPainter
             if (Math.Abs(cattails.X - x) + Math.Abs(cattails.Y - y) < u * 0.22f) continue;        // not among the cattails
             if (island is Island isle && Dist(isle.Centre, new PointF(x, y)) < isle.Radius + u * 0.2f) continue;   // not on or against the island rock
             if (formation is Island fm && Dist(fm.Centre, new PointF(x, y)) < fm.Radius + u * 0.15f) continue;     // nor the rock formation's stone
+            if (formation2 is Island fm2 && Dist(fm2.Centre, new PointF(x, y)) < fm2.Radius + u * 0.15f) continue;  // nor the second's
             clusters--;
             int n = 8 + rng.Next(8);
             for (int k = 0; k < n; k++)
@@ -1071,9 +1112,6 @@ internal static class PondPainter
     {
         uint[] px = Read(bmp);                                                          // the stone and its cap, painted whole, each at its place on the ground
         uint[] outPx = (uint[])px.Clone();                                              // what the water leaves of them
-        int[] inStone = DistanceToEdge(stone, w, h, edgeIsBank: false);               // tenths of a pixel in from the stone's own edge
-        int[] inCap = DistanceToEdge(cap, w, h, edgeIsBank: false);                   // the same for the cap
-        int[] outCap = DistanceToEdge(cap.Select(c => !c).ToArray(), w, h, edgeIsBank: false);   // for pixels outside the cap: how far from its rim
         float edge = isle.Radius * 0.2f * 10, band = u * 0.012f * 10, full = u * 0.24f * 10;
         float slope = MathF.Max(1, hillOuter - isle.CapRadius - collar);              // pixels from the collar's edge down to full depth
         float sinkMax = Light.SinkPx(1, u);                                            // how far down the screen the deepest part of the stone is drawn
@@ -1084,6 +1122,12 @@ internal static class PondPainter
         int x0 = Math.Max(0, (int)(isle.Centre.X - reach)), x1 = Math.Min(w - 1, (int)(isle.Centre.X + reach));
         int y0 = Math.Max(0, (int)(isle.Centre.Y - reach)), y1 = Math.Min(h - 1, (int)(isle.Centre.Y + reach + sinkMax) + 2);
         int bw = x1 - x0 + 1;
+        // The three distance maps, inside the box only (every edge a boxed pixel measures to is in the box).
+        int[] inStone = DistanceToEdge(stone, w, h, false, x0, y0, x1, y1);          // tenths of a pixel in from the stone's own edge
+        int[] inCap = DistanceToEdge(cap, w, h, false, x0, y0, x1, y1);              // the same for the cap
+        bool[] notCap = new bool[w * h];
+        for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) notCap[y * w + x] = !cap[y * w + x];
+        int[] outCap = DistanceToEdge(notCap, w, h, false, x0, y0, x1, y1);          // for pixels outside the cap: how far from its rim
         // How deep the stone is at a ground pixel: the hill the bed climbs under the fish (Hill),
         // read from the cap's PAINTED rim so the collar follows the cap's lumps, and never deeper
         // than the water itself is (near the bank the pond is shallow and so is the stone).
@@ -1238,44 +1282,55 @@ internal static class PondPainter
     /// neighbours. Like asking everyone in a crowd "how far to the exit?",
     /// where each person only asks the people next to them and adds one step.
     /// </summary>
-    private static int[] DistanceToEdge(bool[] inside, int w, int h, bool edgeIsBank)
+    private static int[] DistanceToEdge(bool[] inside, int w, int h, bool edgeIsBank) => DistanceToEdge(inside, w, h, edgeIsBank, 0, 0, w - 1, h - 1);
+
+    /// <summary>
+    /// The same, run only inside a box (the array is still the whole frame,
+    /// so the answers index as before; outside the box they are 0). Right
+    /// whenever every edge a boxed pixel is nearest to lies inside the box
+    /// (a stone and its cap in a box a little bigger than the stone), and
+    /// three whole-frame sweeps per stone, three stones, cost a second and a
+    /// half of the start (2026-10-27).
+    /// </summary>
+    private static int[] DistanceToEdge(bool[] inside, int w, int h, bool edgeIsBank, int bx0, int by0, int bx1, int by1)
     {
         const int Far = int.MaxValue / 4;
         var d = new int[w * h];
-        for (int i = 0; i < d.Length; i++) d[i] = inside[i] ? Far : 0;
+        for (int y = by0; y <= by1; y++)
+            for (int x = bx0; x <= bx1; x++) { int i = y * w + x; d[i] = inside[i] ? Far : 0; }
         if (edgeIsBank)
         {
             // A wall just outside the screen: the border pixels are one step from it.
-            for (int x = 0; x < w; x++) { d[x] = Math.Min(d[x], 10); d[(h - 1) * w + x] = Math.Min(d[(h - 1) * w + x], 10); }
-            for (int y = 0; y < h; y++) { d[y * w] = Math.Min(d[y * w], 10); d[y * w + w - 1] = Math.Min(d[y * w + w - 1], 10); }
+            for (int x = bx0; x <= bx1; x++) { if (by0 == 0) d[x] = Math.Min(d[x], 10); if (by1 == h - 1) d[(h - 1) * w + x] = Math.Min(d[(h - 1) * w + x], 10); }
+            for (int y = by0; y <= by1; y++) { if (bx0 == 0) d[y * w] = Math.Min(d[y * w], 10); if (bx1 == w - 1) d[y * w + w - 1] = Math.Min(d[y * w + w - 1], 10); }
         }
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
+        for (int y = by0; y <= by1; y++)
+            for (int x = bx0; x <= bx1; x++)
             {
                 int i = y * w + x;
                 if (d[i] == 0) continue;
                 int best = d[i];
-                if (x > 0) best = Math.Min(best, d[i - 1] + 10);
-                if (y > 0)
+                if (x > bx0) best = Math.Min(best, d[i - 1] + 10);
+                if (y > by0)
                 {
                     best = Math.Min(best, d[i - w] + 10);
-                    if (x > 0) best = Math.Min(best, d[i - w - 1] + 14);
-                    if (x < w - 1) best = Math.Min(best, d[i - w + 1] + 14);
+                    if (x > bx0) best = Math.Min(best, d[i - w - 1] + 14);
+                    if (x < bx1) best = Math.Min(best, d[i - w + 1] + 14);
                 }
                 d[i] = best;
             }
-        for (int y = h - 1; y >= 0; y--)
-            for (int x = w - 1; x >= 0; x--)
+        for (int y = by1; y >= by0; y--)
+            for (int x = bx1; x >= bx0; x--)
             {
                 int i = y * w + x;
                 if (d[i] == 0) continue;
                 int best = d[i];
-                if (x < w - 1) best = Math.Min(best, d[i + 1] + 10);
-                if (y < h - 1)
+                if (x < bx1) best = Math.Min(best, d[i + 1] + 10);
+                if (y < by1)
                 {
                     best = Math.Min(best, d[i + w] + 10);
-                    if (x < w - 1) best = Math.Min(best, d[i + w + 1] + 14);
-                    if (x > 0) best = Math.Min(best, d[i + w - 1] + 14);
+                    if (x < bx1) best = Math.Min(best, d[i + w + 1] + 14);
+                    if (x > bx0) best = Math.Min(best, d[i + w - 1] + 14);
                 }
                 d[i] = best;
             }

@@ -133,6 +133,13 @@ internal sealed class Snake : Body
     private readonly float _u, _often, _len, _wide;
     private readonly PointF[] _trail = new PointF[400];
     private int _trailHead, _trailCount;
+    // THE DIVE (2026-10-27): the head's depth, where it is going, the depth the head had at each remembered spot (so the body
+    // follows it down and up the way the koi's does, Koi._trailZ), each spine point's depth and haze this frame, and the
+    // stencil for a deep snake (Open less the stones' collars and caps, Pond.StoneTop, which stand in front of it).
+    private readonly float[] _trailZ = new float[400];
+    private float _zHead, _zTarget;
+    private readonly float[] _zAt = new float[Points], _murkAt = new float[Points];
+    private readonly bool[] _openDeep;
 
     // Everything on the pond it must go round, as circles (lily pads, rocks,
     // the cattail clump, the iris clumps) plus the log as a thick line.
@@ -200,7 +207,7 @@ internal sealed class Snake : Body
 
     // ---- THE CHANCE MEAL ---- (see the class comment)
     private readonly Snatch _snatch;                       // who it is after, how long it will bother, when it may look again (Tadpoles.cs)
-    private readonly Func<Tadpole, bool> _ahead;            // "is it in front of the head?" made once, so a look allocates nothing
+    private readonly Func<ISnack, bool> _ahead;            // "is it in front of the head?" made once, so a look allocates nothing
     private int _snatchSeen;                               // how many catches the snatch had counted when this chase began (to tell a catch from a give-up)
     internal Tadpoles? Prey { get; set; }                  // the pond's tadpoles (set by the scene; null in a pond without any)
 
@@ -241,6 +248,9 @@ internal sealed class Snake : Body
     // For the instruments only (nothing in the drawing or the mind reads these): the last thing that
     // happened in the hunt, as a fixed word, and a counter that goes up each time.
     public string HuntNote = "";
+    /// <summary>The instrument log (PECKWORKS_SNAKELOG names a file, set up in the constructor): one line per frame while it is live. Null in the real pond.</summary>
+    public static Action<string>? MotionLog;
+    private double _clock;                                 // seconds since the scene began (the log's first column; the visit's own clock resets)
     public int HuntSeq, Meetings, Stalks, Abandoned, StrikeCount, Caught, Missed;
     private void Note(string what) { HuntNote = what; HuntSeq++; }
 
@@ -265,6 +275,15 @@ internal sealed class Snake : Body
         _rng = rng;
         _u = pond.U;
         _often = often;
+        string? snakeLog = Environment.GetEnvironmentVariable("PECKWORKS_SNAKELOG");
+        if (!string.IsNullOrEmpty(snakeLog) && MotionLog == null)
+        {
+            var writer = new StreamWriter(snakeLog) { AutoFlush = false };
+            MotionLog = line => writer.WriteLine(line);
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => writer.Flush();
+        }
+        _openDeep = new bool[pond.Open.Length];
+        for (int i = 0; i < _openDeep.Length; i++) _openDeep[i] = pond.Open[i] && !pond.StoneTop[i];
         _len = _u * 0.3f;
         _wide = _u * 0.0068f;
         for (int i = 0; i < Points; i++) Along[i] = i / (Points - 1f);
@@ -308,7 +327,20 @@ internal sealed class Snake : Body
     /// clips through anything in this universe). The snake is the lighter but
     /// is never moved by a fish: it answers a touch its own way, by startling.
     /// </summary>
-    public bool InWater => _live && !(_doing == Doing.Bask && _phase is 1 or 2);
+    public bool InWater => _live && !(_doing == Doing.Bask && _phase is 1 or 2) && !Deep;
+
+    /// <summary>Under the surface (the head more than 0.08 of the pond down): drawn under the fish shallower than it (DrawDeep), on no surface list, pushing no petal, hunting nothing.</summary>
+    public bool Deep => _zHead > 0.08f;
+
+    /// <summary>The head's depth, 0 the surface to 1 the pond's full depth (for the instruments).</summary>
+    public float Z => _zHead;
+
+    /// <summary>The bed's depth under a screen point, 0 to 1 of the pond's full depth (Pond.Floor).</summary>
+    private float FloorZ(float x, float y)
+    {
+        int ix = Math.Clamp((int)x, 0, _pond.Width - 1), iy = Math.Clamp((int)y, 0, _pond.Height - 1);
+        return _pond.Floor[iy * _pond.Width + ix] / 255f;
+    }
 
     /// <summary>
     /// A new visit: rolls this snake's two dials, comes in from beyond one edge
@@ -388,6 +420,7 @@ internal sealed class Snake : Body
             wHunt = 0; wExplore = 3f * (0.7f + 0.5f * (1 - _nerve)); wBask *= 3; wCross *= 0.3f;
         }
         if (_alive > 200 + 120 * want) wExplore = wHunt = wBask = wProwl = 0;    // a long visit ends now (a famished one stays a little longer)
+        if (Deep) { wHunt = 0; wBask = 0; wProwl = 0; }                       // under the surface it explores on, or crosses out; the hunts are for a snake at the top
         int pick = Dice.Pick(_rng, [wHunt, wBask, wExplore, wCross, wProwl]);
         if (_fed && pick == 3 && _alive <= 200 && BeginExplore()) return;   // a fed snake keeps its meal on show: it explores before it crosses (the roll is made all the same)
         switch (pick)
@@ -437,7 +470,11 @@ internal sealed class Snake : Body
     /// <summary>Leave: toward a point well beyond the far side of the screen, as seen from here through the pond's middle.</summary>
     private void BeginCross()
     {
-        _mind.Begin(Doing.Cross); _phase = 0; Note("cross");
+        _mind.Begin(Doing.Cross); _phase = 0;
+        // Half of its crossings are dives too (an explore was often over, or a prowl, before the head reached water deep
+        // enough to go down in: one dive begun and nothing seen on the first run). The roll is made either way.
+        _zTarget = _rng.NextDouble() < 0.5 ? 0.3f + 0.4f * (float)_rng.NextDouble() : 0f;
+        Note(_zTarget > 0 ? "cross:dive" : "cross");
         PointF c = _pond.Centre;
         // A fed snake goes straight through the middle: with the usual spread it left along the bottom edge from the land
         // corner, the bulge below the picture for most of the next minute. (The roll is made either way: the dice must not move.)
@@ -459,7 +496,10 @@ internal sealed class Snake : Body
             if (!_pond.Water[i] || !_pond.Open[i] || _pond.RoomAt(x, y) < _u * 0.05f || Clear(x, y) < _u * 0.06f) continue;
             if (Dist(new PointF(x, y), new PointF(_x, _y)) < _u * 0.25f) continue;       // not just next door
             _goal = new PointF(x, y);
-            _mind.Begin(Doing.Explore, 45); _phase = 0; _exploreLeft--; Note("explore");
+            // Half of its explores are DIVES (2026-10-27, "make the snake be willing to go deep also"): down to a third
+            // to seven tenths of the pond on the way to the spot, the body following the head (Update, LaySpine).
+            _zTarget = _rng.NextDouble() < 0.5 ? 0.3f + 0.4f * (float)_rng.NextDouble() : 0f;
+            _mind.Begin(Doing.Explore, 45); _phase = 0; _exploreLeft--; Note(_zTarget > 0 ? "explore:dive" : "explore");
             return true;
         }
         return false;
@@ -627,7 +667,7 @@ internal sealed class Snake : Body
     /// uses). A tadpole behind it was "seen" in the first build, and the snake, whose turning circle is wide at a swim,
     /// spent its five seconds in a long U-turn with the tadpole bolting away behind it.
     /// </summary>
-    private bool AheadOfHead(Tadpole t)
+    private bool AheadOfHead(ISnack t)
     {
         PointF h = Spine[0], n = t.Nose;
         return MathF.Abs(Wrap(MathF.Atan2(n.Y - h.Y, n.X - h.X) - _heading)) < 1.309f;
@@ -635,6 +675,7 @@ internal sealed class Snake : Body
 
     private void LookForTadpole(float dt)
     {
+        if (Deep) return;
         if (Prey == null || _fed || _flee > 0 || !(_doing is Doing.Cross or Doing.Explore) || _phase != 0) return;
         PointF mouth = Spine[0];
         int ix = (int)mouth.X, iy = (int)mouth.Y;
@@ -679,7 +720,7 @@ internal sealed class Snake : Body
             return;
         }
         if (_mind.Over) { _snatch.Abandon(); Decide(); return; }
-        Tadpole prey = _snatch.Prey;
+        ISnack prey = _snatch.Prey;
         // A tadpole that has dived out of reach (a froglet always is within it) is let go: the snake takes what is near the top,
         // and in the first runs it chased a tadpole three tenths of the pond's depth down for its whole five seconds.
         if (prey.Stage < 4 && prey.Z > 0.2f) { _snatch.Abandon(); Decide(); return; }
@@ -764,6 +805,7 @@ internal sealed class Snake : Body
     /// </summary>
     private void Scan()
     {
+        if (Deep) return;
         if (_fed || _strikes >= MaxStrikes || (_lizards == null && _mice == null)) return;
         if (!(_doing is Doing.Cross or Doing.Explore or Doing.Hunt || (_doing == Doing.Bask && _phase == 0))) return;
         PointF head = Spine[0];
@@ -804,6 +846,7 @@ internal sealed class Snake : Body
     /// </summary>
     private void Notice()
     {
+        if (Deep) return;
         if (_fed || _strikes >= MaxStrikes || _prowls >= (_hunger >= 0.8f ? 4 : 3) || (_lizards == null && _mice == null)) return;
         if (!(_doing == Doing.Cross || (_doing == Doing.Explore && _phase == 0))) return;
         float want = Want;
@@ -1062,6 +1105,7 @@ internal sealed class Snake : Body
     {
         _trailHead = (_trailHead + 1) % _trail.Length;
         _trail[_trailHead] = p;
+        _trailZ[_trailHead] = _zHead;
         _trailCount = Math.Min(_trail.Length, _trailCount + 1);
     }
 
@@ -1167,6 +1211,7 @@ internal sealed class Snake : Body
     public void Update(float dt, ReadOnlySpan<PointF> animals, Lizards? lizards = null, Mice? mice = null)
     {
         _lizards = lizards; _mice = mice;
+        _clock += dt;
         _hunger = MathF.Min(1f, _hunger + dt * Appetite / _hungerSecs);      // hunger creeps up whether it is on screen or not
         _snatch.Tick(dt);                                                    // the rest after a chase runs whether it is on screen or not
         // ANY other doing taking over (a fright, a hunt, the jam breaker, the visit ending) ends a chase in progress: one
@@ -1183,6 +1228,15 @@ internal sealed class Snake : Body
             return;
         }
         _alive += dt;
+        // ---- Depth ----
+        // An explore may be a dive (BeginExplore): the head eases down to its target and the body follows it
+        // down the trail (LaySpine); any other doing, and the end of the explore, eases it back up to the
+        // surface over ten seconds or so. Never deeper than the bed under the head allows. Deep, it hunts and
+        // basks at nothing (Decide, Scan, Notice, LookForTadpole), pushes no petal and is on no surface list.
+        if (_doing is not (Doing.Explore or Doing.Cross)) _zTarget = 0;
+        float bedZ = MathF.Max(0, 0.9f * FloorZ(_x, _y) - 0.05f);
+        _zHead += (MathF.Min(_zTarget, bedZ) - _zHead) * (1 - MathF.Exp(-dt * 0.25f));
+        MotionLog?.Invoke(FormattableString.Invariant($"F,{_clock:F3},{_doing},{_phase},{_x:F1},{_y:F1},{_zHead:F3},{_zTarget:F2},{_speed:F1},{HuntNote}"));
 
         // ---- A touch from another animal: startle ----
         // A bold snake feels a touch only when it is close (0.035u), a nervous one
@@ -1344,7 +1398,8 @@ internal sealed class Snake : Body
         float nx = _x + MathF.Cos(_heading) * step, ny = _y + MathF.Sin(_heading) * step;
         float clearNext = Clear(nx, ny);
         float clearHere = Clear(_x, _y);
-        _blocked = !(clearNext > 0 || clearNext >= clearHere);   // never stuck: a step toward more room is always allowed
+        _blocked = !(clearNext > 0 || clearNext >= clearHere)    // never stuck: a step toward more room is always allowed
+                   || (_zHead > 0.9f * FloorZ(nx, ny) && FloorZ(nx, ny) < FloorZ(_x, _y));   // and never into a bed too shallow for its depth (a dive turns at a hill; a step toward deeper water is always allowed)
         if (clearHere < 0 && !(_doing is Doing.Strike or Doing.Swallow or Doing.Stalk or Doing.Miss) && !(_doing == Doing.Bask && _phase >= 1))
         {
             // INSIDE something (a bank rock's circle, entered on a stalk or a strike through its margin): the head walks straight
@@ -1507,26 +1562,34 @@ internal sealed class Snake : Body
         float cy = _pond.Centre.Y;
         int slot = _trailHead, left = _trailCount - 1;
         PointF a = head, b = _trail[slot];
+        float za = _zHead, zb = _trailZ[slot];
         float done = 0, seg = Dist(a, b);
         for (int i = 0; i < Points; i++)
         {
             float want = Along[i] * _len;
             while (done + seg < want && left > 0)
             {
-                done += seg; a = b;
+                done += seg; a = b; za = zb;
                 slot = (slot - 1 + _trail.Length) % _trail.Length; left--;
-                b = _trail[slot]; seg = Dist(a, b);
+                b = _trail[slot]; zb = _trailZ[slot]; seg = Dist(a, b);
             }
             float t = seg > 1e-4f ? Math.Clamp((want - done) / seg, 0, 1) : 0;
-            Spine[i] = new PointF(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t);
+            // Each point's depth is the depth the head had when it passed here (the trail remembers it), so a
+            // diving snake goes down head first and the tail follows; drawn, the point sinks down the screen by
+            // its depth as every swimmer does (Light.SinkPx) and is hazed by it (Light.Murk, nothing at the very
+            // top: on the water it swims clear, as before).
+            float z = za + (zb - za) * t;
+            _zAt[i] = z;
+            _murkAt[i] = Light.Murk(z) * Math.Clamp(z / 0.1f, 0, 1);
+            float sx = a.X + (b.X - a.X) * t, sy = a.Y + (b.Y - a.Y) * t;
+            Spine[i] = new PointF(sx, sy + Light.SinkPx(z, _u));
             Shape.Radius[i] = _wide * Profile(Along[i]);
             // The same point for touching (Core/Minds Chain), on the GROUND
             // plane: the spine is screen pixels, and the pond is squashed down
             // the screen by Ripples.Squash, so the ground y is the screen y
-            // stretched back out from the pond's middle (the koi's ToGround).
-            // Its depth is 0: it swims ON the water, so a koi below it reads
-            // the gap up to it as the gap to any body above, stretched.
-            Shape.Points[i] = new System.Numerics.Vector3(Spine[i].X, cy + (Spine[i].Y - cy) / Ripples.Squash, 0);
+            // stretched back out from the pond's middle (the koi's ToGround),
+            // and the depth is the point's own, in pixels.
+            Shape.Points[i] = new System.Numerics.Vector3(sx, cy + (sy - cy) / Ripples.Squash, z * Pond.DepthU * _u);
         }
         Shape.Seal();
         Widths();
@@ -1540,7 +1603,7 @@ internal sealed class Snake : Body
     {
         for (int i = 0; i < Points; i++)
         {
-            float w = Shape.Radius[i];
+            float w = Shape.Radius[i] * Light.Scale(_zAt[i]);      // smaller the deeper, as a koi is (Light.EyeU)
             if (Along[i] < 0.07f) w *= _mouth;
             if (_bulgeAmp > 0)
             {
@@ -1646,19 +1709,34 @@ internal sealed class Snake : Body
     /// <summary>The floating petals in its way are shoved aside (Petals.PushAside): it swims ON the water, so nothing of it passes under a petal.</summary>
     public void PushPetals(Petals petals)
     {
+        if (Deep) return;                                   // under the surface it brushes no petal
         if (_live) petals.PushAside(Drawn, DrawnHalfWidth);
     }
 
+    /// <summary>At the surface: drawn over the ripples and the floating petals, as before. (A deep snake is drawn by DrawDeep, under the fish.)</summary>
     public void Draw(FrameBuffer fb)
     {
-        if (!_live) return;
-        Paint(fb, _pond.Open, _pond.Sun, 0, MathF.Max(1f, _u * 0.0012f));
+        if (!_live || Deep) return;
+        DrawBody(fb);
+    }
+
+    /// <summary>Under the surface: drawn before the koi school, so every fish shallower than it is painted over it (a fish deeper still is a known pass).</summary>
+    public void DrawDeep(FrameBuffer fb)
+    {
+        if (!_live || !Deep) return;
+        DrawBody(fb);
+    }
+
+    private void DrawBody(FrameBuffer fb)
+    {
+        bool[] st = Deep ? _openDeep : _pond.Open;
+        Paint(fb, st, _pond.Sun, 0, MathF.Max(1f, _u * 0.0012f) * (1 + 2 * _zHead), water: _pond.Pixels, murkAt: _murkAt);
         // The eyes: tiny dark dots either side of the head.
         PointF e0 = Spine[1], e1 = Spine[2];
         float ex = e1.X - e0.X, ey = e1.Y - e0.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));
         float er = MathF.Max(0.7f, _wide * 0.3f);
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
-            Oval(fb, _pond.Open, new PointF(e0.X - ey / el * HalfWidth[1] * 0.7f * side, e0.Y + ex / el * HalfWidth[1] * 0.7f * side), 0, er, er, 20, 20, 16, 0.9f, 0, _pond.Sun);
+            Oval(fb, st, new PointF(e0.X - ey / el * HalfWidth[1] * 0.7f * side, e0.Y + ex / el * HalfWidth[1] * 0.7f * side), 0, er, er, 20, 20, 16, 0.9f, _murkAt[1], _pond.Sun, water: _pond.Pixels);
     }
 }
 

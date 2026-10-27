@@ -134,7 +134,11 @@ and drifts in a lull, so no two fall the same way.
   bluer the deeper it goes until the water hides it, with a small dry cap breaking the surface:
   the cap's rim is wet, the stone just under the surface round it is nearly as bright as the cap,
   and the stone is drawn sunk by its depth the way every fish is, so the dry top is the top of the
-  same boulder and nothing swims between them; a fish deep behind the cap is hidden by it.
+  same boulder and nothing swims between them; a fish deep behind the cap is hidden by it. Two
+  small rock formations stand in the water as well, one toward the lower left and one toward the
+  upper right, each a stone going under with two or three little dry caps. The pond is a little
+  deeper than it was, and its bed is uneven: broad humps and hollows that the water's colour, the
+  bed's clearness and every swimmer's depth all follow.
   The koi swim up and over its shoulders and round the cap, and the water is clear enough now
   that the bed and its stones show through the deepest part.
   The turtle rows as a pond slider does (the diagonal pairs together, a long push, a folded leg
@@ -272,6 +276,9 @@ and drifts in a lull, so no two fall the same way.
   backward with two to four tail flips (the abdomen snaps under, a quarter second apart), sits still
   with its feelers up, and walks back toward home. It is drawn on the bed (sunk, hazed and shrunk like
   the fish above it), is solid to nothing, and each has its own two dials, how bold and how busy.
+  A koi that is at least half hungry, or the turtle when it has not eaten for ten minutes, may spot a prawn within
+  reach and go for it (the same chance meal as a tadpole); the prawn flicks away as it would from any fish, most
+  chases end in a miss, and a prawn that is taken is back at its home from under the stones a few minutes later.
 - **Ducks** (off by default for now; the "Ducks" setting brings them back) swim by now and then: usually a mother with three to six ducklings, sometimes a drake and
   a hen, sometimes a lone drake, of one of four species (the eastern spot-billed duck, mallard,
   mandarin, common teal), each with its own colours seen from above (the mandarin drake's two
@@ -313,7 +320,9 @@ and drifts in a lull, so no two fall the same way.
   small wake, and slips away. It is
   not on rails: it feels its way, goes round the lily pads, the rocks, the log, the island's cap, the cattails and
   the iris clumps rather than over them, pushes the floating petals out of its way, and if a
-  koi, a turtle or the lizard touches it, it startles: a burst of speed, a swing away, rings off its head, then it calms. The koi and
+  koi, a turtle or the lizard touches it, it startles: a burst of speed, a swing away, rings off its head, then it calms. Half of
+  its swims about the pond are dives: it goes down head first to a third to seven tenths of the pond, the body following, drawn
+  smaller and hazier under the fish, and comes up again before it hunts or basks. The koi and
   turtles treat its body as solid (they steer under or round it, and a fish that meets it is pushed out), and the minnows keep
   clear of it as they do of the koi. Each visit is a different snake: it rolls a boldness and a
   nerve, and then chooses what to do by weighted dice, a few things per visit. It may swim out

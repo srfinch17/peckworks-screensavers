@@ -68,6 +68,9 @@ internal sealed class Turtles
     /// <summary>The pond's tadpoles: a turtle that happens upon one may chase and eat it. Set once by the scene.</summary>
     public Tadpoles? Prey { set { foreach (Turtle t in _all) t.Prey = value; } }
 
+    /// <summary>The pond's prawns: a turtle that has not eaten for a while may chase and eat one it happens upon (2026-10-27). Set once by the scene.</summary>
+    public Prawns? PrawnPrey { set { foreach (Turtle t in _all) t.PrawnPrey = value; } }
+
     /// <summary>
     /// Paints the turtles that are up on a perch. KoiSchool leaves those out:
     /// a hauled-out turtle is above the water, so it goes over everything that
@@ -191,8 +194,12 @@ internal sealed class Turtle : Body
     private bool _breathed;                               // floating: has it taken this float's breath at the surface yet
     private PointF? _nibble;                              // the petal it is drifting toward, screen pixels
     private readonly Snatch _snatch;                      // the chance meal in hand (Tadpoles.cs): a tadpole it happened upon
-    private readonly Func<Tadpole, bool> _canReach;       // which prey is in water it can swim in
+    private readonly Func<ISnack, bool> _canReach;       // which prey is in water it can swim in
+    private readonly Func<ISnack, bool> _canReachPrawn;  // a prawn on the shallows' bed: it noses down closer than it would for a tadpole
     internal Tadpoles? Prey { get; set; }                 // the pond's tadpoles (set by the wrapper once the scene has made them)
+    internal Prawns? PrawnPrey { get; set; }              // the pond's prawns (the same way)
+    private float _hungerT;                               // 0 just fed to 1 famished, creeping up over ten minutes: a prawn is worth a chase past half
+    private int _caughtSeen;                              // the snatch's catches counted so far (a new one feeds it)
     private double _time;
 
     /// <summary>Where the head leaves the shell, as s along the body: the head and neck ahead of this turn on the neck; the shell behind it is rigid.</summary>
@@ -269,6 +276,7 @@ internal sealed class Turtle : Body
         // that chased a tadpole in there stood on the spot for the rest of the run (its steps refused by the bed,
         // the first stress run, seed 3). Made once: a look makes no garbage.
         _canReach = t => _pond.RoomAt(t.Nose.X, t.Nose.Y) >= _len * 0.6f && 0.9f * BedUnder(t.X, t.Y) > 0.35f * _len / DepthPx + 0.04f;
+        _canReachPrawn = s => _pond.RoomAt(s.Nose.X, s.Nose.Y) >= _len * 0.3f && 0.9f * BedUnder(s.X, s.Y) > 0.2f * _len / DepthPx + 0.02f;   // (a prawn lives beside a stone: less room than a tadpole's test asks)
         _len = pond.U * 0.1f;
         _wide = _len * 0.24f;
         _skin = Skin(rng);
@@ -410,11 +418,17 @@ internal sealed class Turtle : Body
         _mind.Tick(dt);
         _hauls.Tick(dt);
         _snatch.Tick(dt);
+        _hungerT = MathF.Min(1f, _hungerT + dt / 600f);
+        if (_snatch.Caught > _caughtSeen) { _caughtSeen = _snatch.Caught; _hungerT = 0; }   // fed: the next prawn waits
         if (_doing != Doing.Snatch && _snatch.Hunting) _snatch.Abandon();   // something took over (a slip from the snake, the dice): the meal is forgotten
         // A tadpole or froglet in sight while it cruises or dives: it may single one out. Never on the way to a
         // perch, never afloat (it is resting), and minutes between looks, hit or miss. It sees about 0.1u round
         // its nose; a jumpy turtle is the quicker to go for what moves.
         if (Prey != null && _doing is Doing.Cruise or Doing.Dive && _snatch.Look(Prey, Nose, _pond.U * 0.1f, 0.05f + 0.15f * _nerve, dt, 8f, 200 + 300 * _sunny, ok: _canReach))
+            _mind.Begin(Doing.Snatch, 8.5f);
+        // And a prawn, when it is hungry (past half, ten minutes from a meal): the same look, the same chase, the
+        // prawns' field (2026-10-27, "make the prawns eatable by things bigger than them").
+        if (PrawnPrey != null && _hungerT > 0.5f && _doing is Doing.Cruise or Doing.Dive && _snatch.Look(PrawnPrey, Nose, _pond.U * 0.1f, 0.05f + 0.15f * _nerve, dt, 8f, 200 + 300 * _sunny, ok: _canReachPrawn))
             _mind.Begin(Doing.Snatch, 8.5f);                                   // a little longer than the chase's own patience: the chase ends itself
 
         switch (_doing)
@@ -431,7 +445,7 @@ internal sealed class Turtle : Body
             _depthTimer -= dt;
             if (_depthTimer <= 0)
             {
-                _zTarget = 0.03f + 0.3f * (float)_rng.NextDouble();
+                _zTarget = 0.05f + 0.55f * (float)_rng.NextDouble();      // (0.03 to 0.33 until 2026-10-27: "make the turtle be willing to go deep also")
                 _depthTimer = 8 + 10 * (float)_rng.NextDouble();
             }
         }
@@ -454,7 +468,7 @@ internal sealed class Turtle : Body
         // stops short of the bed by that much, and over a bed that rises
         // (the bank, a rock's flank) the feelers turn it or lift it before
         // the clamp ("bottom") ever has to.
-        float margin = 0.35f * _len / DepthPx;
+        float margin = (_doing == Doing.Snatch && _snatch.Hunting && _snatch.Prey.Stage == 5 ? 0.2f : 0.35f) * _len / DepthPx;   // (after a prawn it noses down closer to the shallows' bed)
         float zNext = _dodge != 0 && swimming && _doing != Doing.Float ? _z + _dodge * _speed * dt / DepthPx : _z + (MathF.Min(_zTarget, bottom - margin) - _z) * (1 - MathF.Exp(-dt * rate));
         zNext = Math.Clamp(zNext, 0, bottom);
         // A floating turtle is BUOYANT: it rises to the surface without a stroke,
@@ -607,7 +621,7 @@ internal sealed class Turtle : Body
             {
                 // Straight at the prey's nose (ground pixels, read afresh each frame: it flees), keenly, with the
                 // bank, the bed and every other body still felt for on the way.
-                Tadpole p = _snatch.Prey;
+                ISnack p = _snatch.Prey;
                 turn = Wrap(MathF.Atan2(p.Y - _y, p.X - _x) - _heading) * 1.4f;
                 most = 0.9f;
                 Feel(ref turn, ref most, dt);
@@ -846,7 +860,7 @@ internal sealed class Turtle : Body
         Span<float> w = stackalloc float[4];   // Cruise, Float, Dive, Haul out
         w[0] = fromCruise ? 0.3f : 3f;
         w[1] = fromCruise ? 3f : 0f;
-        w[2] = fromCruise ? 2.2f : 0f;                                  // (1.2 until 2026-10-26 night: one dive in five minutes on one seed, three on another; "make animals swim down to the bottom")
+        w[2] = fromCruise ? 3f : 0f;                                    // (1.2 until 2026-10-26 night, 2.2 until 2026-10-27, "be willing to go deep also")
         w[3] = _hauls.Ready && _z < 0.3f ? 0.8f + 5f * _sunny : 0f;     // a sunny turtle takes every chance; from deep water it cruises up first (an approach begun at 0.6 arrived too deep to climb and gave up)
         switch (Dice.Pick(_rng, w))
         {
@@ -856,7 +870,7 @@ internal sealed class Turtle : Body
                 _breathed = false;
                 break;
             case 2:
-                _mind.Begin(Doing.Dive, 14 + 16 * (float)_rng.NextDouble());   // (8 to 20 s until 2026-10-26 night: long enough now to cross the deep and be seen down there)
+                _mind.Begin(Doing.Dive, 18 + 22 * (float)_rng.NextDouble());   // (8 to 20 s until 2026-10-26 night, 14 to 30 until 2026-10-27: long enough to cross the deep and be seen down there)
                 _zTarget = 0.6f + 0.4f * (float)_rng.NextDouble();      // down to the bed (the floor under it caps this)
                 NewGoal();
                 break;

@@ -20,7 +20,7 @@ namespace SakuraPond;
 /// the bed (rocks, the island, the formation, the cattails, the bank) are
 /// walls to it: a step onto a pixel that is not open, shallow water is refused.
 /// </summary>
-internal sealed class Prawns
+internal sealed class Prawns : ISnackField
 {
     /// <summary>
     /// The instrument log (PECKWORKS_PRAWNLOG names a file, set up once here, flushed at exit): one line per
@@ -109,6 +109,26 @@ internal sealed class Prawns
 
     /// <summary>Each prawn's middle, screen pixels, for the instruments (and for anything that might one day hunt them). Empty while none is out.</summary>
     public PointF[] Spots => _spots;
+
+    /// <summary>The nearest living, unhunted prawn whose nose is within seePx of the mouth and passes "ok" (the predators' Snatch asks; surfaceOnly means nothing to a prawn, which is always on the bed).</summary>
+    public ISnack? Spot(PointF mouth, float seePx, bool surfaceOnly = false, Func<ISnack, bool>? ok = null)
+    {
+        ISnack? best = null;
+        float bestD2 = seePx * seePx;
+        for (int i = 0; i < _all.Length; i++)
+        {
+            Prawn p = _all[i];
+            if (!p.Alive || p.Hunter != null) continue;
+            PointF n = p.Nose;
+            float dx = n.X - mouth.X, dy = n.Y - mouth.Y, d2 = dx * dx + dy * dy;
+            if (d2 >= bestD2 || (ok != null && !ok(p))) continue;
+            bestD2 = d2; best = p;
+        }
+        return best;
+    }
+
+    /// <summary>A predator's mouth has closed on it: gone this frame, back at its home a few minutes later (Prawn.Eaten).</summary>
+    public void Eat(ISnack s) => ((Prawn)s).Eaten();
 }
 
 /// <summary>
@@ -272,7 +292,7 @@ internal sealed class PrawnBed
 /// (a bold one 0.3u); a scare may carry it one flick (0.06u) further, and then it
 /// walks back.
 /// </summary>
-internal sealed class Prawn : Body
+internal sealed class Prawn : Body, ISnack
 {
     private const int Points = 10;
     private enum Doing
@@ -331,6 +351,38 @@ internal sealed class Prawn : Body
     /// <summary>The prawn's middle, screen pixels.</summary>
     public PointF Spot => ToScreen(_x, _y);
 
+    // ---- The snack's view of it (ISnack): a koi at least half hungry, or the turtle, may single it out (Snatch) ----
+    private bool _alive = true;
+    private float _reborn;                                // seconds until an eaten prawn is back at its home
+    public bool Alive => _alive;
+    public Snatch? Hunter { get; set; }
+    public PointF Nose => Spine[0];                       // the rostrum as drawn
+    float ISnack.X => _x;
+    float ISnack.Y => _y;
+    float ISnack.Z => _z;
+    public int Stage => 5;                                // (a tadpole's stages are 0 to 4: the predators' log tells a prawn by this)
+    public bool OnTheWayOut => false;
+
+    /// <summary>
+    /// Eaten: nothing is drawn or updated for a while, then it is back at its home, as a new prawn from
+    /// under the stones (90 to 240 s later, its own dice). The hunter is released; a prawn's mind goes on
+    /// ticking while it is gone, so it comes back doing whatever the dice next say.
+    /// </summary>
+    public void Eaten()
+    {
+        _alive = false;
+        Hunter = null;
+        _reborn = 90 + 150 * (float)_rng.NextDouble();
+    }
+
+    private void Reborn()
+    {
+        _alive = true;
+        _x = _hx; _y = _hy;
+        _lift = 0; _curl = 0;
+        _flickActive = false; _inScare = false; _flicksLeft = 0;
+    }
+
     public Prawn(PrawnBed bed, int index, PointF home, float bold, float busy, Random rng) : base(Points)
     {
         _bed = bed; _pond = bed.Pond; _view = bed.View; _rng = rng; _u = bed.U;
@@ -357,6 +409,7 @@ internal sealed class Prawn : Body
 
     public void Update(float dt, PointF[] threats)
     {
+        if (!_alive) { _reborn -= dt; if (_reborn <= 0) Reborn(); else return; }
         _mind.Tick(dt);
         _scareCool.Tick(dt);
         _walkBan -= dt;
@@ -826,6 +879,7 @@ internal sealed class Prawn : Body
 
     public void Draw(FrameBuffer fb)
     {
+        if (!_alive) return;
         float murk = Light.Murk(_z);
         if (_len < 8f)
         {

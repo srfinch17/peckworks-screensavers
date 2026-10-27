@@ -131,6 +131,12 @@ src/
     TurningStamp.cs                a picture stamped at any angle (dragonflies, swallows, their shadows)
     Light.cs                       where the sun is and how we look at the pond
     SakuraPondSettings.cs          declares its knobs
+Since 2026-10-27 a prawn is PREY as a tadpole is (`ISnack`, `ISnackField`: the shared `Snatch` works on
+either, the predator chases a nose and never learns which): a koi at least half hungry, or the turtle
+ten minutes from its last meal (`_hungerT`), may spot one within 0.1u and chase it, nosing down to the
+shallows' bed with a smaller margin than usual; the prawn's own flick is its escape, the catch is the
+mouth within reach of its rostrum, and a prawn eaten is gone from the bed and back at its home from under
+the stones 90 to 240 s later (`Prawn.Eaten`, `Reborn`). Its mind goes on ticking while it is gone.
 
   Halloween/                       falling leaves, bats, and jack-o'-lanterns
     Program.cs                     Main(), plus the definition
@@ -1229,6 +1235,20 @@ lunges for 0.35 s (cut short if the nose ends up behind the head) at 0.6u a seco
 lunge never closes), with a ring off the head; the catch is the nose within 0.02u of the head. A
 touch, a hunt, a tadpole diving out of reach or the visit ending drops the chase, and it rests four to eight minutes after any chase.
 
+*The snake dives* (2026-10-27, "make the turtle and the snake be willing to go deep also"). Half of
+its explores are dives: the head eases down to a third to seven tenths of the pond on the way to
+the spot, and the body follows it, because the trail it is laid along remembers the depth the head
+had at each point (`_trailZ`, the koi's way), so it goes down head first and the tail follows. Each
+point is drawn sunk down the screen by its depth, smaller and hazier (`Light.SinkPx`, `Scale`,
+`Murk`, nothing at the very top so on the water it swims clear as before), through the deep water
+stencil that leaves out the stones' collars and caps, and under the fish: a deep snake is drawn
+before the koi school (`DrawDeep`), so every fish shallower than it paints over it (a fish deeper
+still is a known pass). Deep, it is on no surface list (a frog is not pushed off it, it brushes no
+petal, no bow wave), it hunts and basks at nothing (the dice drop those faces, the scans skip), a
+step onto a bed too shallow for its depth is refused, and the end of the explore, or any other
+doing, eases it back to the surface over ten seconds or so. `PECKWORKS_SNAKELOG` names a file for a
+line per frame (clock, doing, place, depth, speed, the hunt's note).
+
 *The snake gets hungry* (round twenty-seven). `Snake._hunger` runs from 0 (full) to 1 (famished), is kept across visits and
 rises with the clock (0 to 1 in 8 to 14 minutes, a bold snake sooner; the rate is worked out from the two dials, never rolled).
 A lizard or a mouse brings it to 0, a tadpole or froglet down by 0.15 to 0.25, a minnow by 0.1 to 0.15. Above 0.5 the wait
@@ -1412,10 +1432,18 @@ of the pond can hide a fish. A fish may be at any depth the bed allows, and thre
 under the surface is drawn smaller the further it is from the eye (`Light.Scale`, about six tenths
 of its size at the limit of sight), the way a coin at the bottom of a pool looks smaller than the
 same coin in your hand. `Light.Murk` mixes it toward the water's own colour, a little at the top
-and more and more with depth. `SeeU` (0.70u; 0.26, 0.30, 0.36 then 0.44 in earlier rounds,
+and more and more with depth. `SeeU` (0.84u; 0.26, 0.30, 0.36, 0.44 then 0.70 in earlier rounds,
 raised each time the owner asked to see more of the deep, the last time "again. make the water
-more transparent") is the depth where the murk would reach all the way; it is well past the
-pond's full depth (0.40u), so a fish on the bed keeps nearly half of its own colour. Deeper also
+more transparent", and once more with the pond itself) is the depth where the murk would reach
+all the way; it is well past the pond's full depth (`Pond.DepthU`, 0.48u since 2026-10-27, "make
+the pond a little deeper": 0.40u before), so a fish on the bed keeps nearly half of its own
+colour. The bed is UNEVEN too (the same day, "make the depths be uneven, like the pondbed has
+deeper and shallower spots"): seven broad soft bumps, humps and hollows by turns, a fifth to a
+third of u across, scale the depth by up to 18 percent either way, more the further from the
+bank, in `PourWater`; and because everything reads depth from that one array (the water's colour,
+the bed's clearness, the floor the swimmers feel, the sink and the haze), a hump is a real rise of
+the bed to every fish, which climbs it as it climbs a stone's flank. The bumps roll their own dice,
+seeded from the screen's size, so nothing else in the scene moved when they came. Deeper also
 means lower on the screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier
 and lower. The painted bed shows through the deepest water by two fifths (`PondPainter.BedClear`,
 one curve for the pebbles and for a submerged stone), and the deep bed has small dark stones
@@ -1432,7 +1460,16 @@ the silt; a puff of silt rises where it roots (`KoiSchool.DrawSilt`, a soft disc
 pale colour seen through the murk, drawn under every fish), billows out and settles over a few
 seconds. The curious and the hungry forage more, and twice as readily since 2026-10-26 night
 (on five-minute runs every fish on one seed and ten of thirteen on another went down, about a
-sixth of their time); a goldfish half as often, and it may go to 0.8 of the pond now.
+sixth of their time); a goldfish half as often, and it may go to 0.8 of the pond now. Two koi rests
+in five are taken ON the bed (0.85 to 1.0 of the pond, a tenth of a length of water under it) and a
+forage lasts a minute or so with longer swims along the bed between its pauses (2026-10-27, "make
+fish be willing to hang out and swim along the bottom sometimes"). And a JAM has a way out at last
+(`Koi.BackOff`): a step refused for a second and a half in a row (a rest spot or a look behind a
+formation held a koi nose-on against its collar for sixteen seconds, every step refused by a bed
+it could not rise over, "fish still do some weird stuff around the rocks") ends the doing with a
+three-second shy toward the deepest water two lengths out, the fish may rise at a slow set rate
+while refused whatever the slide rule says, and for half a minute no goal, rest spot or look is
+chosen within 0.3u of the spot (the first fix chose the same rock to look at and jammed again).
 
 *Three-dimensional steering and bumping.* The fish steer in all three directions with the engine's
 steering kit (`Core/Minds/Space.cs`). Each animal keeps a `Body.Shape`, a `Chain`: a string of
@@ -1581,7 +1618,12 @@ its depth read from the NEAREST cap's rim, so the stone between two caps stays s
 one stone and not a dark cloud per cap), each cap goes into the blockers and into `Pond.Rocks` (so every
 animal's obstacle list has it without a new list), and the bed climbs to each cap's rim (`Hill`, once
 per cap; the lowest hill wins between them). `Pond.Formation` holds it. Placement is counted, never
-assumed: the start log prints it, 12 of 12 seeds at 1920x1080.
+assumed: the start log prints it, 12 of 12 seeds at 1920x1080. A SECOND formation (2026-10-27, "i
+like the rocks we have. add one more") is placed the same way in the upper right half, nearest the
+upper right corner, clear of the island and the first; it rolls its own dice (seeded from the first
+one's place) so every roll after it is what it was, and `Pond.Formation2` holds it. The stone wraps
+run their three distance maps inside the stone's box now, not over the whole frame (three stones,
+nine whole-frame sweeps, had cost a second and a half of the start).
 
 *The lawn is finished every other frame.* The carpet of blades and the tufts are the two dearest
 things in the whole pond to draw, and grass moves slowly (a gust takes seconds to cross the

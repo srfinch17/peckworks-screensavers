@@ -262,6 +262,9 @@ internal sealed class KoiSchool
     /// <summary>The pond's tadpoles: a fish that happens upon one may chase and eat it. Set once by the scene.</summary>
     public Tadpoles? Prey { set { foreach (Koi k in _fish) k.Prey = value; } }
 
+    /// <summary>The pond's prawns: a hungry koi that happens upon one may chase and eat it (2026-10-27). Set once by the scene.</summary>
+    public Prawns? PrawnPrey { set { foreach (Koi k in _fish) k.PrawnPrey = value; } }
+
     private readonly Cooldown _teasePond = new();         // one tease in the pond at a time, and not twice within ten seconds
 
     /// <summary>The schools of minnows the big koi may rush for the fun of it. Set once by the scene, after the minnows are made.</summary>
@@ -611,8 +614,10 @@ internal sealed class Koi : Body
         Dart,          // a goldfish's play: two to four quick zig-zag bursts, each a sharp swerve the other way, then it wanders on (2026-10-27, "make the little goldfish more fun to watch")
     }
     private readonly Snatch _snatch;                      // the chance meal in hand (Tadpoles.cs): who it is after, how long it will bother, when it may look again
-    private readonly Func<Tadpole, bool> _canReach;       // which prey is in water a koi can get into
+    private readonly Func<ISnack, bool> _canReach;       // which prey is in water a koi can get into
     internal Tadpoles? Prey { get; set; }                 // the tadpoles of the pond (set by the school once the scene has made them; null in a pond without any)
+    internal Prawns? PrawnPrey { get; set; }              // the prawns of the pond (the same way); a koi at least half hungry may take one it happens upon
+    private readonly Func<ISnack, bool> _canReachPrawn;   // a prawn in water a koi can get down to (the bed under it deep enough for its margin)
     private readonly Mind<Doing> _mind = new();           // the doing now and how long it may last (Core/Minds)
     private Doing _doing => _mind.Doing;
     private float _targetX, _targetY;                     // what it is investigating, ground pixels
@@ -691,6 +696,9 @@ internal sealed class Koi : Body
     private readonly Cooldown _fleeCool = new();          // no fresh flee for a moment after one ends (a chaser swinging round would restart it every few seconds)
     private float _flinchX, _flinchY;                     // where the shadow was, ground pixels
     private float _shyX, _shyY;                           // where to swim to get away from the thing it bumped, ground pixels
+    private float _refusedFor;                            // seconds in a row the step rule has refused its step (a jam against a stone's hill: BackOff)
+    private float _avoidX, _avoidY;                       // where it last backed off from (ground), and until when its goals and looks keep clear of it
+    private double _avoidUntil;
     private float _stuckFor;                              // seconds its steps have been refused (nosed against something)
     private float _dodge;                                 // the climb (negative) or dive (positive) its feelers chose this frame, z per unit forward; 0 = holding its depth
     private Body[] _bodies = [];                          // every body in the water this frame (the school and the turtles), for the feelers
@@ -820,6 +828,7 @@ internal sealed class Koi : Body
         _cruise = gold ? 0.4f + 0.3f * _energy : 0.45f + 0.35f * _energy;
         _snatch = new Snatch(gold ? "goldfish" : "koi", Snatch.Seed((int)(_energy * 1e6f), (int)(_social * 1e6f), (int)(_curious * 1e6f), index));
         _canReach = t => _pond.RoomAt(t.Nose.X, t.Nose.Y) >= _len * 0.6f;   // the same room a thing it noses at must have (Notice); made once, so a look makes no garbage   // an energetic fish cruises faster (a goldfish a little slower, in its own body lengths: it is a small fish)
+        _canReachPrawn = s => _pond.RoomAt(s.Nose.X, s.Nose.Y) >= _len * 0.25f && 0.9f * BedUnder(s.X, s.Y) > 0.12f * _len / DepthPx + 0.01f;   // (a quarter of a length of room: a prawn's home is beside a stone, where a tadpole's 0.6 fails every one; no hunt at all on the first two runs)   // (the bed under a prawn is the shallows' bed, 0.02u to 0.12u: a koi noses down to it as a forager does, a twelfth of its length of water under it)
         _chaseCool.Start(30 + 90 * (float)rng.NextDouble());   // nobody chases in the first half minute
         _teaseRng = new Random(Snatch.Seed((int)(_energy * 1e6f) ^ 0x7EA5E, (int)(_curious * 1e6f), (int)(_social * 1e6f), index + 977));   // a fixed mix, never HashCode.Combine (that one is salted per process)
         _teaseCool.Start(30 + 60 * _energy);                   // nobody teases in the first half minute; from the dials, no roll
@@ -1114,7 +1123,8 @@ internal sealed class Koi : Body
         // in one hop. A fish that cannot rise as fast as the bed comes up (a
         // resting one barely rises at all, by the slide rule in HoldDepth)
         // stops at the stone's foot and turns, instead of being lifted over it.
-        bool refused = OnLand(next) || Z > 0.9f * BedUnder(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step)
+        bool bedBlocked = Z > 0.9f * BedUnder(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step);   // (the bed under the whole BODY, not the centre alone)
+        bool refused = OnLand(next) || bedBlocked
                        || (roomNext <= _len * 0.15f && roomNext < roomHere && RoomAlong(_heading, _len * 0.5f) <= roomHere);
         if (MotionLog != null)
         {
@@ -1122,6 +1132,12 @@ internal sealed class Koi : Body
             _logRoomAhead = roomAhead; _logRoomHere = roomHere;
             _logCause = !refused ? 0 : OnLand(next) ? 1 : Z > 0.9f * BedUnder(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step) ? 2 : 3;
         }
+        // A JAM: refused for a second and a half in a row. A goal pull plus a refusal is a deadlock (a
+        // rest spot or a look behind the formation held a koi nose-on against its collar for 16 s,
+        // every step refused by the bed it could not rise over, 2026-10-27: "fish still do some weird
+        // stuff around the rocks"). The doing ends and it backs off toward the roomiest open water.
+        _refusedFor = refused ? _refusedFor + dt : 0;
+        if (_refusedFor > 1.5f) BackOff();                                      // (a shy that is itself refused backs off again, another way)
         if (!refused)
         {
             _x += MathF.Cos(_heading) * step;
@@ -1202,7 +1218,7 @@ internal sealed class Koi : Body
         // (a twelfth of its length of water under it), and between its spots a
         // fifth, so "swim down to the bottom" means the bottom (with three
         // tenths it hung a third of the pond's depth up over any slope).
-        float margin = (_doing == Doing.Forage ? (_hold > 0 ? 0.08f : 0.18f) : 0.3f) * _len / DepthPx;
+        float margin = (_doing == Doing.Forage ? (_hold > 0 ? 0.08f : 0.18f) : _doing == Doing.Rest && _zTarget > 0.8f ? 0.1f : _doing == Doing.Snatch && _snatch.Hunting && _snatch.Prey.Stage == 5 ? 0.12f : 0.3f) * _len / DepthPx;   // (a rest on the bed lies nearly on it too; a chase after a prawn noses down to the shallows' bed)
         float zWant = MathF.Min(_zTarget, cap - margin);
         bool forBed = Z > cap - margin - 0.03f;
         // Easing toward the depth it wants; or, when the feelers chose a climb
@@ -1210,7 +1226,7 @@ internal sealed class Koi : Body
         // times the distance swum, so the course is a straight line in three
         // dimensions, and the easing takes over again once the way is clear.
         float zNext = _dodge != 0 && !refused ? Z + _dodge * step / DepthPx
-                                              : Z + (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping || _doing is Doing.Leap or Doing.Tease ? 0.6f : forBed ? 0.8f : 0.18f)));
+                                              : Z + (zWant - Z) * (1 - MathF.Exp(-dt * (_gulping || _doing is Doing.Leap or Doing.Tease ? 0.6f : forBed ? 0.8f : _doing == Doing.Rest && _zTarget > 0.8f ? 0.5f : 0.18f)));   // (a rest on the bed goes down briskly: at the idle rate a 15 s rest never got there)
         zNext = Math.Clamp(zNext, 0, cap);
         // Rising moves the picture UP the screen and sinking moves it DOWN
         // (Light.Sink), so both are held to a share of the fish's own forward
@@ -1225,7 +1241,15 @@ internal sealed class Koi : Body
         // a bed steeper than the fish can climb at its speed is a wall to its
         // feelers (RoomAround), so it turns or climbs before it is lifted.
         if (MotionLog != null) { _logCap = cap; _logZWant = zWant; _logZRaw = zNext; }   // the depth rule's inputs, for the log
-        Z = Light.HoldDepth(Z, zNext, _heading, _speed, dt, _pond.U);
+        float held = Light.HoldDepth(Z, zNext, _heading, _speed, dt, _pond.U);
+        // A fish whose step the bed refuses is not swimming forward, so the slide rule above would let it rise by
+        // nothing at all, and it could never get over the slope that refused it: the deadlock behind every jam
+        // at a stone (16 s nose-on against the formation, 2026-10-27). Refused, it may rise at a slow set rate,
+        // a fish backing water and lifting its nose, whatever the rule says.
+        // (And it rises whether or not the depth rule asked it to: the depth cap reads the bed under the fish's
+        // CENTRE, the refusal reads it under the whole body, so a koi lying across a stone's lower flank sat in
+        // deep water by the cap, refused by the bed at its side, and asked for no rise, for ten seconds.)
+        Z = bedBlocked ? MathF.Max(0, MathF.Min(held, Z - 0.15f * dt)) : held;
         if (_gulping && Z < 0.05f)
         {
             PointF mouth = Spine[0];
@@ -1326,7 +1350,7 @@ internal sealed class Koi : Body
                 x = s.X; y = s.Y;
                 if (x < 0 || y < 0 || x >= _pond.Width || y >= _pond.Height) continue;
             }
-            if (_pond.RoomAt(x, y) < _len * 0.4f) continue;
+            if (_pond.RoomAt(x, y) < _len * 0.4f || Avoided(new PointF(x, y))) continue;
             if (deep && tries < 40 && _pond.Floor[(int)y * _pond.Width + (int)x] < 150) continue;
             (_goalX, _goalY) = ToGround(x, y);
             break;
@@ -1346,7 +1370,7 @@ internal sealed class Koi : Body
             float a = (float)(_rng.NextDouble() * MathF.Tau), r = _len * (from + (to - from) * (float)_rng.NextDouble());
             PointF s = ToScreen(_x + MathF.Cos(a) * r, _y + MathF.Sin(a) * r);
             if (s.X < 0 || s.Y < 0 || s.X >= _pond.Width || s.Y >= _pond.Height) continue;
-            if (_pond.RoomAt(s.X, s.Y) < _len * 0.4f || _pond.Floor[(int)s.Y * _pond.Width + (int)s.X] < 150) continue;
+            if (_pond.RoomAt(s.X, s.Y) < _len * 0.4f || _pond.Floor[(int)s.Y * _pond.Width + (int)s.X] < 150 || Avoided(s)) continue;
             (_goalX, _goalY) = ToGround(s.X, s.Y);
             _goalTimer = 12 + 18 * (float)_rng.NextDouble();
             return true;
@@ -1388,6 +1412,12 @@ internal sealed class Koi : Body
         // are at the clutch's deep edge, and a froglet swimming off across open water.
         if (Prey != null && _doing is Doing.Wander or Doing.Investigate && !_gulping && !_bumping && !Airborne
             && _snatch.Look(Prey, Head, _pond.U * 0.12f, 0.03f + 0.12f * _curious * _energy, dt, 6f, 240 + 360 * (1 - _energy), surfaceOnly: false, ok: _canReach))   // (at 0.05 + 0.2 and 180 to 480 s the fish took 12 tadpoles an hour on a seed whose clutch lay in their reach: a clutch of eleven down to three in twenty minutes)
+            Begin(Doing.Snatch);
+        // A hungry koi that happens upon a prawn (2026-10-27, "make the prawns eatable by things bigger than them that
+        // happen to be hungry and happen to spot a nearby prawn"): the same chance meal from the prawns' field, only
+        // when it is at least half hungry and the prawn is in water it can get down to. A goldfish is a prawn's size.
+        if (PrawnPrey != null && _kind == Kind.Koi && _hunger > 0.5f && _doing is Doing.Wander or Doing.Forage or Doing.Investigate or Doing.Rest && !_gulping
+            && _snatch.Look(PrawnPrey, Head, _pond.U * 0.12f, 0.02f + 0.1f * _hunger, dt, 6f, 240 + 240 * (1 - _hunger), surfaceOnly: false, ok: _canReachPrawn))
             Begin(Doing.Snatch);
 
         // A SHOAL OF MINNOWS NEAR, and the mood takes it: once a second, only from an idle moment (a wander or a look
@@ -1494,7 +1524,7 @@ internal sealed class Koi : Body
                         if (_hold <= 0)
                         {
                             if (_mind.Over) { Begin(Doing.Wander); break; }
-                            if (!NewGoalNear(1.5f, 4f)) NewGoal(deep: true);       // the next pause a few lengths on (the first forage run swam a whole pond to one goal and paused once)
+                            if (!NewGoalNear(2f, 7f)) NewGoal(deep: true);         // the next pause a few lengths on, a longer swim along the bed between (the first forage run swam a whole pond to one goal and paused once)
                             Depth(0.8f + 0.2f * (float)_rng.NextDouble(), _mind.Left + 5);   // right down (the bed's own clamp and the forager's small margin set where it stops)
                         }
                     }
@@ -1821,18 +1851,20 @@ internal sealed class Koi : Body
                 Depth(_targetIsPetal ? (_kind == Kind.Goldfish ? 0.1f : 0.06f) : 0.15f + 0.3f * (float)_rng.NextDouble(), 30);
                 break;
             case Doing.Rest:
-                _mind.Begin(doing, 8 + 14 * (float)_rng.NextDouble());
                 NewGoal(deep: true);
                 {
                     float r = (float)_rng.NextDouble();
-                    float z = _kind == Kind.Goldfish ? 0.3f + 0.15f * r : 0.45f + 0.3f * r;   // deep: from hazy to, at the deep end, out of sight (Light.SeeU); a goldfish only to hazy
+                    _mind.Begin(doing, _kind == Kind.Koi && r < 0.4f ? 25 + 20 * r : 8 + 14 * r);   // a rest on the bed is a long one (25 to 33 s): "hang out ... along the bottom"
+                    // Deep: hazy, or, for two koi rests in five, right down on the bed ("make fish be willing to hang out
+                    // and swim along the bottom sometimes", 2026-10-27; the bed's clamp and a small margin set where it stops).
+                    float z = _kind == Kind.Goldfish ? 0.3f + 0.15f * r : r < 0.4f ? 0.85f + 0.15f * r : 0.45f + 0.3f * r;
                     if (_mate != null) z = _mate._zTarget + 0.04f + 0.08f * r;                // resting beside a friend: a little under it, so the pair is still close in depth
                     Depth(z, _mind.Left);
                 }
                 break;
             case Doing.Forage:
-                _mind.Begin(doing, 25 + 25 * (float)_rng.NextDouble());            // half a minute or so down there, spot to spot
-                if (!NewGoalNear(2f, 5f)) NewGoal(deep: true);                     // the first pause a few lengths on, over a deep bed
+                _mind.Begin(doing, 35 + 45 * (float)_rng.NextDouble());            // a minute or so down there, spot to spot (25 to 50 s until 2026-10-27, "swim along the bottom")
+                if (!NewGoalNear(2f, 7f)) NewGoal(deep: true);                     // the first pause a few lengths on, over a deep bed
                 Depth(0.8f + 0.2f * (float)_rng.NextDouble(), _mind.Left + 5);     // to the bed itself: a hazy shape moving over it (Light.SeeU), never lost (0.55 to 0.8 until 2026-10-26 night, "swim down to the bottom")
                 break;
             case Doing.Shy:
@@ -2024,7 +2056,7 @@ internal sealed class Koi : Body
         // is near.
         float far = _kind == Kind.Goldfish ? 0.4f : 1f;
         _targetIsPetal = false;
-        if (_petals != null && _rng.NextDouble() < 0.15 + 0.5 * _hunger && _petals.NearestFloating(here.X, here.Y, u * 0.6f * far, out PointF petal) && _pond.RoomAt(petal.X, petal.Y) >= _len * 0.6f)
+        if (_petals != null && _rng.NextDouble() < 0.15 + 0.5 * _hunger && _petals.NearestFloating(here.X, here.Y, u * 0.6f * far, out PointF petal) && _pond.RoomAt(petal.X, petal.Y) >= _len * 0.6f && !Avoided(petal))
         {
             (_targetX, _targetY) = ToGround(petal.X, petal.Y);
             _targetIsPetal = true;
@@ -2060,7 +2092,7 @@ internal sealed class Koi : Body
             else continue;
             float dx = p.X - here.X, dy = p.Y - here.Y;
             if (dx * dx + dy * dy > u * u * 0.8f * 0.8f * far * far) continue;     // too far to bother
-            if (!InWater(p) || _pond.RoomAt(p.X, p.Y) < _len * 0.6f) continue;   // on land, or too tight against the bank or the rocks to swim up to
+            if (!InWater(p) || _pond.RoomAt(p.X, p.Y) < _len * 0.6f || Avoided(p)) continue;   // on land, too tight against the bank or the rocks to swim up to, or where it just jammed
             (_targetX, _targetY) = ToGround(p.X, p.Y);
             return true;
         }
@@ -2249,6 +2281,44 @@ internal sealed class Koi : Body
     /// whichever side of the other it was pushed. A cooldown, as two fish
     /// swimming side by side touch again and again.
     /// </summary>
+    /// <summary>
+    /// The way out of a jam (see Update): of eight directions the one with the most room over two
+    /// lengths, and a short swim (Shy) three lengths that way, whatever it was doing; a chase or a rest
+    /// against the stone is over. The shy's own timer hands it back to the dice from the open water.
+    /// </summary>
+    private void BackOff()
+    {
+        // The way out is where the BED is deepest two lengths on (a jam is a bed the fish cannot rise over:
+        // the roomiest direction by the walls' grid could be straight up the same slope), with the walls'
+        // room breaking ties.
+        float bestA = _heading + MathF.PI, bestScore = float.MinValue;
+        for (int k = 0; k < 8; k++)
+        {
+            float a = _heading + k * MathF.Tau / 8, ca = MathF.Cos(a), sa = MathF.Sin(a);
+            float bed = 1;
+            for (int s = 1; s <= 4; s++) bed = MathF.Min(bed, FloorAt(ToScreen(_x + ca * _len * 0.5f * s, _y + sa * _len * 0.5f * s)));
+            float score = bed * 4 + MathF.Min(1, RoomAlong(a, _len * 2) / (_len * 2));
+            if (score > bestScore) { bestScore = score; bestA = a; }
+        }
+        _shyX = _x + MathF.Cos(bestA) * _len * 3; _shyY = _y + MathF.Sin(bestA) * _len * 3;
+        _refusedFor = 0;
+        // And it remembers the spot: for the next half minute no idle goal, rest spot or thing to look at is
+        // chosen within 0.3u of it (a fish backed off a formation, chose the same rock to look at, and jammed
+        // on it again, round and round for 30 s on the first run of this fix).
+        _avoidX = _x; _avoidY = _y; _avoidUntil = _time + 30;
+        Begin(Doing.Shy);
+        _mind.Begin(Doing.Shy, 3f);                                            // a longer shy than a bump's: time to turn and get clear
+    }
+
+    /// <summary>Is this screen point within 0.3u of where it last backed off from, while that memory lasts?</summary>
+    private bool Avoided(PointF screen)
+    {
+        if (_time >= _avoidUntil) return false;
+        (float gx, float gy) = ToGround(screen.X, screen.Y);
+        float dx = gx - _avoidX, dy = gy - _avoidY;
+        return dx * dx + dy * dy < _pond.U * _pond.U * 0.09f;
+    }
+
     public void Bumped(Vector3 away)
     {
         if (!_shyCool.Ready || _doing is Doing.Chase or Doing.Flee or Doing.Flinch or Doing.Leap) return;   // a leap's burst is not put off by a brush with a neighbour

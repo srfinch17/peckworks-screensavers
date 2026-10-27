@@ -44,7 +44,7 @@ namespace SakuraPond;
 /// a rock or under the bank. A froglet at the surface is solid to the floating petals: it shoves
 /// them aside as it goes.
 /// </summary>
-internal sealed class Tadpoles
+internal sealed class Tadpoles : ISnackField
 {
     private readonly Clutch[] _clutches;
     private float[] _threats = new float[64];     // the threats in GROUND pixels, x y x y ... (grows once if ever needed)
@@ -68,7 +68,7 @@ internal sealed class Tadpoles
     /// surface; a fish reaches the bed). ok: the animal's own extra test (a
     /// crayfish wants a clear walk to it).
     /// </summary>
-    public Tadpole? Spot(PointF mouth, float seePx, bool surfaceOnly = false, Func<Tadpole, bool>? ok = null)
+    public ISnack? Spot(PointF mouth, float seePx, bool surfaceOnly = false, Func<ISnack, bool>? ok = null)
     {
         Tadpole? best = null;
         float bestD2 = seePx * seePx;
@@ -91,6 +91,8 @@ internal sealed class Tadpoles
     /// for a froglet that swims away). A small ring where it was taken near
     /// the surface: the gulp or the snap that took it stirs the water.
     /// </summary>
+    void ISnackField.Eat(ISnack s) => Eat((Tadpole)s);
+
     public void Eat(Tadpole t)
     {
         if (!t.Alive) return;
@@ -110,6 +112,10 @@ internal sealed class Tadpoles
         // The predators' log (Snatch.Log) as a permanent instrument, like the koi's and the turtle's: PECKWORKS_SNATCHLOG
         // names a file that gets every look, catch, miss and abandon. Nothing in the real pond. (Until 2026-10-27 only a
         // spliced copy ever set it, and the build warned that nothing assigned it.)
+        // And PECKWORKS_SNATCHOFTEN (a number) makes every predator look that many times oftener and rest that much less: a
+        // five-minute test run shows what an hour would (Snatch.Often). Unset in the real pond.
+        string? often = Environment.GetEnvironmentVariable("PECKWORKS_SNATCHOFTEN");
+        if (!string.IsNullOrEmpty(often) && float.TryParse(often, System.Globalization.CultureInfo.InvariantCulture, out float oftenValue)) Snatch.Often = oftenValue;
         string? snatchLog = Environment.GetEnvironmentVariable("PECKWORKS_SNATCHLOG");
         if (!string.IsNullOrEmpty(snatchLog))
         {
@@ -724,7 +730,7 @@ internal enum TadState { Hang, Scull, Windup, Burst, Flee, Graze, Rise, Swim, Di
 /// One tadpole, and (after it grows up) the froglet it becomes: a small bending Body on a
 /// short trail, the tail's wave running along it. See the class comment of Tadpoles.
 /// </summary>
-internal sealed class Tadpole : Body
+internal sealed class Tadpole : Body, ISnack
 {
     public enum Exit { None, Edge, Murk, Eaten }
 
@@ -839,6 +845,14 @@ internal sealed class Tadpole : Body
     /// <summary>Total length now, ground pixels (the unit its speeds are in).</summary>
     private float Len => (_bl + _tl) * _grow;
     public PointF Nose => Spine[0];
+    // The snack's view of it (ISnack): the fields above, by other names where the names clash.
+    bool ISnack.Alive => Alive;
+    Snatch? ISnack.Hunter { get => Hunter; set => Hunter = value; }
+    float ISnack.X => X;
+    float ISnack.Y => Y;
+    float ISnack.Z => Z;
+    int ISnack.Stage => Stage;
+    bool ISnack.OnTheWayOut => Leaving != Exit.None;
     public bool Gone => !Alive;
 
     private static float Wrap(float a) => MathF.IEEERemainder(a, MathF.Tau);
@@ -1949,6 +1963,35 @@ internal sealed class Tadpole : Body
 /// dials): one roll from the animal's own Random would move every roll that
 /// animal makes afterwards, and the owner compares builds at one seed.
 /// </summary>
+/// <summary>
+/// A small animal a predator may single out and eat: what the shared Snatch
+/// needs to know of it. A tadpole or froglet (Tadpole) and a prawn (Prawn)
+/// are both one; the predator never learns which, it chases a nose.
+/// </summary>
+internal interface ISnack
+{
+    bool Alive { get; }
+    Snatch? Hunter { get; set; }
+    /// <summary>Its nose as drawn, screen pixels (what the mouth must reach).</summary>
+    PointF Nose { get; }
+    /// <summary>Its nose on the ground plane, ground pixels (what the predator steers at).</summary>
+    float X { get; }
+    float Y { get; }
+    /// <summary>Its depth, 0 the surface to 1 the pond's full depth.</summary>
+    float Z { get; }
+    /// <summary>For the log: a tadpole's stage, 5 for a prawn.</summary>
+    int Stage { get; }
+    /// <summary>Already on its way out of the picture (leaving, dying): not worth a chase.</summary>
+    bool OnTheWayOut { get; }
+}
+
+/// <summary>Somewhere prey lives (the tadpoles, the prawns): a predator asks it for the nearest it can see, and tells it when one is eaten.</summary>
+internal interface ISnackField
+{
+    ISnack? Spot(PointF mouth, float seePx, bool surfaceOnly = false, Func<ISnack, bool>? ok = null);
+    void Eat(ISnack s);
+}
+
 internal sealed class Snatch
 {
     /// <summary>Instruments only: every look, catch, miss and abandon as one line. Null in the real pond.</summary>
@@ -1958,7 +2001,8 @@ internal sealed class Snatch
 
     private readonly Random _rng;
     private readonly string _who;
-    private Tadpole? _prey;
+    private ISnack? _prey;
+    private ISnackField? _field;                 // where the prey came from (the chase asks it to eat)
     private float _timer, _cool, _coolFor;
     public int Caught, Missed;
 
@@ -1975,7 +2019,7 @@ internal sealed class Snatch
     /// <summary>Is it after one right now? False as soon as the prey is eaten (by it or another), gone, or given up.</summary>
     public bool Hunting => _prey != null;
     /// <summary>The one it is after (only while Hunting).</summary>
-    public Tadpole Prey => _prey!;
+    public ISnack Prey => _prey!;
     /// <summary>Seconds of patience left (only while Hunting).</summary>
     public float Left => _timer;
     /// <summary>Rested from the last chase and not in one: may it look at all?</summary>
@@ -1991,13 +2035,13 @@ internal sealed class Snatch
     /// seconds, and whatever happens it will not look again for coolFor
     /// seconds. True when a chase has just begun.
     /// </summary>
-    public bool Look(Tadpoles tads, PointF mouth, float seePx, float chancePerSecond, float dt, float patience, float coolFor, bool surfaceOnly = false, Func<Tadpole, bool>? ok = null)
+    public bool Look(ISnackField tads, PointF mouth, float seePx, float chancePerSecond, float dt, float patience, float coolFor, bool surfaceOnly = false, Func<ISnack, bool>? ok = null)
     {
         if (!Ready) return false;
         if (_rng.NextDouble() >= 1 - Math.Exp(-chancePerSecond * Often * dt)) return false;
-        Tadpole? t = tads.Spot(mouth, seePx, surfaceOnly, ok);
+        ISnack? t = tads.Spot(mouth, seePx, surfaceOnly, ok);
         if (t == null) return false;
-        _prey = t; t.Hunter = this; _timer = patience; _coolFor = coolFor / Often;
+        _prey = t; _field = tads; t.Hunter = this; _timer = patience; _coolFor = coolFor / Often;
         Log?.Invoke($"look,{_who},{t.Stage},{t.Z:F3},{t.Nose.X:F0},{t.Nose.Y:F0},{mouth.X:F0},{mouth.Y:F0}");
         return true;
     }
@@ -2008,11 +2052,12 @@ internal sealed class Snatch
     /// the patience is spent or the prey is gone. True while the chase goes
     /// on; false the frame it ends, caught or not (Caught and Missed say which).
     /// </summary>
-    public bool Chase(Tadpoles tads, PointF mouth, float reachPx)
+    public bool Chase(ISnackField tads, PointF mouth, float reachPx)
     {
         if (_prey == null) return false;
-        Tadpole t = _prey;
-        if (!t.Alive || t.Hunter != this || t.Leaving != Tadpole.Exit.None) { Drop("lost", mouth); return false; }
+        ISnack t = _prey;
+        tads = _field ?? tads;                                  // the field the prey came from (a koi after a prawn passes the tadpoles here, out of habit)
+        if (!t.Alive || t.Hunter != this || t.OnTheWayOut) { Drop("lost", mouth); return false; }
         PointF n = t.Nose;
         float dx = n.X - mouth.X, dy = n.Y - mouth.Y;
         if (dx * dx + dy * dy <= reachPx * reachPx) { tads.Eat(t); Caught++; Drop("caught", mouth); return false; }

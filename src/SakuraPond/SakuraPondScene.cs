@@ -73,6 +73,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Lap("painter");
         Lap(_pond.Island is Island isle ? $"island at {isle.Centre.X:F0},{isle.Centre.Y:F0} r {isle.Radius:F0} cap {isle.Cap.X:F0},{isle.Cap.Y:F0} r {isle.CapRadius:F0}" : "island none");   // (the island too: a reader crops it by these numbers)
         Lap(_pond.Formation is Formation fm ? $"formation at {fm.Stone.Centre.X:F0},{fm.Stone.Centre.Y:F0} r {fm.Stone.Radius:F0} caps {fm.Caps.Length}" : "formation none");   // (a placement is counted, never assumed)
+        Lap(_pond.Formation2 is Formation fm2 ? $"formation2 at {fm2.Stone.Centre.X:F0},{fm2.Stone.Centre.Y:F0} r {fm2.Stone.Radius:F0} caps {fm2.Caps.Length}" : "formation2 none");
         Lap($"shore band {_pond.Shore.Count} px, reach {_pond.Shore.Reach:F1} px");                                                                                                   // (the lapping edge is counted too)
         float u = _pond.U;
         _waterInView = new bool[_pond.Water.Length];
@@ -120,6 +121,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         // Who may eat a tadpole or froglet it happens upon (Snatch in Tadpoles.cs): nothing goes looking for them.
         _koi.Prey = _tadpoles;
         _turtles.Prey = _tadpoles;
+        _koi.PrawnPrey = _prawns;                  // and a hungry koi, or the turtle, may take a prawn it happens upon (2026-10-27)
+        _turtles.PrawnPrey = _prawns;
         _frogs.Prey = _tadpoles;
         _crayfish.Prey = _tadpoles;
         _snake.Prey = _tadpoles;                   // and the swimming snake, when a tadpole is right at its nose
@@ -248,6 +251,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _prawns.Draw(fb);                         // the prawns, on the same bed: under every fish too
         Sections.Mark("crayfish, prawns");
         _tadpoles.DrawUnder(fb);                  // the tadpoles, just over the bed in the shallows, and a froglet deep under the surface: under every fish (drawn after the koi, a clutch sat on the back of a fish passing over it)
+        _snake.DrawDeep(fb);                      // a diving snake: under the fish (every koi shallower than it paints over it)
         _koi.Draw(fb, _turtles);                  // the koi and the turtles in one depth order (a turtle between the fish deeper and shallower than it)
         _frogs.DrawUnder(fb);                     // a frog that has dived is under the surface: over the fish deeper than it, under the minnows
         _tadpoles.DrawRising(fb);                 // a froglet in the top of the water: over the fish below it, UNDER the ripples and the floating petals (drawn after the petals, it swam on top of them)

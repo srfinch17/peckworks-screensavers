@@ -158,7 +158,7 @@ internal sealed class CrayfishBody : Body
     private readonly float[] _dice = new float[4];
     // ---- a chance meal (Tadpoles.cs): a tadpole on the bed within a few steps ----
     private readonly Snatch _snatch;
-    private readonly Func<Tadpole, bool> _canReach;      // made once: a prey it can walk straight to (a closure made per look would be garbage)
+    private readonly Func<ISnack, bool> _canReach;      // made once: a prey it can walk straight to (a closure made per look would be garbage)
     private bool _toPrey;                                // this Walk is the chase
     private int _ate;                                    // catches seen so far (a new one begins a feed)
     internal Tadpoles? Prey { get; set; }
