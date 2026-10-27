@@ -552,9 +552,15 @@ tail, each with how wide the body is there (`Body.cs`). The head swims a path; t
 along the path the head has already swum, like train carriages following the track, so every
 turn bends the whole body through the curve. A swimming wave runs down the koi's body (the head
 nearly still, the tail swinging widest: a carp swims from the back half, so the wave's width
-grows as the cube of the distance along the body and only two thirds of a wavelength fits on
+grows as the cube of the distance along the body and only four fifths of a wavelength fits on
 it; a wave that grew as the square with nearly a whole wavelength threw the body into an S with a
-second bend at the tail, "a super wiggle like a worm"); and the head's rate of turn is eased
+second bend at the tail, "a super wiggle like a worm"). The tail BEATS AT THE SPEED OF THE FISH
+(round thirty-four): beats a second is lengths a second divided by the stride, six tenths of a
+length per beat as a carp swims, with a slow flutter as a floor on a glide, and the wave's width
+grows with the effort. Three fixed rates (2.3, 1.5 and 0.7 a second by state) had given a stride
+of 0.35 lengths and a wave running four times the swim speed (a real carp covers half to four
+fifths of what its wave covers), which read as "the movement doesn't match the speed of the
+fish". The head's rate of turn is eased
 over an eighth of a second, because the body is laid along the path the head took, and a
 steering sum that flipped sign from frame to frame was laid into that path as kinks. The
 remembered path and the walk back along it are the shared `Core/Minds/Trail.cs`. The snake's head weaves side to side and the body

@@ -999,9 +999,25 @@ internal sealed class Koi : Body
         if (_doing == Doing.Chase && _partner != null && Near(_partner, 1.5f) && MathF.Abs(Wrap(MathF.Atan2(_partner._y - _y, _partner._x - _x) - _heading)) > 0.5f)
             targetSpeed *= 0.45f;
         _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (rush || teasing ? 2.2f : _swimming ? 1.1f : 0.45f)));   // (the tease's glide eases at the rush's own rate: speed is never written at the state change, only eased)
-        float targetAmp = rush ? _len * 0.11f : _swimming ? _len * 0.085f : _len * 0.022f;
+        // THE BEAT FOLLOWS THE SPEED. A carp travels about six tenths of its
+        // length per tail beat (its stride, like a walker's pace), so beats a
+        // second = lengths a second / stride: a fish easing from a rush to a
+        // glide slows its tail WITH its body, instead of switching between
+        // three fixed rates (2.3, 1.5 and 0.7 a second) that had the tail of a
+        // slowing fish still thrashing at full rate, and the wave running down
+        // the body two and a half times faster than the fish moved. The owner's
+        // words: "the movement doesn't feel like it matches the speed and
+        // direction of the fish". A gliding fish lets the tail idle at a slow
+        // flutter (a floor), and a goldfish takes shorter strides (beats
+        // quicker for its speed, _beatMul). The wave's width grows with the
+        // effort too: a tenth of a length at cruise, a touch more at a rush,
+        // a fiftieth on a glide (the same widths as before at those speeds).
+        float lengthsPerSecond = _speed / _len, stride = 0.6f / _beatMul;
+        float effort = Math.Clamp(lengthsPerSecond / _cruise, 0f, 1.4f);
+        bool tailWorking = _swimming || rush;
+        float targetAmp = _len * (tailWorking ? 0.04f + 0.055f * effort : 0.022f);
         _amp += (targetAmp - _amp) * (1 - MathF.Exp(-dt * 2.5f));
-        float beatsPerSecond = (rush ? 2.3f : _swimming ? 1.5f : 0.7f) * _beatMul;
+        float beatsPerSecond = tailWorking ? MathF.Max(0.6f * _beatMul, lengthsPerSecond / stride) : MathF.Max(0.35f * _beatMul, 0.5f * lengthsPerSecond / stride);
         _phase = (_phase + MathF.Tau * beatsPerSecond * dt) % MathF.Tau;
 
         // ---- Steering ----
@@ -1301,6 +1317,9 @@ internal sealed class Koi : Body
             // Columns 13 to 18: roomAhead, roomHere (pixels the feelers read), the refusal's cause, the bed's cap, the depth wanted, the depth before the slide rule.
             sb.Append(FormattableString.Invariant($"{LogClock:F3},{(_kind == Kind.Goldfish ? 100 + _index : _index)},{_x:F2},{_y:F2},{_heading:F4},{_turnRate:F4},{_speed:F2},{Z:F4},{_doing},{_dodge:F2},{Spine[0].X:F2},{Spine[0].Y:F2},{(refused ? 1 : 0)},{_logRoomAhead:F1},{_logRoomHere:F1},{_logCause},{_logCap:F4},{_logZWant:F4},{_logZRaw:F4}"));
             for (int i = 0; i < Spine.Length; i++) sb.Append(FormattableString.Invariant($",{Spine[i].X:F2}:{Spine[i].Y:F2}"));
+            // After the spine (so a reader that takes "x:y tokens" still finds them all): the swimming wave's phase, its
+            // width and the body length, for measuring the stride (lengths travelled per tail beat) and the wave's speed.
+            sb.Append(FormattableString.Invariant($",beat={_phase:F3}:{_amp:F2}:{_len:F1}"));
             MotionLog(sb.ToString());
         }
     }
@@ -2711,11 +2730,17 @@ internal sealed class Koi : Body
     /// The swimming wave's sideways push at s along the body, this frame. A
     /// carp swims from the back half: the front of the body is stiff and the
     /// tail does the work, so the wave's width grows as the CUBE of s (a
-    /// sixth of the tail's at the middle of the body) and only about two
-    /// thirds of a wavelength fits on the body. The first version grew as the
+    /// sixth of the tail's at the middle of the body) and only about four
+    /// fifths of a wavelength fits on the body. The first version grew as the
     /// square and fitted nearly a whole wave: the body swung into an S with a
     /// second bend the other way at the tail, a quarter of all frames, which
     /// the owner saw as "a super wiggle rippling down the body like a worm".
+    /// The wave's speed down the body is its beats a second times its length
+    /// on the body (a wavelength and a quarter of the fish): with the beat tied
+    /// to the speed (stride 0.6) it runs about twice as fast as the fish swims,
+    /// which is what a real carp does (the fish covers 0.5 to 0.8 of what its
+    /// wave covers). At two thirds of a wavelength it ran two and a half times
+    /// as fast and read as wiggling in place.
     /// </summary>
     private float Sway(float s)
     {
@@ -2723,7 +2748,7 @@ internal sealed class Koi : Body
         // its width stops growing at _swayCap: a goldfish's long fin would
         // otherwise swing a third of a body length each side, a paddle.
         float w = MathF.Min(s, _swayCap);
-        return _amp * (0.03f + 0.97f * w * w * w) * MathF.Sin(MathF.Tau * 0.65f * s - _phase);
+        return _amp * (0.03f + 0.97f * w * w * w) * MathF.Sin(MathF.Tau * 0.8f * s - _phase);
     }
 
     /// <summary>The distance between two trail points in three dimensions: across the ground and down, depths turned into pixels.</summary>
