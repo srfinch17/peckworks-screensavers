@@ -59,6 +59,7 @@ internal sealed class Dragonflies
     private readonly float _u;
     private int _frame;
     private double _time;
+    private float _jit1, _jit2;                           // the hover jitter's two wrapped phases
 
     /// <param name="koi">The koi, told of each tap too: a curious one comes to look.</param>
     public Dragonflies(Pond pond, Ripples ripples, int count, Random rng, Minnows? minnows = null, KoiSchool? koi = null)
@@ -158,6 +159,7 @@ internal sealed class Dragonflies
     public void Update(float dt)
     {
         _time += dt;
+        _jit1 = (_jit1 + 7.3f * dt) % MathF.Tau; _jit2 = (_jit2 + 5.1f * dt) % MathF.Tau;   // the hover jitter's phases (Draw)
         _frame++;
         for (int i = 0; i < _flies.Length; i++)
         {
@@ -212,7 +214,7 @@ internal sealed class Dragonflies
                         float touch = MathF.Sin(f.Progress * MathF.PI);
                         float was = f.Height;
                         f.Height = f.FromH + (0.0f - f.FromH) * touch;
-                        if (was > 0.004f && f.Height <= 0.004f) _ripples.Add(f.X - MathF.Cos(f.Heading) * _u * 0.016f, f.Y - MathF.Sin(f.Heading) * _u * 0.016f, 0.6f);
+                        if (was > 0.004f && f.Height <= 0.004f) _ripples.Add(f.X - MathF.Cos(f.Heading) * _u * 0.016f, f.Y - MathF.Sin(f.Heading) * _u * 0.016f * Ripples.Squash, 0.6f);   // (the squash was missing here until 2026-10-27: the ring landed a pixel or two off the tail)
                     }
                     else f.Height = f.FromH + (f.ToH - f.FromH) * e;
                     if (f.Progress >= 1)
@@ -376,8 +378,8 @@ internal sealed class Dragonflies
         {
             int look = f.Doing == Doing.Perch && f.Height < 0.01f ? 0 : 1 + (_frame + (int)f.Phase) % 2;
             float jitter = f.Doing == Doing.Hover ? _u * 0.0015f : 0;
-            float t = (float)(_time % 10000.0) + f.Phase;
-            float x = f.X + jitter * MathF.Sin(t * 7.3f), y = f.Y - f.Height * _u * Light.Lift + jitter * MathF.Sin(t * 5.1f + 1);
+            // The hover's jitter rides two wrapped phases of its own (a sine of the clock wrapped at 10000 s jumped every 2.8 hours).
+            float x = f.X + jitter * MathF.Sin(_jit1 + f.Phase * 7.3f), y = f.Y - f.Height * _u * Light.Lift + jitter * MathF.Sin(_jit2 + f.Phase * 5.1f + 1);
             float near = 1 + f.Height * 0.9f;                            // higher = nearer to us = a touch bigger
             _looks[f.Kind][look].Draw(fb, x, y, f.Heading, near, Ripples.Squash, 1f, null, _pond.Open);
         }

@@ -1333,7 +1333,7 @@ internal sealed class DuckWorld
             cx.Add(gx); cy.Add(gy); cr.Add(radius);
         }
         foreach (LilyPad p in pond.Pads) Add(p.Center, p.Radius);
-        foreach (BankRock r in pond.Rocks) Add(r.Centre, r.Radius);
+        foreach (BankRock r in pond.Rocks) Add(r.Centre, r.InWater ? r.Radius * 1.3f : r.Radius);   // a cap standing in the water (the formation's, the island's) gets the island cap's margin: the lists must agree (2026-10-27)
         Add(pond.CattailSpot, U * 0.075f);                 // the cattails stand in front of the ducks: keep the whole clump clear
         foreach ((PointF root, _) in pond.IrisSpots) Add(root, U * 0.05f);
         if (pond.Island is Island isle) Add(isle.Cap, isle.CapRadius * 1.3f);   // the island's dry cap (a duckling dabbled on it)

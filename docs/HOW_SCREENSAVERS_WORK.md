@@ -120,6 +120,7 @@ src/
     Turtle.cs                      the turtle: paddling, floating, diving, hauling out to bask
     Frog.cs                        the frogs: sitting on pads, rocks and the bank, leaping, kicking, floating, diving, climbing out
     Crayfish.cs                    a crayfish that comes out from under a bank rock, walks the shallow bed, feeds, and flips backward from a fish
+    Prawns.cs                      a few see-through freshwater prawns on the bed of the shallows: they feed, walk, swim a little, and flick backward from a fish
     Petals.cs                      petals falling from the blossom, landing, floating
     Ripples.cs                     rings spreading on the water, and the bow waves of swimmers at the surface
     Dragonflies.cs                 hover, dart, perch, dip, and the game with the minnows
@@ -740,6 +741,16 @@ slower in body lengths, keeps to the upper water (a small fish deep down is lost
 off. It follows other goldfish twice as readily and never starts a chase at a koi; an idle wander mostly heads for the neighbourhood of
 another goldfish, which is all the "shoal" there is. A goldfish only goes to look at what is near, because it crosses the pond
 at about a third of a koi's pace, and a faraway petal used to leave it "investigating" four fifths of the time.
+Its play (2026-10-27, "make the little goldfish more fun to watch") is the DART (`Doing.Dart`): two to four
+quick bursts near the top of the water, each a sharp swerve the other way (a point three lengths ahead and
+off to the new side, pulled at harder than a chase), then it wanders on; a face of the dice about the size
+of a look's, the energetic more, and its chases after another goldfish are twice as ready as a koi's. It
+never idles shallower than 0.08 of the pond now, and takes a tenth more of the water's colour at every
+depth than a koi would (`LaySpine`): a small, bright, crisp fish right under the surface read as sitting
+ON the water ("the little goldfish sometimes look like they're above the surface of the water"); the haze
+and the depth are what say "under". The idle drift of every fish reaches deeper since the same day ("make
+more fish willing to swim deeper": a koi's to 0.55 and 0.8 of the pond where it reached 0.4 and 0.6, a
+goldfish's to 0.38 where it reached 0.25).
 
 *Rigid animals turn as a whole.* A dragonfly or a swallow does not bend, so it is a picture
 painted once (several, for the wingbeat) and stamped at any angle every frame (`TurningStamp.cs`),
@@ -753,7 +764,9 @@ Experimental Biology): the diagonal pairs together (front left with back right, 
 pair; only a sea turtle flaps both front flippers at once, and `Turtle.PairOffset` is that one
 difference), the sweep back the LONG part of the cycle (56 percent, `ThrustShare`), the leg
 straight and the foot spread on the push, and the leg folded at the elbow and the foot closed
-to a blade on the way forward (`Fold`). A front leg sweeps a smaller arc than a back leg. A
+to a blade on the way forward (`Fold`). A front leg sweeps a smaller arc than a back leg, and a
+leg reaches about a fifth of the shell's length past its rim and no more (a third until the
+owner said "turtles legs are too long", twice, on 2026-10-27). A
 cruising turtle rows in bouts of two to six seconds and then holds its legs trailing and
 coasts for a second or two (`_bout`, `_gliding`; the bouts' lengths come from a hash of its
 dials, not the scene's dice); a dive, an approach or a chase keeps rowing. (Until 2026-10-26
@@ -782,7 +795,8 @@ Approach, Climb, Bask, Slip) and weighted dice in `Decide()`. A dive goes right 
 and is nearly twice as likely from a cruise as it was (2026-10-26 night, "make animals swim
 down to the bottom": one dive in five minutes on one seed before, four on one seed after).
 `PECKWORKS_TURTLELOG` names a file for a line per turtle per frame (where, how deep, heading,
-turn rate, speed, stroke phase, doing), the instrument the gait was measured with. A haul-out is PLANNED first (a
+turn rate, speed, stroke phase, doing), the instrument the gait was measured with. `PECKWORKS_SNATCHLOG` names one for every predator's look, catch, miss and
+abandon (`Snatch.Log`), as the spliced instruments used to. A haul-out is PLANNED first (a
 point on open water beside the perch, a second one further out on the same line so it arrives
 pointing the right way, where the shell's middle will rest) and refused if the straight swim in
 is not clear of the bank or another turtle holds the perch. The island cap is approached from
@@ -1114,6 +1128,40 @@ pixel stops short), swinging round first if the threat is behind; a bold one wit
 ahead raises its claws first and flips only if it comes within 0.05u. Four seconds between scares.
 Then it holds still with the claws up for a second or two, walks home and slides back under the
 stone. A visit is 30 to 95 s of activity every two to five minutes (the "Crayfish" knob).
+
+*Prawns are the crayfish's method, made small, see-through and always out.* The prawns
+(`Prawns.cs`: a wrapper like `Crayfish`, a `PrawnBed` that answers "may a prawn stand here" and
+finds the homes, and one `Prawn` per animal) copy the crayfish: a rigid body on a straight spine
+(ten points, rostrum to tail fan), legs, antennae and eyes laid on it as small ovals and lines, a
+mind on `Mind<Doing>` with two dials dealt at birth by `Traits.Deal` (bold, busy), and a tail
+flick drawn as a shortening of everything behind the carapace. What differs: a prawn is
+see-through (the body colour carries an alpha of 0.5 to 0.6, so the bed shows through it, with a
+darker, more solid gut thread and stripes), it has no rock to hide under (its home is a patch of
+visible shallow bed, floor 0.02u to 0.065u down where it can, within 0.15u of a stone that stands in
+the water, with room all round and twelve free lines out, found once in the constructor and at
+least 0.08u from the other prawns' homes; a seed that has no such place simply has fewer
+prawns), and its position is the MIDDLE of the body, so a pivot turns it about its middle. It
+feeds most of the time (the front legs reach in and out at about two beats a second), walks at
+0.012u a second with the legs rippling four steps a second, rarely swims (0.025u a second, lifted
+0.01u to 0.02u off the bed by a bell-shaped rise, the legs trailing and, when it is long enough on
+the screen, four swimmeret paddles beating), and turns in a pivot of 0.3 s a quarter turn. A
+scare is any koi, turtle or duck within 0.07u (bold: 0.05u) of its middle while it feeds, walks or
+swims: it swings its tail toward the roomiest way back (0.15 s) so that backward means away, then
+flicks two to four times, 0.06u in 0.12 s each with a quarter second pause, a flick that would end
+on a refused pixel stops short and a later flick with no room behind it is dropped, then sits
+still a second or two with its feelers spread and walks back toward home if it was carried beyond
+seven tenths of its range. Three seconds between scares. It keeps within 0.2u of home (bold: 0.3u), plus the
+one flick a scare may carry it. Solidity: a prawn is solid to nothing and passes under everything
+(the fish pass over it, the pads and petals cover it, the stencil of open water hides it under a
+branch, and two prawns may pass over each other, being tiny and see-through); the pixels that are
+not open shallow water (the land, the stones and their caps, the pads, the cattails' foot, water
+where the haze would pass 0.65) are walls to it, tested at its middle and both ends by the step
+rule, so a wanted step onto one is refused. On the bed its Z is the floor under its middle (eased
+over 0.3 s, never deeper than the bed), so it is sunk, hazed toward the water and shrunk like a
+koi at that depth. At the preview size (a prawn four pixels long) it is one soft dash. It is
+drawn right after the crayfish and before every fish. `PECKWORKS_PRAWNLOG` names a file that gets
+one line per prawn per frame (position, doing, depth, heading, speed, pose, the drawn rostrum and
+tail, the nearest threat's distance and whether it was visible).
 
 *A field mouse is the lizard's method, made small and shy.* The mouse (`Mouse.cs`, with a `Mice`
 holder like `Lizards`) copies the lizard's shape: a spine laid along the shared `Trail` (14 points,

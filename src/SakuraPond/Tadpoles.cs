@@ -107,6 +107,16 @@ internal sealed class Tadpoles
         _ripples = ripples;
         _clutches = new Clutch[Math.Max(0, clutches)];
         for (int i = 0; i < _clutches.Length; i++) _clutches[i] = new Clutch(pond, ripples, where, stand, rng);
+        // The predators' log (Snatch.Log) as a permanent instrument, like the koi's and the turtle's: PECKWORKS_SNATCHLOG
+        // names a file that gets every look, catch, miss and abandon. Nothing in the real pond. (Until 2026-10-27 only a
+        // spliced copy ever set it, and the build warned that nothing assigned it.)
+        string? snatchLog = Environment.GetEnvironmentVariable("PECKWORKS_SNATCHLOG");
+        if (!string.IsNullOrEmpty(snatchLog))
+        {
+            var writer = new StreamWriter(snatchLog) { AutoFlush = false };
+            Snatch.Log = line => writer.WriteLine(line);
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => writer.Flush();
+        }
     }
 
     /// <param name="threats">Screen points of everything a tadpole flees: koi heads and middles, turtle noses and shells, the snake's head, the ducks' heads.</param>

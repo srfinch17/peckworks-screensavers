@@ -215,6 +215,10 @@ internal sealed class CrayfishBody : Body
         if (!_view[i]) return false;
         float f = _pond.Floor[i] / 255f;
         if (Light.Murk(f) > MurkLimit) return false;
+        // And never deeper than 0.13u of water whatever the haze: since Light.SeeU went past the pond's depth
+        // (2026-10-26) the murk tops out near 0.55 and the limit above refuses nothing, so a crayfish could walk
+        // off into the deep middle (the prawns' helper found it, 2026-10-27). It lives in the shallows.
+        if (f * Pond.DepthU > 0.13f) return false;
         int jy = (int)(s.Y + Light.SinkPx(f, _u));
         return jy >= 0 && jy < _pond.Height && _view[jy * _pond.Width + ix];
     }

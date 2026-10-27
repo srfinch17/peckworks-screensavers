@@ -66,6 +66,15 @@ internal abstract class Body
     protected abstract bool Colour(float s, float v, out int r, out int g, out int b, out float alpha);
 
     /// <summary>
+    /// How solid the body is at (s, v), 0 to 1, for a shadow pass (the colours
+    /// are not wanted there). By default it asks Colour and keeps only the
+    /// alpha; an animal whose colour is costly to work out (the koi's skin
+    /// sheets) answers directly. Must agree with Colour, or the shadow and the
+    /// body have different shapes.
+    /// </summary>
+    protected virtual float ShadowAlpha(float s, float v) => Colour(s, v, out _, out _, out _, out float a) ? a : 0;
+
+    /// <summary>
     /// Draws the body along the current spine, one piece of spine at a time.
     ///
     /// For each short piece (from one spine point to the next), we visit only
@@ -143,7 +152,7 @@ internal abstract class Body
             float by0 = MathF.Min(a.Y, b.Y) - reach - before, by1 = MathF.Max(a.Y, b.Y) + reach + after;
             int y0 = Math.Max(cy0, (int)by0), y1 = Math.Min(cy1, (int)by1);
             int xMin = Math.Max(cx0, (int)bx0), xMax = Math.Min(cx1, (int)bx1);
-            float sA = Along[i], sB = Along[i + 1];
+            float sA = Along[i], sB = Along[i + 1], invLen = 1 / len;
             int mA = murkAt != null ? (int)(murkAt[i] * 256) : murk256, mB = murkAt != null ? (int)(murkAt[i + 1] * 256) : murk256;
             for (int y = y0; y <= y1; y++)
             {
@@ -163,17 +172,24 @@ internal abstract class Body
                 for (int x = xa; x <= xb; x++)
                 {
                     int idx = row + x;
+                    if (onlyWhere != null && !onlyWhere[idx]) continue;   // the stencil first: a pixel under a branch or a pad costs nothing more than this read (it was tested after the mitres, the distances and a square root)
                     float rx = x + 0.5f - a.X;
                     // Exactly on which side of each mitre line? (The stretch
                     // above was rounded out to whole pixels, so a pixel right
                     // on a mitre line could otherwise be painted by both
                     // strips, and a fish painted twice over itself shows a
-                    // light line across its body.)
-                    if (!first && rx * sx + ry * sy < 0) continue;
-                    if (!last && (rx - len * dx) * ex2 + (ry - len * dy) * ey2 >= 0) continue;
+                    // light line across its body.) Only the two pixels at
+                    // either end of the stretch can be the rounded-out ones,
+                    // so only they are asked (four multiplies a pixel saved
+                    // over the whole body; proved pixel-identical).
+                    if (x <= xa + 1 || x >= xb - 1)
+                    {
+                        if (!first && rx * sx + ry * sy < 0) continue;
+                        if (!last && (rx - len * dx) * ex2 + (ry - len * dy) * ey2 >= 0) continue;
+                    }
                     float along = rx * dx + ry * dy;                // pixels along the piece from its start
                     float side = rx * nx + ry * ny;                 // signed: pixels out to one side
-                    float t = along <= 0 ? 0 : along >= len ? 1 : along / len;
+                    float t = along <= 0 ? 0 : along >= len ? 1 : along * invLen;
                     float hw = hwA + (hwB - hwA) * t;
                     // Past the very nose or the tail tip, measure round the end, so the ends are rounded.
                     float overrun = (first && along < 0) ? -along : (last && along > len) ? along - len : 0;
@@ -181,10 +197,14 @@ internal abstract class Body
                     float cover = (hw - dist) * invSoft + 0.5f;
                     if (cover <= 0) continue;
                     if (cover > 1) cover = 1;
-                    if (onlyWhere != null && !onlyWhere[idx]) continue;
                     float s = sA + (sB - sA) * t;
                     float v = hw > 0.01f ? Math.Clamp(-side / hw, -1f, 1f) : 0f;
-                    if (!Colour(s, v, out int r, out int g, out int bl, out float alpha)) continue;
+                    int r = 0, g = 0, bl = 0; float alpha;
+                    // A shadow pass needs only how solid the body is here, never its colours: the koi's
+                    // bed shadow and every cross shadow are whole-body passes, and they were asking the
+                    // skin for colours they threw away (about half of a koi's pixel work was shadows).
+                    if (sh256 > 0) { alpha = ShadowAlpha(s, v); if (alpha <= 0) continue; }
+                    else if (!Colour(s, v, out r, out g, out bl, out alpha)) continue;
                     // From here on the arithmetic is whole numbers (solidness
                     // in 256ths, the murk in 256ths): this loop runs tens of
                     // thousands of times a frame per koi, and the float version
@@ -283,16 +303,20 @@ internal abstract class Body
         int x0 = Math.Max(0, (int)c.X - reach), x1 = Math.Min(fb.Width - 1, (int)c.X + reach);
         int y0 = Math.Max(0, (int)c.Y - reach), y1 = Math.Min(fb.Height - 1, (int)c.Y + reach);
         uint[] px = fb.Pixels;
+        float invLen = 1 / len, invWid = 1 / wid;                         // two multiplies per pixel instead of two divides (a fin's box is a few hundred pixels, a turtle has forty-odd ovals a frame)
+        bool rayed = rays && len > wid * 1.2f;
         for (int y = y0; y <= y1; y++)
+        {
+            float dy = y + 0.5f - c.Y, dyCa = dy * ca, dySa = dy * sa;       // the row's share of the turn, done once per row
             for (int x = x0; x <= x1; x++)
             {
                 int idx = y * fb.Width + x;
                 if (onlyWhere != null && !onlyWhere[idx]) continue;
-                float dx = x + 0.5f - c.X, dy = y + 0.5f - c.Y;
-                float u = (dx * ca + dy * sa) / len, v = (-dx * sa + dy * ca) / wid;
+                float dx = x + 0.5f - c.X;
+                float u = (dx * ca + dySa) * invLen, v = (dyCa - dx * sa) * invWid;
                 float q = u * u + v * v;
                 if (q >= 1) continue;
-                float a = alpha * Math.Clamp((1 - q) * 3, 0, 1) * (rays && len > wid * 1.2f ? 0.75f + 0.25f * MathF.Sin(v * 9) : 1f);   // soft edge; fins get faint rays
+                float a = alpha * Math.Clamp((1 - q) * 3, 0, 1) * (rayed ? 0.75f + 0.25f * MathF.Sin(v * 9) : 1f);   // soft edge; fins get faint rays
                 if (mark != null && a > 0.02f) mark[idx] = true;
                 int rr = r, gg = g, bb = b;
                 if (sun != null) { int k = sun[idx]; rr = rr * k >> 8; gg = gg * k >> 8; bb = bb * k >> 8; }
@@ -304,5 +328,6 @@ internal abstract class Body
                 }
                 px[idx] = FrameBuffer.Blend(bg, rr, gg, bb, a);
             }
+        }
     }
 }

@@ -146,7 +146,10 @@ and drifts in a lull, so no two fall the same way.
   that flutters behind it. It is the same fish in the same water (same body, steering, depth and bump rules), but it keeps to
   the sunlit top of the pond, beats quicker, nibbles at the surface twice as often, flinches from a swallow's shadow from further
   off, follows other goldfish far more readily than a koi, never chases a koi, and idles in the neighbourhood of a shoalmate,
-  so three of them drift about as a loose little shoal.
+  so three of them drift about as a loose little shoal. Now and then one DARTS: two to four quick zig-zag bursts near the
+  top, the way a goldfish in a bowl does, and pairs of them chase each other twice as readily as the koi do; and every
+  goldfish keeps a little under the surface with a touch more of the water's haze on it, so it never looks to be
+  sitting on top of the water. Every fish's idle drift reaches deeper than it did.
 - **Each koi has a mind of its own.** Three personality dials are dealt when it is born (spread
   across the school, so near-twins are rare): how
   energetic it is (how much it beats rather than glides, how fast it cruises), how sociable, and
@@ -258,6 +261,17 @@ and drifts in a lull, so no two fall the same way.
   and is solid to nothing: everything swims over it. A tadpole within a few steps on the bed it walks
   at, briskly, and eats if its claws reach it; then it stands and feeds. Each visit has its own two dials, how bold
   and how hungry. The "Crayfish" knob sets how often it comes out (0 for never).
+- A few **freshwater prawns** (the sujiebi, the see-through striped shrimp of a Japanese pond; the "Prawns"
+  knob sets how many, three by default) live on the bed of the shallows near the stones that stand in
+  the water. Each is about two thirds the length of the crayfish, nearly transparent with a faint
+  grey-green cast so the bed shows through it, with a dark thread of a gut down its back, a few thin
+  oblique stripes on its tail segments, two eyes on stalks, and two antennae twice its length that are
+  never quite still. It stands and picks at the silt with its front legs for ten to forty seconds,
+  walks a few body lengths on five pairs of legs rippling in a wave, now and then lifts off the bed and
+  swims forward slowly before settling again, and, when a koi, a turtle or a duck comes near, escapes
+  backward with two to four tail flips (the abdomen snaps under, a quarter second apart), sits still
+  with its feelers up, and walks back toward home. It is drawn on the bed (sunk, hazed and shrunk like
+  the fish above it), is solid to nothing, and each has its own two dials, how bold and how busy.
 - **Ducks** (off by default for now; the "Ducks" setting brings them back) swim by now and then: usually a mother with three to six ducklings, sometimes a drake and
   a hen, sometimes a lone drake, of one of four species (the eastern spot-billed duck, mallard,
   mandarin, common teal), each with its own colours seen from above (the mandarin drake's two

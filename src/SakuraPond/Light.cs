@@ -43,10 +43,11 @@ internal static class Light
     /// The depth, in u, past which a thing in the water is lost from view:
     /// the pond's murk has turned it fully the water's own colour, exactly as
     /// the painted bed is lost in the middle of the pond. A koi that dives
-    /// below this is gone until it comes up again. Shallower than the pond's
-    /// deepest water (Pond.DepthU), so the middle of the pond really can hide
-    /// a fish; deeper than most of the water near the bank, so fish there are
-    /// always seen.
+    /// below this is gone until it comes up again. DEEPER than the pond's
+    /// deepest water (Pond.DepthU) since 2026-10-26 (it was shallower, so the
+    /// middle of the pond could hide a fish): the murk now tops out near 0.55
+    /// on the bed, no fish is ever quite lost, and the painters' "nothing left
+    /// to paint" culls past 0.985 are dormant (kept: a smaller SeeU wakes them).
     /// </summary>
     public const float SeeU = 0.70f;   // 0.26 until 2026-10-23 ("a little tiny bit" deeper), 0.30 until 2026-10-26 ("make the deep parts a little more visible"), 0.36 until the same evening ("make the water a little more transparent so i can kinda see what's going on down there"), 0.44 until later that evening ("again. make the water more transparent": the fourth ask, so the step is twice the last one, and the painted bed's step was made to show at last, see PondPainter.BedClear): well past the pond's full depth now, so a fish on the bed keeps nearly half of its own colour
 

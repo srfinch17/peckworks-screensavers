@@ -274,7 +274,7 @@ internal sealed class Snake : Body
         var centres = new List<PointF>();
         var radii = new List<float>();
         foreach (LilyPad p in pond.Pads) { centres.Add(p.Center); radii.Add(p.Radius); }
-        foreach (BankRock r in pond.Rocks) { centres.Add(r.Centre); radii.Add(r.Radius); }
+        foreach (BankRock r in pond.Rocks) { centres.Add(r.Centre); radii.Add(r.InWater ? r.Radius * 1.3f : r.Radius); }   // a cap standing in the water (the formation's, the island's) gets the island cap's margin: the lists must agree (2026-10-27)
         centres.Add(pond.CattailSpot); radii.Add(_u * 0.06f);
         foreach ((PointF root, _) in pond.IrisSpots) { centres.Add(root); radii.Add(_u * 0.045f); }
         if (pond.Island is Island isle) { centres.Add(isle.Cap); radii.Add(isle.CapRadius * 1.3f); }   // the island's dry cap
