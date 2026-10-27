@@ -331,6 +331,8 @@ internal sealed class Snake : Body
 
     /// <summary>Under the surface (the head more than 0.08 of the pond down): drawn under the fish shallower than it (DrawDeep), on no surface list, pushing no petal, hunting nothing.</summary>
     public bool Deep => _zHead > 0.08f;
+    /// <summary>A stress hook for the instruments: PECKWORKS_SNAKEDIVE=1 makes every explore and crossing a dive (the dice still roll).</summary>
+    private static readonly bool AlwaysDive = Environment.GetEnvironmentVariable("PECKWORKS_SNAKEDIVE") == "1";
 
     /// <summary>The head's depth, 0 the surface to 1 the pond's full depth (for the instruments).</summary>
     public float Z => _zHead;
@@ -473,7 +475,7 @@ internal sealed class Snake : Body
         _mind.Begin(Doing.Cross); _phase = 0;
         // Half of its crossings are dives too (an explore was often over, or a prowl, before the head reached water deep
         // enough to go down in: one dive begun and nothing seen on the first run). The roll is made either way.
-        _zTarget = _rng.NextDouble() < 0.5 ? 0.3f + 0.4f * (float)_rng.NextDouble() : 0f;
+        { bool dive = _rng.NextDouble() < 0.5; _zTarget = dive ? 0.3f + 0.4f * (float)_rng.NextDouble() : AlwaysDive ? 0.5f : 0f; }   // (the same two rolls as before, so the dice are unmoved; the stress hook adds no roll)
         Note(_zTarget > 0 ? "cross:dive" : "cross");
         PointF c = _pond.Centre;
         // A fed snake goes straight through the middle: with the usual spread it left along the bottom edge from the land
@@ -498,7 +500,7 @@ internal sealed class Snake : Body
             _goal = new PointF(x, y);
             // Half of its explores are DIVES (2026-10-27, "make the snake be willing to go deep also"): down to a third
             // to seven tenths of the pond on the way to the spot, the body following the head (Update, LaySpine).
-            _zTarget = _rng.NextDouble() < 0.5 ? 0.3f + 0.4f * (float)_rng.NextDouble() : 0f;
+            { bool dive = _rng.NextDouble() < 0.5; _zTarget = dive ? 0.3f + 0.4f * (float)_rng.NextDouble() : AlwaysDive ? 0.5f : 0f; }   // (the same two rolls as before, so the dice are unmoved; the stress hook adds no roll)
             _mind.Begin(Doing.Explore, 45); _phase = 0; _exploreLeft--; Note(_zTarget > 0 ? "explore:dive" : "explore");
             return true;
         }
@@ -1234,9 +1236,14 @@ internal sealed class Snake : Body
         // surface over ten seconds or so. Never deeper than the bed under the head allows. Deep, it hunts and
         // basks at nothing (Decide, Scan, Notice, LookForTadpole), pushes no petal and is on no surface list.
         if (_doing is not (Doing.Explore or Doing.Cross)) _zTarget = 0;
-        float bedZ = MathF.Max(0, 0.9f * FloorZ(_x, _y) - 0.05f);
+        // The bed under the head AND a little ahead of it: the step rule refuses a step into a bed shallower than the
+        // head, and a head that rose only with the bed already under it waited at every steep slope (a rock's hill,
+        // where the prawns live: "snake gets hung up on prawn somehow. happened near a rock") for the 5 s jam breaker.
+        float aheadPx = _u * 0.06f;
+        float bedZ = MathF.Max(0, 0.9f * MathF.Min(FloorZ(_x, _y), FloorZ(_x + MathF.Cos(_heading) * aheadPx, _y + MathF.Sin(_heading) * aheadPx)) - 0.05f);
         _zHead += (MathF.Min(_zTarget, bedZ) - _zHead) * (1 - MathF.Exp(-dt * 0.25f));
-        MotionLog?.Invoke(FormattableString.Invariant($"F,{_clock:F3},{_doing},{_phase},{_x:F1},{_y:F1},{_zHead:F3},{_zTarget:F2},{_speed:F1},{HuntNote}"));
+        if (_zHead > bedZ) _zHead = MathF.Max(bedZ, _zHead - 0.2f * dt);              // too deep for the bed ahead: up at a set rate, not the slow ease (which never got there while the step stood refused)              // too deep for the bed ahead: up at a set rate, not the slow ease (which never got there while the step stood refused)
+        MotionLog?.Invoke(FormattableString.Invariant($"F,{_clock:F3},{_doing},{_phase},{_x:F1},{_y:F1},{_zHead:F3},{_zTarget:F2},{_speed:F1},{HuntNote},{(_blocked ? 1 : 0)},{bedZ:F3}"));
 
         // ---- A touch from another animal: startle ----
         // A bold snake feels a touch only when it is close (0.035u), a nervous one

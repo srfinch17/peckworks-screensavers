@@ -1267,8 +1267,14 @@ before the koi school (`DrawDeep`), so every fish shallower than it paints over 
 still is a known pass). Deep, it is on no surface list (a frog is not pushed off it, it brushes no
 petal, no bow wave), it hunts and basks at nothing (the dice drop those faces, the scans skip), a
 step onto a bed too shallow for its depth is refused, and the end of the explore, or any other
-doing, eases it back to the surface over ten seconds or so. `PECKWORKS_SNAKELOG` names a file for a
-line per frame (clock, doing, place, depth, speed, the hunt's note).
+doing, eases it back to the surface over ten seconds or so. The head reads the bed a little AHEAD
+of it as well as under it, and when it is deeper than that bed allows it rises at a set rate
+(round thirty-five, "snake gets hung up on prawn somehow. happened near a rock": with the head
+rising only with the bed already under it, every step at a steep slope, a rock's hill where the
+prawns live, was refused until the 5 s jam breaker, the koi's old deadlock in a new body).
+`PECKWORKS_SNAKELOG` names a file for a line per frame (clock, doing, place, depth, speed, the
+hunt's note, whether the step was refused, the bed's cap); `PECKWORKS_SNAKEDIVE=1` makes every
+explore and crossing a dive, for the instruments.
 
 *The snake gets hungry* (round twenty-seven). `Snake._hunger` runs from 0 (full) to 1 (famished), is kept across visits and
 rises with the clock (0 to 1 in 8 to 14 minutes, a bold snake sooner; the rate is worked out from the two dials, never rolled).
