@@ -1465,9 +1465,11 @@ internal sealed class Turtle : Body
             // A front leg sweeps from well forward to straight out; a back leg from out to well back,
             // through a smaller arc. With the legs at rest (floating, gliding, basking) they trail a
             // little behind those middles. The fold at the elbow or knee is the recovery's.
-            Leg(fb, stencil, 0.3f, side, 1.15f - 0.55f * Stroke(front) * _stroke - 0.12f * (1 - _stroke), 0.34f, Thrust(front) * _stroke, Fold(front) * _stroke, +1, murk);
+            // Short legs: a slider's leg reaches about a quarter of its length past the shell's rim, no more
+            // (0.34 and 0.3 of the length until 2026-10-27, "turtles legs are too long").
+            Leg(fb, stencil, 0.3f, side, 1.15f - 0.55f * Stroke(front) * _stroke - 0.12f * (1 - _stroke), 0.25f, Thrust(front) * _stroke, Fold(front) * _stroke, +1, murk);
             // The stretch (while basking) swings one back leg further back and out.
-            Leg(fb, stencil, 0.74f, side, 2.3f - 0.45f * Stroke(rear) * _stroke + 0.3f * (1 - _stroke) + (side > 0 ? 0.4f * _stretch : 0), 0.3f + (side > 0 ? 0.1f * _stretch : 0), Thrust(rear) * _stroke, Fold(rear) * _stroke, -1, murk);
+            Leg(fb, stencil, 0.74f, side, 2.3f - 0.45f * Stroke(rear) * _stroke + 0.3f * (1 - _stroke) + (side > 0 ? 0.4f * _stretch : 0), 0.23f + (side > 0 ? 0.08f * _stretch : 0), Thrust(rear) * _stroke, Fold(rear) * _stroke, -1, murk);
         }
         Paint(fb, stencil, _pond.Sun, murk, soft, _pond.Pixels, mark: mark);
         // The eyes: a dark dot each side of the head, toward the front.

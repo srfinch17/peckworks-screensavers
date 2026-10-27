@@ -8,7 +8,7 @@ namespace SakuraPond;
 /// </summary>
 public sealed class SakuraPondSettings : ScreensaverSettings
 {
-    private readonly IntSetting _petals, _koi, _goldfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _frogs, _tadpoles, _crayfish, _ducks, _log, _drawWidth;
+    private readonly IntSetting _petals, _koi, _goldfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _frogs, _tadpoles, _crayfish, _prawns, _ducks, _log, _drawWidth;
 
     public SakuraPondSettings() : base("SakuraPond")
     {
@@ -27,6 +27,7 @@ public sealed class SakuraPondSettings : ScreensaverSettings
         _frogs = Add(nameof(FrogCount), "Frogs", 0, 4, 2);
         _tadpoles = Add(nameof(TadpoleClutches), "Tadpole clutches", 0, 3, 1);
         _crayfish = Add(nameof(CrayfishPercent), "Crayfish", 0, 300, 100, "%");
+        _prawns = Add(nameof(PrawnCount), "Prawns", 0, 6, 3);           // a few freshwater prawns on the bed of the shallows (round thirty-two)
         _ducks = Add(nameof(DuckPercent), "Ducks", 0, 300, 0, "%");   // off by default since 2026-10-23 (his word: "turn off the ducks for now"); the slider brings them back
         _log = Add(nameof(FallenLog), "Fallen log", 0, 1, 0);          // off by default since 2026-10-23 ("the log just feels outta place"; the code stays, 1 brings it back); a small rock formation stands where it lay
         // 1920 since the boughs sway (round twenty-five): on a 4K screen the new build at 2048 took two pages on one
@@ -46,6 +47,9 @@ public sealed class SakuraPondSettings : ScreensaverSettings
 
     /// <summary>How often the crayfish comes out from under its rock. 100 = every few minutes, 0 = never.</summary>
     public int CrayfishPercent => _crayfish.Value;
+
+    /// <summary>How many freshwater prawns live on the bed of the shallows. 0 = none.</summary>
+    public int PrawnCount => _prawns.Value;
 
     /// <summary>How often a duck (often with ducklings) swims by. 100 = every several minutes, 0 = never.</summary>
     public int DuckPercent => _ducks.Value;

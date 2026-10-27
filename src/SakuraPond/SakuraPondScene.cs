@@ -55,6 +55,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Frogs _frogs;
     private readonly Tadpoles _tadpoles;
     private readonly Crayfish _crayfish;
+    private readonly Prawns _prawns;
     private readonly Ducks _ducks;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
@@ -115,6 +116,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         int salt = unchecked(_pond.Pads.Count * 7919 + (_pond.Pads.Count > 0 ? (int)_pond.Pads[0].Center.X * 31 + (int)_pond.Pads[0].Center.Y : 0) + width);
         _tadpoles = new Tadpoles(_pond, settings.TadpoleClutches, _ripples, _waterInView, HeapFree(_waterInView), new Random(unchecked(salt + 101)), _petals);
         _crayfish = new Crayfish(_pond, _ripples, settings.CrayfishPercent / 100f, new Random(unchecked(salt + 202)));
+        _prawns = new Prawns(_pond, _ripples, settings.PrawnCount, _waterInView, new Random(unchecked(salt + 404)));   // the prawns too: their own dice
         // Who may eat a tadpole or froglet it happens upon (Snatch in Tadpoles.cs): nothing goes looking for them.
         _koi.Prey = _tadpoles;
         _turtles.Prey = _tadpoles;
@@ -223,6 +225,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _dragonflies.Update(dt);
         _swallows.Update(dt);
         _ripples.Update(dt);
+        _prawns.Update(dt, bedThreats);                                                   // the prawns flick backward from the same things the crayfish does
         Sections.Mark("update: crayfish to ripples");
     }
 
@@ -242,7 +245,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _mice.Draw(fb);
         Sections.Mark("mice");
         _crayfish.Draw(fb);                       // on the bed of the shallows: under every fish
-        Sections.Mark("crayfish");
+        _prawns.Draw(fb);                         // the prawns, on the same bed: under every fish too
+        Sections.Mark("crayfish, prawns");
         _tadpoles.DrawUnder(fb);                  // the tadpoles, just over the bed in the shallows, and a froglet deep under the surface: under every fish (drawn after the koi, a clutch sat on the back of a fish passing over it)
         _koi.Draw(fb, _turtles);                  // the koi and the turtles in one depth order (a turtle between the fish deeper and shallower than it)
         _frogs.DrawUnder(fb);                     // a frog that has dived is under the surface: over the fish deeper than it, under the minnows
