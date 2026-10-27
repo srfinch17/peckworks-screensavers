@@ -33,6 +33,11 @@ internal sealed class FrogPerch
 /// </summary>
 internal sealed class Frogs
 {
+    // THE INSTRUMENT LOG (permanent, free unless PECKWORKS_FROGLOG names a file): one row per frog per frame, what it is
+    // doing, where it is drawn, its depth, height, leg pose, heading, speed and where it is in its kick cycle. The kit's
+    // frog readers (frogstats.py, frogsheet30.py) were written against a spliced copy of this; now the repo carries it.
+    private static readonly System.IO.StreamWriter? FrogLog = Environment.GetEnvironmentVariable("PECKWORKS_FROGLOG") is string lf && lf.Length > 0 ? new System.IO.StreamWriter(lf) { AutoFlush = false } : null;
+    private int _logFrame;
     private readonly Frog[] _all;
     private readonly List<FrogPerch> _perches = new();
     private readonly List<Body> _inWater = new();     // the frogs in the water this frame, refilled each Update and never reallocated
@@ -85,6 +90,12 @@ internal sealed class Frogs
         if (surface != null) for (int k = 0; k < surface.Count; k++) if (surface[k] is not Frog) _solids.Add(surface[k]);
         if (turtles != null) for (int k = 0; k < turtles.Count; k++) if (turtles[k].InWater) _solids.Add(turtles[k]);
         foreach (Frog f in _all) f.Update(dt, snakeHead, koiHeads, turtleSpots, lizardNoses, snake);
+        if (FrogLog != null)
+        {
+            _logFrame++;
+            for (int i = 0; i < _all.Length; i++) FrogLog.WriteLine(FormattableString.Invariant($"F,{_logFrame},{i},{_all[i].LogRow()}"));
+            if (_logFrame % 600 == 0) FrogLog.Flush();
+        }
         // Two frogs in the water must not overlap: if their middles are closer than 0.8 of a body
         // length each is eased apart (half the way each, no faster than a body length a second).
         for (int i = 0; i < _all.Length; i++)
@@ -138,6 +149,7 @@ internal sealed class Frogs
     public void Draw(FrameBuffer fb)
     {
         foreach (Frog f in _all) if (!f.UnderWater) f.Draw(fb);
+        foreach (Frog f in _all) f.DrawSpray(fb);                 // the drops of a landing, over the frog that threw them
     }
 
     // ---------------------------------------------------------------- perches
@@ -384,6 +396,14 @@ internal sealed class Frog : Body
     // ---- where it is ----
     private float _x, _y, _heading;                        // the body's middle, ground pixels; ground radians
     private float _wakeRun;                                // pixels swum since the last wavelet of its bow wave (Ripples.Wake)
+    private float _spread;                                 // the kick's sweep: 0 legs together, 1 knees and feet swept wide (peaks mid-thrust)
+    private int _divesWet;                                 // dives in this spell in the water: two end the chain (it heads for a perch)
+    private readonly float[] _murkAt = new float[Points];  // the water over each spine point when it swims or floats (the head clear, the rump under)
+    private struct Drop { public float X, Y, Vx, Vy, H, Vh; }
+    private readonly Drop[] _drops = new Drop[10];         // the spray of a landing: a few drops flung up, each on its own arc (the koi leap's)
+    private int _dropCount;
+    private float _foam;                                   // the white froth where it hit the water: 1 at the splash, gone in a third of a second
+    private PointF _foamAt;
     private float _speed, _turnRate;
     private float _wet;                                    // seconds since it last sat on something: the longer, the keener to get out
     private float _z;                                      // depth: 0 at the surface, 1 as deep as a koi goes
@@ -486,6 +506,8 @@ internal sealed class Frog : Body
     public PointF Nose => Spine[0];
     public PointF Rump => Spine[Points - 1];
     public float Z => _z;
+    /// <summary>The instrument log's columns for this frog (Frogs.Update writes them when PECKWORKS_FROGLOG names a file).</summary>
+    public string LogRow() => FormattableString.Invariant($"{_doing},{_hop},{Centre.X:F1},{Centre.Y:F1},{_z:F3},{_height:F4},{_pose:F2},{_heading:F2},{_speed:F1},{_kickT:F2},{_period:F2}");
     public float Height => _height;
     public float Speed => _speed;
     public float Heading => _heading;
@@ -685,13 +707,15 @@ internal sealed class Frog : Body
         _snatch.Tick(dt);
         if (_hop != HopKind.Snap && _snatch.Hunting) _snatch.Abandon();     // the snap is the whole chase; anything else going on means it is off
         for (int i = 0; i < _bad.Length; i++) if (_bad[i] > 0) _bad[i] -= dt;
-        if (_doing == Doing.Sit) _wet = 0; else _wet += dt;
+        if (_doing == Doing.Sit) { _wet = 0; _divesWet = 0; } else _wet += dt;
         if (_splashPending)
         {
             _splashIn -= dt;
             if (_splashIn <= 0) { _splashPending = false; _ripples.Add(_splashAt.X, _splashAt.Y, 0.3f); }
         }
 
+        if (_dropCount > 0) Spray(dt);
+        if (_foam > 0) _foam = MathF.Max(0, _foam - dt / 0.35f);
         CheckThreats();
 
         if (_hop != HopKind.None) Hop(dt);
@@ -773,7 +797,7 @@ internal sealed class Frog : Body
         else if (touched) { src = "touch"; at = _touchAt; }
         else if (shadow is PointF sd) { src = "shadow"; at = sd; }
         else if (sitting && _perch != null && _perch.Kind != PerchKind.Pad && NearAny(_lizardNoses, me, _u * 0.08f * reach, out PointF ln)) { src = "lizard"; at = ln; }
-        else if (!sitting && NearAny(_koiHeads, me, _u * 0.04f * reach, out PointF kh)) { src = "koi"; at = kh; }
+        else if (!sitting && _divesWet < 2 && NearAny(_koiHeads, me, _u * 0.03f * reach, out PointF kh)) { src = "koi"; at = kh; }   // (0.04u until round thirty-five; and after two dives in one spell it has had enough and heads for a perch instead)
         else if (!sitting && NearAny(_turtleSpots, me, _u * 0.06f * reach, out PointF ts)) { src = "turtle"; at = ts; }
         if (src == null) return;
         Log?.Invoke($"reach {src} ready={(_alarm.Ready ? 1 : 0)}");
@@ -1024,12 +1048,72 @@ internal sealed class Frog : Body
         }
     }
 
-    /// <summary>The ring a frog makes landing: a big one now, a smaller one a quarter second behind.</summary>
+    /// <summary>
+    /// A frog hitting the water: a big ring, a thin one a quarter second behind, a burst of foam where it struck, and
+    /// eight drops flung up and out that fall back in with tiny rings of their own (the koi leap's spray). The owner's
+    /// words before this, when a landing was one ring at six tenths (three grey levels of lift for half a second):
+    /// "the water doesn't get disturbed when they hit it in any way".
+    /// </summary>
     private void Splash()
     {
         PointF s = Centre;
-        _ripples.Add(s.X, s.Y, 0.6f);
+        _ripples.Add(s.X, s.Y, 1.3f);
         _splashAt = s; _splashIn = 0.25f; _splashPending = true;
+        _foam = 1f; _foamAt = s;
+        _dropCount = 0;
+        float u = _u, wide = _len * 0.3f;
+        for (int i = 0; i < 8; i++)
+        {
+            float a = (float)(_rng.NextDouble() * MathF.Tau), v = u * (0.025f + 0.06f * (float)_rng.NextDouble());
+            _drops[_dropCount++] = new Drop
+            {
+                X = s.X + (float)(_rng.NextDouble() - 0.5) * wide, Y = s.Y + (float)(_rng.NextDouble() - 0.5) * wide * Ripples.Squash,
+                Vx = MathF.Cos(a) * v, Vy = MathF.Sin(a) * v * Ripples.Squash,
+                H = 0.003f, Vh = 0.08f + 0.1f * (float)_rng.NextDouble(),
+            };
+        }
+    }
+
+    /// <summary>The drops of a splash on their arcs: up, over, down, and a tiny ring where each one lands (the koi's Spray).</summary>
+    private void Spray(float dt)
+    {
+        for (int i = 0; i < _dropCount; i++)
+        {
+            ref Drop d = ref _drops[i];
+            d.X += d.Vx * dt; d.Y += d.Vy * dt;
+            d.Vh -= 0.9f * dt;                                                    // gravity, in u a second each second: a drop is up for about a quarter second
+            d.H += d.Vh * dt;
+            if (d.H <= 0)
+            {
+                if (i < 3) _ripples.Add(d.X, d.Y, 0.15f, thin: true);
+                _drops[i] = _drops[--_dropCount];
+                i--;
+            }
+        }
+    }
+
+    /// <summary>Paints the spray (Frogs.Draw, after every frog): each drop a tiny pale bead lifted up the screen by its height.</summary>
+    public void DrawSpray(FrameBuffer fb)
+    {
+        if (_dropCount == 0) return;
+        float r = MathF.Max(1f, _u * 0.0022f);
+        for (int i = 0; i < _dropCount; i++)
+        {
+            ref Drop d = ref _drops[i];
+            var c = new PointF(d.X, d.Y - d.H * Light.Lift * _u);
+            Oval(fb, _pond.Open, c, 0, r, r, 236, 246, 250, 0.85f, 0, _pond.Sun, rays: false, water: _pond.Pixels);
+        }
+    }
+
+    /// <summary>A small ring from each hind foot (where the feet are at the stroke's start, just behind the hips).</summary>
+    private void KickRings(float strength)
+    {
+        foreach (int side in (ReadOnlySpan<int>)[1, -1])
+        {
+            (float fx, float fy) = RawGround(0.95f, 0.45f * side);
+            PointF f = ToScreen(fx, fy);
+            _ripples.Add(f.X, f.Y, strength, thin: true);
+        }
     }
 
     // ================================================================ leaving the perch
@@ -1237,17 +1321,25 @@ internal sealed class Frog : Body
         {
             var ps = _owner.Perches;
             int n = ps.Count, usable = 0;
+            // A near perch first: a frog crosses to the next pad or stone, not the whole pond (0.6u, and 1.0u once wet a
+            // while, until round thirty-five: one frog swam 26 to 30 s at a stretch three times in four minutes). If
+            // nothing is within reach it looks over the whole pond, the nearest much preferred (one frog with no perch
+            // near it floated for three minutes in three-second floats).
+            foreach (float reach in (ReadOnlySpan<float>)[_wet > 20f ? 0.5f : 0.35f, 2f])
+            {
+            if (usable > 0) break;
             for (int i = 0; i < n; i++)
             {
                 FrogPerch p = ps[i];
                 _w[i] = 0;
                 if ((p.Holder != null && p.Holder != this) || (p == _lastPerch && n > 1) || p == _perch || _bad[i] > 0) continue;
                 float d = Dist(here, p.Centre);
-                if (d > _u * (_wet > 20f ? 1.0f : 0.6f) || d < _len * 1.2f) continue;
+                if (d > _u * reach || d < _len * 1.2f) continue;
                 if (!StageFor(p, here, out PointF stage, out PointF dirIn, out PointF pre)) continue;
                 _stageCache[i] = stage; _dirCache[i] = dirIn; _preCache[i] = pre;
-                _w[i] = 1f / (0.15f + d / _u);
+                _w[i] = 1f / ((0.08f + d / _u) * (0.08f + d / _u));              // the nearest by far (the square of the distance)
                 usable++;
+            }
             }
             if (usable > 0)
             {
@@ -1276,7 +1368,7 @@ internal sealed class Frog : Body
 
     private void BeginSwim()
     {
-        _mind.Begin(Doing.Swim, 30f);
+        _mind.Begin(Doing.Swim, 20f);
         _kickT = Thrust + 0.05f; _period = 1.0f + 0.3f * (float)_rng.NextDouble();   // in the glide, legs out: the landing's skim; the first kick after the recovery
         _poseWant = 1f;
         _z = 0; _zTarget = 0; _rising = false; _speed = _u * 0.05f;
@@ -1296,6 +1388,7 @@ internal sealed class Frog : Body
     {
         ReleaseGoal();
         _mind.Begin(Doing.Dive, 3.5f + 5 * (float)_rng.NextDouble());
+        _divesWet++;
         _zTarget = 0.2f + 0.1f * (float)_rng.NextDouble();
         _rising = false; _diveExtra = 0;
         _kickT = 0; _boost = 1f;
@@ -1357,6 +1450,7 @@ internal sealed class Frog : Body
                 _floatKickT += dt;
                 float k = _floatKickT / 0.55f;
                 if (k >= 1) { _floatKickT = -1; _poseWant = hang; }
+                else if (_floatKickT - dt <= 0) KickRings(0.15f);                          // the lazy kick's own small rings
                 else { _poseWant = hang + 0.4f * MathF.Sin(MathF.PI * k); _speed = MathF.Max(_speed, _u * 0.015f * MathF.Sin(MathF.PI * k)); }
             }
             else _poseWant = hang;
@@ -1373,12 +1467,18 @@ internal sealed class Frog : Body
             if (_kickT >= _period) { _kickT -= _period; _period = 0.95f + 0.35f * (float)_rng.NextDouble(); }
             float c = _kickT, recoverFrom = _period - Recover;
             float kick = c < Thrust ? Smooth(c / Thrust) : MathF.Exp(-(c - Thrust) * 3.2f);
+            // THE WHIP: in the first half of the thrust the knees and feet sweep out wide, in the second half they come
+            // together behind as the legs straighten (a frog's kick is a whip, not a piston: the webs push on the way round).
+            _spread = c < Thrust ? MathF.Sin(MathF.PI * MathF.Min(1f, c / Thrust)) : 0f;
+            // Each thrust stirs the water: a small ring from each foot, when the feet are near the surface.
+            if (c < dt && _z < 0.15f) KickRings(0.3f);
             _boost = MathF.Max(0, _boost - dt / 0.9f);
             float drag = c > recoverFrom ? 1 - 0.35f * Smooth((c - recoverFrom) / Recover) : 1f;
             _speed = (vGlide + (vPush - vGlide) * kick) * drag + _u * 0.07f * _boost;
             _poseWant = c < Thrust ? Smooth(c / Thrust) : c < recoverFrom ? 1f - 0.08f * Smooth((c - Thrust) / 0.3f) : 0.92f * (1 - Smooth((c - recoverFrom) / Recover));
             push = c < Thrust ? 1f : c > recoverFrom ? 0.6f : 0.25f;
         }
+        if (floating) _spread = 0;
         // The speed a landing carried into the water: it skims on, slowing, and the first kick comes when the glide is done.
         _skid *= MathF.Exp(-dt * 2.5f);
         if (_skid > _speed) _speed = _skid;
@@ -1536,10 +1636,12 @@ internal sealed class Frog : Body
     private void FloatEnds()
     {
         Span<float> w = stackalloc float[3];
-        bool tired = _wet > 25f;               // it has been in the water a good while: it wants out
-        w[0] = (2f + 2f * _restless) * (tired ? 3f : 1f);   // to a perch
-        w[1] = tired ? 0.1f : 0.8f + 1.0f * _restless;      // to open water, for the swim of it
-        w[2] = 0.25f;                                       // duck under
+        // A frog is a bank animal that visits the water: it wants out after a dozen seconds wet (25 until round thirty-five,
+        // when the frogs were in the water half to two thirds of the time, dive after dive off every passing koi).
+        bool tired = _wet > 12f;               // it has been in the water a good while: it wants out
+        w[0] = (2f + 2f * _restless) * (tired ? 4f : 1f);   // to a perch
+        w[1] = tired ? 0.05f : 0.5f + 0.6f * _restless;     // to open water, for the swim of it
+        w[2] = _divesWet >= 2 ? 0f : 0.25f;                 // duck under (not a third time this spell)
         switch (Dice.Pick(_rng, w))
         {
             case 2:
@@ -1558,7 +1660,7 @@ internal sealed class Frog : Body
 
     private void BeginSwimFromWater()
     {
-        _mind.Begin(Doing.Swim, 30f);
+        _mind.Begin(Doing.Swim, 20f);
         _kickT = 0; _period = 0.9f + 0.2f * (float)_rng.NextDouble();
         _refused = 0; _blocked = false;
     }
@@ -1792,7 +1894,21 @@ internal sealed class Frog : Body
         float soft = MathF.Max(1f, _u * 0.0012f) * (1 + 3 * _z);
         float L = _len * Sc;
         bool floating = _doing == Doing.Float && _hop == HopKind.None;
-        float legMurk = floating ? MathF.Max(murk, 0.5f) : murk;
+        // IN THE WATER the frog is in it, not on it: only the head (the eyes and the snout) breaks the surface; the back
+        // slopes under, the rump and the hind legs are a hand down and the arms hang under the chin. So the water is
+        // painted over each part by how deep it sits (the murk per spine point, Body.Paint's murkAt), and Body.Deepen
+        // darkens and greys those parts as it does any deep thing. Before round thirty-five the whole frog took the
+        // surface's own haze (0.14) and read as lying on top of the water (his words: "no indication that they're in the
+        // water, they look like they're just on top of everything"). Afloat the head sits lower too.
+        bool wet = !air;
+        float legMurk = wet ? MathF.Max(murk, floating ? 0.55f : 0.5f) : murk, armMurk = wet ? MathF.Max(murk, 0.4f) : murk;
+        if (wet)
+            for (int i = 0; i < Points; i++)
+            {
+                float sAlong = Along[i], headClear = floating ? 0.22f : 0.14f;
+                float sunk = Math.Clamp((sAlong - 0.2f) / 0.4f, 0f, 1f);                  // 0 at the head, 1 from the middle of the back on
+                _murkAt[i] = MathF.Max(murk, headClear + (0.42f - headClear) * sunk);
+            }
 
         // The shadow: the same body, dark and soft, down and to the right by the height (the pond's rule, Light.cs).
         if (air && _height * _u > 0.6f)
@@ -1813,10 +1929,16 @@ internal sealed class Frog : Body
 
         HindLeg(fb, stencil, 1, L, legMurk);
         HindLeg(fb, stencil, -1, L, legMurk);
-        ForeLeg(fb, stencil, 1, L, legMurk);
-        ForeLeg(fb, stencil, -1, L, legMurk);
+        ForeLeg(fb, stencil, 1, L, armMurk);
+        ForeLeg(fb, stencil, -1, L, armMurk);
 
-        Paint(fb, stencil, _pond.Sun, murk, soft, _pond.Pixels);
+        Paint(fb, stencil, _pond.Sun, murk, soft, _pond.Pixels, murkAt: wet ? _murkAt : null);
+        // The foam of a landing: a soft white disc that spreads a little and fades (a third of a second).
+        if (_foam > 0)
+        {
+            float fr = L * (0.35f + 0.45f * (1 - _foam));
+            Oval(fb, _pond.Open, _foamAt, 0, fr, fr * Ripples.Squash, 232, 240, 238, 0.55f * _foam * _foam, 0, _pond.Sun, rays: false, water: _pond.Pixels);
+        }
 
         // The eyes.
         float rr = MathF.Max(1.4f, L * 0.09f), rd = rr * 0.72f;
@@ -1854,9 +1976,12 @@ internal sealed class Frog : Body
         (float hx, float hy) = RawGround(0.70f, 0.6f * side);
         float ox = -_fy * side, oy = _fx * side;                                  // the unit vector out to this side, ground plane
         // Gathered (the crouch before a spring): the knees drawn in under the body and the feet pulled back under the hips.
-        float tf = Lerp(Lerp(0.17f, 0.07f, g), -0.36f, p) * L, to = Lerp(0.24f, 0.07f, p) * splay * L * (1 - 0.3f * g);
-        float sf = Lerp(-0.30f, -0.40f, p) * L, so = Lerp(-0.04f, 0.04f, p) * splay * L;
-        float ff = Lerp(0.20f * (1 - 0.4f * g), -0.20f, p) * L, fo = Lerp(0.03f, 0.08f, p) * splay * L;
+        // The whip of the kick (_spread, mid-thrust 1): the knee swings out a fifth of a length and the foot a quarter,
+        // and both come back in as the legs straighten; stretched, the feet sit a little apart with the webs open.
+        float sp = _spread;
+        float tf = Lerp(Lerp(0.17f, 0.07f, g), -0.36f, p) * L, to = (Lerp(0.24f, 0.07f, p) + 0.2f * sp) * splay * L * (1 - 0.3f * g);
+        float sf = Lerp(-0.30f, -0.40f, p) * L, so = (Lerp(-0.04f, 0.04f, p) + 0.1f * sp) * splay * L;
+        float ff = Lerp(0.20f * (1 - 0.4f * g), -0.20f, p) * L, fo = (Lerp(0.03f, 0.12f, p) + 0.25f * sp) * splay * L;
         float kx = hx + _fx * tf + ox * to, ky = hy + _fy * tf + oy * to;
         float ax = kx + _fx * sf + ox * so, ay = ky + _fy * sf + oy * so;
         float fx = ax + _fx * ff + ox * fo, fy = ay + _fy * ff + oy * fo;

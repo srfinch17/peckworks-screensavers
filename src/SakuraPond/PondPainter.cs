@@ -118,7 +118,7 @@ internal sealed class Pond
     /// to the bed, the way its painted bed is hidden; near the bank the floor
     /// is shallow and a fish there is always in sight.
     /// </summary>
-    public const float DepthU = 0.48f;   // (0.4 until 2026-10-27, "make the pond a little deeper": a fish on the bed is drawn a fifth further down the screen and a touch smaller; Light.SeeU rose with it so it keeps the haze it had)
+    public const float DepthU = 0.54f;   // (0.48 until 2026-10-27 afternoon, "i need a tiny bit more depth": Light.SeeU stayed, so the bed is a touch murkier and Body.Deepen darkens what is on it; 0.4 until 2026-10-27 morning, "make the pond a little deeper": a fish on the bed is drawn a fifth further down the screen and a touch smaller; Light.SeeU rose with it so it keeps the haze it had)
 
     /// <summary>How much sun reaches each pixel, 0 to 255 (the branches' shadows are darker).</summary>
     public required byte[] Sun { get; init; }

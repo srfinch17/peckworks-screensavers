@@ -137,8 +137,9 @@ and drifts in a lull, so no two fall the same way.
   same boulder and nothing swims between them; a fish deep behind the cap is hidden by it. Two
   small rock formations stand in the water as well, one toward the lower left and one toward the
   upper right, each a stone going under with two or three little dry caps. The pond is a little
-  deeper than it was, and its bed is uneven: broad humps and hollows that the water's colour, the
-  bed's clearness and every swimmer's depth all follow.
+  deeper than it was (and a tiny bit more again), and its bed is uneven: broad humps and hollows that the water's colour, the
+  bed's clearness and every swimmer's depth all follow. Anything that swims deep loses its colour
+  with the depth, darker and greyer the further down it is, before the water's own colour veils it.
   The koi swim up and over its shoulders and round the cap, and the water is clear enough now
   that the bed and its stones show through the deepest part.
   The turtle rows as a pond slider does (the diagonal pairs together, a long push, a folded leg
@@ -234,7 +235,12 @@ and drifts in a lull, so no two fall the same way.
   down, back up with a tiny ring, and never up under the snake or a duck). A frog in the water is
   solid to the koi (they steer round it and a fish that meets it is pushed out), is pushed clear of
   the snake, the turtles and the ducks, and shoves the floating petals aside. Each frog has its
-  own two dials: how bold and how restless.
+  own two dials: how bold and how restless. A frog in the water is IN it: only its head is clear
+  of the surface, its back, rump, legs and arms are under the water's haze and go darker and
+  greyer for it; its kick is a whip (the feet sweep out wide and close as the legs straighten) and
+  each thrust leaves a small ring from each foot; a landing is a real splash (a big ring, foam,
+  drops flung up that fall back with rings of their own). Frogs live on the bank and visit the
+  water: a trip in lasts a dozen seconds or so, to the next pad or stone, not across the pond.
 - **Tadpoles** hang in a loose cluster over the bed in the warm shallows near the cattails, tails
   sculling lazily, some grazing at a rock's flank, the bank or a pad's rim. Now and then one bursts
   (curls into a C, whips its tail and shoots a few body lengths, then stops dead); anything big

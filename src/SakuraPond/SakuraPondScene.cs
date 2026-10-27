@@ -237,7 +237,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     public void Render(FrameBuffer fb)
     {
         Sections.Begin();
-        fb.Restore(_pond.Pixels);
+        fb.Restore(_pond.Pixels);                 // (not with the lawn's box left out: the carpet reads the frame inside its box, round thirty-five found the smear)
         Sections.Mark("backdrop copy");
         _pond.Shore.Draw(fb);                     // the water lapping at the sand: first, so the lawn's blades overhang it
         Sections.Mark("shore");

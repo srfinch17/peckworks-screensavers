@@ -915,7 +915,22 @@ slowing (`_skid`), its first kick coming when the glide is done; only a landing 
 the legs, in the last fifth of the flight and the rest of the way as it settles. A turn on the spot
 takes as long as it is big (0.12 s plus 0.22 s per quarter turn) and a turn past a quarter turn is
 two hops with a short rest between (a frog turning right round after a climb once did it in a tenth
-of a second). Afloat it treads water: a lazy half-kick every few seconds. The FORELEGS are not on that dial: each is three pieces (upper arm, forearm,
+of a second). Afloat it treads water: a lazy half-kick every few seconds. Round thirty-five, his
+verdict on all of that ("their legs don't seem to sync with their swimming motion, they have no
+indication that they're in the water, they look like they're just on top of everything, the
+water doesn't get disturbed when they hit it"): the kick is a WHIP (in the first half of the
+thrust the knees and feet sweep out wide, `_spread`, and come together as the legs straighten;
+stretched, the feet sit a little apart with the webs open), each thrust leaves a small ring from
+each foot and a float's lazy kick a smaller one, and a landing is a real SPLASH: a big ring, a
+thin one behind it, a disc of foam that fades in a third of a second and eight drops flung up
+that fall back with tiny rings (the koi leap's spray; measured, the water round a landing lifts
+by sixteen to twenty grey levels where one ring had lifted it by three). And a frog IN the water
+is painted in it: only the head is clear, the back slopes under, the rump and hind legs take
+half the water's haze and the arms four tenths (the murk per spine point, `Body.Paint`'s
+`murkAt`), so `Body.Deepen` darkens and greys them as it does a deep fish. Frogs also LIVE ON
+THE BANK now: in the water a third of the time (half to two thirds before; a frog wants out after
+twelve seconds wet, a koi has to come closer to send it under, two dives in one spell end the
+chain, and it swims to a NEAR perch, the next pad or stone, never across the pond). The FORELEGS are not on that dial: each is three pieces (upper arm, forearm,
 hand with three fingers) whose elbow and wrist are eased toward a pose per state (`EaseArms`):
 planted beside the body with the hands set down under the eyes when it sits, swept back along the
 flanks in the flight of a leap, held still along the sides while it swims (a frog swims with its
@@ -1441,9 +1456,16 @@ same coin in your hand. `Light.Murk` mixes it toward the water's own colour, a l
 and more and more with depth. `SeeU` (0.84u; 0.26, 0.30, 0.36, 0.44 then 0.70 in earlier rounds,
 raised each time the owner asked to see more of the deep, the last time "again. make the water
 more transparent", and once more with the pond itself) is the depth where the murk would reach
-all the way; it is well past the pond's full depth (`Pond.DepthU`, 0.48u since 2026-10-27, "make
-the pond a little deeper": 0.40u before), so a fish on the bed keeps nearly half of its own
-colour. The bed is UNEVEN too (the same day, "make the depths be uneven, like the pondbed has
+all the way; it is past the pond's full depth (`Pond.DepthU`, 0.54u since round thirty-five, "i
+need a tiny bit more depth"; 0.48u that morning, 0.40u before), so a fish on the bed keeps
+four tenths of its own colour. But its OWN colour changes with depth too (`Body.Deepen`, round
+thirty-five, "when a creature swims deeper it gets darker, less color vibrant"): before the
+water's colour is mixed over it, each pixel is pulled toward its own grey and darkened by how deep
+it is (the murk is the dial: nothing at the surface, four tenths of its saturation and six tenths
+of its brightness left at the limit of sight), the way water eats the warm end of the light first,
+so an orange koi on the bed is a dull brownish grey where the murk mix alone had left it a bright
+orange half-veiled in teal (worked through the painter's own sums: (121, 104, 65) before,
+(82, 94, 75) after; a white koi 154 to 94 bright). The bed is UNEVEN too (the same day, "make the depths be uneven, like the pondbed has
 deeper and shallower spots"): seven broad soft bumps, humps and hollows by turns, a fifth to a
 third of u across, scale the depth by up to 18 percent either way, more the further from the
 bank, in `PourWater`; and because everything reads depth from that one array (the water's colour,

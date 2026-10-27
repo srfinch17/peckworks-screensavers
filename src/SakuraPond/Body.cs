@@ -222,7 +222,8 @@ internal abstract class Body
                     int m256 = mA + ((mB - mA) * (int)(t * 256) >> 8);     // this piece's murk: the same at both ends, or the slope between them
                     if (m256 > 0)
                     {
-                        // Under water: the deeper, the more the fish takes on the water's own colour.
+                        Deepen(ref r, ref g, ref bl, m256);                 // darker and greyer by its depth first (its own colour fades)...
+                        // ...then under water: the deeper, the more the fish takes on the water's own colour.
                         uint wc = water != null ? water[idx] : bg;
                         int wr = (int)((wc >> 16) & 0xFF), wg = (int)((wc >> 8) & 0xFF), wb = (int)(wc & 0xFF);
                         r += (wr - r) * m256 >> 8; g += (wg - g) * m256 >> 8; bl += (wb - bl) * m256 >> 8;
@@ -231,6 +232,32 @@ internal abstract class Body
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// What depth does to a thing's OWN colour, before the water's colour is
+    /// mixed over it: darker and greyer the deeper it is. Water eats light,
+    /// the warm end first, so a red koi a hand down is a dull red and one on
+    /// the bed is a brownish grey; the murk mix alone (toward the water's
+    /// teal) kept the fish's own share as bright as at the surface, and the
+    /// owner asked for depth to show in the colour ("when a creature swims
+    /// deeper it gets darker, less color vibrant"). The dial is the murk in
+    /// 256ths (0.14 at the surface, 1 at the limit of sight, Light.Murk):
+    /// nothing happens at the surface, and at the limit the colour is left
+    /// with four tenths of its saturation and six tenths of its brightness.
+    /// Whole numbers only: this runs once per painted pixel.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    protected static void Deepen(ref int r, ref int g, ref int b, int murk256)
+    {
+        int t = murk256 - 36;                                   // 0.14 * 256: the surface's own haze is not depth
+        if (t <= 0) return;
+        if (t > 220) t = 220;
+        int lum = (r * 77 + g * 150 + b * 29) >> 8;             // the pixel's brightness, the eye's weights
+        int sat = 256 - t * 150 / 220, dark = 256 - t * 100 / 220;
+        r = (lum + ((r - lum) * sat >> 8)) * dark >> 8;
+        g = (lum + ((g - lum) * sat >> 8)) * dark >> 8;
+        b = (lum + ((b - lum) * sat >> 8)) * dark >> 8;
     }
 
     /// <summary>
@@ -304,6 +331,7 @@ internal abstract class Body
         int y0 = Math.Max(0, (int)c.Y - reach), y1 = Math.Min(fb.Height - 1, (int)c.Y + reach);
         uint[] px = fb.Pixels;
         float invLen = 1 / len, invWid = 1 / wid;                         // two multiplies per pixel instead of two divides (a fin's box is a few hundred pixels, a turtle has forty-odd ovals a frame)
+        int murk256 = (int)(murk * 256);
         bool rayed = rays && len > wid * 1.2f;
         for (int y = y0; y <= y1; y++)
         {
@@ -323,6 +351,7 @@ internal abstract class Body
                 uint bg = px[idx];
                 if (murk > 0)
                 {
+                    Deepen(ref rr, ref gg, ref bb, murk256);         // darker and greyer by depth (see Deepen), then toward the water
                     uint wc = water != null ? water[idx] : bg;      // toward the water's colour, not whatever is under it (see Paint)
                     rr += (int)((((wc >> 16) & 0xFF) - rr) * murk); gg += (int)((((wc >> 8) & 0xFF) - gg) * murk); bb += (int)(((wc & 0xFF) - bb) * murk);
                 }
