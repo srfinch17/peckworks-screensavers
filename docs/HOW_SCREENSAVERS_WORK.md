@@ -121,6 +121,7 @@ src/
     Frog.cs                        the frogs: sitting on pads, rocks and the bank, leaping, kicking, floating, diving, climbing out
     Crayfish.cs                    a crayfish that comes out from under a bank rock, walks the shallow bed, feeds, and flips backward from a fish
     Prawns.cs                      a few see-through freshwater prawns on the bed of the shallows: they feed, walk, swim a little, and flick backward from a fish
+    DeepDwellers.cs                the crayfish and long-armed prawns of the deep bed: they forage, skitter, fight each other, snap at a minnow that dips down, and are food for the biggest koi, a diving turtle and the diving snake
     Petals.cs                      petals falling from the blossom, landing, floating
     Ripples.cs                     rings spreading on the water, and the bow waves of swimmers at the surface
     Dragonflies.cs                 hover, dart, perch, dip, and the game with the minnows
@@ -137,6 +138,17 @@ ten minutes from its last meal (`_hungerT`), may spot one within 0.1u and chase 
 shallows' bed with a smaller margin than usual; the prawn's own flick is its escape, the catch is the
 mouth within reach of its rostrum, and a prawn eaten is gone from the bed and back at its home from under
 the stones 90 to 240 s later (`Prawn.Eaten`, `Reborn`). Its mind goes on ticking while it is gone.
+Since round thirty-seven the deep bed's crayfish and prawns are a third field (`DeepDwellers`, stages 6 and
+7 in the log): one of the largest koi that is hungry and already below half depth, a hungry turtle on a dive
+below half depth (the look 0.25u on the screen with the ground distance tested at 0.12u in its "ok": a
+turtle at half depth is drawn 0.13u higher than a dweller on the bed, and a 0.12u screen look found none in
+thirty stress minutes), and the diving snake (its head past 0.4 of the depth, `Snake.LookOnBed`, the head
+going down to the prey's depth four times as fast as a dive eases and held there through the chase; a dive's
+target is 0.3 to 0.7 and the head eases toward it slowly, so a look from 0.55 never came in ten stress
+minutes) may take one; a dweller eaten is gone two to five minutes and a newcomer
+of its kind walks in from the picture's edge (`Dweller.Reborn`, `DeepBed.EdgeWay`), the pond going on past
+the view. A koi's catch of a prawn or a dweller now takes 0.4 off its hunger (a tadpole 0.1): until this round
+a fed koi was as hungry as before and went straight back for the next.
 
   Halloween/                       falling leaves, bats, and jack-o'-lanterns
     Program.cs                     Main(), plus the definition
@@ -995,6 +1007,31 @@ into a gap it cannot turn in. Measured with every school sent to the three-cap f
 minutes (`PECKWORKS_MINNOWGOAL`): fish-seconds spinning 6030 before, 9 after, the rest of the "spins"
 the mill round a lure that is meant to be there.
 
+And since round thirty-seven a school has a DEPTH (`School._z`, shared by its fish). About one new
+drift target in sixteen (`PECKWORKS_MINNOWDIP` multiplies it) is a Dip: a spot on the deep bed (floor at
+least 0.65 of the depth, in view, with room; half the time within 0.04u to 0.14u of one of the deep
+dwellers, `Minnows.DipNear`), swum to briskly (pace 3) while the school sinks toward 0.9 of the bed less a
+margin, then a Graze of 10 to 25 s at a slow pace (the fidget and the room rule make the mill), then the
+next drift with the depth wanted back at 0, the pace brisker the deeper it starts. The sink and the rise are
+held to half the fish's MEAN SPEED as swum (Light.HoldDepth's share with the nose across the screen: a school
+that sank faster than it swam would be seen sliding down the screen; from the mood's pace it was 77 px/s on
+the first frames of a scatter, before the fish had got up to speed), and each fish's own depth moves no faster
+than half the distance IT REALLY STEPPED last frame can hide (not the speed it wanted: refused at a slope it
+sank on the spot) and is the school's
+capped by the bed under its nose less a margin, EASED, down at the school's rate and up at that or 0.03 a
+second (a cap taken outright dropped 0.03 of the depth a frame at a hollow's edge: an 800 pixel a second
+slide on the first run; a rise floor of 0.08 bobbed a grazing fish 17 px/s over a hollow's edge, a tenth of
+the deep fish-frames reading as slides); a deep fish's step is refused onto
+a bed shallower than it is (unless the bed here is shallower still), so a school keeps inside its hollow
+rather than riding up the wall. A fish is drawn shrunk about its nose by the perspective and sunk down the
+screen by its depth (`Minnow.LaySpine`, the identity at the surface, so a school that never dips is drawn
+pixel for pixel as before), with the pond's own haze for its depth, through the deep stencil from a quarter
+of the depth down; a school past a quarter of the depth is drawn BEFORE the koi (`Minnows.DrawDeep`), under
+all of them at once, one cut rather than a place in the koi's depth order (a dozen fish a few pixels long).
+A school down on the bed is left alone by the dragonfly's lure, the koi's tease and the snake's hunt, is
+scared by every koi's head whatever its depth rather than the surface list, and is what a crayfish's claw
+can reach.
+
 *Tadpoles hang, burst and grow up.* A clutch (`Tadpoles.cs`: `Tadpoles` holds clutches, a `Clutch`
 is the cluster, a `Tadpole` is one animal and, later, the froglet it becomes) lives in water shallow
 enough that the bed shows, near the cattails. Unlike the minnows they have no flocking: no
@@ -1206,6 +1243,74 @@ drawn right after the crayfish and before every fish. `PECKWORKS_PRAWNLOG` names
 one line per prawn per frame (position, doing, depth, heading, speed, pose, the drawn rostrum and
 tail, the nearest threat's distance and whether it was visible).
 
+*The deep dwellers are the prawns' method again, one class for two species, with claws, fights and a
+snap.* `DeepDwellers.cs` (round thirty-seven, "a crayfish and prawns of maybe different species to occupy
+the deep ... battle each other ... skitter along the deep areas barely visible, foraging ... eaten by some
+of the largest koi, sometimes turtles, and snakes ... a chance of catching a minnow in its pincers") holds a
+wrapper like `Prawns` (and the referee of the fights), a `DeepBed` that answers "may a dweller stand here"
+(open water in view through the DEEP stencil, so the stones' caps stand in front of them, with a floor at
+least 0.62 of the pond's depth, 0.33u: `DeepBed.DeepZ`, and the sunk picture of the point on open water
+too), and one `Dweller` per animal, a `DeepKind` of Crayfish (a signal crayfish, 0.072u to 0.082u at the
+surface, drawn at about half that on the bed) or Prawn (a long-armed prawn, 0.05u to 0.058u). Every third
+from the first is a crayfish. Homes are deep free spots with room all round, 0.15u apart, found once. The
+mind is the prawn's (Feed, Walk, Turn, Flick, Settle) plus Threat (claws up at a fish over it, by the bold
+ones), Bout and Lunge; a feed is 6 to 25 s and a walk 1 to 4 s at 0.024u a second (a prawn 0.02u, twice
+the shallows' prawn's), the skitter he asked for; a walk stops short of another dweller in its way (a fight is the only touch). The
+claws are a shared geometry (`ClawPoints`: shoulder, elbow, palm, tip, in ground pixels) that both the
+drawing and the snap use, eased by `UpdateClaws` toward the pose the doing wants: held ahead, raised and
+wide (a display), locked (the grapple), folded (a flick), one to the mouth (a crayfish's feed, or either
+kind eating a minnow), or shot out at the aim and snapped shut (a lunge). A crayfish's claw is an arm, a
+broad palm with the chalk-white hinge patch and two fingers; a prawn's is two long thin segments and a
+small pincer, in bluish grey.
+
+THE FIGHTS are one object, `Bout`, that moves both animals, so the pair stays in step. The referee
+(`DeepDwellers.Referee`) hands one out when two dwellers are both idle, both free, within 0.14u on the
+ground and rested from their last (four to eight minutes a pair): a roll a second at about one chance
+in thirty, likelier for two bold ones. The winner is rolled then, from strength (length, kind, boldness:
+a crayfish counts half again; the weaker wins one time in five). Face (both pivot to face each other, and
+nothing follows until both are within 0.15 rad of it; not there in 2.5 s, no fight: a display begun with
+one still side-on had the pair walking into each other, middles 6 px apart on one natural run), Display
+(claws up and wide, feelers whipping, a slow edge forward, 1.2 to 2.5 s), Close (a walk's pace until the
+claws' reach of each meets, or it comes to nothing after 5 s), Grapple (2 to 5 s locked, the pair moved as
+ONE along the line between them, by the same vector so the gap never changes: a rock to and fro at 1.4 Hz
+by a third of the claws' reach plus the winner's gain of a third of a walk's pace toward the loser, who
+gives way first; six tenths of a second of steps the bed refuses ends it, the pair rocking in place
+meanwhile: ended at the first refusal, a pair against the deep's rim had five grapples of 0.0 s in one
+run), Break (the loser flicks away, backward, with its own escape, the winner stands with its claws up a
+second or two). A pair whose closing walk the bed refuses stands off, claws up, and parts without a
+grapple (Close gives up after 5 s). The claws' reach is in the DRAWN size (`_len`, the perspective size the body
+is laid out in): with the surface size the first fights grappled 35 px apart on the screen.
+
+THE SNAP (`Lunge`): while it feeds, walks or is settled, a dweller asks the schools for the nearest minnow
+at its own depth within twice the SNAP'S reach (`SnapReach`, where the pincer's tip is with the claw shot
+out, about 1.85 times the resting reach; `Minnows.NearestFishDeep`); it turns to it if it is not nearly
+ahead (a quick pivot), DASHES at it (up to 0.6 s at three times its walk, the fish's nose read afresh each
+frame, over the moment the fish is at the snap's reach: aimed at the resting reach, the extended claw
+overshot the fish by half a body and every snap in twenty stress minutes missed), then the near claw shoots out
+toward the fish (the palm along the arm, so the whole claw points at the aim), the pincer open, the reach half
+again, and at the snap (0.2 s) closes on whatever living minnow's nose is within 0.45 of a length of its tip
+(`Minnows.Take` with a depth window, whose TOP must be given: its default top is the snake's 0.3 and excluded
+every deep fish for seven builds, found by tracing one snap against the minnow log; a minnow is two thirds of
+a dweller's length, so a pincer closing on its front half is a hold): a hit is
+held, a silver sliver across the fingers eaten away over 12 to 20 s of feeding, a miss is a miss, and
+either way the school bursts away from the claw (`Minnows.Scatter`). Six to twelve seconds between snaps.
+(With the look at one reach and the snap from where it stood, ten stress minutes with the schools on the
+bed most of the time gave three snaps and no hit: a dweller is slow and a milling minnow is seldom within a
+claw of it.)
+
+The rest of it: scares as the crayfish's (within 0.08u, bold 0.055u, of its middle: a bold one with the
+threat ahead raises its claws and flicks only if it comes within 0.045u, else it flicks at once, the tail
+toward the roomiest way back, two to four flicks of 0.1u, a prawn 0.07u; four seconds between), from
+every koi's head and middle whatever its depth, the turtles, the ducks' heads and the DIVING snake's head;
+a range of 0.25u from home (bold 0.35u) it walks back to; drawn through the deep stencil with its own
+shadow a hair down and right, legs, feelers, body, claws and eyes, all darkened and greyed by its depth
+(`Body.Deepen`) and hazed toward the water, so that at the bed it keeps about four tenths of its own
+colour (the same-scene gate's footprint read 7 to 12 grey levels of difference against the bed: barely
+visible, as asked). `PECKWORKS_DEEPLOG` names a file for a line per dweller per frame (doing, place, depth,
+heading, speed, curl, visible, nose, fight partner and phase, lunges, catches, wins, losses, scares, the
+nearest threat, alive, seconds of a held meal); `PECKWORKS_DEEPBOUT` multiplies the fights' chance and
+divides their rest; the eaters' looks and the claws' hits and misses go to `PECKWORKS_SNATCHLOG`.
+
 *A field mouse is the lizard's method, made small and shy.* The mouse (`Mouse.cs`, with a `Mice`
 holder like `Lizards`) copies the lizard's shape: a spine laid along the shared `Trail` (14 points,
 the first 8 a plump body and the last 6 a very thin tail), the three shared walking rules in
@@ -1293,7 +1398,8 @@ speed, wall side, room, whether it moved, flash), `PECKWORKS_MINNOWGOAL=island|f
 sends every school's idle target to that stone for a stress run, and `PECKWORKS_MASKDUMP` names a
 folder for the steering masks as PGM pictures (water, open, land, stonetop, shoal, the room grid at
 every pixel) so a script can flood-fill them for a pocket before a mind is blamed (all three round
-thirty-six). `PECKWORKS_SNAKELOG` names a file for a line per frame (clock, doing, place, depth, speed, the
+thirty-six); `PECKWORKS_DEEPLOG`, `PECKWORKS_DEEPBOUT` and `PECKWORKS_MINNOWDIP` are round thirty-seven's (the
+deep dwellers' log, their fights raised, the minnows' dips raised). `PECKWORKS_SNAKELOG` names a file for a line per frame (clock, doing, place, depth, speed, the
 hunt's note, whether the step was refused, the bed's cap); `PECKWORKS_SNAKEDIVE=1` makes every
 explore and crossing a dive, for the instruments.
 

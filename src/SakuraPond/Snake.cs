@@ -210,6 +210,8 @@ internal sealed class Snake : Body
     private readonly Func<ISnack, bool> _ahead;            // "is it in front of the head?" made once, so a look allocates nothing
     private int _snatchSeen;                               // how many catches the snatch had counted when this chase began (to tell a catch from a give-up)
     internal Tadpoles? Prey { get; set; }                  // the pond's tadpoles (set by the scene; null in a pond without any)
+    internal DeepDwellers? DeepPrey { get; set; }          // the crayfish and prawns of the deep bed (round thirty-seven): a DIVING snake may take one at its nose
+    private int _snatchStage;                              // what the chase in hand is after (a tadpole's 0 to 4, a dweller's 6 or 7), for the meal's bookkeeping
 
     // ---- THE APPETITE ---- (see the class comment)
     private float _hunger = 0.3f;                          // 0 full to 1 famished, kept across visits (the Snake object lives on; _live only toggles)
@@ -226,7 +228,7 @@ internal sealed class Snake : Body
     /// <summary>For the instruments and the drawing's docs: hunger now, 0 to 1.</summary>
     public float Hunger => _hunger;
     /// <summary>For the instruments: meals so far by kind, and the last one (a counter that goes up, what, hunger before and after).</summary>
-    public int AteLizard, AteMouse, AteTadpole, AteMinnow, MealSeq;
+    public int AteLizard, AteMouse, AteTadpole, AteMinnow, AteBed, MealSeq;   // (AteBed: a crayfish or prawn of the deep bed, taken on a dive)
     public string MealKind = "";
     public float MealBefore, MealAfter;
 
@@ -241,7 +243,7 @@ internal sealed class Snake : Body
         MealBefore = _hunger;
         _hunger = drop >= 1f ? 0f : MathF.Max(0f, _hunger - drop);
         MealAfter = _hunger; MealKind = kind; MealSeq++;
-        switch (kind) { case "lizard": AteLizard++; break; case "mouse": AteMouse++; break; case "tadpole": AteTadpole++; break; default: AteMinnow++; break; }
+        switch (kind) { case "lizard": AteLizard++; break; case "mouse": AteMouse++; break; case "tadpole": AteTadpole++; break; case "crayfish": case "prawn": AteBed++; break; default: AteMinnow++; break; }
         Note("ate:" + kind);
     }
 
@@ -677,7 +679,7 @@ internal sealed class Snake : Body
 
     private void LookForTadpole(float dt)
     {
-        if (Deep) return;
+        if (Deep) { LookOnBed(dt); return; }
         if (Prey == null || _fed || _flee > 0 || !(_doing is Doing.Cross or Doing.Explore) || _phase != 0) return;
         PointF mouth = Spine[0];
         int ix = (int)mouth.X, iy = (int)mouth.Y;
@@ -703,18 +705,41 @@ internal sealed class Snake : Body
     /// ends with the minnow hunt's second ring, a half second of closing in again, and another lunge if the
     /// patience lasts. The catch is the Snatch's: the prey's nose within 0.02u of the head.
     /// </summary>
+    /// <summary>
+    /// The DIVING snake's chance meal (round thirty-seven, "sometimes ... snakes"): down on the deep bed (the head past
+    /// 0.55 of the depth), swimming (Cross or Explore), not fed, not frightened: a crayfish or prawn of the deep within
+    /// 0.15u ahead of its nose, with the same dice as the tadpole look and more patience (a dweller flicks off, and the
+    /// head has to come down to it). The chase is ThinkSnatch's, with the head held at the prey's depth.
+    /// </summary>
+    private void LookOnBed(float dt)
+    {
+        if (DeepPrey == null || _fed || _flee > 0 || !(_doing is Doing.Cross or Doing.Explore) || _phase != 0 || _zHead < 0.4f) return;   // (past 0.4 of the depth: a dive's target is 0.3 to 0.7 and the head eases toward it slowly, so 0.55 was never reached in ten stress minutes; the chase takes it the rest of the way down)
+        PointF mouth = Spine[0];
+        int ix = (int)mouth.X, iy = (int)mouth.Y;
+        if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height || !_pond.Water[iy * _pond.Width + ix]) return;
+        float want = Want;
+        if (!_snatch.Look(DeepPrey, mouth, _u * 0.15f * (1f + 0.5f * want), (0.1f + 0.2f * _bold) * (1f + 3f * want), dt, 8f + 2f * want, (240f + 240f * _nerve) * (1f - 0.6f * want), surfaceOnly: false, ok: _ahead)) return;
+        _snatchSeen = _snatch.Caught;
+        _snatchStage = _snatch.Prey.Stage;
+        _mind.Begin(Doing.Snatch, 12f);
+        _phase = 0; _strikeT = 1; _goal = _snatch.Prey.Nose;
+    }
+
     private void ThinkSnatch(float dt)
     {
         PointF head = Spine[0];
-        bool going = Prey != null && _snatch.Chase(Prey, head, _u * 0.02f);
+        ISnackField? field = (ISnackField?)Prey ?? DeepPrey;                 // (the Snatch chases from the field the prey came from; this only has to be some field)
+        bool going = field != null && _snatch.Chase(field, head, _u * 0.02f);
         if (!going)
         {
             // Caught or given up (or the prey was taken by another: lost). A catch rings once at the head; either
-            // way the snake carries on with whatever it rolls next, and is not "fed" (a tadpole is a mouthful).
+            // way the snake carries on with whatever it rolls next, and is not "fed" by a tadpole (a mouthful); a
+            // crayfish or a prawn of the deep is a real meal (0.4 of its hunger).
             if (_snatch.Caught != _snatchSeen)
             {
-                _ripples.Add(head.X, head.Y, 0.9f);
-                Ate("tadpole", 0.15f + 0.1f * (float)_huntRng.NextDouble());
+                _ripples.Add(head.X, head.Y, _snatchStage >= 6 ? 0.4f : 0.9f);   // (a catch on the bed barely marks the surface)
+                if (_snatchStage >= 6) Ate(_snatchStage == 7 ? "crayfish" : "prawn", 0.4f);
+                else Ate("tadpole", 0.15f + 0.1f * (float)_huntRng.NextDouble());
                 _gulp = GulpFor;
             }
             _snatchSeen = _snatch.Caught;
@@ -723,9 +748,12 @@ internal sealed class Snake : Body
         }
         if (_mind.Over) { _snatch.Abandon(); Decide(); return; }
         ISnack prey = _snatch.Prey;
+        _snatchStage = prey.Stage;
         // A tadpole that has dived out of reach (a froglet always is within it) is let go: the snake takes what is near the top,
         // and in the first runs it chased a tadpole three tenths of the pond's depth down for its whole five seconds.
         if (prey.Stage < 4 && prey.Z > 0.2f) { _snatch.Abandon(); Decide(); return; }
+        // A dweller on the bed: the head goes down to it (the bed's own cap keeps it off the floor) and stays there for the chase.
+        if (prey.Stage >= 6) _zTarget = MathF.Min(1f, prey.Z + 0.02f);
         PointF nose = prey.Nose;
         _goal = nose;
         // How far the nose is off the way the head points, in radians (0 dead ahead, 3.14 straight behind).
@@ -1235,13 +1263,14 @@ internal sealed class Snake : Body
         // down the trail (LaySpine); any other doing, and the end of the explore, eases it back up to the
         // surface over ten seconds or so. Never deeper than the bed under the head allows. Deep, it hunts and
         // basks at nothing (Decide, Scan, Notice, LookForTadpole), pushes no petal and is on no surface list.
-        if (_doing is not (Doing.Explore or Doing.Cross)) _zTarget = 0;
+        if (_doing is not (Doing.Explore or Doing.Cross) && !(_doing == Doing.Snatch && _snatch.Hunting && _snatch.Prey.Stage >= 6)) _zTarget = 0;   // (a chase after a dweller of the deep bed keeps the head down: ThinkSnatch sets its depth)
         // The bed under the head AND a little ahead of it: the step rule refuses a step into a bed shallower than the
         // head, and a head that rose only with the bed already under it waited at every steep slope (a rock's hill,
         // where the prawns live: "snake gets hung up on prawn somehow. happened near a rock") for the 5 s jam breaker.
         float aheadPx = _u * 0.06f;
         float bedZ = MathF.Max(0, 0.9f * MathF.Min(FloorZ(_x, _y), FloorZ(_x + MathF.Cos(_heading) * aheadPx, _y + MathF.Sin(_heading) * aheadPx)) - 0.05f);
-        _zHead += (MathF.Min(_zTarget, bedZ) - _zHead) * (1 - MathF.Exp(-dt * 0.25f));
+        bool onBed = _doing == Doing.Snatch && _snatch.Hunting && _snatch.Prey.Stage >= 6;   // after a dweller of the deep bed: the head goes down to it four times as fast as a dive eases (the chase is eight seconds; at the dive's ease the head was still a reach above the prey when the patience ran out)
+        _zHead += (MathF.Min(_zTarget, bedZ) - _zHead) * (1 - MathF.Exp(-dt * (onBed ? 1f : 0.25f)));
         if (_zHead > bedZ) _zHead = MathF.Max(bedZ, _zHead - 0.2f * dt);              // too deep for the bed ahead: up at a set rate, not the slow ease (which never got there while the step stood refused)              // too deep for the bed ahead: up at a set rate, not the slow ease (which never got there while the step stood refused)
         MotionLog?.Invoke(FormattableString.Invariant($"F,{_clock:F3},{_doing},{_phase},{_x:F1},{_y:F1},{_zHead:F3},{_zTarget:F2},{_speed:F1},{HuntNote},{(_blocked ? 1 : 0)},{bedZ:F3}"));
 

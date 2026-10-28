@@ -40,18 +40,27 @@ internal sealed class Minnows
     // a spin is a nose confined to a few pixels at speed with the heading going round, which only a log can count.
     private static readonly System.IO.StreamWriter? MinnowLog = Environment.GetEnvironmentVariable("PECKWORKS_MINNOWLOG") is string lf && lf.Length > 0 ? new System.IO.StreamWriter(lf) { AutoFlush = false } : null;
     private int _logFrame;
+    /// <summary>
+    /// Where the crayfish and prawns of the deep bed are (DeepDwellers.AnySpot, set by the scene): half of a school's
+    /// dips to the bed go to a spot near one of them, so a claw gets its chance at a minnow. Null means dips go anywhere
+    /// deep. Static, like the stress dials: one pond per process.
+    /// </summary>
+    public static Func<Random, PointF?>? DipNear;
 
-    public Minnows(Pond pond, int schools, bool[] where, Ripples ripples, Random rng)
+    /// <param name="where">Open water in view: where a school near the surface is drawn and may go.</param>
+    /// <param name="whereDeep">The same less the stones' caps and collars (the scene's deep stencil): what a school that has dipped to the bed is drawn through, since those stones stand in front of it.</param>
+    public Minnows(Pond pond, int schools, bool[] where, bool[] whereDeep, Ripples ripples, Random rng)
     {
         _u = pond.U;
         _schools = new School[Math.Max(0, schools)];
-        for (int i = 0; i < _schools.Length; i++) _schools[i] = new School(pond, where, ripples, rng, 12 + rng.Next(8));
+        for (int i = 0; i < _schools.Length; i++) _schools[i] = new School(pond, where, whereDeep, ripples, rng, 12 + rng.Next(8));
     }
 
-    /// <param name="koiHeads">Points along each koi this frame (head and middle), in screen pixels: the minnows keep clear of them.</param>
-    public void Update(float dt, PointF[] koiHeads)
+    /// <param name="koiHeads">Points along each koi near the surface this frame (head and middle), in screen pixels: a school near the surface keeps clear of them.</param>
+    /// <param name="bedHeads">The same points of EVERY koi whatever its depth: what a school down on the bed keeps clear of (a forager down there is the threat; a fish at the top is not).</param>
+    public void Update(float dt, PointF[] koiHeads, PointF[] bedHeads)
     {
-        foreach (School s in _schools) s.Update(dt, koiHeads);
+        foreach (School s in _schools) s.Update(dt, s.Deep ? bedHeads : koiHeads);
         if (MinnowLog != null)
         {
             _logFrame++;
@@ -60,15 +69,27 @@ internal sealed class Minnows
         }
     }
 
+    /// <summary>The schools near the surface: after the koi and the turtles (they are just under the surface, over everything deeper).</summary>
     public void Draw(FrameBuffer fb)
     {
-        foreach (School s in _schools) s.Draw(fb);
+        foreach (School s in _schools) if (!s.DrawnDeep) s.Draw(fb);
+    }
+
+    /// <summary>
+    /// The schools that have dipped toward the bed (round thirty-seven): BEFORE the koi and the turtles, so a fish
+    /// swimming over them paints over them. One cut, not a place in the koi's depth order: a school on its way down
+    /// is under every koi at once, which is near enough for a dozen fish a few pixels long (stated in the docs).
+    /// </summary>
+    public void DrawDeep(FrameBuffer fb)
+    {
+        foreach (School s in _schools) if (s.DrawnDeep) s.Draw(fb);
     }
 
     /// <summary>
     /// The nearest school whose middle is within "reach" pixels of this point AND in view (open water, not under a
     /// branch or a pad), or false. A koi asks this before it goes to play with a school (Koi.Tease): it reads, it
-    /// never changes anything. No allocation: the middle comes back through the out argument.
+    /// never changes anything. No allocation: the middle comes back through the out argument. A school down on the
+    /// bed is not one a koi at the top rushes.
     /// </summary>
     public bool NearestSchoolWithin(float x, float y, float reach, out PointF centre)
     {
@@ -77,7 +98,7 @@ internal sealed class Minnows
         bool found = false;
         foreach (School s in _schools)
         {
-            if (!s.CentreInView) continue;
+            if (!s.CentreInView || s.Deep) continue;
             float dx = s.Centre.X - x, dy = s.Centre.Y - y, d = dx * dx + dy * dy;
             if (d < bestD) { bestD = d; centre = s.Centre; found = true; }
         }
@@ -115,14 +136,14 @@ internal sealed class Minnows
         float bestD = float.MaxValue;
         foreach (School s in _schools)
         {
-            if (s.Live <= LeastFish) continue;
+            if (s.Live <= LeastFish || s.Deep) continue;                   // (the snake hunts at the top of the water: a school down on the bed is out of its reach)
             float dx = s.Centre.X - x, dy = s.Centre.Y - y, d = dx * dx + dy * dy;
             if (d < bestD) { bestD = d; best = s.Centre; }
         }
         return best;
     }
 
-    /// <summary>The nose of the nearest living minnow (of a school that can spare one) within "within" pixels of (x, y), screen pixels. For a snake to aim at.</summary>
+    /// <summary>The nose of the nearest living minnow (of a school near the surface that can spare one) within "within" pixels of (x, y), screen pixels. For a snake to aim at.</summary>
     public bool NearestFish(float x, float y, float within, out PointF nose)
     {
         nose = default;
@@ -130,8 +151,27 @@ internal sealed class Minnows
         bool found = false;
         foreach (School s in _schools)
         {
-            if (s.Live <= LeastFish) continue;
-            Minnow? f = s.NearestLive(x, y, ref bestD);
+            if (s.Live <= LeastFish || s.Deep) continue;
+            Minnow? f = s.NearestLive(x, y, ref bestD, -1f, 0.3f);
+            if (f != null) { nose = f.Nose; found = true; }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// The nose of the nearest living minnow (of a school that can spare one) within "within" pixels of (x, y), screen
+    /// pixels, that is at least zMin deep: what a crayfish or prawn on the bed can reach when a school dips to it
+    /// (DeepDwellers). False when none.
+    /// </summary>
+    public bool NearestFishDeep(float x, float y, float within, float zMin, out PointF nose)
+    {
+        nose = default;
+        float bestD = within * within;
+        bool found = false;
+        foreach (School s in _schools)
+        {
+            if (s.Live <= LeastFish || !s.Deep) continue;
+            Minnow? f = s.NearestLive(x, y, ref bestD, zMin, 2f);
             if (f != null) { nose = f.Nose; found = true; }
         }
         return found;
@@ -139,10 +179,11 @@ internal sealed class Minnows
 
     /// <summary>
     /// The jaws of something closed here (screen pixels): the nearest living minnow whose nose is within reachPx of the
-    /// point is gone, and true comes back. A school never drops below four. The school goes on with one fewer, and a
+    /// point, and whose depth is between zMin and zMax (the snake's jaws at the top of the water, a claw on the bed),
+    /// is gone, and true comes back. A school never drops below four. The school goes on with one fewer, and a
     /// newcomer swims in from the picture's edge three to six minutes later (so the pond does not empty over a night).
     /// </summary>
-    public bool Take(float x, float y, float reachPx)
+    public bool Take(float x, float y, float reachPx, float zMin = -1f, float zMax = 0.3f)
     {
         School? from = null;
         Minnow? fish = null;
@@ -150,7 +191,7 @@ internal sealed class Minnows
         foreach (School s in _schools)
         {
             if (s.Live <= LeastFish) continue;
-            Minnow? f = s.NearestLive(x, y, ref bestD);
+            Minnow? f = s.NearestLive(x, y, ref bestD, zMin, zMax);
             if (f != null) { fish = f; from = s; }
         }
         if (fish == null || from == null) return false;
@@ -160,13 +201,14 @@ internal sealed class Minnows
 
     private School? _lastLured;
 
-    /// <summary>Something touched the water here (screen pixels): the nearest school, if near enough, rushes to it.</summary>
+    /// <summary>Something touched the water here (screen pixels): the nearest school, if near enough and not down on the bed, rushes to it.</summary>
     public void Lure(float x, float y)
     {
         School? best = null;
         float bestD = _u * _u * 0.8f * 0.8f;
         foreach (School s in _schools)
         {
+            if (s.Deep) continue;
             float dx = s.Centre.X - x, dy = s.Centre.Y - y, d = dx * dx + dy * dy;
             if (d < bestD) { bestD = d; best = s; }
         }
@@ -185,7 +227,7 @@ internal sealed class Minnows
         float bestD = float.MaxValue;
         foreach (School s in _schools)
         {
-            if (s == _lastLured && _schools.Length > 1) continue;
+            if ((s == _lastLured && _schools.Length > 1) || s.Deep) continue;   // (nor a school down on the bed: the game is at the surface)
             float dx = s.Centre.X - x, dy = s.Centre.Y - y, d = dx * dx + dy * dy;
             if (d < bestD) { bestD = d; best = s.Centre; }
         }
@@ -203,6 +245,8 @@ internal sealed class School
         Mill,       // round and round the lure
         Scatter,    // a koi has rushed the school: every fish bursts straight away from its head, flat out
         Regroup,    // the burst over, the fish gather again a little way off, then drift on
+        Dip,        // briskly down to a spot on the deep bed, sinking as it goes (round thirty-seven: "if minnows swim down by them")
+        Graze,      // on the bed: a slow mill about the spot, picking at the silt, then up and away on the next drift
     }
 
     private readonly Pond _pond;
@@ -211,6 +255,18 @@ internal sealed class School
     private readonly Minnow[] _fish;
     private readonly float _u;
     private Mood _mood = Mood.Drift;
+    // THE SCHOOL'S DEPTH (0 the surface, 1 the pond's full depth), shared by its fish (each capped by the bed under its own
+    // nose), eased toward what the mood wants at a rate held to the school's pace (a school that sank faster than it swam
+    // would be seen sliding down the screen: Light.HoldDepth's rule, applied to the school as one). 0 until a Dip.
+    private float _z, _zWant;
+    /// <summary>Down toward the bed (past 0.3): a school the surface's games, hunts and teases leave alone, that every koi's head whatever its depth scares, and that a crayfish's claw can reach.</summary>
+    public bool Deep => _z > 0.3f;
+    /// <summary>Drawn before the koi (under them) rather than after: from a quarter of the depth down.</summary>
+    public bool DrawnDeep => _z > 0.25f;
+    public float Z => _z;
+    // A STRESS DIAL for the instruments: PECKWORKS_MINNOWDIP multiplies the chance that a new drift target is a dip to the
+    // bed (one in ten in the real pond), so a five-minute run shows what an hour would of the claws' catches.
+    private static readonly float DipOften = Environment.GetEnvironmentVariable("PECKWORKS_MINNOWDIP") is string dp && dp.Length > 0 && float.TryParse(dp, System.Globalization.CultureInfo.InvariantCulture, out float dpv) ? dpv : 1f;
     private float _nipTimer;             // milling fish nip at the surface now and then: a fizz of tiny rings
     private float _tx, _ty;              // where the school is heading, ground pixels
     private float _lx, _ly;              // the lure: where the water was touched, ground pixels
@@ -226,12 +282,12 @@ internal sealed class School
     public int Live => _live;
 
     /// <summary>The living fish whose nose is nearest to (x, y) and closer than the squared distance in "best2" (which is lowered to the new best). Null if none.</summary>
-    public Minnow? NearestLive(float x, float y, ref float best2)
+    public Minnow? NearestLive(float x, float y, ref float best2, float zMin, float zMax)
     {
         Minnow? found = null;
         foreach (Minnow f in _fish)
         {
-            if (f.Gone) continue;
+            if (f.Gone || f.Z < zMin || f.Z > zMax) continue;
             PointF n = f.Nose;
             float dx = n.X - x, dy = n.Y - y, d2 = dx * dx + dy * dy;
             if (d2 < best2) { best2 = d2; found = f; }
@@ -272,7 +328,7 @@ internal sealed class School
     /// <summary>Is the school's middle on open water that can be seen (a safe place to look up, and a pixel inside the picture)?</summary>
     public bool CentreInView => Centre.X >= 0 && Centre.Y >= 0 && Centre.X < _pond.Width && Centre.Y < _pond.Height && InView(Centre.X, Centre.Y);
 
-    public School(Pond pond, bool[] where, Ripples ripples, Random rng, int count)
+    public School(Pond pond, bool[] where, bool[] whereDeep, Ripples ripples, Random rng, int count)
     {
         _pond = pond;
         _rng = rng;
@@ -293,7 +349,7 @@ internal sealed class School
         for (int i = 0; i < count; i++)
         {
             float a = (float)(rng.NextDouble() * MathF.Tau), d = _u * 0.045f * MathF.Sqrt((float)rng.NextDouble());
-            _fish[i] = new Minnow(pond, where, rng, _cx + MathF.Cos(a) * d, _cy + MathF.Sin(a) * d, heading + 0.5f * ((float)rng.NextDouble() - 0.5f));
+            _fish[i] = new Minnow(pond, where, whereDeep, rng, _cx + MathF.Cos(a) * d, _cy + MathF.Sin(a) * d, heading + 0.5f * ((float)rng.NextDouble() - 0.5f));
         }
         _live = count;
         _own = new Random(unchecked(count * 7919 + (int)home.X * 31 + (int)home.Y * 17 + 12345));
@@ -343,6 +399,35 @@ internal sealed class School
             break;
         }
         _timer = 14 + 16 * (float)_rng.NextDouble();
+        _zWant = 0;                                            // a drift is at the top of the water (a school that was down comes up as it goes)
+        // A DIP (round thirty-seven): about one new target in sixteen is a spot on the deep bed instead, and the school
+        // goes down to it to pick at the silt (with the graze that follows, about a tenth of its time). From the school's
+        // OWN dice (the scene's are not moved by this); a spot with a floor at least 0.65 of the depth, in view, with
+        // room, or no dip this time; half the time near one of the deep bed's crayfish or prawns (DipNear), which is how
+        // "if minnows swim down by them" comes about at all. The stress dial scales the one in sixteen.
+        if (_own.NextDouble() < 0.06 * DipOften)
+        {
+            PointF? near = _own.NextDouble() < 0.5 ? Minnows.DipNear?.Invoke(_own) : null;
+            for (int k = 0; k < 40; k++)
+            {
+                float x, y;
+                if (near is PointF np)
+                {
+                    PointF ns = Minnow.ToScreen(_pond, np.X, np.Y);
+                    float a = (float)(_own.NextDouble() * MathF.Tau), d = _u * (0.04f + 0.1f * (float)_own.NextDouble());
+                    x = ns.X + MathF.Cos(a) * d; y = ns.Y + MathF.Sin(a) * d;
+                    if (x < 1 || y < 1 || x >= _pond.Width - 1 || y >= _pond.Height - 1) continue;
+                }
+                else { x = (float)_own.NextDouble() * _pond.Width; y = (float)_own.NextDouble() * _pond.Height; }
+                int ix = (int)x, iy = (int)y;
+                if (!InView(x, y) || _pond.RoomAt(x, y) < _u * (near != null ? 0.06f : 0.1f) || _pond.Floor[iy * _pond.Width + ix] / 255f < 0.65f) continue;
+                (_tx, _ty) = Minnow.ToGround(_pond, x, y);
+                _zWant = 0.9f * _pond.Floor[iy * _pond.Width + ix] / 255f - 0.04f;
+                _mood = Mood.Dip;
+                _timer = 30;
+                break;
+            }
+        }
     }
 
     public void Lure(float x, float y)
@@ -445,15 +530,52 @@ internal sealed class School
                 float rx = _cx - _rgX, ry = _cy - _rgY;
                 if (_timer <= 0 || rx * rx + ry * ry < _u * _u * 0.03f * 0.03f) { _mood = Mood.Drift; NewTarget(); }
                 break;
+            case Mood.Dip:
+                // Briskly to the deep spot, sinking on the way (the depth below follows the pace); there, or bored, it grazes.
+                pace = 3f;
+                float ddx = _cx - _tx, ddy = _cy - _ty;
+                if (ddx * ddx + ddy * ddy < _u * _u * 0.05f * 0.05f || _timer <= 0) { _mood = Mood.Graze; _timer = 10 + 15 * (float)_own.NextDouble(); }
+                break;
+            case Mood.Graze:
+                // On the bed: a slow idle about the spot (the fish fidget and keep their room, which is the mill they make
+                // round any spot), then the next drift takes it up and away.
+                pace = 0.9f;
+                if (_timer <= 0) { _mood = Mood.Drift; NewTarget(); }
+                break;
             default:
-                pace = 1.3f;
+                pace = 1.3f + 1.5f * _z;                           // a school coming up from a dip swims briskly (the rise below is held to the pace)
                 float gx = _cx - _tx, gy = _cy - _ty;
                 if (_timer <= 0 || gx * gx + gy * gy < _u * _u * 0.05f * 0.05f) NewTarget();
                 break;
         }
+        // ---- The school's depth: toward what the mood wants, no faster than half the school's swim can hide ----
+        // (sink pixels a second at most half the ground pixels the fish are ACTUALLY swimming a second, their mean
+        // speed, Light.HoldDepth's share with the nose across the screen; from the mood's pace it was 77 px/s on the
+        // first frames of a scatter, before the fish had got up to speed: a slide).
+        float meanSpeed = 0; int swimming = 0;
+        foreach (Minnow f in _fish) if (!f.Gone) { meanSpeed += f.Speed; swimming++; }
+        meanSpeed /= MathF.Max(1, swimming);
+        float maxRate = 0.5f * meanSpeed / (Pond.DepthU * _u * Light.Sink);
+        _z += Math.Clamp(_zWant - _z, -maxRate * dt, maxRate * dt);
         foreach (Minnow f in _fish)
         {
             if (f.Gone) continue;
+            // Its own depth: the school's, capped by the bed under its nose less a small margin, EASED (at the school's
+            // rate, or a quarter of the depth a second at least): the bed is uneven (hollows and shoals), and a fish
+            // that took the cap outright dropped 0.03 of the depth a frame crossing a hollow's edge, a slide of 800
+            // screen pixels a second on the first run. Its own step rule keeps it off a bed shallower than it (TryStep).
+            PointF ns = Minnow.ToScreen(_pond, f.X, f.Y);
+            int fx = Math.Clamp((int)ns.X, 0, _pond.Width - 1), fy = Math.Clamp((int)ns.Y, 0, _pond.Height - 1);
+            float want = MathF.Max(0f, MathF.Min(_z, 0.9f * _pond.Floor[fy * _pond.Width + fx] / 255f - 0.03f));
+            // Down (into a hollow) at the school's own rate, which the pace hides; up (the bed rising under it, which
+            // the step rule mostly refuses) at that rate or 0.08 a second at least, so a fish on a slope is lifted off it
+            // in a few seconds rather than left inside it. (A floor of 0.25 a second both ways had a grazing fish, barely
+            // moving, dropping into a hollow at 77 screen pixels a second: a slide.)
+            // And no faster than half ITS OWN swim can hide (a fidgeting fish slower than the school's mean lags behind in
+            // depth and catches up when it speeds up: a third of the deep fish-frames read as slides on the mean alone).
+            float own = 0.5f * (f.Moved / MathF.Max(1e-3f, dt)) / (Pond.DepthU * _u * Light.Sink);   // (the distance it really stepped last frame, not the speed it wanted: refused at a slope it sank on the spot)
+            float lim = (want > f.Z ? MathF.Min(maxRate, own) : MathF.Max(MathF.Min(maxRate, own), 0.03f)) * dt;   // (a rise floor of 0.08 bobbed a grazing fish 17 px/s over a hollow's edge)
+            f.Z += Math.Clamp(want - f.Z, -lim, lim);
             float tx = _tx, ty = _ty;
             if (_mood == Mood.Mill)
             {
@@ -487,10 +609,17 @@ internal sealed class Minnow : Body
     private const float FinEnd = 1.25f;
 
     private readonly Pond _pond;
-    private readonly bool[] _where;
+    private readonly bool[] _where, _whereDeep;    // where it is drawn: open water in view, or (down on the bed) the same less the stones' caps and collars
     private readonly Random _rng;
     private readonly float _len, _wide, _u;
     private readonly float _jitter;                // this fish swims a little faster or slower than its school
+
+    /// <summary>Its depth, 0 the surface to 1 the pond's full depth: the school's, capped by the bed under it (School.Update sets it). 0 until the school dips.</summary>
+    public float Z { get; set; }
+    /// <summary>How fast it is swimming, ground pixels a second (the school's depth may change no faster than half of this can hide).</summary>
+    public float Speed => _speed;
+    /// <summary>How far it actually stepped last frame, ground pixels (its own depth may change no faster than half of THIS can hide: a fish refused at a slope wants a speed but goes nowhere, and sank on the spot).</summary>
+    public float Moved => _logMoved;
 
     /// <summary>Its own place in the swirl round a lure: where on the ring (radians) and how far out (0.5 to 1).</summary>
     public float RingPlace { get; }
@@ -504,7 +633,7 @@ internal sealed class Minnow : Body
     private float _logRoom, _logMoved;             // the room where it stood and how far it stepped this frame (for the log only)
 
     /// <summary>The instrument log's columns for this fish: x, y (ground), heading, speed, wall side, room here, moved this frame, flash.</summary>
-    public string LogRow() => FormattableString.Invariant($"{X:F1},{Y:F1},{_heading:F3},{_speed:F1},{_wallSide},{_logRoom:F1},{_logMoved:F2},{_flash:F2}");
+    public string LogRow() => FormattableString.Invariant($"{X:F1},{Y:F1},{_heading:F3},{_speed:F1},{_wallSide},{_logRoom:F1},{_logMoved:F2},{_flash:F2},{Z:F3}");   // (z last, so readers that count columns from the left are not moved)
 
     /// <summary>Where its nose is, ground pixels.</summary>
     public float X { get; private set; }
@@ -526,10 +655,10 @@ internal sealed class Minnow : Body
         LaySpine();
     }
 
-    public Minnow(Pond pond, bool[] where, Random rng, float x, float y, float heading) : base(Points)
+    public Minnow(Pond pond, bool[] where, bool[] whereDeep, Random rng, float x, float y, float heading) : base(Points)
     {
         _pond = pond;
-        _where = where;
+        _where = where; _whereDeep = whereDeep;
         _rng = rng;
         _u = pond.U;
         _len = _u * (0.017f + 0.006f * (float)rng.NextDouble());
@@ -699,9 +828,24 @@ internal sealed class Minnow : Body
         float nx = X + MathF.Cos(_heading) * step, ny = Y + MathF.Sin(_heading) * step;
         PointF next = ToScreen(_pond, nx, ny);
         float roomNext = _pond.RoomAt(next.X, next.Y);
-        if (roomNext > 2 || roomNext >= roomHere) { X = nx; Y = ny; return true; }
+        if (roomNext > 2 || roomNext >= roomHere)
+        {
+            // Down on the bed (a dip): never onto a bed shallower than the fish is deep, unless the bed here is shallower
+            // still (then any way out is allowed): the slope of a hollow or a stone's hill is a wall to a deep fish, as to
+            // a koi (the snake's rule, round thirty-five), so the school keeps inside its hollow instead of riding up the
+            // wall and being lifted in a jump.
+            if (Z > 0.3f)
+            {
+                float bedNext = 0.9f * BedAt(next) - 0.03f;
+                if (bedNext < Z - 0.02f && bedNext < 0.9f * BedAt(ToScreen(_pond, X, Y)) - 0.03f) return false;
+            }
+            X = nx; Y = ny; return true;
+        }
         return false;
     }
+
+    /// <summary>The bed under a screen point, 0 to 1 of the pond's full depth (Pond.Floor; a point off the picture counts as its nearest pixel).</summary>
+    private float BedAt(PointF s) => _pond.Floor[Math.Clamp((int)s.Y, 0, _pond.Height - 1) * _pond.Width + Math.Clamp((int)s.X, 0, _pond.Width - 1)] / 255f;
 
     /// <summary>
     /// Points the fish along the wall it is following: across the "uphill to open water" direction of the
@@ -798,6 +942,19 @@ internal sealed class Minnow : Body
             Spine[i] = new PointF((l.X + r.X) / 2, (l.Y + r.Y) / 2);
             HalfWidth[i] = Dist(l, r) / 2;
         }
+        // Depth (round thirty-seven, a school may dip to the bed): the picture shrinks about the nose by the perspective
+        // (Light.Scale) and sinks down the screen by its depth (Light.SinkPx), as a koi's does. At the surface this is
+        // the identity, so a school that never dips is drawn pixel for pixel as before.
+        if (Z > 0.001f)
+        {
+            float sc = Light.Scale(Z), sink = Light.SinkPx(Z, _u);
+            PointF n0 = Spine[0];
+            for (int i = 0; i < Points; i++)
+            {
+                Spine[i] = new PointF(n0.X + (Spine[i].X - n0.X) * sc, n0.Y + (Spine[i].Y - n0.Y) * sc + sink);
+                HalfWidth[i] *= sc;
+            }
+        }
     }
 
     /// <summary>A blunt little head, widest at the shoulders, tapering to a thin tail stalk, then the fin fanning out.</summary>
@@ -837,16 +994,19 @@ internal sealed class Minnow : Body
 
     public void Draw(FrameBuffer fb)
     {
-        const float murk = 0.2f;                   // just under the surface: a little of the water's colour, no haze
-        Paint(fb, _where, _pond.Sun, murk, MathF.Max(0.8f, _u * 0.0007f), _pond.Pixels);   // hazed toward the water, not toward a koi it crosses
+        // Just under the surface: a little of the water's colour (0.2), no haze. Down on the bed (a dip): the pond's own
+        // haze for its depth (Light.Murk), through the deep stencil, with a softer edge, as a koi down there is drawn.
+        float murk = MathF.Max(0.2f, Light.Murk(Z));
+        bool[] where = Z > 0.25f ? _whereDeep : _where;
+        Paint(fb, where, _pond.Sun, murk, MathF.Max(0.8f, _u * 0.0007f) * (1 + Z), _pond.Pixels);   // hazed toward the water, not toward a koi it crosses
         // Two tiny dark eyes either side of the head.
         PointF e0 = Spine[0], e1 = Spine[1];
         float ex = e1.X - e0.X, ey = e1.Y - e0.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));
-        float er = MathF.Max(0.6f, _len * 0.035f);
+        float er = MathF.Max(0.6f, _len * 0.035f * Light.Scale(Z));
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
         {
             var c = new PointF(e0.X + ex / el * HalfWidth[1] * 0.5f - ey / el * HalfWidth[1] * 0.7f * side, e0.Y + ey / el * HalfWidth[1] * 0.5f + ex / el * HalfWidth[1] * 0.7f * side);
-            Oval(fb, _where, c, 0, er, er, 20, 22, 24, 0.9f, murk, _pond.Sun, rays: false);
+            Oval(fb, where, c, 0, er, er, 20, 22, 24, 0.9f, murk, _pond.Sun, rays: false);   // (no "water" here: the eye sits on the body and takes its haze from it, as before; with the backdrop it moved a few pixels of every eye at the surface)
         }
     }
 }

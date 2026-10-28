@@ -265,6 +265,9 @@ internal sealed class KoiSchool
     /// <summary>The pond's prawns: a hungry koi that happens upon one may chase and eat it (2026-10-27). Set once by the scene.</summary>
     public Prawns? PrawnPrey { set { foreach (Koi k in _fish) k.PrawnPrey = value; } }
 
+    /// <summary>The crayfish and prawns of the deep bed (round thirty-seven): one of the largest koi, hungry and already down on the bed, may take one it happens upon. Set once by the scene.</summary>
+    public DeepDwellers? DeepPrey { set { foreach (Koi k in _fish) k.DeepPrey = value; } }
+
     private readonly Cooldown _teasePond = new();         // one tease in the pond at a time, and not twice within ten seconds
 
     /// <summary>The schools of minnows the big koi may rush for the fun of it. Set once by the scene, after the minnows are made.</summary>
@@ -618,6 +621,8 @@ internal sealed class Koi : Body
     internal Tadpoles? Prey { get; set; }                 // the tadpoles of the pond (set by the school once the scene has made them; null in a pond without any)
     internal Prawns? PrawnPrey { get; set; }              // the prawns of the pond (the same way); a koi at least half hungry may take one it happens upon
     private readonly Func<ISnack, bool> _canReachPrawn;   // a prawn in water a koi can get down to (the bed under it deep enough for its margin)
+    internal DeepDwellers? DeepPrey { get; set; }         // the crayfish and prawns of the deep bed (round thirty-seven): a big koi, hungry and already down there, may take one
+    private int _ateSeen, _lastStage;                     // the snatch's catches counted so far, and the kind of prey the chase in hand is after: a meal of a prawn or a dweller is a meal, a tadpole a mouthful
     private readonly Mind<Doing> _mind = new();           // the doing now and how long it may last (Core/Minds)
     private Doing _doing => _mind.Doing;
     private float _targetX, _targetY;                     // what it is investigating, ground pixels
@@ -1244,7 +1249,7 @@ internal sealed class Koi : Body
         // (a twelfth of its length of water under it), and between its spots a
         // fifth, so "swim down to the bottom" means the bottom (with three
         // tenths it hung a third of the pond's depth up over any slope).
-        float margin = (_doing == Doing.Forage ? (_hold > 0 ? 0.08f : 0.18f) : _doing == Doing.Rest && _zTarget > 0.8f ? 0.1f : _doing == Doing.Snatch && _snatch.Hunting && _snatch.Prey.Stage == 5 ? 0.12f : 0.3f) * _len / DepthPx;   // (a rest on the bed lies nearly on it too; a chase after a prawn noses down to the shallows' bed)
+        float margin = (_doing == Doing.Forage ? (_hold > 0 ? 0.08f : 0.18f) : _doing == Doing.Rest && _zTarget > 0.8f ? 0.1f : _doing == Doing.Snatch && _snatch.Hunting && _snatch.Prey.Stage >= 5 ? 0.12f : 0.3f) * _len / DepthPx;   // (a rest on the bed lies nearly on it too; a chase after a prawn or a deep dweller noses down to the bed)
         float zWant = MathF.Min(_zTarget, cap - margin);
         bool forBed = Z > cap - margin - 0.03f;
         // Easing toward the depth it wants; or, when the feelers chose a climb
@@ -1449,6 +1454,14 @@ internal sealed class Koi : Body
         if (PrawnPrey != null && _kind == Kind.Koi && _hunger > 0.5f && _doing is Doing.Wander or Doing.Forage or Doing.Investigate or Doing.Rest && !_gulping
             && _snatch.Look(PrawnPrey, Head, _pond.U * 0.12f, 0.02f + 0.1f * _hunger, dt, 6f, 240 + 240 * (1 - _hunger), surfaceOnly: false, ok: _canReachPrawn))
             Begin(Doing.Snatch);
+        // A crayfish or a prawn of the DEEP bed (round thirty-seven, "they will sometimes get eaten by some of the largest
+        // koi"): only one of the largest koi (over 0.13u long: about the top third of the dealt lengths), at least half
+        // hungry, and already down in the deep water (a forage, a rest on the bed, a wander below half depth: from the
+        // top the dwellers are barely visible, and that is how he wants them), may single one out within 0.12u of its
+        // nose. The same chance meal and the same reach test as a prawn's; more patience, since a dweller flicks off.
+        if (DeepPrey != null && _kind == Kind.Koi && _len > _pond.U * 0.13f && _hunger > 0.5f && Z > 0.5f && _doing is Doing.Wander or Doing.Forage or Doing.Rest && !_gulping
+            && _snatch.Look(DeepPrey, Head, _pond.U * 0.12f, 0.03f + 0.12f * _hunger, dt, 8f, 240 + 240 * (1 - _hunger), surfaceOnly: false, ok: _canReachPrawn))
+            Begin(Doing.Snatch);
 
         // A SHOAL OF MINNOWS NEAR, and the mood takes it: once a second, only from an idle moment (a wander or a look
         // on the way) in the upper water, with the mouth free, nothing else chasing in the pond (AnyChasing counts a
@@ -1594,8 +1607,14 @@ internal sealed class Koi : Body
                 // The chase: flat out at the prey's nose, down to its depth (the bed's clamp keeps the fish off the
                 // shallows' floor; the tadpole hangs a little over it, so the mouth comes within reach). Eaten when the
                 // mouth is within a quarter of a length of it; given up when the patience runs out or it got away.
-                if (!_snatch.Chase(Prey!, Head, _len * 0.25f)) Begin(Doing.Wander);
-                else { _zTarget = MathF.Min(_zCap, _snatch.Prey.Z); _depthTimer = 5; }
+                if (!_snatch.Chase(Prey!, Head, _len * 0.25f))
+                {
+                    // A catch is a meal: a prawn or a deep dweller takes the edge off its hunger (0.4), a tadpole barely (0.1).
+                    // (Until round thirty-seven a caught prawn left the fish as hungry as before, so it went straight back for the next.)
+                    if (_snatch.Caught > _ateSeen) { _ateSeen = _snatch.Caught; _hunger = MathF.Max(0, _hunger - (_lastStage >= 5 ? 0.4f : 0.1f)); }
+                    Begin(Doing.Wander);
+                }
+                else { _lastStage = _snatch.Prey.Stage; _zTarget = MathF.Min(_zCap, _snatch.Prey.Z); _depthTimer = 5; }
                 break;
             case Doing.Tease:
                 if (_teaseGlide > 0)

@@ -56,6 +56,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Tadpoles _tadpoles;
     private readonly Crayfish _crayfish;
     private readonly Prawns _prawns;
+    private readonly DeepDwellers _deep;
     private readonly Ducks _ducks;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
@@ -105,7 +106,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _wind, _rng);
         _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _waterInViewDeep, _rng, settings.KoiPlayPercent / 100f, _petals, settings.GoldfishCount);   // the koi (and goldfish) nose at and eat the floating petals
         _petals.Landed = (x, y) => _koi.Notice(x, y, petal: true);                                                                // and the hungry ones come when one settles
-        _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _ripples, _rng);
+        _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _waterInViewDeep, _ripples, _rng);   // (the deep stencil too: a school that dips to the bed is drawn through it)
         _koi.Minnows = _minnows;   // the big koi may rush a school of minnows for the fun of it
         _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _waterInViewDeep, _rng, _petals);   // a floating turtle nibbles at a petal
         _snake = new Snake(_pond, _ripples, settings.MinnowSchools > 0 ? _minnows : null, settings.SnakePercent / 100f, _rng);
@@ -123,11 +124,18 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _tadpoles = new Tadpoles(_pond, settings.TadpoleClutches, _ripples, _waterInView, HeapFree(_waterInView), new Random(unchecked(salt + 101)), _petals);
         _crayfish = new Crayfish(_pond, _ripples, settings.CrayfishPercent / 100f, new Random(unchecked(salt + 202)));
         _prawns = new Prawns(_pond, _ripples, settings.PrawnCount, _waterInView, new Random(unchecked(salt + 404)));   // the prawns too: their own dice
+        // The crayfish and long-armed prawns of the DEEP bed (round thirty-seven), their own dice as well; they take a
+        // minnow of a school that dips down to them, so they are handed the schools.
+        _deep = new DeepDwellers(_pond, settings.DeepDwellerCount, _waterInViewDeep, settings.MinnowSchools > 0 ? _minnows : null, new Random(unchecked(salt + 505)));
         // Who may eat a tadpole or froglet it happens upon (Snatch in Tadpoles.cs): nothing goes looking for them.
         _koi.Prey = _tadpoles;
         _turtles.Prey = _tadpoles;
         _koi.PrawnPrey = _prawns;                  // and a hungry koi, or the turtle, may take a prawn it happens upon (2026-10-27)
         _turtles.PrawnPrey = _prawns;
+        _koi.DeepPrey = _deep;                     // and a dweller of the deep bed: one of the largest koi down there, a diving turtle, a diving snake (round thirty-seven)
+        _turtles.DeepPrey = _deep;
+        _snake.DeepPrey = _deep;
+        Minnows.DipNear = _deep.Count > 0 ? _deep.AnySpot : null;   // and half the schools' dips to the bed go down near one of them (the claws' chance at a minnow)
         _frogs.Prey = _tadpoles;
         _crayfish.Prey = _tadpoles;
         _snake.Prey = _tadpoles;                   // and the swimming snake, when a tadpole is right at its nose
@@ -170,7 +178,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
 
     // The threat lists handed round each frame, kept from frame to frame and only re-made when their length changes
     // (see Scratch.Gather at the end of this file).
-    private PointF[] _scary = [], _bumpers = [], _frogThreats = [], _bedThreats = [], _tadThreats = [];
+    private PointF[] _scary = [], _bumpers = [], _frogThreats = [], _bedThreats = [], _tadThreats = [], _deepThreats = [];
 
     public void Update(double elapsedSeconds)
     {
@@ -193,7 +201,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         PointF[] duckHeads = _ducks.Heads;
         // Everything small flees the same list: koi near the surface, the snake's head, the ducks' heads (a duck eats minnows and tadpoles).
         PointF[] scary = Scratch.Gather(ref _scary, koiHeads, duckHeads, one: _snake.Live ? _snake.Head : null);
-        _minnows.Update(dt, scary);                // the minnows keep clear of the snake and the ducks as of a koi
+        _minnows.Update(dt, scary, _koi.BedHeads); // the minnows keep clear of the snake and the ducks as of a koi; a school down on the bed, of every koi whatever its depth
         Sections.Mark("update: minnows");
         _turtles.Update(dt, _snake.Live ? _snake.Head : null, _koi.Bodies);   // a basking turtle slips in when the snake comes near; a swimming one steers round the fish
         Sections.Mark("update: turtles");
@@ -234,6 +242,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _swallows.Update(dt);
         _ripples.Update(dt);
         _prawns.Update(dt, bedThreats);                                                   // the prawns flick backward from the same things the crayfish does
+        _deep.Update(dt, _snake.Live && _snake.Deep ? Scratch.Gather(ref _deepThreats, bedThreats, one: _snake.Head) : bedThreats);   // the deep dwellers too, and from the diving snake's head
         Sections.Mark("update: crayfish to ripples");
     }
 
@@ -280,6 +289,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("mice");
         _crayfish.Draw(fb);                       // on the bed of the shallows: under every fish
         _prawns.Draw(fb);                         // the prawns, on the same bed: under every fish too
+        _deep.Draw(fb);                           // the crayfish and prawns of the deep bed: under every fish (through the deep stencil, so a stone's cap stands in front of them)
+        _minnows.DrawDeep(fb);                    // a school that has dipped toward the bed: under every fish (the rest of the minnows are drawn after the fish, below)
         Sections.Mark("crayfish, prawns");
         _tadpoles.DrawUnder(fb);                  // the tadpoles, just over the bed in the shallows, and a froglet deep under the surface: under every fish (drawn after the koi, a clutch sat on the back of a fish passing over it)
         _snake.DrawDeep(fb);                      // a diving snake: under the fish (every koi shallower than it paints over it)

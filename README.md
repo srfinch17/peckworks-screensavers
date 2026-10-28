@@ -193,7 +193,10 @@ and drifts in a lull, so no two fall the same way.
   school turns, and scattering like thrown rice when a koi cruises underneath. Each minnow is a
   bending body on its own trail, like the koi in miniature. A minnow that meets the island, the log
   or a bank rock between it and its school turns and swims along the stone to get round it (its
-  tail only beats when it is actually moving), instead of nosing the rock.
+  tail only beats when it is actually moving), instead of nosing the rock. About one drift in sixteen is a
+  DIP: the school swims briskly down to a spot on the deep bed (half the time near one of the deep dwellers
+  below), sinking no faster than its swim can hide, grazes there ten to twenty-five seconds (drawn under every
+  koi, hazed and shrunk by its depth) and comes up on its next drift.
 - **The dragonfly's game**: every so often a dragonfly flies over to a school, hovers, then skims
   low and taps the water three times in a short line, each tap a small ring. The minnows rush to
   the rings in a body and circle under the spot, nipping at the surface where the dragonfly
@@ -286,6 +289,22 @@ and drifts in a lull, so no two fall the same way.
   A koi that is at least half hungry, or the turtle when it has not eaten for ten minutes, may spot a prawn within
   reach and go for it (the same chance meal as a tadpole); the prawn flicks away as it would from any fish, most
   chases end in a miss, and a prawn that is taken is back at its home from under the stones a few minutes later.
+- **The deep dwellers** (the "Deep dwellers" knob, four by default: every third from the first a crayfish, the
+  rest prawns) live on the bottom of the deepest water, where the pond's haze leaves them about four tenths of
+  their own colour: barely visible, on purpose. The crayfish is a signal crayfish (uchida-zarigani): brown-olive,
+  bigger than the red one of the shallows, with a chalk-white patch at the hinge of each claw. The prawns are
+  oriental river prawns (tenagaebi, "long-armed prawns"): see-through olive-brown with dark freckles, half again
+  the sujiebi's size, with their second pair of legs grown into two thin arms longer than the body, each ending
+  in a small pincer. They forage (standing, picking at the silt, a crayfish bringing a claw to its mouth), skitter
+  in short brisk walks between stops, raise their claws at a fish that comes over or flick backward from it, and
+  now and then two of them fight: they face off, lift and spread their claws with the feelers whipping, close until
+  the claws touch, lock and shove to and fro with the stronger gaining ground, and the loser flips away while the
+  winner stands tall. A school of minnows that dips to the bed near one can lose a fish to it: the near claw shoots
+  out and snaps, and a hit is held in the pincer and eaten over a quarter of a minute (the school bursts away from
+  the claw either way). And they are food themselves: one of the largest koi, hungry and already down on the bed,
+  a hungry turtle on a dive, or the snake when it dives may single one out and take it, and a newcomer of its kind
+  walks in from beyond the picture's edge a few minutes later. Each has its own two dials, how bold and how busy;
+  they are solid to nothing and pass under everything.
 - **Ducks** (off by default for now; the "Ducks" setting brings them back) swim by now and then: usually a mother with three to six ducklings, sometimes a drake and
   a hen, sometimes a lone drake, of one of four species (the eastern spot-billed duck, mallard,
   mandarin, common teal), each with its own colours seen from above (the mandarin drake's two
@@ -396,8 +415,8 @@ number of minnow schools (0 means no game), number of turtles, number of frogs (
 number of dragonflies, how often the swallows visit, how often the snake crosses, how many
 lizards there are (0 to 3), how often the lizards come out (Lizard visits), how many field
 mice live in the grass (0 to 3), how many clutches of tadpoles wriggle in the shallows (0 to 3,
-one by default), how often the crayfish comes out from under its rock, and how often a duck
-family swims by (never, by default).
+one by default), how often the crayfish comes out from under its rock, how many crayfish and long-armed
+prawns live on the deep bed (four by default), and how often a duck family swims by (never, by default).
 
 On a screen wider than the "Draw width" setting (1920 pixels by default) it draws at that width
 and Windows enlarges the picture: the scene is soft and painterly, so the enlarging loses little,
