@@ -1659,7 +1659,9 @@ AHEAD as well as under the body (so a fish rises before a slope it could not cli
 look-ahead may now pull the cap down by at most three tenths of the depth below the bed under the body: the
 shore's cap is nought, and unbounded it held a fish a length and a half from the bank at the surface with its
 back fully out over 0.3 of the depth of water (the first visit sheet). Water under three quarters of a height is the SHORE
-(`OnShore`): a step onto it is refused (cause 4 in the log) and the feelers call it no room, so a fish turns
+(`OnShore`): a step onto it is refused (cause 4 in the log) unless the step DEEPENS the water (the snake's rule
+from round thirty-five: a fish already inside the band, shoved there by a bump, had every step refused, the way
+out included, and stood 131 s in a shy on one 1080p run), and the feelers call it no room, so a fish turns
 before it, as it does before a rock. And where the bed lifts a spine point within half a height of the surface
 its back is OUT of the water by that share (`_outAt` per point, `_out` the most of any): that part takes none of
 the haze (the haze is what says "under"), a dorsal ridge is drawn along the backbone from a third of the way

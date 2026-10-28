@@ -1190,7 +1190,11 @@ internal sealed class Koi : Body
         // resting one barely rises at all, by the slide rule in HoldDepth)
         // stops at the stone's foot and turns, instead of being lifted over it.
         float bedNext = BedUnder(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step);   // (the bed under the whole BODY, not the centre alone)
-        bool shore = OnShore(bedNext);                                           // water too shallow for its height at all: the shore (round thirty-eight)
+        // Water too shallow for its height at all: the shore (round thirty-eight). A step that DEEPENS the water is
+        // always allowed (the snake's rule from thirty-five): a fish already inside the shore's band (a shove from a
+        // bump put one there) had every step refused, the way out included, and stood 131 s in a shy on the first
+        // 1080p run of the seventh build.
+        bool shore = OnShore(bedNext) && bedNext <= BedUnder(_x, _y) + 1e-3f;
         bool bedBlocked = shore || Z > CapOf(bedNext);
         bool refused = OnLand(next) || bedBlocked
                        || (roomNext <= _len * 0.15f && roomNext < roomHere && RoomAlong(_heading, _len * 0.5f) <= roomHere);
@@ -2475,6 +2479,7 @@ internal sealed class Koi : Body
     /// </summary>
     private float WayOut(float step)
     {
+        float bedHere = BedUnder(_x, _y);                     // (a probe into shallower water than this is the shore; into deeper is the way out)
         for (int k = 1; k <= 3; k++)
             foreach (int side in (ReadOnlySpan<int>)[1, -1])
             {
@@ -2483,7 +2488,7 @@ internal sealed class Koi : Body
                 foreach (float d in (ReadOnlySpan<float>)[step * 2, _len * 0.2f, _len * 0.45f])
                 {
                     float bu = BedUnder(_x + ca * d, _y + sa * d);
-                    if (OnLand(ToScreen(_x + ca * d, _y + sa * d)) || OnShore(bu) || Z > CapOf(bu)) { clear = false; break; }   // (the step's OWN tests, the shore included: with the old bed test alone a koi stood refused by the shore for 42 s in a shy, EP-166's trap once more)
+                    if (OnLand(ToScreen(_x + ca * d, _y + sa * d)) || (OnShore(bu) && bu <= bedHere + 1e-3f) || Z > CapOf(bu)) { clear = false; break; }   // (the step's OWN tests, the shore included, with its exit toward deeper water: with the old bed test alone a koi stood refused by the shore for 42 s in a shy, EP-166's trap once more)
                 }
                 if (clear) return a;
             }
