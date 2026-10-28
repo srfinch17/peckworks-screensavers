@@ -1194,7 +1194,7 @@ internal sealed class Koi : Body
         // always allowed (the snake's rule from thirty-five): a fish already inside the shore's band (a shove from a
         // bump put one there) had every step refused, the way out included, and stood 131 s in a shy on the first
         // 1080p run of the seventh build.
-        bool shore = OnShore(bedNext) && bedNext <= BedUnder(_x, _y) + 1e-3f;
+        bool shore = OnShore(bedNext) && bedNext < BedUnder(_x, _y) - 1e-4f;   // (strictly shallower: a body with no water under it at all, shoved onto the bank, may step any way that is not onto land, and the water comes back under it as it goes)
         bool bedBlocked = shore || Z > CapOf(bedNext);
         bool refused = OnLand(next) || bedBlocked
                        || (roomNext <= _len * 0.15f && roomNext < roomHere && RoomAlong(_heading, _len * 0.5f) <= roomHere);
@@ -2407,7 +2407,11 @@ internal sealed class Koi : Body
         // A guard, not a fix: the one lift the log still shows, 0.014 in a frame three times in 90 s on seed 5, is
         // LaySpine's clamp reading the bed under the TAIL after a sideways shove, which this test of the head's spot
         // cannot see; a three pixel hop, left as is.)
-        if (OnLand(pushed) || 0.9f * FloorAt(pushed) < Z - 0.005f) { by.X = 0; by.Y = 0; }
+        // The step's own tests for the shove's ground part (round thirty-eight): the bed under the whole BODY where the
+        // push would put it, the shore included. The head's spot alone let a bump shove a fish 74 px along the shore in
+        // two seconds until its body lay over the bank, every step refused from then on (131 s in a shy on a 1080p run).
+        float bedPushed = BedUnder(_x + by.X, _y + by.Y);
+        if (OnLand(pushed) || (OnShore(bedPushed) && bedPushed < BedUnder(_x, _y) - 1e-4f) || CapOf(bedPushed) < Z - 0.005f) { by.X = 0; by.Y = 0; }
         _x += by.X; _y += by.Y;
         float dz = by.Z / DepthPx;
         // An upward push is held to what the SHALLOWEST remembered point can
@@ -2488,7 +2492,7 @@ internal sealed class Koi : Body
                 foreach (float d in (ReadOnlySpan<float>)[step * 2, _len * 0.2f, _len * 0.45f])
                 {
                     float bu = BedUnder(_x + ca * d, _y + sa * d);
-                    if (OnLand(ToScreen(_x + ca * d, _y + sa * d)) || (OnShore(bu) && bu <= bedHere + 1e-3f) || Z > CapOf(bu)) { clear = false; break; }   // (the step's OWN tests, the shore included, with its exit toward deeper water: with the old bed test alone a koi stood refused by the shore for 42 s in a shy, EP-166's trap once more)
+                    if (OnLand(ToScreen(_x + ca * d, _y + sa * d)) || (OnShore(bu) && bu < bedHere - 1e-4f) || Z > CapOf(bu)) { clear = false; break; }   // (the step's OWN tests, the shore included, with its exit toward deeper water: with the old bed test alone a koi stood refused by the shore for 42 s in a shy, EP-166's trap once more)
                 }
                 if (clear) return a;
             }

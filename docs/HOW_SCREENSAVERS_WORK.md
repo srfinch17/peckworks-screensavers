@@ -1661,8 +1661,11 @@ shore's cap is nought, and unbounded it held a fish a length and a half from the
 back fully out over 0.3 of the depth of water (the first visit sheet). Water under three quarters of a height is the SHORE
 (`OnShore`): a step onto it is refused (cause 4 in the log) unless the step DEEPENS the water (the snake's rule
 from round thirty-five: a fish already inside the band, shoved there by a bump, had every step refused, the way
-out included, and stood 131 s in a shy on one 1080p run), and the feelers call it no room, so a fish turns
-before it, as it does before a rock. And where the bed lifts a spine point within half a height of the surface
+out included, and stood 131 s in a shy on one 1080p run; and strictly shallower, so a body with no water
+under it at all may step any way that is not onto land), and the feelers call it no room, so a fish turns
+before it, as it does before a rock. The SHOVE of a bump (`Nudge`) is tested as a step is, the bed under the
+whole body and the shore included: tested at the head's spot alone, a bump shoved a fish 74 px along the shore
+in two seconds until its body lay over the bank, where every step was refused (that was the 131 s). And where the bed lifts a spine point within half a height of the surface
 its back is OUT of the water by that share (`_outAt` per point, `_out` the most of any): that part takes none of
 the haze (the haze is what says "under"), a dorsal ridge is drawn along the backbone from a third of the way
 back to the tail's base (dark, with a wet gleam beside it on the sun's side, both fading with the share out), and
