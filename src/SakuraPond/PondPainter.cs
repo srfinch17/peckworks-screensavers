@@ -197,12 +197,13 @@ internal sealed class Pond
     // A coarse grid of "how far is the nearest bank or rock", in pixels, for
     // steering: a koi asks it to know when to turn away from the edge.
     private readonly float[] _room;
+    private readonly float[] _roomKoi;                   // the same grid with the stones' shoulders (StoneShoal) as walls: what a KOI steers by (round thirty-nine)
     private readonly int _gw, _gh;
     private readonly float _cell;
 
-    public Pond(float[] room, int gw, int gh, float cell)
+    public Pond(float[] room, float[] roomKoi, int gw, int gh, float cell)
     {
-        _room = room; _gw = gw; _gh = gh; _cell = cell;
+        _room = room; _roomKoi = roomKoi; _gw = gw; _gh = gh; _cell = cell;
     }
 
     /// <summary>
@@ -211,13 +212,25 @@ internal sealed class Pond
     /// and blended between its four nearest cells, so it changes smoothly as
     /// a fish swims, never in steps.
     /// </summary>
-    public float RoomAt(float x, float y)
+    public float RoomAt(float x, float y) => Sample(_room, x, y);
+
+    /// <summary>
+    /// The room a KOI has (round thirty-nine): the same grid with every stone's shoulder (StoneShoal, where a koi may
+    /// not swim) as a wall, so the room falls off toward a stone the way it falls off toward the bank. By the shared
+    /// grid a stone's shoulder was no wall until a fish stood on it (a cliff, not a slope): the feelers' "uphill on
+    /// clearance" fallback pointed INTO a stone while the refused step's probe pointed out, the two balanced, and a
+    /// goldfish stood at a shoulder's edge for 115 s with its turn rate flipping sign every frame. The minnows, the
+    /// turtle and the snake swim or walk over the shoulders, so they keep the shared grid.
+    /// </summary>
+    public float KoiRoomAt(float x, float y) => Sample(_roomKoi, x, y);
+
+    private float Sample(float[] grid, float x, float y)
     {
         float gx = Math.Clamp(x / _cell, 0, _gw - 1.001f), gy = Math.Clamp(y / _cell, 0, _gh - 1.001f);
         int ix = (int)gx, iy = (int)gy;
         float fx = gx - ix, fy = gy - iy;
-        float a = _room[iy * _gw + ix], b = _room[iy * _gw + ix + 1];
-        float c = _room[(iy + 1) * _gw + ix], d = _room[(iy + 1) * _gw + ix + 1];
+        float a = grid[iy * _gw + ix], b = grid[iy * _gw + ix + 1];
+        float c = grid[(iy + 1) * _gw + ix], d = grid[(iy + 1) * _gw + ix + 1];
         return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
     }
 
@@ -226,6 +239,13 @@ internal sealed class Pond
     {
         float s = _cell;
         return new PointF(RoomAt(x + s, y) - RoomAt(x - s, y), RoomAt(x, y + s) - RoomAt(x, y - s));
+    }
+
+    /// <summary>The koi's "more open water": the uphill direction of KoiRoomAt, the stones' shoulders being walls to it.</summary>
+    public PointF KoiOpenWay(float x, float y)
+    {
+        float s = _cell;
+        return new PointF(KoiRoomAt(x + s, y) - KoiRoomAt(x - s, y), KoiRoomAt(x, y + s) - KoiRoomAt(x, y - s));
     }
 }
 
@@ -526,6 +546,20 @@ internal static class PondPainter
             for (int k = 0; k < fm.Caps.Length; k++) Hill(floor, stoneShoal, fm.Caps[k], fm.Stone.Radius + u * 0.04f, fm.CapRadii[k] * 1.4f, w, h);
         if (formation2 is Formation fm2)
             for (int k = 0; k < fm2.Caps.Length; k++) Hill(floor, stoneShoal, fm2.Caps[k], fm2.Stone.Radius + u * 0.04f, fm2.CapRadii[k] * 1.4f, w, h);
+        // The KOI'S room grid (round thirty-nine): the steering grid again with the stones' shoulders as walls, so a
+        // koi's feelers feel a stone coming the way they feel the bank, a slope of falling room, not a cliff at the
+        // shoulder's edge (Pond.KoiRoomAt tells the rest). One more distance transform at the start, the same cost
+        // as the first.
+        var swimKoi = new bool[w * h];
+        for (int i = 0; i < swimKoi.Length; i++) swimKoi[i] = swim[i] && !stoneShoal[i];
+        int[] swimDistKoi = DistanceToEdge(swimKoi, w, h, edgeIsBank: true);
+        var roomKoi = new float[gw * gh];
+        for (int gy = 0; gy < gh; gy++)
+            for (int gx = 0; gx < gw; gx++)
+            {
+                int x = Math.Min(w - 1, (int)(gx * cell)), y = Math.Min(h - 1, (int)(gy * cell));
+                roomKoi[gy * gw + gx] = swimDistKoi[y * w + x] / 10f;
+            }
 
         // The heap: every pixel a drifted petal touched that is still open water in the finished picture (a rock or the
         // log painted over it later is not water, so it is left out; the branch shade darkened it, and the backdrop pixel
@@ -533,7 +567,7 @@ internal static class PondPainter
         var heap = new List<int>();
         for (int i = 0; i < waterMask.Length; i++) if (!heapTouched[i] && waterMask[i]) heap.Add(i);
 
-        return new Pond(room, gw, gh, cell)
+        return new Pond(room, roomKoi, gw, gh, cell)
         {
             Width = w, Height = h, U = u,
             Pixels = beforeBranches, Branches = boughs, TreeRoots = treeRoots,

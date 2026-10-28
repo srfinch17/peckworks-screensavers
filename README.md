@@ -104,7 +104,9 @@ and drifts in a lull, so no two fall the same way.
   through its turns along the path its head swam, never flipped or slid. They swim at real depths:
   the pond has a bed that slopes up to the bank and to every rock, a fish is never deeper than
   the water under any part of its body and rises up the slope before the shallows (and keeps off
-  a stone's shoulders, where the water would be under half the pond's depth). The fish has a HEIGHT
+  a stone's shoulders, where the water would be under half the pond's depth; since round thirty-nine it feels those shoulders coming by a room grid of its
+  own, so it turns before a stone instead of nosing against it, creeps up a stone's flank instead of freezing
+  on it a frame at a time, and lets its tail go quiet when it is held). The fish has a HEIGHT
   (a carp's body is about three tenths of its length deep, a goldfish a little more), and the bed
   rises gently to the bank over a third of the screen's unit, so a fish heading for the shore swims up
   the slope, then its back and dorsal fin break the surface (drawn clear of the water's haze, with a
@@ -349,11 +351,11 @@ and drifts in a lull, so no two fall the same way.
   dead, perch on lily pads, and the golden female dips to touch her tail to the water.
 - **Swallows** visit to drink: low, fast, sweeping curves with bursts of wingbeats and swept-back
   glides, skimming the surface with a line of rings, their shadows racing below them.
-- Now and then a **snake** (one of five Japanese kinds, a different one each visit: the shimahebi,
-  olive with four dark stripes; the aodaisho, plain green with faint blotches and a pale head; the
-  yamakagashi, a checker of black and orange-red blotches with a yellow collar; the hibakari, plain
-  brown with a cream line along the neck; the karasuhebi, near black with a blue sheen down the
-  back) comes out of the grass, swims across the pond with its body weaving behind its head and a
+- Now and then a **snake** (one of four Japanese kinds, a different one each visit: the shimahebi,
+  olive with four dark stripes; the aodaisho, olive green with soft darker blotches and a pale head;
+  the hibakari, plain brown with a cream line along the neck; the karasuhebi, near black with a blue
+  sheen down the back; drawn with a real head and neck, a rounded body lit in rows of scales, soft-edged
+  marks, and only the head riding clear of the water) comes out of the grass, swims across the pond with its body weaving behind its head and a
   small wake, and slips away. It is
   not on rails: it feels its way, goes round the lily pads, the rocks, the log, the island's cap, the cattails and
   the iris clumps rather than over them, pushes the floating petals out of its way, and if a

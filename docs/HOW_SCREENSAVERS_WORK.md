@@ -1397,9 +1397,12 @@ prawns live, was refused until the 5 s jam breaker, the koi's old deadlock in a 
 speed, wall side, room, whether it moved, flash), `PECKWORKS_MINNOWGOAL=island|formation|formation2`
 sends every school's idle target to that stone for a stress run, and `PECKWORKS_MASKDUMP` names a
 folder for the steering masks as PGM pictures (water, open, land, stonetop, shoal, the room grid at
-every pixel) so a script can flood-fill them for a pocket before a mind is blamed (all three round
+every pixel, and since round thirty-nine `roomkoi.pgm`, the koi's own grid) so a script can flood-fill them for a pocket before a mind is blamed (all three round
 thirty-six); `PECKWORKS_DEEPLOG`, `PECKWORKS_DEEPBOUT` and `PECKWORKS_MINNOWDIP` are round thirty-seven's (the
-deep dwellers' log, their fights raised, the minnows' dips raised). `PECKWORKS_SNAKELOG` names a file for a line per frame (clock, doing, place, depth, speed, the
+deep dwellers' log, their fights raised, the minnows' dips raised). Round thirty-nine added refusal cause 5 to the koi
+log (a creep: part of a step taken up a slope the cap refused whole) and a `way=` token at the row's end (the refused
+step's probe answer, a heading, and the shy's goal), since a jam's cause was the probe and the feelers disagreeing.
+`PECKWORKS_SNAKELOG` names a file for a line per frame (clock, doing, place, depth, speed, the
 hunt's note, whether the step was refused, the bed's cap); `PECKWORKS_SNAKEDIVE=1` makes every
 explore and crossing a dive, for the instruments.
 
@@ -1418,11 +1421,21 @@ times a visit and a hungry one stays a little longer. A crossing or an explore t
 for the nearest edge of the picture (`WatchLawn`): a hungry snake goes to the land corner more often and could be trapped in the
 pocket between the bank rocks and the edge.
 
-*Five skins and a hunt.* Each visit wears one of five skins (`Snake.Colour(s, v)`: a shimahebi,
-aodaisho, yamakagashi, hibakari or karasuhebi), picked from the two dials already rolled at the door
-(`(bold*1000 + 7*nerve*1000) mod 5`), never from a new roll, because one extra roll there would move
-every later roll in the scene and the owner compares builds at one seed. The marks are looked up from
-(s, v) with a sine or two, so they ride along as the body bends. The same trick gives the snake its
+*Four skins and a hunt.* Each visit wears one of four skins (`Snake.Colour(s, v)`: a shimahebi,
+aodaisho, hibakari or karasuhebi; the yamakagashi's checker of black and rust was dropped in round thirty-nine at the
+owner's word, "drop the checkered one"), picked from the two dials already rolled at the door
+(`(bold*1000 + 7*nerve*1000) mod 4`, skipping the dropped number), never from a new roll, because one extra roll there
+would move every later roll in the scene and the owner compares builds at one seed. The marks are looked up from
+(s, v) with a sine or two, so they ride along as the body bends. WHAT MAKES IT READ AS A SNAKE (round thirty-nine,
+"make the snakes look more natural"; before, a 4x crop showed a flat yellow ribbon with hard rectangles on it and a
+bullet for a head): a head wider than the neck with a real neck behind it (`Profile`: the snout rounds out to a third
+wider than the neck at the eyes, narrows to three quarters, and the body fills out over the next tenth), a rounder
+body (the edges 0.56 as bright as the ridge against 0.72 before, a soft gleam down the ridge), a lattice of scale rows
+a few percent light and dark (two waves crossing along and across the body, a row about every body width; never
+drawn scales, which at this size are a dot grid), marks with soft rounded edges each of its own size (the blotches
+are rounded boxes faded over a third of their size, the stripes faded bands), cooler olives, and the body behind the
+neck a thirtieth of the depth under the surface so the water veils it a little and it sits a pixel lower than the
+head, which rides clear. The same trick gives the snake its
 own dice for the hunt (a `Random` seeded from the dials), so a meeting never touches the scene's dice
 either. A snake between visits is drawn out by prey: its clock runs twice as fast while a lizard
 or a mouse is out. THE HUNT has four new doings. A lizard or mouse that is out, within 0.14u of the head and
@@ -1646,6 +1659,39 @@ its nose clear was refused every frame and never asked to turn (20 s against the
 shies, its heading within a tenth of a radian). Now a refused step probes round the centre with the
 step's own tests for the nearest clear heading (`Koi.WayOut`) and the next frame turns to it hard.
 
+*Near the rocks (round thirty-nine,* "please focus on making animals operate properly when they are near the rocks.
+right now the fish get all janky and so do other animals"*).* The reader split every motion number by distance to
+a stone (`rocks39.py`: within 0.08u of a shoulder or a top against the rest) and found three things, none of them a
+jam. A fish climbing a stone's flank was refused by the depth cap a frame or three at a time, stepped, and was
+refused again (150 to 180 such stands per five minutes at 1080p): the clamp lifts a fish a sliver each refused frame,
+so the next step passes and the one after fails, a stutter the eye catches as a freeze with the body still swaying.
+Now a step refused by the cap ALONE is a slope, not a wall: the fish takes the part of the step the bed allows (half,
+then a quarter, tried with the step's own test; cause 5 in the log, a creep) and slows up the flank instead of
+freezing on it. A fish refused by anything kept its full cruising speed through the stand (62 to 70 stands at the
+shoulders per five minutes, 0.4 s on average, up to 1.8 s), its tail beating at that speed on the spot, and shot off
+at it the frame the way opened: the speed now decays briskly toward the cornered floor while it is refused, and the
+tail beat follows the speed the fish really MADE GOOD last frame (`_swum`, eased over an eighth of a second), so a held
+fish lets its tail fall to the glide's flutter. And the shoulders themselves were a cliff to the feelers: the shared
+room grid is built before the hills are, so a shoulder was no wall until a fish stood on it, and 1500 to 1700 steps
+per run were refused as land there with the feelers asking for no turn. The koi has a room grid of its own now
+(`Pond.KoiRoomAt`, the shared grid with the shoulders as walls, one more distance transform at the start), so the
+room falls off toward a stone the way it falls off toward the bank and a fish turns before it. Two jams came out on
+the way, each a rule with two owners. With the first build's speed decay a goldfish stood at a shoulder's edge for
+115 s: the probe answered "up" every frame and the fish began to turn, and the feelers' fallback (uphill on the
+shared grid, which climbs INTO the stone) swung it back, a third of a second each way; the probe has the last word
+over the feelers now, and the probe's "nothing clear, straight behind" was itself a trap (a turn of exactly half a
+circle has no side, `Wrap` gave it a different sign each frame, the eased turn rate averaged nought), so it answers
+with the koi grid's uphill instead. Then a forager crept into a pocket at a stone's foot for 50 s: the probe called a
+heading clear by the bed and the land, and the step's closing-room rule refused it; the probe tests every rule of
+the step now. The final numbers at 1080p, two seeds, five minutes, old then new: refused steps within 0.08u of a
+stone 3.4 and 2.7 percent to 0.3 and 0.5; land refusals at the shoulders 1519 and 1735 to none; the longest refused run
+near a stone 1.6 s to 1.2 s; the drawn nose's jerk near a stone 0.057 and 0.046 px per frame squared to 0.049 and
+0.030 (far from the stones 0.03); the change of turn rate per frame 0.023 and 0.023 to 0.016 and 0.017 (far 0.010);
+the sharpest drawn spine bend's 99th percentile near a stone 104 and 75 degrees to 64 and 69 (far 60 to 66). The
+turtle was clean at the stones before and after; the snake's head is as smooth there as anywhere; the frogs' jerk
+near the island is twice the open water's before and after, which is their kick-and-glide swim close to a stone and
+not a jam, left as it is.
+
 *A fish has a height, and the shore is where the water is too shallow for it (round thirty-eight,* "the land
 gradually rises underwater until it sticks out of the water and becomes the shore ... if fish swim close to the
 shore, they have to swim up to follow the slope. if they get in too close their back fin will stick out of the
@@ -1720,7 +1766,8 @@ room along a level feeler BEFORE any sample is inside it, and the fish turns or 
 bed's clamp did the steering in hops.) When something is in the way the feelers pick the
 smallest change of course: turn, climb over or dive under. When EVERY feeler is blocked (its nose
 in a pocket between a rock and the bank; the search reaches a right angle either side and the way
-out is behind it) it turns toward more open water by the room grid, as the turtle does; before
+out is behind it) it turns toward more open water by the koi's own room grid (`Pond.KoiRoomAt`, the shared grid
+with the stones' shoulders as walls, round thirty-nine), as the turtle does by the shared one; before
 that fallback a koi stood nose against a rock for forty seconds. Feelers can miss, so as a last resort
 `KoiSchool.Update` finds any two bodies that overlap (`Chain.Touch`) and pushes them apart as a
 recoil, no faster than a body length a second, with a sideways push if the bed or the surface

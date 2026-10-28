@@ -52,22 +52,32 @@ namespace SakuraPond;
 /// still have the last word (except that the log is not an obstacle to a
 /// snake that has come to lie on it).
 ///
-/// FIVE SKINS. Every visit is also a different KIND of snake, one of five that
-/// really swim in Japanese ponds, seen from above (the back and the top of the
-/// head; the belly is never seen). The skin is worked out from the two dials
-/// rolled at the door, never from a fresh roll (one extra roll would change
-/// every later roll in the scene, and the owner compares builds at one seed):
+/// FOUR SKINS (five until round thirty-nine). Every visit is also a different
+/// KIND of snake, one of four that really swim in Japanese ponds, seen from
+/// above (the back and the top of the head; the belly is never seen). The skin
+/// is worked out from the two dials rolled at the door, never from a fresh roll
+/// (one extra roll would change every later roll in the scene, and the owner
+/// compares builds at one seed):
 ///   0 shimahebi    the four-lined rat snake: olive with four dark stripes;
 ///   1 aodaisho     the Japanese rat snake: plain olive green, faint darker
 ///                  blotches in a loose chain down the spine, a pale grey-green head;
-///   2 yamakagashi  the tiger keelback: olive, a CHECKER of black and orange-red
-///                  blotches along the front half, a yellow collar behind a dark head;
+///   2 yamakagashi  DROPPED 2026-10-28 at the owner's word ("drop the checkered
+///                  one"): the tiger keelback's checker of black and rust read as
+///                  a toy; the number is kept so the other skins keep their dials;
 ///   3 hibakari     a plain warm brown with a thin cream line along each side of
 ///                  the neck and a darker head;
 ///   4 karasuhebi   the black shimahebi: near black, the stripes only just blacker,
 ///                  a blue sheen down the ridge of the back.
 /// The marks are looked up from (s, v), how far along and how far across, so
-/// they ride along as the body bends, like the koi's patches.
+/// they ride along as the body bends, like the koi's patches. WHAT MAKES IT READ
+/// AS A SNAKE AND NOT A ROPE (round thirty-nine, "make the snakes look more
+/// natural"): a head wider than the neck with a real neck behind it (Profile), a
+/// rounder body (the edges well darker than the ridge, a gleam down the ridge),
+/// a lattice of scale rows a few percent light and dark (two crossing waves,
+/// never drawn scales: at this size a drawn scale is a dot of noise), marks with
+/// soft rounded edges, each its own size (the old blotches were hard rectangles,
+/// the stripes hard bands), and the body behind the head a hair under the
+/// surface, veiled by the water, while the head rides clear.
 ///
 /// AND A HUNT OF ITS OWN (the order it happens in). A lizard or a mouse that is
 /// OUT and comes within 0.14u of the snake's head, ahead of it, while the snake
@@ -362,7 +372,8 @@ internal sealed class Snake : Body
         // The skin comes from the two dials already rolled (a fresh roll would move every later roll in the scene),
         // and so does the hunt's own dice, so a meeting never touches the scene's Random.
         int d1 = (int)(_bold * 1000), d2 = (int)(_nerve * 1000);
-        _skin = (d1 + 7 * d2) % 5;
+        _skin = (d1 + 7 * d2) % 4;
+        if (_skin >= 2) _skin++;                            // 0, 1, 3, 4: the yamakagashi's checker (2) was dropped at the owner's word, 2026-10-28 ("drop the checkered one"); no fresh roll, the same two dials
         _blot = ((d1 * 31 + d2 * 17) % 100) / 100f;
         _huntRng = new Random(d1 * 7919 + d2 * 104729 + 17);
         _target = null; _strikes = 0; _prowls = 0; _fed = false; _won = false; Array.Clear(_rolled); _rolledCount = 0; Array.Clear(_looked); _lookedCount = 0;
@@ -1615,6 +1626,10 @@ internal sealed class Snake : Body
             // its depth as every swimmer does (Light.SinkPx) and is hazed by it (Light.Murk, nothing at the very
             // top: on the water it swims clear, as before).
             float z = za + (zb - za) * t;
+            // On the water only the HEAD rides clear (round thirty-nine): the body behind the neck lies a hair under
+            // the surface, a thirtieth of the depth, so it is veiled a little by the water and sits a pixel lower on the
+            // screen than the head. Drawn at the surface entire, the snake was an opaque rope laid on the picture.
+            if (!Deep && z < 0.035f && Along[i] > 0.06f) z = MathF.Max(z, 0.035f * MathF.Min(1f, (Along[i] - 0.06f) / 0.1f));
             _zAt[i] = z;
             _murkAt[i] = Light.Murk(z) * Math.Clamp(z / 0.1f, 0, 1);
             float sx = a.X + (b.X - a.X) * t, sy = a.Y + (b.Y - a.Y) * t;
@@ -1657,11 +1672,15 @@ internal sealed class Snake : Body
     /// </summary>
     private static float Profile(float s)
     {
-        if (s < 0.035f) return 0.55f + 0.65f * MathF.Sin(s / 0.035f * MathF.PI * 0.5f);   // the snout rounding out to the head
-        if (s < 0.06f) return 1.2f - 0.4f * (s - 0.035f) / 0.025f;                        // the head narrowing to the neck
-        if (s < 0.12f) return 0.8f + 0.2f * (s - 0.06f) / 0.06f;                          // the neck filling out
+        // The head seen from above (round thirty-nine): a rounded snout widening to the eyes, a third wider than the
+        // neck, then a real neck before the body fills out. The old head was a bullet a fifth wider than the body
+        // with no neck to speak of, and the whole animal read as a rope with two dots on the end.
+        if (s < 0.045f) return 0.45f + 0.85f * MathF.Sin(s / 0.045f * MathF.PI * 0.5f);   // the snout rounding out to the head's widest, at the eyes
+        if (s < 0.075f) return 1.3f - 0.55f * (s - 0.045f) / 0.03f;                       // the head narrowing to the neck (0.75)
+        if (s < 0.14f) return 0.75f + 0.25f * (s - 0.075f) / 0.065f;                      // the neck filling out
         if (s < 0.6f) return 1f;
-        return MathF.Max(0.05f, 1 - (s - 0.6f) / 0.4f);                                    // the long taper to the tail
+        float t = (s - 0.6f) / 0.4f;
+        return MathF.Max(0.05f, (1 - t) * (1 - 0.35f * t));                                // the long taper to the tail, gentle at first and quicker near the tip
     }
 
     /// <summary>Which of the five skins this snake wears (0 shimahebi, 1 aodaisho, 2 yamakagashi, 3 hibakari, 4 karasuhebi), for the instruments.</summary>
@@ -1671,65 +1690,67 @@ internal sealed class Snake : Body
     {
         float av = MathF.Abs(v);
         alpha = 1;
-        float shade = 0.72f + 0.28f * MathF.Sqrt(MathF.Max(0, 1 - v * v));             // a rounded back
+        // A ROUND BODY (round thirty-nine). The edges are now well darker than the ridge (0.56 at the edge against
+        // 0.72 before: the old shading left a flat tube with a faint rim), with a soft gleam down the ridge of the
+        // back, and the whole lit by a lattice of scale rows: two waves crossing along and across the body, a few
+        // percent light and dark, one row about every body width. Nothing is drawn as a scale (at this size a scale
+        // is a dot, and a grid of dots is noise); the lattice only breaks the painted-tube look the way real
+        // keeled scales catch the light in rows.
+        float shade = 0.56f + 0.44f * MathF.Sqrt(MathF.Max(0, 1 - v * v)) + 0.07f * MathF.Max(0, 1 - av / 0.3f);
+        float rows = _len / MathF.Max(1f, _wide * 2.2f);                                 // scale rows along the body
+        float lattice = MathF.Sin((s * rows + v * 0.75f) * MathF.Tau) * MathF.Sin((s * rows - v * 0.75f) * MathF.Tau);
+        shade *= 1 + 0.06f * lattice;
+        bool head = s < 0.075f;                                                          // the head's own colour (Profile: the head ends at 0.075)
         int lift = 0;                                                                    // a cool highlight added after the shading (the black snake's sheen)
         switch (_skin)
         {
             default:
-                // Shimahebi: olive back, darker on the head, with four dark stripes running down the body.
-                (r, g, b) = s < 0.06f ? (112, 104, 62) : (150, 140, 88);
-                if (s > 0.07f && (MathF.Abs(av - 0.32f) < 0.08f || MathF.Abs(av - 0.76f) < 0.08f)) { r = 66; g = 58; b = 36; }
+                // Shimahebi: olive back, darker on the head, with four dark stripes running down the body, soft-edged.
+                (r, g, b) = head ? (104, 98, 60) : (138, 132, 84);
+                if (s > 0.09f)
+                {
+                    float st = MathF.Min(MathF.Abs(av - 0.32f), MathF.Abs(av - 0.76f));
+                    float k = Math.Clamp((0.09f - st) / 0.04f, 0f, 1f);
+                    r += (int)((62 - r) * k); g += (int)((56 - g) * k); b += (int)((36 - b) * k);
+                }
                 break;
             case 1:
-                // Aodaisho: plain olive green, a pale grey-green head, and faint darker blotches in a loose chain
-                // down the spine (a blotch every 0.09 of the length, a little to one side and then the other).
-                if (s < 0.07f) (r, g, b) = (152, 160, 124);
+                // Aodaisho: olive green (cooler than before: the old olive painted yellow in the sun), a pale grey-green
+                // head, and darker blotches in a loose chain down the spine (a blotch every 0.09 of the length, a little
+                // to one side and then the other), each a soft rounded patch of its own size.
+                if (head) (r, g, b) = (148, 156, 124);
                 else
                 {
-                    (r, g, b) = (124, 134, 72);
+                    (r, g, b) = (110, 124, 74);
                     float ph = s * 11f + _blot;
                     int cell = (int)ph;
                     float f = ph - cell;
                     float centre = (cell & 1) == 0 ? 0.12f : -0.12f;
-                    if (f > 0.12f && f < 0.62f && MathF.Abs(v - centre) < 0.42f) { r = 98; g = 108; b = 56; }
-                }
-                break;
-            case 2:
-                // Yamakagashi: olive, a dark head, a yellow collar just behind it, and along the front half a CHECKER of
-                // black and orange-red blotches (two lanes, one each side of the back; the colours swap every cell).
-                if (s < 0.07f) (r, g, b) = (44, 48, 32);
-                else if (s < 0.115f) (r, g, b) = (222, 192, 52);
-                else
-                {
-                    (r, g, b) = (112, 120, 64);
-                    float fade = Math.Clamp((0.66f - s) / 0.18f, 0f, 1f);
-                    if (fade > 0 && av > 0.18f)
-                    {
-                        float ph = s * 24f;
-                        int cell = (int)ph;
-                        float f = ph - cell;
-                        if (f > 0.12f && f < 0.88f)
-                        {
-                            bool black = (((cell + (v > 0 ? 1 : 0)) & 1) == 0);
-                            (int tr, int tg, int tb) = black ? (24, 24, 22) : (178, 96, 60);   // rust, not toy coral-snake orange
-                            r += (int)((tr - r) * fade); g += (int)((tg - g) * fade); b += (int)((tb - b) * fade);
-                        }
-                    }
+                    float size = 0.8f + 0.1f * ((cell * 7) % 5);                          // 0.8 to 1.2, from the cell number (no roll)
+                    float dx = (f - 0.37f) / (0.25f * size), dy = (v - centre) / (0.42f * size);
+                    float d = MathF.Sqrt(MathF.Sqrt(dx * dx * dx * dx + dy * dy * dy * dy));   // a rounded box: 1 at its soft edge
+                    float k = Math.Clamp((1.15f - d) / 0.35f, 0f, 1f);
+                    r += (int)((84 - r) * k); g += (int)((96 - g) * k); b += (int)((56 - b) * k);
                 }
                 break;
             case 3:
                 // Hibakari: a plain warm brown, a darker head, and a thin cream line along the side of the neck for a short way.
-                (r, g, b) = s < 0.06f ? (108, 76, 44) : (146, 104, 62);
-                if (s > 0.012f && s < 0.26f && MathF.Abs(av - 0.7f) < 0.075f)
+                (r, g, b) = head ? (104, 74, 44) : (140, 102, 62);
+                if (s > 0.012f && s < 0.26f && MathF.Abs(av - 0.7f) < 0.09f)
                 {
-                    float k = Math.Clamp((0.26f - s) / 0.1f, 0f, 1f);
+                    float k = Math.Clamp((0.26f - s) / 0.1f, 0f, 1f) * Math.Clamp((0.09f - MathF.Abs(av - 0.7f)) / 0.03f, 0f, 1f);
                     r += (int)((230 - r) * k); g += (int)((212 - g) * k); b += (int)((166 - b) * k);
                 }
                 break;
             case 4:
                 // Karasuhebi: near black, the four stripes only just blacker, and a blue sheen down the ridge of the back.
                 (r, g, b) = (34, 35, 36);
-                if (s > 0.07f && (MathF.Abs(av - 0.32f) < 0.08f || MathF.Abs(av - 0.76f) < 0.08f)) { r = 20; g = 20; b = 21; }
+                if (s > 0.09f)
+                {
+                    float st = MathF.Min(MathF.Abs(av - 0.32f), MathF.Abs(av - 0.76f));
+                    float k = Math.Clamp((0.09f - st) / 0.04f, 0f, 1f);
+                    r += (int)((20 - r) * k); g += (int)((20 - g) * k); b += (int)((21 - b) * k);
+                }
                 if (av < 0.34f)
                 {
                     float k = 1 - av / 0.34f;
