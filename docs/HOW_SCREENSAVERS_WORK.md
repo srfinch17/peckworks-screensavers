@@ -1654,7 +1654,11 @@ of its length deep (a wakin 0.36: `Koi._height`), and its spine runs through the
 half a height above the spine and the belly half a height below it. Three rules follow from one number. The
 spine can be no deeper than the bed less six tenths of a height (`CapOf`: the belly keeps a tenth of clearance;
 where that is more than the old nine tenths of the bed the old rule stays), in the easing of Update, in the
-clamp of LaySpine and in the feelers' room (`RoomAround`). Water under three quarters of a height is the SHORE
+clamp of LaySpine and in the feelers' room (`RoomAround`). Update's cap reads the bed a length and a half
+AHEAD as well as under the body (so a fish rises before a slope it could not climb at its speed), and that
+look-ahead may now pull the cap down by at most three tenths of the depth below the bed under the body: the
+shore's cap is nought, and unbounded it held a fish a length and a half from the bank at the surface with its
+back fully out over 0.3 of the depth of water (the first visit sheet). Water under three quarters of a height is the SHORE
 (`OnShore`): a step onto it is refused (cause 4 in the log) and the feelers call it no room, so a fish turns
 before it, as it does before a rock. And where the bed lifts a spine point within half a height of the surface
 its back is OUT of the water by that share (`_outAt` per point, `_out` the most of any): that part takes none of

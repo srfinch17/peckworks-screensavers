@@ -1272,7 +1272,11 @@ internal sealed class Koi : Body
         // for the bed is brisker than the idle drift up and down; and whatever
         // the easing says, LaySpine never leaves it below the bed.
         float ahead = FloorAt(ToScreen(_x + MathF.Cos(_heading) * _len * 1.5f, _y + MathF.Sin(_heading) * _len * 1.5f));
-        float cap = CapOf(MathF.Min(_floor, ahead));            // (the body's height under the spine too, round thirty-eight)
+        // The bed AHEAD may pull the cap down by at most three tenths of the depth below the bed under the body: it is
+        // there so a fish rises before a slope it could not climb at its speed, not to pin it to the surface. With the
+        // shore in it unbounded (the shore's cap is nought), a fish a length and a half from the bank was held at Z 0,
+        // its back fully out over 0.3 of the depth of water, on the first visit sheet of round thirty-eight.
+        float cap = CapOf(MathF.Min(_floor, MathF.Max(ahead, _floor - 0.3f)));   // (the body's height under the spine too, round thirty-eight)
         // It WANTS to be a little above the bed, never on it: three tenths of
         // its length of water under it, which is the gap its feelers call
         // clear (RoomAround counts the bed's gap as room, stretched; the
