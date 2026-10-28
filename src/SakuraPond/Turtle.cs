@@ -741,7 +741,9 @@ internal sealed class Turtle : Body
             // room is nought on both sides of the step ("as much room as here"), that rule walked a turtle's nose onto
             // a bank stone, and there the room grid is flat, so nothing could steer it off (a turtle after a tadpole
             // in the shallows stood with its nose on a stone for the rest of a run, 2026-10-20).
-            ok = !LandAt(next) && (roomNext > _len * 0.2f || roomNext >= _pond.RoomAt(here.X, here.Y));
+            // And never onto the SHORE: water shallower than half its shell's height (a slider's shell is about three tenths of
+            // its length deep) has no room for it at all, as for a koi (round thirty-eight, "i need all creatures to obey this").
+            ok = !LandAt(next) && FloorAt(next) >= 0.15f * _len / DepthPx && (roomNext > _len * 0.2f || roomNext >= _pond.RoomAt(here.X, here.Y));
         }
         if (ok)
         {

@@ -272,6 +272,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Pgm("stonetop", (x, y) => _pond.StoneTop[y * w + x] ? (byte)255 : (byte)0);
         Pgm("shoal", (x, y) => _pond.StoneShoal[y * w + x] ? (byte)255 : (byte)0);
         Pgm("room", (x, y) => (byte)Math.Clamp((int)(_pond.RoomAt(x, y) + 0.5f), 0, 255));
+        Pgm("floor", (x, y) => _pond.Floor[y * w + x]);    // the bed the swimmers feel, 0 at the edge to 255 at full depth (round thirty-eight: the shore's slope and the hollows read off it)
+        Pgm("depth", (x, y) => _pond.Depth[y * w + x]);    // the painted depth (the floor without the stones' hills)
     }
 
     public void Render(FrameBuffer fb)

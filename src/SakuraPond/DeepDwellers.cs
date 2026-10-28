@@ -189,7 +189,7 @@ internal enum DeepKind
 internal sealed class DeepBed
 {
     /// <summary>The floor (0 the surface, 1 the pond's full depth) a dweller needs under it: the deep is where the water is at least this share of the depth (0.33u).</summary>
-    public const float DeepZ = 0.62f;
+    public const float DeepZ = 0.33f / Pond.DepthU;   // (0.62 of the 0.54u pond until 2026-10-28: the same 0.33u of water, kept in u when the depth changed)
     public readonly Pond Pond;
     public readonly bool[] View;               // open deep water in view: where a dweller may be drawn AND walk (the stones' caps and collars left out)
     public readonly float U;

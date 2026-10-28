@@ -118,7 +118,7 @@ internal sealed class Pond
     /// to the bed, the way its painted bed is hidden; near the bank the floor
     /// is shallow and a fish there is always in sight.
     /// </summary>
-    public const float DepthU = 0.54f;   // (0.48 until 2026-10-27 afternoon, "i need a tiny bit more depth": Light.SeeU stayed, so the bed is a touch murkier and Body.Deepen darkens what is on it; 0.4 until 2026-10-27 morning, "make the pond a little deeper": a fish on the bed is drawn a fifth further down the screen and a touch smaller; Light.SeeU rose with it so it keeps the haze it had)
+    public const float DepthU = 0.6f;    // (0.54 until 2026-10-28: the open pond's typical bed is now 0.88 of this, 0.53u as before, with humps to the full 0.6u and hollows to 0.46u, "the depths of the water are not the same everywhere"; the constants that were in depths, the stones' shoals, the deep bed's floor and the minnows' dip floor, were re-expressed so they stay where they were in u; 0.48 until 2026-10-27 afternoon, "i need a tiny bit more depth": Light.SeeU stayed, so the bed is a touch murkier and Body.Deepen darkens what is on it; 0.4 until 2026-10-27 morning, "make the pond a little deeper": a fish on the bed is drawn a fifth further down the screen and a touch smaller; Light.SeeU rose with it so it keeps the haze it had)
 
     /// <summary>How much sun reaches each pixel, 0 to 255 (the branches' shadows are darker).</summary>
     public required byte[] Sun { get; init; }
@@ -680,7 +680,7 @@ internal static class PondPainter
     /// </summary>
     private static void PourWater(uint[] px, bool[] inPond, int[] dist, byte[] depth, int w, int h, float u)
     {
-        float full = u * 0.24f * 10f;                       // depth reaches its deepest this far from the bank (dist is in tenths)
+        float full = u * 0.36f * 10f;                       // depth reaches its deepest this far from the bank (dist is in tenths); 0.24u until 2026-10-28 ("the land gradually rises underwater until it sticks out of the water and becomes the shore": a wider, gentler slope, so a fish's back is out of the water for the last few hundredths of u and not the last few pixels)
         // THE BED IS UNEVEN (2026-10-27, "make the depths be uneven, like the pondbed has deeper and shallower
         // spots"): a handful of broad, soft hollows and humps (bumps a quarter to a third of u across) scale the
         // depth by up to a quarter either way, and more the further from the bank, so the shallows keep their
@@ -689,7 +689,7 @@ internal static class PondPainter
         // hump is a real rise of the bed to every swimmer. The bumps roll their OWN dice, seeded from the
         // screen's size, so nothing else in the scene moved when they came.
         var bumpRng = new Random(w * 7919 + h * 104729 + 7);
-        const int bumps = 7;
+        const int bumps = 11;                                 // (7 until 2026-10-28, "make sure that the depths of the water are not the same everywhere": more, and the open pond's depth now varies ABOUT its typical depth instead of being clamped at the full one, see below)
         float[] bx = new float[bumps], by = new float[bumps], br = new float[bumps], bk = new float[bumps];
         for (int k = 0; k < bumps; k++)
         {
@@ -711,7 +711,11 @@ internal static class PondPainter
                     float ex = (x - bx[k]) * br[k], ey = (y - by[k]) * br[k], q = ex * ex + ey * ey;
                     if (q < 4) { float f = 1 - q * 0.25f; n += bk[k] * f * f; }   // a smooth bump, gone two radii out
                 }
-                d = Math.Clamp(d * (1 + 0.18f * Math.Clamp(n, -1, 1) * d), 0, 1);   // (a quarter and tighter bumps on the first run: a forager climbing a hump could not rise as fast as the slope, and jammed)
+                // The open pond is 0.88 of the full depth where no bump is, a hump up to the full depth and a hollow down to
+                // 0.76: before this the bumps were laid on a bed already at the full depth and clamped there, so half the
+                // water sat at exactly 255 and only the hollows showed ("not the same everywhere"). Pond.DepthU rose with it
+                // (0.54 to 0.6), so the typical bed is as deep as it was, 0.53u, with real humps and hollows either side.
+                d = Math.Clamp(d * (0.88f + 0.12f * Math.Clamp(n, -1, 1) * d), 0, 1);   // (a quarter and tighter bumps on the first run: a forager climbing a hump could not rise as fast as the slope, and jammed)
                 depth[i] = (byte)(d * 255);
 
                 // (No dark line at the edge here: the edge is alive, Shoreline paints it every frame.)
@@ -1112,7 +1116,7 @@ internal static class PondPainter
                 float f = d <= 0 ? 0 : d * d * (3 - 2 * d);
                 int i = y * w + x;
                 floor[i] = (byte)Math.Min(floor[i], (int)(f * 255));
-                if (f < 0.45f) shoal[i] = true;
+                if (f * Pond.DepthU < 0.243f) shoal[i] = true;   // (under 0.243u of water over the shoulder: 0.45 of the old 0.54u depth, the number round thirty-six set, kept in u when the depth changed)
             }
     }
 

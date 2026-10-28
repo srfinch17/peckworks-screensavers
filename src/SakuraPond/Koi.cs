@@ -64,6 +64,21 @@ internal sealed class KoiSchool
         if (Environment.GetEnvironmentVariable("PECKWORKS_NUDGECAP") == "0") Koi.NudgeCap = false;
         int koi = Math.Max(0, count);
         _fish = new Koi[koi + Math.Max(0, goldfish)];
+        // THE SHALLOWS, listed once (round thirty-eight): every sixth pixel of water in view, off the stones' shoals, over a
+        // floor between a fiftieth and a seventh of the depth (the bank's slope, wide enough for any fish's band), with a
+        // hundredth of u of room. A visit to the shallows picks its spot from this list by its own height: the band of
+        // "water about its height deep" is a few pixels wide, and random points of the screen found it one try in sixty
+        // (on one seed, never: the fish swam to a stale goal for twenty seconds).
+        var spots = new List<PointF>();
+        for (int y = 3; y < pond.Height; y += 6)
+            for (int x = 3; x < pond.Width; x += 6)
+            {
+                int i = y * pond.Width + x;
+                float fl = pond.Floor[i] / 255f;
+                if (fl < 0.02f || fl > 0.14f || !where[i] || pond.StoneShoal[i] || pond.RoomAt(x, y) < pond.U * 0.01f) continue;
+                spots.Add(new PointF(x, y));
+            }
+        Koi.ShallowSpots = spots.ToArray();
         float[] energy = Traits.Deal(rng, _fish.Length), social = Traits.Deal(rng, _fish.Length), curious = Traits.Deal(rng, _fish.Length);
         for (int i = 0; i < _fish.Length; i++)
             _fish[i] = i < koi
@@ -542,6 +557,25 @@ internal sealed class Koi : Body
     private readonly bool[] _whereDeep;                   // the same less the stones' collars and caps: the stencil when it is deeper than a quarter of the pond (see Draw)
     private readonly Random _rng;
     private readonly float _len, _wide;                   // body length and half its widest width, ground pixels
+    // THE FISH HAS A HEIGHT (round thirty-eight, "the land gradually rises underwater until it sticks out of the water
+    // ... if fish swim close to the shore, they have to swim up to follow the slope. if they get in too close their back
+    // fin will stick out of the water ... eventually they cant get any closer"): a carp's body is about 0.28 of its
+    // length deep (a wakin 0.36), and its spine runs through the middle of that. So the back is half a height above the
+    // spine and the belly half a height below it: water shallower than the belly's reach is land to it (CapOf: the
+    // spine can be no deeper than the bed less six tenths of a height, a tenth of clearance), and when the bed lifts
+    // the spine within half a height of the surface the BACK IS OUT of the water by that much (_outAt, per point:
+    // drawn clear of the haze, a dorsal ridge and a stronger bow wave). Where the bed is under three quarters of a
+    // height the fish would be more than two thirds out: a step there is refused, the shore (OnShore).
+    private readonly float _height;                       // body height, ground pixels
+    private float HeightZ => _height / DepthPx;           // the same, in depths (0 the surface, 1 the pond's full depth)
+    /// <summary>The deepest the spine may be over a bed of depth "bed": nine tenths of the bed (the old clearance) or the bed less six tenths of the body's height, whichever is less, never under nought.</summary>
+    private float CapOf(float bed) => MathF.Max(0f, MathF.Min(0.9f * bed, bed - 0.6f * HeightZ));
+    /// <summary>Water too shallow for this fish at all: under three quarters of its height. A step there is refused and the feelers call it no room.</summary>
+    private bool OnShore(float bed) => bed < 0.75f * HeightZ;
+    /// <summary>The shallows' spots (screen pixels, water in view over the bank's slope, listed once by KoiSchool): where a visit to the shallows picks its goal from.</summary>
+    internal static PointF[] ShallowSpots = [];
+    private readonly float[] _outAt = new float[Points];  // how far each point's back is out of the water, 0 under to 1 with the spine at the surface
+    private float _out;                                   // the most of any body point: the wake and the ridge read it
     private readonly float _cruise;                       // this fish's beat speed, body lengths a second
     private readonly float _w1, _w2, _p1, _p2;            // its own two wander waves
     private float _wave1, _wave2, _finPh;                 // the wander waves' and the fin beat's phases, each advanced by its own rate and wrapped (a sine of a clock wrapped at 100000 s jumped once a day: the clock and the wave's period do not share a multiple)
@@ -615,6 +649,7 @@ internal sealed class Koi : Body
         Forage,        // down to the deep bed: a slow cruise from one deep spot to the next, a pause nosing in the silt at each (a puff of it rises), then back up to the light
         Tease,         // a big fish near a school of minnows rushes it for about a second for the fun of it (never catches, never eats), then glides to a stop
         Dart,          // a goldfish's play: two to four quick zig-zag bursts, each a sharp swerve the other way, then it wanders on (2026-10-27, "make the little goldfish more fun to watch")
+        Shallows,      // up the bank's slope into water about its own height deep, back and dorsal fin out, a few seconds nosing there, then away (round thirty-eight, "if they get in too close their back fin will stick out of the water")
     }
     private readonly Snatch _snatch;                      // the chance meal in hand (Tadpoles.cs): who it is after, how long it will bother, when it may look again
     private readonly Func<ISnack, bool> _canReach;       // which prey is in water a koi can get into
@@ -828,6 +863,7 @@ internal sealed class Koi : Body
         float u = pond.U;
         _len = gold ? u * (0.042f + 0.01f * (float)rng.NextDouble()) : u * (0.095f + 0.06f * (float)rng.NextDouble());
         _wide = gold ? _len * (0.24f + 0.02f * (float)rng.NextDouble()) : _len * (0.12f + 0.02f * (float)rng.NextDouble());   // a wakin is deep-bodied (at 0.2 it read as a slim koi with a fan tail from above)
+        _height = _len * (gold ? 0.36f : 0.28f);              // (no roll: the dice order is unmoved)
         // The personality dials. Each is dealt on its own, so a fish can be
         // lazy and sociable, or energetic and solitary: no two alike.
         (_energy, _social, _curious) = dials;
@@ -1153,14 +1189,16 @@ internal sealed class Koi : Body
         // in one hop. A fish that cannot rise as fast as the bed comes up (a
         // resting one barely rises at all, by the slide rule in HoldDepth)
         // stops at the stone's foot and turns, instead of being lifted over it.
-        bool bedBlocked = Z > 0.9f * BedUnder(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step);   // (the bed under the whole BODY, not the centre alone)
+        float bedNext = BedUnder(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step);   // (the bed under the whole BODY, not the centre alone)
+        bool shore = OnShore(bedNext);                                           // water too shallow for its height at all: the shore (round thirty-eight)
+        bool bedBlocked = shore || Z > CapOf(bedNext);
         bool refused = OnLand(next) || bedBlocked
                        || (roomNext <= _len * 0.15f && roomNext < roomHere && RoomAlong(_heading, _len * 0.5f) <= roomHere);
         if (MotionLog != null)
         {
             // The step rule's own inputs, for the log (which rule refused, and what the feelers read).
             _logRoomAhead = roomAhead; _logRoomHere = roomHere;
-            _logCause = !refused ? 0 : OnLand(next) ? 1 : Z > 0.9f * BedUnder(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step) ? 2 : 3;
+            _logCause = !refused ? 0 : OnLand(next) ? 1 : shore ? 4 : Z > CapOf(bedNext) ? 2 : 3;
         }
         // A JAM: refused for a second and a half in a row. A goal pull plus a refusal is a deadlock (a
         // rest spot or a look behind the formation held a koi nose-on against its collar for 16 s,
@@ -1234,7 +1272,7 @@ internal sealed class Koi : Body
         // for the bed is brisker than the idle drift up and down; and whatever
         // the easing says, LaySpine never leaves it below the bed.
         float ahead = FloorAt(ToScreen(_x + MathF.Cos(_heading) * _len * 1.5f, _y + MathF.Sin(_heading) * _len * 1.5f));
-        float cap = 0.9f * MathF.Min(_floor, ahead);
+        float cap = CapOf(MathF.Min(_floor, ahead));            // (the body's height under the spine too, round thirty-eight)
         // It WANTS to be a little above the bed, never on it: three tenths of
         // its length of water under it, which is the gap its feelers call
         // clear (RoomAround counts the bed's gap as room, stretched; the
@@ -1323,8 +1361,10 @@ internal sealed class Koi : Body
         // Its bow wave: with its back up at the surface a swimming fish pushes a
         // small V of ripples ahead of its nose (the one thing in a calm pond that
         // says where the surface is). Fainter the deeper its back and the slower it goes.
-        if (_air <= 0 && Z < WakeZ)
-            _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, 0.5f * MathF.Min(1, _speed / (_len * _cruise)) * (1 - 0.6f * Z / WakeZ));
+        // With its back OUT of the water (the shallows by the shore, round thirty-eight) the V is a real one: up to two and
+        // a half times the strength, a fish ploughing the surface.
+        if (_air <= 0 && (Z < WakeZ || _out > 0))
+            _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, MathF.Min(1f, 0.5f * MathF.Min(1, _speed / (_len * _cruise)) * (1 - 0.6f * MathF.Min(Z, WakeZ) / WakeZ) * (1 + 1.5f * _out)));
         if (MotionLog != null)
         {
             // The whole drawn spine after the columns, as x:y pairs (a goldfish's index is offset by 100 so no two fish share a row key).
@@ -1335,7 +1375,7 @@ internal sealed class Koi : Body
             // After the spine (so a reader that takes "x:y tokens" still finds them all): the swimming wave's phase, its
             // width and the body length, for measuring the stride (lengths travelled per tail beat) and the wave's speed.
             sb.Append(FormattableString.Invariant($",beat={_phase:F3}:{_amp:F2}:{_len:F1}"));
-            sb.Append(FormattableString.Invariant($",zat={_zAt[0]:F4}:{_zAt[9]:F4}:{_zAt[17]:F4}:{_murkMin:F3}:{_zTop:F4}"));   // the drawn depths (head, middle, tail base), the clearest point's murk and depth: what the picture is painted from
+            sb.Append(FormattableString.Invariant($",zat={_zAt[0]:F4}:{_zAt[9]:F4}:{_zAt[17]:F4}:{_murkMin:F3}:{_zTop:F4},out={_out:F3}:{_floor:F4}:{FloorAt(ToScreen(_goalX, _goalY)):F3}"));   // the drawn depths (head, middle, tail base), the clearest point's murk and depth: what the picture is painted from; how far its back is out of the water, the bed under its body and the bed at its goal (a visit to the shallows whose goal is deep never found the band)
             MotionLog(sb.ToString());
         }
     }
@@ -1344,8 +1384,12 @@ internal sealed class Koi : Body
 
     /// <summary>Picks somewhere new to idle toward: a random spot in open water, and how long to keep at it.</summary>
     /// <param name="deep">Only a deep spot (a resting place), if one turns up.</param>
-    private void NewGoal(bool deep = false)
+    /// <param name="deep">A forager's goal: over a bed at least 150/255 of full depth.</param>
+    /// <param name="shallow">A visit to the shallows (round thirty-eight): a spot on the bank's slope where the water is 0.85 to 1.4 of the fish's own height deep (its back will be out), in view, with a little swimming room.</param>
+    /// <returns>Whether a goal of the kind asked for was found. A caller that asked for the shallows and got false must not act on the goal that stands (the last wander's): two builds "visited the shallows" out in the pond that way, EP-168.</returns>
+    private bool NewGoal(bool deep = false, bool shallow = false)
     {
+        bool found = false;
         // A goldfish's idle wander mostly heads for the neighbourhood of another
         // goldfish (seven times in ten, when there is one): the pull that keeps
         // a shoal loosely together even when nobody is "following" anybody, the
@@ -1385,12 +1429,38 @@ internal sealed class Koi : Body
                 x = s.X; y = s.Y;
                 if (x < 0 || y < 0 || x >= _pond.Width || y >= _pond.Height) continue;
             }
+            if (shallow)
+            {
+                // The shallows: a floor between 0.85 and 1.4 of its height on the bank's slope. That band is a few pixels wide
+                // (the slope is 0.36u and the band a thirtieth of it), so a random point almost never lands in it: from a random
+                // point of the slope (a floor under half depth), walk DOWNHILL in floor, ten pixels a step toward the shallowest
+                // of eight neighbours, until the floor is in the band or the walk is on land, a stone's shoal (land to it, a jam)
+                // or out of view; then the spot must have a tenth of a length of room and not be one it avoids. The first
+                // forty tries start within 0.9u of the fish (near enough to reach in a visit), the last twenty anywhere.
+                // From the school's list of the shallows' spots (every sixth pixel of the bank's slope in view): one of
+                // them, over a floor of 0.85 to 1.4 of THIS fish's height, with a tenth of a length of room, not one it
+                // avoids; the first forty tries within 0.9u of the fish (near enough to reach in a visit), the last twenty
+                // anywhere. (The band is a few pixels wide: random points of the screen found it one try in sixty, and a
+                // walk downhill from a random point of the slope found it on one seed and not the other.)
+                if (ShallowSpots.Length == 0) break;
+                PointF sp = ShallowSpots[_rng.Next(ShallowSpots.Length)];
+                x = sp.X; y = sp.Y;
+                float fl = _pond.Floor[(int)y * _pond.Width + (int)x] / 255f;
+                if (fl < 0.85f * HeightZ || fl > 1.4f * HeightZ || _pond.RoomAt(x, y) < _len * 0.1f || Avoided(sp)) continue;
+                (float gx0, float gy0) = ToGround(x, y);
+                if (tries < 40 && (gx0 - _x) * (gx0 - _x) + (gy0 - _y) * (gy0 - _y) > _pond.U * _pond.U * 0.9f * 0.9f) continue;
+                (_goalX, _goalY) = ToGround(x, y);
+                found = true;
+                break;
+            }
             if (_pond.RoomAt(x, y) < _len * 0.4f || Avoided(new PointF(x, y))) continue;
             if (deep && tries < 40 && _pond.Floor[(int)y * _pond.Width + (int)x] < 150) continue;
             (_goalX, _goalY) = ToGround(x, y);
+            found = true;
             break;
         }
         _goalTimer = 12 + 18 * (float)_rng.NextDouble();
+        return found;
     }
 
     /// <summary>
@@ -1580,6 +1650,22 @@ internal sealed class Koi : Body
                     else if (_mind.Over) Begin(Doing.Wander);
                 }
                 break;
+            case Doing.Shallows:
+                {
+                    // Up the bank's slope to a spot where the water is about its own height deep (NewGoal(shallow)): the bed's
+                    // cap lifts it as it goes, its back breaks the surface over the last stretch (the ridge, the V), and at the
+                    // spot it noses in the sand a few seconds, then wanders off down the slope. The step rule's shore keeps it
+                    // from going further than three quarters of its height of water.
+                    float sdx = _goalX - _x, sdy = _goalY - _y;
+                    if (_hold > 0)
+                    {
+                        _hold -= dt;
+                        if (_hold <= 0) Begin(Doing.Wander);
+                    }
+                    else if (sdx * sdx + sdy * sdy < _len * _len * 0.5f) _hold = 3f + 3f * (float)_rng.NextDouble();
+                    else if (_mind.Over) Begin(Doing.Wander);
+                    break;
+                }
             case Doing.Dart:
                 // The play: a burst, then a sharp swerve the other way and another burst, two to four of them,
                 // each aimed a few lengths ahead and off to the new side (a firm pull, see Goal); between them
@@ -1740,6 +1826,8 @@ internal sealed class Koi : Body
                 return (_goalX, _goalY, 0.25f);
             case Doing.Forage:
                 return (_goalX, _goalY, _hold > 0 ? 0.15f : 0.45f);          // nosing at the bed it barely steers; between spots a wander's pull
+            case Doing.Shallows:
+                return (_goalX, _goalY, _hold > 0 ? 0.15f : 0.9f);              // a firm pull up the slope (the feelers read the bank as a wall all the way), barely steering while it noses there
             case Doing.Dart:
                 return (_goalX, _goalY, 1.3f);                                   // the swerve's point: a firm pull, so each burst really bends (a chase's is 1.1)
             case Doing.Leap:
@@ -1817,10 +1905,15 @@ internal sealed class Koi : Body
         // after one. A koi never darts (its play is the chase, the leap and the tease). Its chases are twice as
         // ready too: a pair of goldfish after each other is the shoal's other game.
         float wDart = gold ? (0.25f + 0.5f * _energy) * _play * (_doing == Doing.Dart ? 0.2f : 1f) : 0;
+        // A visit to the shallows (round thirty-eight): a small face, likelier for a curious fish, never twice running.
+        // Naturally the fish kept a length off the bank and no back ever broke the surface but a leap's: this is how
+        // "if fish swim close to the shore" comes about at all.
+        float wShallows = (0.08f + 0.12f * _curious) * (gold ? 0f : 1f) * (_doing == Doing.Shallows ? 0f : 1f);   // (not a goldfish: its height is so small that "water about its height deep" lies within a few pixels of the land, where the step rule's room test never lets it)
         if (gold) wChase *= 2;
-        switch (Dice.Pick(_rng, [wChase, wFollow, wLook, wRest, wForage, wDart, wWander]))
+        switch (Dice.Pick(_rng, [wChase, wFollow, wLook, wRest, wForage, wDart, wWander, wShallows]))
         {
             case 5: Begin(Doing.Dart); break;
+            case 7: Begin(Doing.Shallows); break;
             case 0: Begin(Doing.Chase, quarry); break;
             case 1:
                 // Two fish may follow EACH OTHER: the lower school index leads (it cruises to idle goals of its own,
@@ -1860,6 +1953,12 @@ internal sealed class Koi : Body
                 break;
             case Doing.Snatch:
                 _mind.Begin(doing, 6.5f);                                          // a little longer than the chase's own patience: the chase ends itself
+                break;
+            case Doing.Shallows:
+                _mind.Begin(doing, 30 + 12 * (float)_rng.NextDouble());            // long enough to reach the bank from well out (a cruise is about 0.45 lengths a second; 14 to 24 s left most visits short of the shallows); the hold at the spot ends it sooner
+                _hold = 0;
+                if (!NewGoal(shallow: true)) { Begin(Doing.Wander); break; }       // no spot of the shallows for it this time: an ordinary wander, never a "visit" to the last goal standing (EP-168)
+                Depth(0.06f, _mind.Left + 5);                                      // up near the top, back still under (at 0.02 the back broke the surface out in the pond on the way); the bed's cap lifts it the rest of the way as the water shoals
                 break;
             case Doing.Dart:
                 _mind.Begin(doing, 4.5f);                                          // the bursts end it sooner; this is the net under them
@@ -2156,7 +2255,7 @@ internal sealed class Koi : Body
     /// </summary>
     public void Notice(float x, float y, bool petal = false)
     {
-        if (_doing is Doing.Chase or Doing.Flee or Doing.Leap or Doing.Snatch or Doing.Tease or Doing.Forage or Doing.Dart) return;      // (a tap or a petal reached a fish IN THE AIR once and turned its leap into a look, mid-arc; a fish after a tadpole has eyes only for it; a fish down on the bed sees nothing at the surface: the first forage run had nine forages, five of them cut short inside seconds by a petal)
+        if (_doing is Doing.Chase or Doing.Flee or Doing.Leap or Doing.Snatch or Doing.Tease or Doing.Forage or Doing.Dart or Doing.Shallows) return;   // (a visit to the shallows too: a petal cut two of five visits short at a second or two)      // (a tap or a petal reached a fish IN THE AIR once and turned its leap into a look, mid-arc; a fish after a tadpole has eyes only for it; a fish down on the bed sees nothing at the surface: the first forage run had nine forages, five of them cut short inside seconds by a petal)
         float chance = petal ? 0.3f * _hunger * _hunger * _play : 0.25f + 0.7f * _curious * _play;   // a petal: only a really hungry fish, and not every time (every fish answering every petal made a pond of fish nosing at petals)
         if (_doing == Doing.Follow && _partner != null) chance *= 1 - 0.7f * Company(Liking(_partner));   // fast with a friend: a tap or a petal turns its head less often (at 0.7 of a friend, about half)
         if (_rng.NextDouble() > chance) return;
@@ -2239,7 +2338,9 @@ internal sealed class Koi : Body
         // bank's edge) is no room at all, at the surface too: before, a fish
         // at Z 0 over a floor of 0 was "not in the bed" and could be pushed onto
         // the stone.
-        float bed = (0.9f * BedUnder(p.X, p.Y) * DepthPx - p.Z) * 2.5f;
+        float under = BedUnder(p.X, p.Y);
+        if (OnShore(under)) return 0;                                             // the shore: no water for a fish of its height at all (round thirty-eight)
+        float bed = (CapOf(under) * DepthPx - p.Z) * 2.5f;
         if (bed <= 0) return 0;
         float room = MathF.Min(_pond.RoomAt(s.X, s.Y), bed);
         // The fish it is chasing is not a wall: counted as one, the feelers
@@ -2377,7 +2478,8 @@ internal sealed class Koi : Body
                 bool clear = true;
                 foreach (float d in (ReadOnlySpan<float>)[step * 2, _len * 0.2f, _len * 0.45f])
                 {
-                    if (OnLand(ToScreen(_x + ca * d, _y + sa * d)) || Z > 0.9f * BedUnder(_x + ca * d, _y + sa * d)) { clear = false; break; }
+                    float bu = BedUnder(_x + ca * d, _y + sa * d);
+                    if (OnLand(ToScreen(_x + ca * d, _y + sa * d)) || OnShore(bu) || Z > CapOf(bu)) { clear = false; break; }   // (the step's OWN tests, the shore included: with the old bed test alone a koi stood refused by the shore for 42 s in a shy, EP-166's trap once more)
                 }
                 if (clear) return a;
             }
@@ -2671,7 +2773,7 @@ internal sealed class Koi : Body
         // the course. (Lifting the WHOLE body by the head's lift was tried
         // first: the tail, already shallower, then rose too, and the fish slid
         // up the screen.)
-        float cap = 0.9f * floor;
+        float cap = CapOf(floor);                           // (the body's height under the spine too, round thirty-eight)
         if (Z > cap)
         {
             Z = cap;
@@ -2731,10 +2833,16 @@ internal sealed class Koi : Body
             _shadowSoft = MathF.Max(1f, _air * u * 0.1f);
         }
         float airLift = _air * Light.Lift * u, airScale = _air > 0 ? Light.Scale(-_air / Pond.DepthU) : 1;   // in the air it is nearer the eye: a little bigger (Scale run above the water)
-        _murkMin = 1; _zTop = 1;
+        _murkMin = 1; _zTop = 1; _out = 0;
         for (int i = 0; i < Points; i++)
         {
             float s = Along[i], z = _zAt[i];
+            // THE BACK OUT OF THE WATER (round thirty-eight): the back rides half a height above the spine, so a point
+            // whose spine is within half a height of the surface has its back out by that share. Not in the air (a
+            // leap is out of the water whole, drawn its own way).
+            float outK = _air > 0 || HeightZ <= 0 ? 0 : Math.Clamp((0.5f * HeightZ - z) / (0.5f * HeightZ), 0f, 1f);
+            _outAt[i] = outK;
+            if (i < 18 && outK > _out) _out = outK;
             // The swimming wave: tiny at the head, widest at the tail, running from head to tail.
             float sway = Sway(s);
             float nx = -dir[i].Y, ny = dir[i].X;                 // sideways
@@ -2763,6 +2871,8 @@ internal sealed class Koi : Body
             // ("the little goldfish sometimes look like they're above the surface", 2026-10-27). The haze is
             // half of what says "under".
             if (_kind == Kind.Goldfish) mk += 0.1f * (1 - mk);
+            // A back out of the water takes none of the water's colour: the haze is what says "under", and this part is not.
+            mk *= 1 - 0.85f * outK;
             _murkAt[i] = mk;
             _depthAt[i] = Light.DepthOf(z);
             _blurAt[i] = (int)(Math.Clamp(lost * 1.1f, 0, 1) * 256);
@@ -2997,6 +3107,26 @@ internal sealed class Koi : Body
         // stencil that leaves them out, so the stone hides it there (Pond.StoneTop).
         bool[] st = Z > 0.25f ? _whereDeep : _where;
         Paint(fb, st, _pond.Sun, _murkAt[0], soft, _pond.Pixels, mark: mark, murkAt: _murkAt);
+        // THE BACK OUT OF THE WATER (round thirty-eight): where a point's back breaks the surface, the dorsal fin stands
+        // up out of it as a dark ridge along the backbone (a carp's dorsal runs from a third of the way back to the base
+        // of the tail), with a wet gleam beside it on the sun's side. Faint where the back is just awash, full where the
+        // spine is at the surface. Painted on the water stencil, over the body.
+        if (_out > 0.05f)
+        {
+            float toSunR = MathF.Atan2(-Light.ShadowY, -Light.ShadowX);
+            for (int i = 6; i < 15; i++)
+            {
+                float k = MathF.Min(_outAt[i], _outAt[i + 1]);
+                if (k < 0.05f) continue;
+                PointF p = Spine[i], q = Spine[i + 1];
+                float th = MathF.Max(1f, HalfWidth[i] * 0.14f);
+                fb.Line(p, q, Color.FromArgb(34, 26, 22), 0.55f * k, th, st);
+                float dx = q.X - p.X, dy = q.Y - p.Y, l = MathF.Max(1e-3f, MathF.Sqrt(dx * dx + dy * dy));
+                float side = MathF.Sign(MathF.Sin(toSunR - MathF.Atan2(dy, dx)));
+                float gx = -dy / l * side * HalfWidth[i] * 0.3f, gy = dx / l * side * HalfWidth[i] * 0.3f;
+                fb.Line(new PointF(p.X + gx, p.Y + gy), new PointF(q.X + gx, q.Y + gy), Color.FromArgb(236, 240, 244), 0.3f * k, th, st);
+            }
+        }
         // The eyes: a small dark dot on each side of the head.
         PointF e0 = Spine[1], e1 = Spine[2];
         float ex = e1.X - e0.X, ey = e1.Y - e0.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));

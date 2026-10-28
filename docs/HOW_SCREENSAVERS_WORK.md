@@ -1646,6 +1646,58 @@ its nose clear was refused every frame and never asked to turn (20 s against the
 shies, its heading within a tenth of a radian). Now a refused step probes round the centre with the
 step's own tests for the nearest clear heading (`Koi.WayOut`) and the next frame turns to it hard.
 
+*A fish has a height, and the shore is where the water is too shallow for it (round thirty-eight,* "the land
+gradually rises underwater until it sticks out of the water and becomes the shore ... if fish swim close to the
+shore, they have to swim up to follow the slope. if they get in too close their back fin will stick out of the
+water and they'll make v shaped waves ... eventually they cant get any closer"*).* A carp's body is about 0.28
+of its length deep (a wakin 0.36: `Koi._height`), and its spine runs through the middle of that, so the back is
+half a height above the spine and the belly half a height below it. Three rules follow from one number. The
+spine can be no deeper than the bed less six tenths of a height (`CapOf`: the belly keeps a tenth of clearance;
+where that is more than the old nine tenths of the bed the old rule stays), in the easing of Update, in the
+clamp of LaySpine and in the feelers' room (`RoomAround`). Water under three quarters of a height is the SHORE
+(`OnShore`): a step onto it is refused (cause 4 in the log) and the feelers call it no room, so a fish turns
+before it, as it does before a rock. And where the bed lifts a spine point within half a height of the surface
+its back is OUT of the water by that share (`_outAt` per point, `_out` the most of any): that part takes none of
+the haze (the haze is what says "under"), a dorsal ridge is drawn along the backbone from a third of the way
+back to the tail's base (dark, with a wet gleam beside it on the sun's side, both fading with the share out), and
+the bow wave (`Ripples.Wake`) is up to two and a half times as strong: a fish ploughing the shallows. The bed's
+slope to the bank widened for this from 0.24u to 0.36u (`PourWater`), so the back is out over the last few
+hundredths of u of the approach and not the last few pixels; the water's colour, the bed's clearness, the
+prawns' and the crayfish's shallows and the tadpoles' shore haunt all read the same depth, so they widened with
+it (the same-scene gate shows the band and nothing else). The turtle keeps the same shore: a step onto a bed
+under half its shell's height is refused. The minnows, tadpoles, frogs, snake and ducks already live at the
+surface or climb out, and the bed animals walk the bottom, so nothing else needed a rule. The koi log's
+`out=` token carries the share out and the bed under the body; `shore38.py` reads fish-seconds with the back
+out, the shore refusals and the standstills over the shallows. The shore is in the refused step's own probe
+too (`WayOut`), since a koi stood refused by it for 42 s in a shy on the first run (EP-166's trap once more:
+a wall class added to the step test and not to the probe). And since the fish kept a length off the bank of
+their own accord (no back but a leap's broke the surface in ten natural minutes), a koi now VISITS the
+shallows (`Doing.Shallows`, a small face of the dice, likelier for a curious fish; not a goldfish, whose
+"water about its height deep" lies within a few pixels of the land): a goal on the bank's slope where the
+floor is 0.85 to 1.4 of its height (`NewGoal(shallow)`: that band is a few pixels wide, so the school lists
+the shallows' spots once, every sixth pixel of water in view over the bank's slope off the stones' shoals,
+`Koi.ShallowSpots`, and a visit draws from the list by its own height, within 0.9u first; a random point of
+the screen found the band one try in sixty, and a walk downhill from a random point of the slope found it
+on one seed and not the other, so most visits swam to a STALE goal, the last wander's, and "arrived" out
+in the pond: a picker that fails must say so, not leave the old goal standing), a firm pull up the slope with the
+feelers reading the bank as a wall all the way, the bed's cap lifting it and its back breaking the surface
+over the last stretch, a hold of 3 to 6 s nosing there, then a wander off down the slope.
+
+And the open pond's bed is no longer one depth ("make sure that the depths of the water are not the same
+everywhere"): the humps and hollows of round thirty-three were laid on a bed already at the full depth and
+clamped there, so half the water sat at exactly 255 in the floor mask and only the hollows showed. The open
+pond is now 0.88 of the full depth where no bump is, a hump up to the full depth and a hollow down to 0.76,
+with eleven bumps instead of seven, and `Pond.DepthU` rose from 0.54u to 0.6u so the typical bed is as deep
+as it was (0.53u) with real humps (0.6u) and hollows (0.46u) either side. The three constants that were in
+depths were re-expressed in u so they stayed put: a stone's shoal (under 0.243u of water), the deep bed's
+floor (0.33u) and the minnows' dip floor (0.35u).
+
+And the deep is a shade clearer and the fish in it dimmer (the same line: "when fish swim deeper, i want them
+to look a little dimmer, i want the water a tiny bit more translucent at depth"): `Light.SeeU` 0.84 to 0.92
+(the haze at the pond's full depth 0.62 to 0.57) and `Body.Deepen`'s darkening 100 to 140 (0.45 of the
+brightness at the limit of sight, six tenths before). In the formula a white koi on the bed goes from 180 to
+168 in its own colour and from 96 to 98 painted through the water: dimmer in itself, a shade less veiled.
+
 *Three-dimensional steering and bumping.* The fish steer in all three directions with the engine's
 steering kit (`Core/Minds/Space.cs`). Each animal keeps a `Body.Shape`, a `Chain`: a string of
 beads along its spine, each with a radius, in ground pixels with z the depth in pixels. The fish

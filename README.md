@@ -104,7 +104,17 @@ and drifts in a lull, so no two fall the same way.
   through its turns along the path its head swam, never flipped or slid. They swim at real depths:
   the pond has a bed that slopes up to the bank and to every rock, a fish is never deeper than
   the water under any part of its body and rises up the slope before the shallows (and keeps off
-  a stone's shoulders, where the water would be under half the pond's depth), a deep fish
+  a stone's shoulders, where the water would be under half the pond's depth). The fish has a HEIGHT
+  (a carp's body is about three tenths of its length deep, a goldfish a little more), and the bed
+  rises gently to the bank over a third of the screen's unit, so a fish heading for the shore swims up
+  the slope, then its back and dorsal fin break the surface (drawn clear of the water's haze, with a
+  dark ridge and a wet gleam) and it ploughs a real V of bow waves, and where the water is under
+  three quarters of its height it can go no further: that is the shore to it, as to the turtle. Now
+  and then a koi goes up the slope on purpose (a visit to the shallows, a few seconds nosing in the
+  sand with its back out, then away). And the open pond's bed is not one depth: humps and hollows
+  take it a fifth either way of its usual depth, so the fish on the bottom are deeper in some places
+  than others. A
+  deep fish
   sits lower on the screen than the water above it (we look at the pond at a slant) and comes up
   the screen as it rises, and in the shallows it throws a shadow on the bed, a soft echo right
   under it that fades as it rises off the bed (never thrown far: a shadow a body length away
@@ -118,7 +128,8 @@ and drifts in a lull, so no two fall the same way.
   where the surface is, so the topmost fish read as just under it, not lying on it. Even at the
   top a fish takes a little of the water's colour. The pond is deep enough to hide a fish: the
   fish swim at any depth the bed allows, go smaller and hazier the deeper they are, and then out
-  of sight. They steer over, under and round each other in three dimensions, and if two do touch
+  of sight; the deeper, the dimmer its own colours (darker and greyer) while the water over it veils
+  it a shade less than it did. They steer over, under and round each other in three dimensions, and if two do touch
   they bump (a short recoil, then a shy swim away) rather than pass through. The 3D navigation
   kit behind this lives in the engine (`Core/Minds/Space.cs`) for other savers to use. A diving
   fish tilts: every point of its body is as deep as its head was when it passed there, so the

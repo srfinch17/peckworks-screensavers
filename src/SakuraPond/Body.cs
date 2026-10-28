@@ -254,7 +254,7 @@ internal abstract class Body
         if (t <= 0) return;
         if (t > 220) t = 220;
         int lum = (r * 77 + g * 150 + b * 29) >> 8;             // the pixel's brightness, the eye's weights
-        int sat = 256 - t * 150 / 220, dark = 256 - t * 100 / 220;
+        int sat = 256 - t * 150 / 220, dark = 256 - t * 140 / 220;   // (100 until 2026-10-28, "when fish swim deeper, i want them to look a little dimmer": 0.45 of the brightness at the limit of sight, six tenths before; the veil thinned at the same time (Light.SeeU), so in the formula a white koi on the bed is 180 to 164 in its own colour and 96 to 99 painted: dimmer in itself, a shade less veiled)
         r = (lum + ((r - lum) * sat >> 8)) * dark >> 8;
         g = (lum + ((g - lum) * sat >> 8)) * dark >> 8;
         b = (lum + ((b - lum) * sat >> 8)) * dark >> 8;

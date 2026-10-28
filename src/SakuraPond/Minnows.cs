@@ -420,7 +420,7 @@ internal sealed class School
                 }
                 else { x = (float)_own.NextDouble() * _pond.Width; y = (float)_own.NextDouble() * _pond.Height; }
                 int ix = (int)x, iy = (int)y;
-                if (!InView(x, y) || _pond.RoomAt(x, y) < _u * (near != null ? 0.06f : 0.1f) || _pond.Floor[iy * _pond.Width + ix] / 255f < 0.65f) continue;
+                if (!InView(x, y) || _pond.RoomAt(x, y) < _u * (near != null ? 0.06f : 0.1f) || _pond.Floor[iy * _pond.Width + ix] / 255f * Pond.DepthU < 0.35f) continue;   // (a floor at least 0.35u deep: 0.65 of the 0.54u pond until 2026-10-28, kept in u)
                 (_tx, _ty) = Minnow.ToGround(_pond, x, y);
                 _zWant = 0.9f * _pond.Floor[iy * _pond.Width + ix] / 255f - 0.04f;
                 _mood = Mood.Dip;
