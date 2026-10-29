@@ -588,7 +588,16 @@ of 0.35 lengths and a wave running four times the swim speed (a real carp covers
 fifths of what its wave covers), which read as "the movement doesn't match the speed of the
 fish". The head's rate of turn is eased
 over an eighth of a second, because the body is laid along the path the head took, and a
-steering sum that flipped sign from frame to frame was laid into that path as kinks. The
+steering sum that flipped sign from frame to frame was laid into that path as kinks. And a head
+that turns ON THE SPOT (held against a stone, or cornered and swinging round at a radian a second
+while barely moving) would lay the whole angle it turned into one corner of the path, a joint of
+up to 90 degrees that then slid down the body as the fish swam off ("an unnatural looking kink
+that undulates throughout their body", round forty-one): a train track has hinges, a fish does
+not. So when the head turns faster than its path bends, the body swings round WITH it, the tail
+sweeping the other way, like a rod pivoting about the head: `Koi.SweepBody` turns the whole
+remembered path about the head by the excess over the sharpest bend a body holds (three radians
+per length, read over the eighth of a length behind the head), after testing that the swept body
+lands in water deep enough for it. The
 remembered path and the walk back along it are the shared `Core/Minds/Trail.cs`. The snake's head weaves side to side and the body
 follows it point for point, which is how a snake really swims. For every pixel near the spine
 we work out two numbers, how far along the body (s) and how far out to the side (v), and the

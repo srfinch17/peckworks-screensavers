@@ -139,6 +139,23 @@ These are in the code comments too; here they are in one place.
   degrees; and the head's turn rate has the koi's turning-circle floor (0.4 body lengths, 0.3 cornered).
   Measured over five minutes of dive stress: the fastest turn 9.6 to 1.5 radians a second, the head inside
   a hill 2.5 percent of frames to none, the longest blocked wait 5.0 s to 0.9 s.
+- **A pivot sweeps a trail-laid body (round forty-one).** A body laid along the trail its head swam
+  inherits every corner of that trail, and a head that turns ON THE SPOT lays the whole angle it turned
+  into one corner: a refused stand (the step rule holds the head, the heading keeps turning toward the way
+  out) or the cornered pivot (speed at an eighth of a length a second, the heading at its 0.9 rad/s floor:
+  7.5 radians of bend per body length, where cruising lays 1.7 to 2.5). The corner then slides down the
+  body as the fish swims off, one spine point a frame ("an unnatural looking kink that undulates throughout
+  their body as they turn or swim away"): joints of up to 93 degrees, 158 frames over 45 in five minutes on
+  one seed, 60 of 119 episodes within two seconds of a refusal. A fish has no hinge: when the head turns
+  faster than its path bends, the body swings round with it and the tail sweeps the other way. So
+  `Koi.SweepBody` compares the trail's direction over the eighth of a length behind the head with the
+  heading and turns the whole remembered trail about the head by the excess over the sharpest bend a body
+  holds (3 radians per length), after testing the swept body where it lands (land, the shoals, the bed at
+  each remembered depth): blocked, half, a quarter, or none. Not over a shorter reach: a shove moves the
+  head a pixel in a frame and read as a turn. The metric is the sharpest joint of the logged spine per
+  frame (kit `motion/pond41/kink41.py`), and a depth change on a refused frame is all drift (`made`): judged
+  against the step the fish meant to make, a rising stand laid a vertical trail segment at the head and the
+  drawn head pointed wherever two coincident points said. MEASURED (kinkB, 720p, 300 s natural): seed 3's sharpest joint 93 to 34.5 degrees, frames over 45 degrees 158 to 0, over 25 degrees 794 to 168, episodes within two seconds of a refusal 60 to 3, the drawn head against the steered heading while refused p90 35 to 13 degrees and max 99 to 19; seed 5 (no pivot corner before either) worst 40 both ways, all at the tail base in hard turns at cruise; no confined spell over 10 s on either seed (longest 5.0 and 5.9 s, resting).
 - **A frightened small thing turns and accelerates at a rate, not in a frame (round forty).** The
   tadpole's flight turned at 30 radians a second (a whole-body snap of 29 degrees in one frame: one frame
   in a hundred) and went from nought to six lengths a second in one frame (nine hundred times in five

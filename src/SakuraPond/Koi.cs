@@ -960,6 +960,79 @@ internal sealed class Koi : Body
         _trailCount = Math.Min(_trail.Length, _trailCount + 1);
     }
 
+    /// <summary>
+    /// A PIVOT SWEEPS THE BODY (round forty-one). The body is laid along the trail the head swam, so a head
+    /// that turned on the spot (refused against a stone, or cornered and turning at its floor of about a radian
+    /// a second while barely moving) laid the whole angle it turned into ONE corner of the trail: a joint of up
+    /// to 90 degrees that then slid down the body as the fish swam off ("an unnatural looking kink that
+    /// undulates throughout their body as they turn or swim away": 121 such episodes in five minutes on one
+    /// seed, 61 of them straight after a refused stand, the sharpest joint climbing one spine point a frame).
+    /// A fish has no hinge. When its head turns faster than its path bends, the body behind swings round with
+    /// it and the tail sweeps the other way, like a rod pivoting about the head. So each frame the trail's
+    /// direction over the eighth of a length behind the head is compared with the heading, and the excess
+    /// over the tightest bend a body holds (SharpestBend) is taken out by turning the whole remembered trail
+    /// about the head by that excess. The swept body is tested where it would land (the bank, the stones'
+    /// shoals, the bed at each remembered depth): blocked, it takes half the sweep, a quarter, or none (the old
+    /// corner, only in a fish wedged between two walls). Measured by the kit's kink40.py: the sharpest joint
+    /// of the logged spine per frame.
+    /// </summary>
+    private void SweepBody()
+    {
+        if (_trailCount < 2) return;
+        // The trail's direction behind the head: to the first remembered point at least an eighth of a length
+        // back. The newest point can sit right under the head after a Remember, and a shove moves the head a
+        // pixel sideways in a frame: over a shorter reach either read as a turn and the body wagged.
+        float minD = _len / 8f, d = 0;
+        PointF p = _trail[_trailHead];
+        for (int i = 0; i < _trailCount; i++)
+        {
+            p = _trail[(_trailHead - i + _trail.Length) % _trail.Length];
+            d = MathF.Sqrt((_x - p.X) * (_x - p.X) + (_y - p.Y) * (_y - p.Y));
+            if (d >= minD) break;
+        }
+        if (d < 1e-3f) return;
+        float corner = Wrap(_heading - MathF.Atan2(_y - p.Y, _x - p.X));
+        float allowed = SharpestBend * d / _len;                             // over this much trail a body may bend this much
+        float excess = MathF.Abs(corner) - allowed;
+        if (excess <= 1e-4f) return;
+        float by = excess * MathF.Sign(corner);
+        for (int t = 0; t < 3; t++, by *= 0.5f)
+            if (SweepClear(by)) { Sweep(by); return; }
+    }
+
+    /// <summary>The tightest bend a body is laid in, radians per body length: a circle a third of a length in radius. Cruising turns lay 1.7 to 2.5; a cornered pivot laid 7.5.</summary>
+    private const float SharpestBend = 3f;
+
+    /// <summary>Would the body, swung about the head by this angle, land in water deep enough for it? Tested at every remembered point within a body length and a bit.</summary>
+    private bool SweepClear(float by)
+    {
+        float c = MathF.Cos(by), s = MathF.Sin(by), run = 0;
+        PointF prev = new(_x, _y);
+        for (int i = 0; i < _trailCount && run < _len * 1.1f; i++)
+        {
+            int at = (_trailHead - i + _trail.Length) % _trail.Length;
+            PointF q = _trail[at];
+            run += MathF.Sqrt((q.X - prev.X) * (q.X - prev.X) + (q.Y - prev.Y) * (q.Y - prev.Y));
+            prev = q;
+            float dx = q.X - _x, dy = q.Y - _y;
+            PointF r = ToScreen(_x + dx * c - dy * s, _y + dx * s + dy * c);
+            if (OnLand(r) || _trailZ[at] > CapOf(FloorAt(r))) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Turn the whole remembered trail about the head by this angle (the body pivots as a rod).</summary>
+    private void Sweep(float by)
+    {
+        float c = MathF.Cos(by), s = MathF.Sin(by);
+        for (int i = 0; i < _trailCount; i++)
+        {
+            int at = (_trailHead - i + _trail.Length) % _trail.Length;
+            float dx = _trail[at].X - _x, dy = _trail[at].Y - _y;
+            _trail[at] = new PointF(_x + dx * c - dy * s, _y + dx * s + dy * c);
+        }
+    }
+
     /// <param name="school">The other koi (for the mind: friends, quarry, chasers).</param>
     /// <param name="bodies">Every body in the water (the school and the turtles that are in): what the feelers must keep clear of.</param>
     public void Update(float dt, Koi[] school, Body[] bodies)
@@ -1393,7 +1466,13 @@ internal sealed class Koi : Body
         // water it hangs level, as koi do, so a tilt it dived into eases away
         // over a second or two once it slows (a resting fish once hung nose
         // down, half out of sight, for eight seconds).
-        float dived = (Z - zBefore) * DepthPx, swum = Math.Clamp(dived, -0.8f * step, 0.8f * step), settled = (dived - swum) / DepthPx;
+        // The slope is judged against the step the fish REALLY made (round forty-one): judged against the step it
+        // MEANT to make, a refused fish rising on the spot (the jam's slow rise) laid a slope with no ground under
+        // it, a vertical segment of the trail right at the head, 4 px deep after a quarter of a second, and the body
+        // walked back along it was pulled 3 px toward the head with its first two points on one spot: the drawn
+        // head pointed wherever those two coincident points happened to say (a 157 degree "joint" at the neck).
+        float made = refused ? 0 : stepTaken;
+        float dived = (Z - zBefore) * DepthPx, swum = Math.Clamp(dived, -0.8f * made, 0.8f * made), settled = (dived - swum) / DepthPx;
         float levelling = 1 - MathF.Exp(-dt * 0.6f * MathF.Max(0, 1 - _speed / (_len * 0.3f)));
         if (settled != 0 || levelling > 0)
             for (int i = 0; i < _trailCount; i++)
@@ -1402,6 +1481,7 @@ internal sealed class Koi : Body
                 float z = _trailZ[slot] + settled;
                 _trailZ[slot] = MathF.Max(0, z + (Z - z) * levelling);
             }
+        SweepBody();                                                          // a head that turned faster than its path bends swings the body round with it (no corner laid)
         PointF last = _trail[_trailHead];
         if ((last.X - _x) * (last.X - _x) + (last.Y - _y) * (last.Y - _y) > (_len / 40) * (_len / 40))
             Remember(new PointF(_x, _y), Z);
