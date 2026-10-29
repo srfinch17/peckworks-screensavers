@@ -304,7 +304,8 @@ internal sealed class Snake : Body
 
         var centres = new List<PointF>();
         var radii = new List<float>();
-        foreach (LilyPad p in pond.Pads) { centres.Add(p.Center); radii.Add(p.Radius); }
+        foreach (LilyPad p in pond.Pads) { centres.Add(p.Center); radii.Add(p.Radius); }   // first in the list: their places are refreshed every frame (the pads drift since round forty, see Update)
+        _padObs = pond.Pads.Count;
         foreach (BankRock r in pond.Rocks) { centres.Add(r.Centre); radii.Add(r.InWater ? r.Radius * 1.3f : r.Radius); }   // a cap standing in the water (the formation's, the island's) gets the island cap's margin: the lists must agree (2026-10-27)
         centres.Add(pond.CattailSpot); radii.Add(_u * 0.06f);
         foreach ((PointF root, _) in pond.IrisSpots) { centres.Add(root); radii.Add(_u * 0.045f); }
@@ -1162,13 +1163,22 @@ internal sealed class Snake : Body
         for (int i = 0; i < _mvN; i++) { _mvX[i] = beads[i].X; _mvY[i] = beads[i].Y; _mvR[i] = radius; }
     }
 
+    private int _padObs;                                    // the first _padObs obstacles are the lily pads
+
     private float Clear(float px, float py)
     {
         float best = _u;
         for (int i = 0; i < _obsCentre.Length; i++)
         {
             float dx = px - _obsCentre[i].X, dy = py - _obsCentre[i].Y;
-            best = MathF.Min(best, MathF.Sqrt(dx * dx + dy * dy) - _obsRadius[i]);
+            float d = MathF.Sqrt(dx * dx + dy * dy) - _obsRadius[i];
+            // A LILY PAD YIELDS (round forty, "a snake hit a lilly pad and break, then go 90 degree turn"): the pad is
+            // the light thing, shoved aside by whatever swims into it (LilyPads.cs), so a snake is never INSIDE one.
+            // Counted as inside, the walk-out below turned the head at 4 radians a second, a corner laid into its
+            // body. A pad's clearance is never under half a pixel: the feelers still steer round it (no room is no
+            // room), but the step is never refused by it and the head, hemmed in among pads, swims on under the leaf.
+            if (i < _padObs) d = MathF.Max(d, 0.5f);
+            best = MathF.Min(best, d);
         }
         for (int i = 0; i < _mvN; i++)
         {
@@ -1263,6 +1273,7 @@ internal sealed class Snake : Body
     {
         _lizards = lizards; _mice = mice;
         _clock += dt;
+        for (int i = 0; i < _padObs; i++) _obsCentre[i] = _pond.Pads[i].Center;   // the pads are where they are NOW, not where they were painted (round forty: they drift)
         _hunger = MathF.Min(1f, _hunger + dt * Appetite / _hungerSecs);      // hunger creeps up whether it is on screen or not
         _snatch.Tick(dt);                                                    // the rest after a chase runs whether it is on screen or not
         // ANY other doing taking over (a fright, a hunt, the jam breaker, the visit ending) ends a chase in progress: one
@@ -1388,7 +1399,10 @@ internal sealed class Snake : Body
         // A chase's pull toward the prey gives way to an obstacle ahead, the nearer the less it counts. With the prey behind
         // the head and a rock in front, the pull (turn back toward the prey) and the avoidance (turn to the clear heading) were
         // equal and opposite, and the snake sat on the rock's margin for three seconds, head still, blocked every frame.
-        if (_doing == Doing.Snatch) turn *= Math.Clamp(clearAhead / margin, 0f, 1f);
+        // (Round forty: every doing's pull, not the chase's alone. A prowl's pull of 1.8 toward the prey balanced the
+        // avoidance at a bank thing's rim and the head stood blocked for 10 s inside a lily pad that had just begun to
+        // yield; a strike keeps its pull, it is a lunge.)
+        if (!striking) turn *= Math.Clamp(clearAhead / margin, 0f, 1f);
         if (clearAhead < margin)
         {
             float best = _heading, bestScore = MathF.Min(clearAhead, margin * 2);

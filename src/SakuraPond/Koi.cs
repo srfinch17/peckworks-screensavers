@@ -1200,7 +1200,12 @@ internal sealed class Koi : Body
         // always allowed (the snake's rule from thirty-five): a fish already inside the shore's band (a shove from a
         // bump put one there) had every step refused, the way out included, and stood 131 s in a shy on the first
         // 1080p run of the seventh build.
-        bool shore = OnShore(bedNext) && bedNext < BedUnder(_x, _y) - 1e-4f;   // (strictly shallower: a body with no water under it at all, shoved onto the bank, may step any way that is not onto land, and the water comes back under it as it goes)
+        // "Shallower" is judged a pixel and a half out at least, the probe's own distance (round forty): a refused fish
+        // slows to its cornered floor, a step of a few hundredths of a pixel, and against the bed's byte raster such a
+        // step reads as shallower at every pixel boundary while the probe, 1.5 px out, calls the same heading clear;
+        // a goldfish that followed its leader into a bank rock's flank stood 80 s like that, refused every frame.
+        float shoreReach = MathF.Max(step, 1.5f);
+        bool shore = OnShore(bedNext) && BedUnder(_x + ca * shoreReach, _y + sa * shoreReach) < BedUnder(_x, _y) - 1e-4f;   // (strictly shallower: a body with no water under it at all, shoved onto the bank, may step any way that is not onto land, and the water comes back under it as it goes)
         bool capBlocked = Z > CapOf(bedNext);
         bool roomClosing = roomNext <= _len * 0.15f && roomNext < roomHere && RoomAlong(_heading, _len * 0.5f) <= roomHere;
         bool bedBlocked = shore || capBlocked;

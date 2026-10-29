@@ -827,8 +827,11 @@ internal static class PondPainter
                 int xl = Math.Max(0, x - s), xr = Math.Min(w - 1, x + s);
                 float gx = (smooth[y * w + xr] - smooth[y * w + xl]) * zPx / (xr - xl);   // how fast the bed deepens going right (a slope, u per u)
                 float gy = (smooth[yd * w + x] - smooth[yu * w + x]) * zPx / (yd - yu);   // and going down the screen
-                // A flank that deepens going down and right faces up and left, toward the sun: lit. The other way: shaded.
-                float tilt = Math.Clamp(gx * 0.6f + gy * 0.8f, -0.35f, 0.35f);
+                // A flank that RISES going up and left (the bed gets shallower toward the sun's side: the depth falls as
+                // x and y fall) faces up and left, toward the sun: lit. One that deepens that way faces away: shaded.
+                // (The first build had this the wrong way round and lit the flanks facing away from the sun; a mound's
+                // sun-side flank is the one whose depth DEcreases toward the sun.)
+                float tilt = -Math.Clamp(gx * 0.6f + gy * 0.8f, -0.35f, 0.35f);
                 int light = 256 + (int)(256 * tilt * open);
                 if (light == 256) continue;
                 uint c = px[i];
@@ -1380,19 +1383,46 @@ internal static class PondPainter
         //    the stone's upper flank, which stands above it, and the cap looked to float.)
         float[] zbuf = new float[bw * (y1 - y0 + 1)];
         Array.Fill(zbuf, 2f);
+        // THE MOUND'S OWN COLOUR (round forty, "take a hard look at the rocks ... looked cut off"): the stone used to be
+        // the flat rock painting (a dry rock's lit face, shaded face, creases and grain) sunk row by row, and sinking
+        // stretches the lower flank three times over: the grain became vertical streaks, a crease a long diagonal
+        // seam, the two faces a hard line across the flank. Now the submerged stone is a smooth mound: the painting's
+        // AVERAGE colour (so each seed keeps its stone's own grey-green) lit by the hill's slope toward the sun (up
+        // and left, the same rule as the bed, LightBed), brightest at the collar and darker down the shaded side,
+        // then darkened and hazed by depth as before. A colour that is a smooth function of the hill cannot show the
+        // stretch, which is what the eye read as "a broken reflection".
+        long sumR = 0, sumG = 0, sumB = 0, count = 0;
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                int i = y * w + x;
+                if (!stone[i] || cap[i]) continue;
+                uint c = px[i];
+                sumR += (c >> 16) & 0xFF; sumG += (c >> 8) & 0xFF; sumB += c & 0xFF; count++;
+            }
+        float baseR = count > 0 ? sumR / (float)count : 110, baseG = count > 0 ? sumG / (float)count : 112, baseB = count > 0 ? sumB / (float)count : 100;
+        // The painting's average carries its shaded faces, so it is darker than the stone's lit top; the mound's base is
+        // that hue brought up to a pale stone's brightness (155 of 255: a wet grey-green boulder in the sun), and the depth
+        // darkening below does the rest. (The first run of the mound used the average as it was: a black pillar.)
+        float lum0 = (baseR * 77 + baseG * 150 + baseB * 29) / 256f, lift = lum0 > 1 ? 155f / lum0 : 1;
+        baseR = MathF.Min(255, baseR * lift); baseG = MathF.Min(255, baseG * lift); baseB = MathF.Min(255, baseB * lift);
+        float zPx = Pond.DepthU * u;                                                   // pixels of depth per unit of Z, for the slope
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++)
             {
                 int i = y * w + x;
                 if (!stone[i] || cap[i]) continue;
                 float depth = DepthAt(i);
-                uint c = px[i];
-                int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
+                // The hill's slope here (depth per pixel, as a slope in u per u), and how much it faces the sun.
+                float gx = (DepthAt(Math.Min(i + 2, px.Length - 1)) - DepthAt(Math.Max(i - 2, 0))) * zPx / 4f;
+                float gy = (DepthAt(Math.Min(i + 2 * w, px.Length - 1)) - DepthAt(Math.Max(i - 2 * w, 0))) * zPx / 4f;
+                float lit = 1 - Math.Clamp(gx * 0.6f + gy * 0.8f, -0.3f, 0.3f);       // rising toward the sun: lit; falling away: shaded
+                int r = (int)(baseR * lit), g = (int)(baseG * lit), b = (int)(baseB * lit);
                 // How much of the stone shows through that much water, from the bed's own curve
                 // (BedClear, one curve for the pebbles and the stone) with the stone's faster fade
                 // below, and fading out over the last fifth of the stone's radius from its own
                 // painted edge so the painting ends in water and not a step.
-                float kEdge = 1 - Math.Clamp(inStone[i] / edge, 0, 1);
+                float kEdge = 1 - Math.Clamp(inStone[i] / (edge * 1.75f), 0, 1);   // (the fade from the painted edge 0.2 of the radius until round forty; 0.35 now, a mound's foot dissolves, it does not stop)
                 // The flank darkens fast going down, red most and blue least (it slopes away from
                 // the light, and the water takes the warm colours first), and the murk takes it
                 // faster than it takes the flat bed: a bright collar, a dark slope, then water by
@@ -1401,7 +1431,7 @@ internal static class PondPainter
                 // round it, and the whole mound was a pale green ghost with a cap on it: the first
                 // two renders of this change. A boulder rising out of murky water is seen at its
                 // top and lost on the way down; the bed's own curve is for a bed lit from above.)
-                float dk = Math.Clamp(depth / 0.55f, 0, 1);
+                float dk = Math.Clamp(depth / 0.42f, 0, 1);   // (0.55 until round forty: the sunk flank reached 200 px down the screen as a dark pillar; a boulder's deep flank is lost in the murk sooner than its top, and the eye sees a rounded top, not a column)
                 dk = dk * dk * (3 - 2 * dk);
                 float clear = BedClear(depth) * (1 - dk) * (1 - dk) * (1 - kEdge * kEdge);
                 float line = Math.Clamp(1 - outCap[i] / band, 0, 1) * 0.2f;         // the dark line where the surface meets the stone
@@ -1444,12 +1474,12 @@ internal static class PondPainter
             {
                 int i = y * w + x;
                 if (!cap[i]) continue;
-                float wet = Math.Clamp(1 - inCap[i] / band, 0, 1) * 0.85f;
+                float wet = Math.Clamp(1 - inCap[i] / band, 0, 1) * 0.6f;   // (0.85 toward six tenths of the water until round forty: a near-black ring round every cap, "a dark ring with a pale middle", an outline by another name)
                 if (wet <= 0) continue;
                 uint c = px[i], o = before[i];
                 int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
                 int or_ = (int)((o >> 16) & 0xFF), og = (int)((o >> 8) & 0xFF), ob = (int)(o & 0xFF);
-                r += (int)((or_ * 0.6f - r) * wet); g += (int)((og * 0.62f - g) * wet); b += (int)((ob * 0.66f - b) * wet);
+                r += (int)((or_ * 0.75f - r) * wet); g += (int)((og * 0.76f - g) * wet); b += (int)((ob * 0.78f - b) * wet);
                 outPx[i] = (uint)(r << 16 | g << 8 | b);
             }
         Write(bmp, outPx);

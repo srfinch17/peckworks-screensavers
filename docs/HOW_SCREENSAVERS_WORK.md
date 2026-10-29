@@ -1895,7 +1895,14 @@ blossom: the branches' shadow map is made before the island is placed and the sp
 sky). The stone is painted as any rock is, whole and bare (no moss: green survived the water as a
 lime glow), the cap on top of it as a small rock of its own with faces, creases, grain and moss, and
 THEN the water is laid back over both (`WrapIsland`). The cap keeps a wet band just inside its own
-rim, the waterline every bank rock has, and no shadow on the water. The stone is ONE OBJECT with
+rim, the waterline every bank rock has, and no shadow on the water. Under the water the stone is a
+SMOOTH MOUND since round forty, not the rock painting sunk: the painting's average hue, lifted to a
+pale stone's brightness, lit by the hill's slope toward the sun (up and left, the bed's own rule)
+and darkened and hazed by depth. Sinking the flat painting row by row had stretched its lower flank
+three times over, so its grain became vertical streaks, a crease a long diagonal seam and its two
+painted faces a hard line across the flank ("it looked cut off ... a broken reflection"); a colour
+that is a smooth function of the hill cannot show the stretch. The cap's wet band is six tenths
+toward three quarters of the water now (at 0.85 toward six tenths it was a black ring). The stone is ONE OBJECT with
 its cap, in depth as well as in paint (2026-10-26 night, after the owner watched a turtle "swim
 under the top, but over the bottom" and said "the top of the rock is just floating in the water"
 and "making the rock one object might be the way to go"). Its depth at every pixel is the hill

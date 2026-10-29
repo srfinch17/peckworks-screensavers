@@ -500,6 +500,7 @@ internal sealed class Ducks
     public void Update(float dt, PointF? snakeHead, IReadOnlyList<Turtle>? turtles = null, IReadOnlyList<Body>? surface = null)
     {
         if (_world == null) return;
+        _world.RefreshPads();                                 // the pads drift (round forty): their circles are where the pads are now
         // THE POND'S LAW, the duck's side of it: a duck is never moved by anything, so it must go ROUND whatever
         // else is at the surface. The turtle's shell (when it is up near the surface), the snake's body and a
         // swimming frog are handed to the world as circles for this frame (every other bead of each chain); the
@@ -1314,7 +1315,18 @@ internal sealed class DuckWorld
     public readonly float U, CY;
     public readonly int W, H;
 
-    private readonly float[] _cx, _cy, _cr;        // round things in the water, ground plane
+    private readonly float[] _cx, _cy, _cr;        // round things in the water, ground plane (the first _padCount are the lily pads, refreshed each frame)
+    private readonly int _padCount;
+
+    /// <summary>The lily pads drift (round forty): their circles are moved to where the pads are now, every frame, before the ducks ask.</summary>
+    public void RefreshPads()
+    {
+        for (int i = 0; i < _padCount; i++)
+        {
+            PointF c = Pond.Pads[i].Center;
+            (_cx[i], _cy[i]) = ToGround(c.X, c.Y);
+        }
+    }
     // MOVING things in the water this frame, as circles on the ground plane: a turtle's shell at the
     // surface, the beads of the snake's body while it swims. Refilled by Ducks.Update every frame; a
     // duck's feelers and step rule read them through Clear, so it goes round a turtle instead of over it.
@@ -1338,6 +1350,7 @@ internal sealed class DuckWorld
         foreach ((PointF root, _) in pond.IrisSpots) Add(root, U * 0.05f);
         if (pond.Island is Island isle) Add(isle.Cap, isle.CapRadius * 1.3f);   // the island's dry cap (a duckling dabbled on it)
         _cx = cx.ToArray(); _cy = cy.ToArray(); _cr = cr.ToArray();
+        _padCount = pond.Pads.Count;
         if (pond.Log is Log log)
         {
             _hasLog = true;

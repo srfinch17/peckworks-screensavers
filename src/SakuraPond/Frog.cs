@@ -714,6 +714,7 @@ internal sealed class Frog : Body
     {
         _time += dt;
         _snakeHead = snakeHead; _koiHeads = koiHeads; _turtleSpots = turtleSpots; _lizardNoses = lizardNoses; _snake = snake;
+        for (int i = 0; i < _padC.Length; i++) _padC[i] = _pond.Pads[i].Center;   // the pads drift (round forty): a swimming frog's clearance reads where they are now
         _alarm.Tick(dt);
         _mind.Tick(dt);
         _snatch.Tick(dt);
