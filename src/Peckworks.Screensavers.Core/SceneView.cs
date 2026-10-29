@@ -25,7 +25,22 @@ public sealed class SceneView : Control
     private readonly Stopwatch _clock = new();
 
     private IScreensaverScene? _scene;
-    private FrameBuffer? _frame;
+    // TWO SHEETS AND A PRESENT THREAD (2026-10-29, round forty's review). Drawing a frame and copying it to the screen
+    // used to happen one after the other on one thread, so on a 4K screen the frame cost was the painting (about 13 ms
+    // at the 1920 draw width) PLUS the stretch to the screen (about 4 ms): 17 ms, past a page, and the pump dropped to
+    // an even 30. Now there are two sheets: the scene paints the next frame on one while a second thread copies the
+    // finished one to the screen, so the stretch hides behind the painting and the frame costs what the painting costs.
+    // FEYNMAN VERSION: one person paints a picture while another carries the previous picture to the gallery, instead
+    // of the painter walking it over and coming back before touching the next canvas.
+    private readonly FrameBuffer?[] _frames = new FrameBuffer?[2];
+    private int _front;                                              // _frames[_front] is the finished frame (being shown); the other is painted into
+    private Thread? _presenter;
+    private readonly AutoResetEvent _present = new(false);           // "a new front frame is ready"
+    private readonly ManualResetEventSlim _idle = new(true);         // "the presenter is not reading any sheet"
+    private readonly object _blit = new();                           // one copy to the window at a time (the presenter and OnPaint)
+    private volatile bool _stop;
+    private IntPtr _hwnd;                                            // the window's handle, read on the UI thread, used by the presenter
+    private volatile int _clientW, _clientH;                         // the window's size, likewise
     private double _lastTime;
 
     /// <summary>
@@ -68,20 +83,26 @@ public sealed class SceneView : Control
     {
         _clock.Restart();
         _lastTime = 0;
+        if (_presenter == null)
+        {
+            _presenter = new Thread(PresentLoop) { IsBackground = true, Name = "present" };
+            _presenter.Start();
+        }
         FramePump.Add(this);
     }
 
     /// <summary>Throw away the current scene and build a new one (for example after a setting changed).</summary>
     public void RestartScene()
     {
+        _idle.Wait();                 // the presenter is not reading a sheet we are about to drop
         _scene?.Dispose();
         _scene = null;
-        _frame = null;
+        _frames[0] = _frames[1] = null;
         EnsureScene();
         Invalidate();
     }
 
-    /// <summary>One frame: update, render, present.</summary>
+    /// <summary>One frame: update, render, and hand the finished sheet to the present thread.</summary>
     internal void Step()
     {
         if (!EnsureScene()) return;
@@ -95,9 +116,44 @@ public sealed class SceneView : Control
         elapsed = Math.Min(elapsed, 0.1);
 
         _scene!.Update(elapsed);
-        _scene.Render(_frame!);
-        Present();
+        int back = 1 - _front;
+        _scene.Render(_frames[back]!);
+        // Hand it over: wait (nearly never) for the presenter to finish with the last sheet, swap, and wake it.
+        _idle.Wait();
+        _front = back;
+        _hwnd = IsHandleCreated ? Handle : IntPtr.Zero;
+        _clientW = ClientSize.Width; _clientH = ClientSize.Height;
+        _idle.Reset();
+        _present.Set();
         LogFrame(now);
+    }
+
+    /// <summary>The present thread: each time a frame is handed over, copies it to the window, then says it is idle.</summary>
+    private void PresentLoop()
+    {
+        while (!_stop)
+        {
+            _present.WaitOne();
+            if (_stop) break;
+            try
+            {
+                FrameBuffer? frame = _frames[_front];
+                IntPtr hwnd = _hwnd;
+                if (frame != null && hwnd != IntPtr.Zero)
+                    lock (_blit)
+                    {
+                        IntPtr hdc = NativeMethods.GetDC(hwnd);
+                        if (hdc != IntPtr.Zero)
+                        {
+                            try { frame.PresentTo(hdc, _clientW, _clientH); }
+                            finally { NativeMethods.ReleaseDC(hwnd, hdc); }
+                        }
+                    }
+            }
+            catch (Exception) { }   // a window going away under us: the next frame, or the end, sorts it out
+            finally { _idle.Set(); }
+        }
+        _idle.Set();
     }
 
     // A testing aid for smoothness: with PECKWORKS_FRAMELOG set to a file
@@ -126,46 +182,41 @@ public sealed class SceneView : Control
             w = MaxRenderWidth;
         }
 
-        if (_scene != null && _frame != null && _frame.Width == w && _frame.Height == h)
+        FrameBuffer? front = _frames[_front];
+        if (_scene != null && front != null && front.Width == w && front.Height == h)
             return true;
 
         // Size changed (or first time): rebuild for the new size.
+        _idle.Wait();                 // not while the presenter reads a sheet
         _scene?.Dispose();
         _scene = _sceneFactory(w, h);
-        _frame = new FrameBuffer(w, h);
+        _frames[0] = new FrameBuffer(w, h);
+        _frames[1] = new FrameBuffer(w, h);
+        _front = 0;
 
         // Fast forward, in small steps, without drawing.
         for (double t = 0; t < PrewarmSeconds; t += 1.0 / 30)
             _scene.Update(1.0 / 30);
 
-        _scene.Render(_frame);
+        _scene.Render(_frames[0]);
         return true;
-    }
-
-    /// <summary>Copy the finished frame onto the screen.</summary>
-    private void Present()
-    {
-        if (_frame == null || !IsHandleCreated) return;
-
-        // CreateGraphics gives us a drawing surface for this control right now.
-        // GetHdc digs out the raw Windows handle (HDC) underneath it, which is
-        // what the fast SetDIBitsToDevice call needs.
-        using Graphics g = CreateGraphics();
-        IntPtr hdc = g.GetHdc();
-        try { _frame.PresentTo(hdc, ClientSize.Width, ClientSize.Height); }
-        finally { g.ReleaseHdc(hdc); }
     }
 
     /// <summary>
     /// Windows sends "paint yourself" when part of us was covered and uncovered.
-    /// We just re-show the last frame.
+    /// We just re-show the last finished frame (never at the same time as the present thread).
     /// </summary>
     protected override void OnPaint(PaintEventArgs e)
     {
-        if (!EnsureScene() || _frame == null) return;
-        IntPtr hdc = e.Graphics.GetHdc();
-        try { _frame.PresentTo(hdc, ClientSize.Width, ClientSize.Height); }
-        finally { e.Graphics.ReleaseHdc(hdc); }
+        if (!EnsureScene()) return;
+        FrameBuffer? frame = _frames[_front];
+        if (frame == null) return;
+        lock (_blit)
+        {
+            IntPtr hdc = e.Graphics.GetHdc();
+            try { frame.PresentTo(hdc, ClientSize.Width, ClientSize.Height); }
+            finally { e.Graphics.ReleaseHdc(hdc); }
+        }
     }
 
     protected override void Dispose(bool disposing)
@@ -173,6 +224,9 @@ public sealed class SceneView : Control
         if (disposing)
         {
             FramePump.Remove(this);
+            _stop = true;
+            _present.Set();           // wake the presenter so it sees the stop
+            _idle.Wait(500);          // let a copy in progress finish before the window goes
             _scene?.Dispose();
         }
         base.Dispose(disposing);

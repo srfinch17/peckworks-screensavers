@@ -131,6 +131,17 @@ internal static class NativeMethods
     /// <summary>SRCCOPY: "copy the source as it is" (as opposed to mixing it with what is there).</summary>
     public const uint SRCCOPY = 0x00CC0020;
 
+    /// <summary>
+    /// A drawing surface for a window, fetched by its handle: the plain Windows way, usable from any thread (the
+    /// present thread in SceneView uses it, where WinForms' CreateGraphics may only be called on the window's own
+    /// thread). Every GetDC is paired with a ReleaseDC.
+    /// </summary>
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetDC(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    public static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
+
     // ------------------------------------------------------------------
     // Frame pacing: one frame per screen refresh.
     // ------------------------------------------------------------------

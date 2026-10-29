@@ -319,6 +319,7 @@ internal abstract class Body
     /// Narrows the stretch [lo, hi] of x-offsets to those where
     /// "x * slope + offset" stays between min and max.
     /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]   // (four or five calls per row of every body; not inlined on its own, and inlined it took 0.3 ms off the koi's CPU per frame, pixel for pixel the same: round forty's review)
     private static void Narrow(ref float lo, ref float hi, float slope, float offset, float min, float max)
     {
         if (MathF.Abs(slope) < 1e-6f)
@@ -351,10 +352,22 @@ internal abstract class Body
         float invLen = 1 / len, invWid = 1 / wid;                         // two multiplies per pixel instead of two divides (a fin's box is a few hundred pixels, a turtle has forty-odd ovals a frame)
         int murk256 = (int)(murk * 256);
         bool rayed = rays && len > wid * 1.2f;
+        // Each row is walked only across the oval's own stretch, not the whole square box (round forty's review: 85
+        // percent of the box's pixels were outside the oval, and every one of them read the stencil before the shape
+        // test threw it out). Along a row u and v are linear in dx, so u^2 + v^2 = 1 is a quadratic in dx: its two
+        // roots are the row's ends, widened a pixel each side; the per-pixel test below still has the last word, so
+        // the picture is the same pixel for pixel.
+        float kA = ca * invLen, kB = sa * invWid, qA = kA * kA + kB * kB;
         for (int y = y0; y <= y1; y++)
         {
             float dy = y + 0.5f - c.Y, dyCa = dy * ca, dySa = dy * sa;       // the row's share of the turn, done once per row
-            for (int x = x0; x <= x1; x++)
+            float uA = dySa * invLen, vA = dyCa * invWid;
+            float qB = 2 * (uA * kA - vA * kB), qC = uA * uA + vA * vA - 1;
+            float disc = qB * qB - 4 * qA * qC;
+            if (disc < 0) continue;                                           // the row misses the oval
+            float sq = MathF.Sqrt(disc), r0 = (-qB - sq) / (2 * qA), r1 = (-qB + sq) / (2 * qA);
+            int xs = Math.Max(x0, (int)MathF.Floor(c.X + r0 - 0.5f) - 1), xe = Math.Min(x1, (int)MathF.Ceiling(c.X + r1 - 0.5f) + 1);
+            for (int x = xs; x <= xe; x++)
             {
                 int idx = y * fb.Width + x;
                 if (onlyWhere != null && !onlyWhere[idx]) continue;

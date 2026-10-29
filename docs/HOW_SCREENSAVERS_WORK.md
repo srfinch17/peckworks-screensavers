@@ -223,10 +223,16 @@ nothing moves slower, only in bigger steps. (Two pages means two pages from the 
 since round forty: a frame whose own work ran past a page had its first wait land on the second
 page and its second on the third, 50 ms a frame, a steady 20 instead of the even 30; now the second
 wait is skipped once a page and a half has passed since the frame began.) On the owner's 4K screen at
-the 1920 draw width the pond's frame sits at the page's edge: the scene is 12.4 to 12.6 ms and the
-present (the stretch to 3840 by 2160, `StretchDIBits`) about 4, so one build holds one page and the
-next, three tenths of a millisecond dearer, drops to an even 30 after a hundred frames; the next
-lever there is a GPU present. The other lever is drawing fewer pixels: Sakura Pond's
+the 1920 draw width the pond's frame sat at the page's edge: the scene is 12.4 to 12.6 ms and the
+present (the stretch to 3840 by 2160, `StretchDIBits`) about 4, and until round forty's review the
+two ran one after the other on one thread, 17 ms, so one build held one page and the next, three
+tenths of a millisecond dearer, dropped to an even 30 after a hundred frames. Now `SceneView` keeps
+TWO sheets and a present thread: the scene paints the next frame on one sheet while the thread copies
+the finished one to the screen, so the stretch hides behind the painting and the pump's cost is the
+painting alone (the reviewer measured 22 ms with the stretch after each frame against 14 with it
+overlapped, in a snapshot made to do the real stretch). `OnPaint` and the thread never copy at once (a
+lock), and nothing swaps a sheet the thread is still reading. The step after that is a GPU present (a
+swap chain: the upload is a millisecond, and it frees the memory bus). The other lever is drawing fewer pixels: Sakura Pond's
 "Draw width" setting (1920 by default) is the width it draws at on a wider screen, and Windows
 enlarges the picture; on the owner's 4K laptop 2048 held 60 frames a second where 2560 held an
 even 30. The default went from 2048 to 1920 when the boughs began to sway (2026-10-22): the new
