@@ -127,6 +127,25 @@ These are in the code comments too; here they are in one place.
   pulls balanced; answer with the grid's uphill, or a turn short of half a circle to one side. And a probe
   placed at a multiple of the step shrinks with a slowed animal to a fraction of a pixel and reads its own
   pixel: floor it (a pixel and a half).
+- **A wall that is a depth is in the animal's own clearance test, and a body laid along a trail is laid
+  in three dimensions over the bed (round forty).** The snake's feelers knew circles and land; only its
+  step rule knew a stone's hill, so a dived snake swam straight at the hill, stopped, and pivoted on the
+  spot at 2.2 radians a second (a right angle laid into its trail: "janky 90 turns around the rock"), and
+  its body, laid at the depth the head had when it passed, was drawn under the hill it was now crossing
+  ("swim through rocks") and longer than itself when the head rose ("stretch"), because the trail was
+  measured along the ground alone. Now a point whose bed is shallower than the head is deep counts as
+  inside something in `Snake.Clear` (a fifth of u per unit of depth); the trail's length counts its rise
+  (`Seg`); every body point is capped by the bed under it and the caps are smoothed along the body at sixty
+  degrees; and the head's turn rate has the koi's turning-circle floor (0.4 body lengths, 0.3 cornered).
+  Measured over five minutes of dive stress: the fastest turn 9.6 to 1.5 radians a second, the head inside
+  a hill 2.5 percent of frames to none, the longest blocked wait 5.0 s to 0.9 s.
+- **A frightened small thing turns and accelerates at a rate, not in a frame (round forty).** The
+  tadpole's flight turned at 30 radians a second (a whole-body snap of 29 degrees in one frame: one frame
+  in a hundred) and went from nought to six lengths a second in one frame (nine hundred times in five
+  minutes), and a flight refused by the bank was followed at once by another the other way: a tadpole
+  cornered by a fish turned a full circle in a second and a half with its speed going nought, six, nought,
+  six. Now the flight turns at 9 radians a second, the speed comes up over a tenth of a second, and a
+  refused flight counts as the whole habituation (it hangs until it has been calm a while).
 - **Sizes and speeds are in u** (the screen's size unit), never "cross the screen in N seconds".
 - **A behaviour shared by many animals is a small object each one OWNS, not a doing in each.**
   The chance meal of a tadpole (`Snatch` in `Tadpoles.cs`) holds the dice, the claim on the prey,

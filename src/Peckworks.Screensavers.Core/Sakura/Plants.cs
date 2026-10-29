@@ -1026,6 +1026,21 @@ public sealed class Boughs
     private readonly float[] _lastShift;                  // per pixel: the shift it was last taken at (a pixel moved under a sixteenth since is left as it is)
     private int _frame;
 
+    /// <summary>
+    /// Opens a scene's "not under a branch" stencil wherever the bough pixel over it is LIVE (laid afresh, swaying,
+    /// every frame), leaving it closed only under the still pixels baked into the backdrop. A stencil cut from the
+    /// boughs at rest hid everything under a bough's resting outline while the bough itself was drawn a few pixels
+    /// away in the wind: a fish passing under a swaying blossom was clipped along an invisible line, and the water
+    /// between the line and the blossom showed through ("sometimes when stuff is swimming under the sakura branches,
+    /// they get janky", 2026-10-29). Under a live pixel nothing needs hiding: the sheet is laid over it afterwards,
+    /// at its own alpha, wherever it has swayed to.
+    /// </summary>
+    public void Uncover(bool[] open)
+    {
+        for (int i = 0; i < _amp.Length; i++)
+            if ((_ag[i] >> 16) != 0 && _amp[i] >= StillByte) open[i] = true;
+    }
+
     /// <summary>How many pixels are laid live each frame (bough pixels outside the still zone), and how many pixels the live tiles hold: the cost, in numbers a log can carry.</summary>
     public int LivePixels { get; }
     public int TilePixels { get; }

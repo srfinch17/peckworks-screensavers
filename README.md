@@ -82,8 +82,12 @@ seconds, climbs the foot of each stone the same way, and washes further up when 
 water (a koi's gulp, a frog's splash) reaches the bank; a lizard or a mouse drinking at the edge
 backs off when a swell reaches its nose; clumps of iris leaves stand on the lawn behind the
 stones, arching out over them toward the water; a clump of cattails stands in the shallows, brown
-heads nodding; lily pads and water lilies float in the calm water nearby; and the branches throw
-dappled shadows on the water. The lawn is a meadow corner in a breeze, different on every seed:
+heads nodding; lily pads and water lilies float in the calm water nearby, each on its own stalk
+like a balloon on a string: a fish, a turtle, the snake or a duck that swims into one shoves it
+aside a little and it eases back over its root, and a pad with a frog or a dragonfly on it stays
+put; and the branches throw dappled shadows on the water. The pond bed is ground with a shape:
+humps and hollows lit on the side that faces the sun and shaded on the other, seen through water
+that darkens with depth but never hides the bottom. The lawn is a meadow corner in a breeze, different on every seed:
 lush and sun-baked patches, a worn spot or two where the earth shows, drifts of clover and
 velvety moss, tufts of grass in three heights and three greens with dry tawny ones among them,
 taller grass gone to seed along the edges, and drifts of wildflowers (daisies, buttercups,
@@ -121,7 +125,9 @@ and drifts in a lull, so no two fall the same way.
   the screen as it rises, and in the shallows it throws a shadow on the bed, a soft echo right
   under it that fades as it rises off the bed (never thrown far: a shadow a body length away
   reads as a fish hovering above the water). A deep fish is
-  smaller, hazier, softer and dimmer than one at the top, so when one passes over another you
+  smaller, softer, darker and duller than one at the top (water eats the warm light first, so a
+  red koi on the bed is a dull brown-red and a white one a pale blue-grey, both still plainly
+  fish: the water's own haze over them is slight), so when one passes over another you
   can tell from above which is over which, and the near one leaves a soft dark echo of itself
   on the deeper one's back where they overlap. They slip under the lily pads, and now and then
   come up to gulp at the surface, leaving a ring. A fish swimming with its back at the surface
@@ -361,7 +367,10 @@ and drifts in a lull, so no two fall the same way.
   the iris clumps rather than over them, pushes the floating petals out of its way, and if a
   koi, a turtle or the lizard touches it, it startles: a burst of speed, a swing away, rings off its head, then it calms. Half of
   its swims about the pond are dives: it goes down head first to a third to seven tenths of the pond, the body following, drawn
-  smaller and hazier under the fish, and comes up again before it hunts or basks. The koi and
+  smaller and hazier under the fish, and comes up again before it hunts or basks. Down there a stone's
+  underwater hill is a wall to it as the bank is: it feels the hill coming and turns early and smoothly
+  round it, never tighter than its body can follow, and its body is laid over the bed under every point of
+  it, bending up a flank as a rope would, never through the stone and never stretched. The koi and
   turtles treat its body as solid (they steer under or round it, and a fish that meets it is pushed out), and the minnows keep
   clear of it as they do of the koi. Each visit is a different snake: it rolls a boldness and a
   nerve, and then chooses what to do by weighted dice, a few things per visit. It may swim out

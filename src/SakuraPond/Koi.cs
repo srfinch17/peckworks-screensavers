@@ -1292,7 +1292,7 @@ internal sealed class Koi : Body
             if (_bumpGap <= 0)
             {
                 PointF back = Spine[7];                                   // the highest point of the back, behind the shoulders
-                _ripples.Add(back.X, back.Y, 0.5f, thin: true);
+                _ripples.Add(back.X, back.Y, 0.28f, thin: true);          // (0.5 until round forty: three bright rings slipping off a back the eye could not see break the surface read as "strange light pulses that sometimes appear around fish when swimming"; at 0.28 they are the faint slip of a thin ring, a touch and no more)
                 _bumpRings++;
                 _bumpGap = 0.4f;
             }

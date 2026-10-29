@@ -39,6 +39,7 @@ internal sealed class Frogs
     private static readonly System.IO.StreamWriter? FrogLog = Environment.GetEnvironmentVariable("PECKWORKS_FROGLOG") is string lf && lf.Length > 0 ? new System.IO.StreamWriter(lf) { AutoFlush = false } : null;
     private int _logFrame;
     private readonly Frog[] _all;
+    private readonly Pond _pond;
     private readonly List<FrogPerch> _perches = new();
     private readonly List<Body> _inWater = new();     // the frogs in the water this frame, refilled each Update and never reallocated
     private readonly List<Body> _solids = new();      // what else is solid in the water this frame (the snake, the ducks, the swimming turtles), for the frogs' questions
@@ -48,6 +49,7 @@ internal sealed class Frogs
     {
         int n = Math.Max(0, count);
         _all = new Frog[n];
+        _pond = pond;
         if (n == 0) return;
         BuildPerches(pond, rng);
         // Where a frog's shadow may fall when it sits up on something: everything that is not water
@@ -86,6 +88,16 @@ internal sealed class Frogs
     /// <param name="surface">Everything solid at the surface this frame (the scene's list: the snake, the ducks, the frogs themselves, which are skipped).</param>
     public void Update(float dt, PointF? snakeHead, PointF[] koiHeads, PointF[] turtleSpots, PointF[] lizardNoses, Body? snake = null, IReadOnlyList<Turtle>? turtles = null, IReadOnlyList<Body>? surface = null)
     {
+        // The pads drift (round forty): a pad perch is wherever its pad is now, and a pad that a frog holds (sitting on
+        // it, or on its way to it) is kept still, so the frog lands on the leaf it aimed at and sits on a leaf that does
+        // not slide out from under it.
+        foreach (FrogPerch p in _perches)
+        {
+            if (p.Kind != PerchKind.Pad) continue;
+            LilyPad pad = _pond.Pads[p.PadIndex];
+            if (p.Holder != null) pad.Hold = 0.2f;
+            p.Centre = pad.Center;
+        }
         _solids.Clear();
         if (surface != null) for (int k = 0; k < surface.Count; k++) if (surface[k] is not Frog) _solids.Add(surface[k]);
         if (turtles != null) for (int k = 0; k < turtles.Count; k++) if (turtles[k].InWater) _solids.Add(turtles[k]);

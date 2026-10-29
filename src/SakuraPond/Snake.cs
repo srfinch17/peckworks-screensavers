@@ -1175,6 +1175,16 @@ internal sealed class Snake : Body
             float dx = px - _mvX[i], dy = py - _mvY[i];
             best = MathF.Min(best, MathF.Sqrt(dx * dx + dy * dy) - _mvR[i]);
         }
+        // THE BED IS A WALL TO A DIVED SNAKE (round forty: "they appear to stretch and swim through rocks", "the
+        // rock just needs to be a 3d thing that's in the way"). Until now the feelers knew only the circles and the
+        // land; the one thing that knew a stone's underwater hill was the step rule, which refused the step only
+        // once the head was at the hill's foot. So a deep snake swam straight at a stone, stopped dead, and pivoted
+        // on the spot: the right angle he saw laid into its body. Now a point whose bed is shallower than the head
+        // is deep counts as inside something, by the shortfall (a fifth of u per unit of depth, about the slope of a
+        // stone's hill), so the feelers see a hill coming the way they see the bank and the head turns early and
+        // round it. Only once it is really under (0.06): on the surface the shallows are no wall, or it could never
+        // cross to the land.
+        if (_zHead > 0.06f) best = MathF.Min(best, (0.9f * FloorZ(px, py) - _zHead) * _u * 0.2f);
         // An exploring snake stays on the picture: beyond the edge counts as a wall while its head is on the picture (a fed
         // snake crawled along below the bottom edge for twenty seconds with its bulge out of sight). A crossing is meant to
         // leave, and a prowl (phase 1) is not walled either: the prey sits on the land corner by the picture's edge, and with
@@ -1283,7 +1293,7 @@ internal sealed class Snake : Body
         bool onBed = _doing == Doing.Snatch && _snatch.Hunting && _snatch.Prey.Stage >= 6;   // after a dweller of the deep bed: the head goes down to it four times as fast as a dive eases (the chase is eight seconds; at the dive's ease the head was still a reach above the prey when the patience ran out)
         _zHead += (MathF.Min(_zTarget, bedZ) - _zHead) * (1 - MathF.Exp(-dt * (onBed ? 1f : 0.25f)));
         if (_zHead > bedZ) _zHead = MathF.Max(bedZ, _zHead - 0.2f * dt);              // too deep for the bed ahead: up at a set rate, not the slow ease (which never got there while the step stood refused)              // too deep for the bed ahead: up at a set rate, not the slow ease (which never got there while the step stood refused)
-        MotionLog?.Invoke(FormattableString.Invariant($"F,{_clock:F3},{_doing},{_phase},{_x:F1},{_y:F1},{_zHead:F3},{_zTarget:F2},{_speed:F1},{HuntNote},{(_blocked ? 1 : 0)},{bedZ:F3}"));
+        MotionLog?.Invoke(FormattableString.Invariant($"F,{_clock:F3},{_doing},{_phase},{_x:F1},{_y:F1},{_zHead:F3},{_zTarget:F2},{_speed:F1},{HuntNote},{(_blocked ? 1 : 0)},{bedZ:F3},{_heading:F3},{_drawnLen / _len:F3},{_capped}"));   // (round forty added the heading, the drawn body's length over its own, and how many points the bed lifted last frame: the stretch and the swim-through, in numbers)
 
         // ---- A touch from another animal: startle ----
         // A bold snake feels a touch only when it is close (0.035u), a nervous one
@@ -1415,6 +1425,14 @@ internal sealed class Snake : Body
             turn += Wrap(best - _heading) * (1.5f + 3f * urgency);
             most = MathF.Max(most, 2.2f);
         }
+        // THE TURNING CIRCLE (round forty): the head may not turn tighter than a body can follow. At its cruise
+        // (0.06u a second, a fifth of its length) the 2.2 radians a second above was a circle a tenth of a body
+        // length across: a right angle in a quarter of a second, laid into the trail the body is drawn along, so
+        // the body showed a corner at every stone ("janky 90 turns around the rock"). The floor is the koi's: a
+        // circle 0.4 body lengths across, 0.3 with something inside the margin, at the speed it is going (never
+        // under an eighth of a length a second, so a stopped snake can still turn). A strike is faster than the
+        // floor binds; the walk out from inside an obstacle (below) keeps its own rate.
+        most = MathF.Min(most, MathF.Max(_speed, _len / 8f) / ((clearAhead < margin ? 0.3f : 0.4f) * _len));
         float swung = Math.Clamp(turn, -most, most) * dt;
         _heading = Wrap(_heading + swung);
         // ---- The orbit breaker ----
@@ -1610,7 +1628,15 @@ internal sealed class Snake : Body
         int slot = _trailHead, left = _trailCount - 1;
         PointF a = head, b = _trail[slot];
         float za = _zHead, zb = _trailZ[slot];
-        float done = 0, seg = Dist(a, b);
+        // THE TRAIL IS MEASURED IN THREE DIMENSIONS (round forty). The body is laid out along the trail by length,
+        // and that length used to be the ground distance alone: a snake rising a whole pond depth while it swam a
+        // body length was still laid a full length along the ground, and then each point was sunk down the screen
+        // by its own depth, so the drawn body was longer than the snake ("they appear to stretch"). Now a stretch
+        // of trail that goes up or down counts its rise in the length, as a real body does, so a steeply rising snake
+        // takes up less ground and the drawn body stays its own length.
+        float zPx = Pond.DepthU * _u;                       // pixels of depth per unit of Z
+        float done = 0, seg = Seg(a, b, za, zb, zPx);
+        _capped = 0;
         for (int i = 0; i < Points; i++)
         {
             float want = Along[i] * _len;
@@ -1618,7 +1644,7 @@ internal sealed class Snake : Body
             {
                 done += seg; a = b; za = zb;
                 slot = (slot - 1 + _trail.Length) % _trail.Length; left--;
-                b = _trail[slot]; zb = _trailZ[slot]; seg = Dist(a, b);
+                b = _trail[slot]; zb = _trailZ[slot]; seg = Seg(a, b, za, zb, zPx);
             }
             float t = seg > 1e-4f ? Math.Clamp((want - done) / seg, 0, 1) : 0;
             // Each point's depth is the depth the head had when it passed here (the trail remembers it), so a
@@ -1626,14 +1652,36 @@ internal sealed class Snake : Body
             // its depth as every swimmer does (Light.SinkPx) and is hazed by it (Light.Murk, nothing at the very
             // top: on the water it swims clear, as before).
             float z = za + (zb - za) * t;
+            float sx = a.X + (b.X - a.X) * t, sy = a.Y + (b.Y - a.Y) * t;
             // On the water only the HEAD rides clear (round thirty-nine): the body behind the neck lies a hair under
             // the surface, a thirtieth of the depth, so it is veiled a little by the water and sits a pixel lower on the
             // screen than the head. Drawn at the surface entire, the snake was an opaque rope laid on the picture.
             if (!Deep && z < 0.035f && Along[i] > 0.06f) z = MathF.Max(z, 0.035f * MathF.Min(1f, (Along[i] - 0.06f) / 0.1f));
+            // THE BED UNDER EVERY POINT (round forty). The trail remembers the depth the head had, and the head rises
+            // over a stone's hill before its body gets there; the body behind it was then laid at the depth of the deep
+            // water it had come through, UNDER the hill it was now crossing, and drawn sunk down the screen onto the
+            // painted stone ("swim through rocks"). A point is never deeper than the bed under it allows (the head's
+            // own rule, with a little less margin).
+            float cap = MathF.Max(0f, 0.9f * FloorZ(sx, sy) - 0.03f);
+            if (z > cap) { z = cap; _capped++; }
             _zAt[i] = z;
+            Spine[i] = new PointF(sx, sy);                   // the ground point for now: the sink is added once the depths are smoothed
+        }
+        // THE BODY BENDS, IT DOES NOT STEP (round forty): a cap that lifts one point alone would put a kink in the
+        // drawn body (a sink of a few pixels between neighbours). No point may be deeper than its neighbour by more
+        // than the ground distance between them times 1.7 (a slope of sixty degrees, as steep as a snake dives), run
+        // once each way along the body, so a point lifted by the bed lifts a smooth ramp of the body beside it. The
+        // pass only ever makes a point shallower, so nothing it does puts a point back under the bed.
+        float slope = 1.7f * (_len / (Points - 1)) / zPx;
+        for (int i = 1; i < Points; i++) _zAt[i] = MathF.Min(_zAt[i], _zAt[i - 1] + slope);
+        for (int i = Points - 2; i >= 0; i--) _zAt[i] = MathF.Min(_zAt[i], _zAt[i + 1] + slope);
+        _drawnLen = 0;
+        for (int i = 0; i < Points; i++)
+        {
+            float z = _zAt[i], sx = Spine[i].X, sy = Spine[i].Y;
             _murkAt[i] = Light.Murk(z) * Math.Clamp(z / 0.1f, 0, 1);
-            float sx = a.X + (b.X - a.X) * t, sy = a.Y + (b.Y - a.Y) * t;
             Spine[i] = new PointF(sx, sy + Light.SinkPx(z, _u));
+            if (i > 0) _drawnLen += Dist(Spine[i], Spine[i - 1]);
             Shape.Radius[i] = _wide * Profile(Along[i]);
             // The same point for touching (Core/Minds Chain), on the GROUND
             // plane: the spine is screen pixels, and the pond is squashed down
@@ -1645,6 +1693,16 @@ internal sealed class Snake : Body
         Shape.Seal();
         Widths();
     }
+
+    /// <summary>The length of one stretch of the trail in three dimensions: across the ground and up or down through the water (zPx pixels per unit of depth).</summary>
+    private static float Seg(PointF a, PointF b, float za, float zb, float zPx)
+    {
+        float dx = a.X - b.X, dy = a.Y - b.Y, dz = (za - zb) * zPx;
+        return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    private int _capped;                                   // this frame: how many of the body's points the bed lifted (the instrument log carries it)
+    private float _drawnLen;                               // this frame: the drawn spine's length, screen pixels (against _len: the stretch, for the log)
 
     /// <summary>
     /// How wide it is DRAWN: the plain width (the chain's radius) with the head opened for a strike and the

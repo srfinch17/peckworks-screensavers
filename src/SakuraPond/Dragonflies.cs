@@ -47,6 +47,7 @@ internal sealed class Dragonflies
         public float PlayTimer;             // until it next feels like teasing the minnows
         public bool Approaching;            // on its way over to the school; the taps come after the next hover
         public int Taps;                    // taps made so far in this tease
+        public int Pad;                     // the lily pad it is landing on or sitting on (its place in Pond.Pads), else -1: that pad is held still (round forty)
     }
 
     private readonly Pond _pond;
@@ -81,6 +82,7 @@ internal sealed class Dragonflies
                 Heading = (float)(rng.NextDouble() * MathF.Tau), Doing = Doing.Hover,
                 Timer = (float)rng.NextDouble() * 2, Phase = (float)(rng.NextDouble() * 10), Kind = i % 2,
                 PlayTimer = 6 + 10 * i + 8 * (float)rng.NextDouble(),      // the first game comes soon; the flies take turns
+                Pad = -1,
             };
             _flies[i].WantHeading = _flies[i].Heading;
         }
@@ -164,6 +166,7 @@ internal sealed class Dragonflies
         for (int i = 0; i < _flies.Length; i++)
         {
             ref Fly f = ref _flies[i];
+            if (f.Pad >= 0) _pond.Pads[f.Pad].Hold = 0.2f;   // landing on or sitting on a lily pad: the pad stays put (round forty)
             // Turning to face its way: quick, as dragonflies do (a full half turn in a fraction of a second).
             float dh = MathF.IEEERemainder(f.WantHeading - f.Heading, MathF.Tau);
             f.Heading += Math.Clamp(dh, -9 * dt, 9 * dt);
@@ -262,10 +265,12 @@ internal sealed class Dragonflies
         double roll = _rng.NextDouble();
         if (roll < 0.12 && _pond.Pads.Count > 0)
         {
-            LilyPad pad = _pond.Pads[_rng.Next(_pond.Pads.Count)];
+            int which = _rng.Next(_pond.Pads.Count);
+            LilyPad pad = _pond.Pads[which];
             float a = (float)(_rng.NextDouble() * MathF.Tau);
             var spot = new PointF(pad.Center.X + MathF.Cos(a) * pad.Radius * 0.55f, pad.Center.Y + MathF.Sin(a) * pad.Radius * 0.45f);
             Go(ref f, spot, 0.003f, Doing.Dart);
+            f.Pad = which;                                                                             // and the pad is held still until it leaves (Update)
         }
         else if (roll < 0.2 && DryRock(out PointF rock))
             Go(ref f, rock, 0.003f, Doing.Dart);                                                  // a sunny stone on the bank: where a lizard can creep up on it
@@ -338,6 +343,7 @@ internal sealed class Dragonflies
 
     private void Go(ref Fly f, PointF to, float height, Doing doing)
     {
+        f.Pad = -1;                                   // any move lets go of the pad it sat on (the pad landing sets it again after)
         f.FromX = f.X; f.FromY = f.Y; f.FromH = f.Height;
         f.ToX = to.X; f.ToY = to.Y; f.ToH = height;
         float d = MathF.Sqrt((to.X - f.X) * (to.X - f.X) + (to.Y - f.Y) * (to.Y - f.Y));

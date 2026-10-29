@@ -67,7 +67,7 @@ internal static class Light
     /// 1 at SeeU. (Until 2026-10-23 the floor was 0.06 and the curve 1.5: the
     /// topmost fish looked out of the water and the deep ones were lost sooner.)
     /// </summary>
-    public static float Murk(float z) => 0.14f + 0.86f * MathF.Pow(Math.Clamp(DepthOf(z) / SeeU, 0, 1), 1.3f);   // (1.6 until 2026-10-26 evening, 1.45 until later that evening: the middle depths clear a little more each time the water does)
+    public static float Murk(float z) => 0.12f + 0.50f * MathF.Pow(Math.Clamp(DepthOf(z) / SeeU, 0, 1), 1.2f);   // ROUND FORTY: the veil tops out at 0.62 instead of 1 ("a little murky down there but not so murky that I can't see the bottom": a thing on the deepest bed keeps six tenths of its own colour, and that colour is what darkens and dulls with depth now, Body.Deepen). (0.14 + 0.86 x^1.3 until 2026-10-29; 1.6 until 2026-10-26 evening, 1.45 until later that evening: the middle depths clear a little more each time the water does)
 
     /// <summary>How far down the screen a thing at Z is drawn from the water above it, in pixels (see Sink).</summary>
     public static float SinkPx(float z, float u) => DepthOf(z) * u * Sink;

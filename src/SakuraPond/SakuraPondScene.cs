@@ -60,6 +60,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Ducks _ducks;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
+    private readonly Pads _pads;                  // the lily pads, live: stamped on the water, shoved by what swims into them, held by their roots (round forty)
     private readonly List<Body> _surface = new();   // what else is solid in the water this frame (the snake, while it swims), refilled per frame, never reallocated
 
     public SakuraPondScene(int width, int height, SakuraPondSettings settings)
@@ -81,16 +82,24 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Lap(_pond.Formation is Formation fm ? $"formation at {fm.Stone.Centre.X:F0},{fm.Stone.Centre.Y:F0} r {fm.Stone.Radius:F0} caps {fm.Caps.Length}" : "formation none");   // (a placement is counted, never assumed)
         Lap(_pond.Formation2 is Formation fm2 ? $"formation2 at {fm2.Stone.Centre.X:F0},{fm2.Stone.Centre.Y:F0} r {fm2.Stone.Radius:F0} caps {fm2.Caps.Length}" : "formation2 none");
         Lap($"shore band {_pond.Shore.Count} px, reach {_pond.Shore.Reach:F1} px");                                                                                                   // (the lapping edge is counted too)
+        if (!string.IsNullOrEmpty(startLog))                                                                                                                                       // (and the pads' roots and sizes, round forty: a reader finds a koi crossing a pad by them)
+        {
+            var padLine = new System.Text.StringBuilder("pads");
+            foreach (LilyPad pad in _pond.Pads) padLine.Append(FormattableString.Invariant($" {pad.Anchor.X:F0},{pad.Anchor.Y:F0},{pad.Radius:F0}"));
+            Lap(padLine.ToString());
+        }
         float u = _pond.U;
+        _wind = new Wind(0.26f, u, Light.View);                   // to the right and a little toward us
+        // The cherry boughs sway in that wind: full sway 0.7u out from a trunk, the tips swinging 0.018u at a full lean.
+        _boughs = new Boughs(width, height, _pond.Branches, _pond.TreeRoots, u * 0.7f, u * 0.018f, _wind, Light.View, _pond.Pixels);   // the still parts go into the backdrop here
+        _boughs.Uncover(_pond.Open);                               // and under the swaying parts the water is open: they cover whatever swims there themselves, each frame, wherever they have swayed to (round forty)
+        Lap($"boughs (live pixels {_boughs.LivePixels}, tile pixels {_boughs.TilePixels})");
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
         _waterInViewDeep = new bool[_waterInView.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInViewDeep[i] = _waterInView[i] && !_pond.StoneTop[i];
-        _wind = new Wind(0.26f, u, Light.View);                   // to the right and a little toward us
-        // The cherry boughs sway in that wind: full sway 0.7u out from a trunk, the tips swinging 0.018u at a full lean.
-        _boughs = new Boughs(width, height, _pond.Branches, _pond.TreeRoots, u * 0.7f, u * 0.018f, _wind, Light.View, _pond.Pixels);   // the still parts go into the backdrop here
-        Lap($"boughs (live pixels {_boughs.LivePixels}, tile pixels {_boughs.TilePixels})");
         _ripples = new Ripples(_pond, _waterInView);
+        _pads = new Pads(_pond);                                   // (no dice of its own: nothing else moves)
         _lawn = new Lawn(width, height, _pond.Carpet, _pond.Grassy, u, _wind, Light.View, _rng, _pond.Open, _pond.Sun);   // never over a branch; shaded by its shadow
         Lap("lawn");
 
@@ -173,6 +182,20 @@ internal sealed class SakuraPondScene : IScreensaverScene
             }
         // Nor where the lapping water ever leaves the bed bare (Shoreline): a tadpole settled there would lie on wet sand.
         for (int i = 0; i < free.Length; i++) if (free[i] && _pond.Shore.EverDry(i)) free[i] = false;
+        // Nor under a lily pad (round forty: the pads are a live layer and the water mask runs on under them now, so a
+        // clutch could otherwise be born under one, out of sight). A tadpole may still swim under a pad on its way.
+        foreach (LilyPad pad in _pond.Pads)
+        {
+            float r = pad.Radius * 1.25f;
+            int x0 = Math.Max(0, (int)(pad.Anchor.X - r)), x1 = Math.Min(w - 1, (int)(pad.Anchor.X + r));
+            int y0 = Math.Max(0, (int)(pad.Anchor.Y - r)), y1 = Math.Min(h - 1, (int)(pad.Anchor.Y + r));
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                {
+                    float dx = x - pad.Anchor.X, dy = (y - pad.Anchor.Y) / 0.82f;
+                    if (dx * dx + dy * dy <= r * r) free[y * w + x] = false;
+                }
+        }
         return free;
     }
 
@@ -243,6 +266,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _ripples.Update(dt);
         _prawns.Update(dt, bedThreats);                                                   // the prawns flick backward from the same things the crayfish does
         _deep.Update(dt, _snake.Live && _snake.Deep ? Scratch.Gather(ref _deepThreats, bedThreats, one: _snake.Head) : bedThreats);   // the deep dwellers too, and from the diving snake's head
+        _pads.Update(dt, _surface, _koi.Bodies, _turtles.All);                              // last: the pads are shoved by where everything at the surface IS this frame
         Sections.Mark("update: crayfish to ripples");
     }
 
@@ -306,6 +330,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("minnows");
         _ripples.Draw(fb);
         Sections.Mark("ripples");
+        _pads.Draw(fb, _pond.Open);               // the lily pads float on the water: over the ripples and everything under the surface, under the petals that settle on them (round forty)
         _petals.DrawFloating(fb);
         Sections.Mark("petals afloat");
         _snake.Draw(fb);

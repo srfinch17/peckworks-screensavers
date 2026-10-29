@@ -116,6 +116,16 @@ internal sealed class Tadpoles : ISnackField
         // five-minute test run shows what an hour would (Snatch.Often). Unset in the real pond.
         string? often = Environment.GetEnvironmentVariable("PECKWORKS_SNATCHOFTEN");
         if (!string.IsNullOrEmpty(often) && float.TryParse(often, System.Globalization.CultureInfo.InvariantCulture, out float oftenValue)) Snatch.Often = oftenValue;
+        // The tadpoles' own motion log (round forty, "analyze the tadpole swimming, it's sometimes insane"): PECKWORKS_TADLOG
+        // names a file that gets one row per living tadpole per frame (clock, clutch, slot, ground x and y, heading, speed in
+        // body lengths a second, state, stage, depth). Nothing in the real pond.
+        string? tadLog = Environment.GetEnvironmentVariable("PECKWORKS_TADLOG");
+        if (!string.IsNullOrEmpty(tadLog))
+        {
+            var tw = new StreamWriter(tadLog) { AutoFlush = false };
+            _log = tw;
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => tw.Flush();
+        }
         string? snatchLog = Environment.GetEnvironmentVariable("PECKWORKS_SNATCHLOG");
         if (!string.IsNullOrEmpty(snatchLog))
         {
@@ -136,7 +146,23 @@ internal sealed class Tadpoles : ISnackField
         }
         _threatCount = threats.Length;
         foreach (Clutch c in _clutches) c.Update(dt, _threats, _threatCount);
+        if (_log != null)
+        {
+            _clock += dt; _logFrame++;
+            for (int c = 0; c < _clutches.Length; c++)
+                for (int k = 0; k < _clutches[c].Fish.Length; k++)
+                {
+                    Tadpole t = _clutches[c].Fish[k];
+                    if (t == null || !t.Alive) continue;
+                    _log.WriteLine(FormattableString.Invariant($"{_clock:F3},{c},{k},{t.X:F1},{t.Y:F1},{t.Heading:F3},{t.Speed / MathF.Max(1e-3f, t.Length):F2},{t.State},{t.Stage},{t.Z:F3}"));
+                }
+            if (_logFrame % 600 == 0) _log.Flush();
+        }
     }
+
+    private StreamWriter? _log;                    // the motion log (PECKWORKS_TADLOG), null in the real pond
+    private double _clock;
+    private int _logFrame;
 
     /// <summary>The tadpoles and any froglet deep under the surface: before the koi, so every fish passes over them.</summary>
     public void DrawUnder(FrameBuffer fb)
@@ -844,6 +870,9 @@ internal sealed class Tadpole : Body, ISnack
     public bool Froglet => Stage == 4;
     /// <summary>Total length now, ground pixels (the unit its speeds are in).</summary>
     private float Len => (_bl + _tl) * _grow;
+
+    /// <summary>Its length now, ground pixels, for the motion log (the unit its speeds are in).</summary>
+    public float Length => Len;
     public PointF Nose => Spine[0];
     // The snack's view of it (ISnack): the fields above, by other names where the names clash.
     bool ISnack.Alive => Alive;
@@ -1175,18 +1204,24 @@ internal sealed class Tadpole : Body, ISnack
         {
             case TadState.Flee:
                 {
-                    float err = Turn(_fleeDir, 30f, dt);
+                    // ROUND FORTY ("analyze the tadpole swimming, it's sometimes insane"; the log said: one frame in a
+                    // hundred a whole-body snap of 29 degrees, the 30 radians a second below, and every dart a jump from
+                    // nothing to six lengths a second in ONE frame, nine hundred of them in five minutes). A frightened
+                    // tadpole turns at 9 radians a second (a right angle in a sixth of a second: quick, and seen as a turn),
+                    // and its speed comes up over about a tenth of a second, so a dart is seen to START.
+                    float err = Turn(_fleeDir, 9f, dt);
                     // Six body lengths a second (five out over deep water): a scare was ten, and a tadpole darting at that
                     // pace and stopping dead read as a mosquito skating on the surface ("the tadpoles swim a little bit too
                     // fast ... like mosquitos").
-                    Speed = MathF.Abs(err) < 1.2f ? len * (_wide ? 5f : 6f) : 0;
+                    float want = MathF.Abs(err) < 1.2f ? len * (_wide ? 5f : 6f) : 0;
+                    Speed += (want - Speed) * (1 - MathF.Exp(-dt * (want > Speed ? 18f : 30f)));
                     if (_stateT <= 0) { State = TadState.Hang; _stateT = 0.5f + 1.5f * R(); }     // the speed is left to bleed off in Hang: a coast
                     break;
                 }
             case TadState.Windup:
                 {
                     // Curl into a C and turn on the spot, then shoot.
-                    float err = Turn(_fleeDir, 16f, dt);
+                    float err = Turn(_fleeDir, 7f, dt);                                              // (16 until round forty: a snap)
                     Speed = 0;
                     _curl = Math.Clamp(err * 0.6f, -0.7f, 0.7f);
                     if (MathF.Abs(err) < 0.12f || _stateT <= 0) { State = TadState.Burst; _stateT = 0.5f; _freq = 7; }
@@ -1196,7 +1231,7 @@ internal sealed class Tadpole : Body, ISnack
                 {
                     // Five body lengths a second for half a second (was ten for a third: the mosquito), so a burst still
                     // covers about two and a half lengths and is seen to go somewhere, at a pace the eye reads as a swim.
-                    Speed = len * 5f;
+                    Speed += (len * 5f - Speed) * (1 - MathF.Exp(-dt * 18f));                       // (up over a tenth of a second since round forty, not in one frame)
                     _curl = 0;
                     if (_stateT <= 0) { State = TadState.Hang; _stateT = 0.4f + 1.6f * R(); }     // the speed is left to bleed off in Hang: a coast, not a stop dead
                     break;
@@ -1220,6 +1255,12 @@ internal sealed class Tadpole : Body, ISnack
                 Speed = 0;
                 _refusedFor += dt;
                 if (_refusedFor > 2f) { _loose = 5f; _refusedFor = 0; }          // pinned: see CanCrawl
+                // A FLIGHT INTO A WALL IS OVER (round forty). A tadpole cornered against the bank by a fish that stayed used to
+                // stop, hang half a second, be scared again, pick another way, run two lengths into the wall again, and so on:
+                // on the wildest second of a five-minute log one turned a full circle in a second and a half with its speed
+                // going nought, six, nought, six. Now a refused flight counts as the whole 2.5 s of fleeing it would have
+                // taken to stop minding (habituation, above): it hangs where it is until it has been calm a while.
+                if (State == TadState.Flee) _fleeFor = MathF.Max(_fleeFor, 2.5f);
                 if (State == TadState.Burst || State == TadState.Flee || State == TadState.Scull) { State = TadState.Hang; _stateT = 0.5f + R(); }
             }
         }

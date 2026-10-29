@@ -7,8 +7,26 @@ using Peckworks.Screensavers.Core.Sakura;
 
 namespace SakuraPond;
 
-/// <summary>A lily pad on the water: where it is and how big (its radius across, in pixels).</summary>
-internal readonly record struct LilyPad(PointF Center, float Radius);
+/// <summary>
+/// A lily pad on the water: where it is now, how big (its radius across, in pixels), and its picture.
+///
+/// ROUND FORTY ("make the lily pads mostly fixed, but they have to be separate from the water. if a fish swims
+/// into one, it will move a little bit ... it's anchored to the ground with a root, so it's basically just like a
+/// balloon on a string except in the water"): a pad is no longer painted into the backdrop. Each one is a Sprite
+/// stamped on the water every frame at Center, which is pushed a little by any body at the surface that runs into
+/// it and eases back to Anchor, the spot its root holds it to (LilyPads.cs). Everything that steers by the pads
+/// (the frogs' perches, the snake's and the ducks' obstacle lists) reads Center; the frogs and the dragonflies hold
+/// a pad still while they sit on it.
+/// </summary>
+internal sealed class LilyPad
+{
+    public PointF Center;          // where it is now, screen pixels
+    public PointF Anchor;          // where its root holds it: it drifts about this and comes back to it
+    public float Radius;           // across, in pixels
+    public Sprite? Picture;        // the pad (its shadow on the water, the leaf, a lily on some), centred in its sheet
+    public float Hold;             // seconds for which something sitting on it keeps it still (a frog, a dragonfly)
+    public LilyPad(PointF center, float radius) { Center = Anchor = center; Radius = radius; }
+}
 
 /// <summary>A rock: where, how big (radius, pixels), and whether it stands out in the water.</summary>
 internal readonly record struct BankRock(PointF Centre, float Radius, bool InWater);
@@ -404,8 +422,11 @@ internal static class PondPainter
         List<(PointF Root, float Toward)> irises = IrisSpots(gn, Read(noGrassSheet), inPond, bank, corner, cattails, u, w, h, rng);   // after the rocks and the sand: on the lawn behind them
 
         // ---- 4: on the water ----
+        // The lily pads are placed here (and their pictures painted, each on its own sheet), but not painted into the
+        // backdrop: they are a live layer since round forty (see LilyPad). The pad mask sheet stays black, so the water
+        // runs on under them and a koi is drawn there, under the pad.
         var pads = new List<LilyPad>();
-        LilyPads(g, gp, pads, inPond, dist, cattails, island, formation?.Stone, formation2?.Stone, w, h, u, rng);
+        LilyPads(pads, inPond, dist, cattails, island, formation?.Stone, formation2?.Stone, w, h, u, rng);
 
         // ---- 5: branch shadows, then the branches ----
         px = Read(bmp);
@@ -546,6 +567,12 @@ internal static class PondPainter
             for (int k = 0; k < fm.Caps.Length; k++) Hill(floor, stoneShoal, fm.Caps[k], fm.Stone.Radius + u * 0.04f, fm.CapRadii[k] * 1.4f, w, h);
         if (formation2 is Formation fm2)
             for (int k = 0; k < fm2.Caps.Length; k++) Hill(floor, stoneShoal, fm2.Caps[k], fm2.Stone.Radius + u * 0.04f, fm2.CapRadii[k] * 1.4f, w, h);
+        // The bed lit by its own shape (round forty): every hump and hollow shades the water over it. The painted
+        // depth, not the floor: the stones' hills are far wider than the stones as painted (a hill reaches 0.05u past
+        // the stone), and lit by their slope each stone sat in a big dark saucer; a stone's flank has its own shading
+        // (WrapIsland). The backdrop the scene restores and the water the swimmers are hazed toward are the same
+        // array (beforeBranches), so the fish fade into the lit bed, not a flat teal.
+        LightBed(beforeBranches, waterMask, heapTouched, depth, w, h, u);
         // The KOI'S room grid (round thirty-nine): the steering grid again with the stones' shoulders as walls, so a
         // koi's feelers feel a stone coming the way they feel the bank, a slope of falling room, not a cliff at the
         // shoulder's edge (Pond.KoiRoomAt tells the rest). One more distance transform at the start, the same cost
@@ -759,6 +786,96 @@ internal static class PondPainter
     }
 
     /// <summary>
+    /// Lights the pond bed by its own slope, so it reads as ground with a shape
+    /// under the water (round forty: "i need this to be a 3d terrain").
+    ///
+    /// FEYNMAN VERSION: hold a sheet of paper flat under a lamp that is up and
+    /// to your left, then push a bump up in it. The side of the bump that faces
+    /// the lamp gets brighter, the side facing away gets darker, and that pair
+    /// of light and dark is the whole of how your eye knows it is a bump. The
+    /// water's colour by depth (PourWater) said how DEEP each spot was, but a
+    /// hump's lit flank and its shaded flank were painted the same, so the bed
+    /// read as a flat sheet with darker and lighter patches. Here each water
+    /// pixel is brightened or dimmed by how much the bed under it tilts toward
+    /// the sun (the sun is up and left: shadows fall down and right, Light.cs).
+    /// The tilt is read from the painted depth (the bank's slope and the humps
+    /// and hollows; the stones' hills shade themselves, see Paint), smoothed
+    /// and over a stencil a hundredth of u wide, and is held to a cap of a third
+    /// either way. The bank's own slope is left as it was painted (the shallows
+    /// keep their pale look): the lighting comes in with the painted depth, from
+    /// nothing at a quarter of it to full at seven tenths, which is the open pond
+    /// where the humps and the stones are. Drifted petals on the water are skipped.
+    /// </summary>
+    private static void LightBed(uint[] px, bool[] water, bool[] untouchedByPetals, byte[] depth, int w, int h, float u)
+    {
+        int s = Math.Max(2, (int)(u * 0.012f));
+        float zPx = Pond.DepthU * u / 255f;                 // pixels of depth per step of the depth byte
+        // The painted depth is a byte: a slope read straight off it climbs in steps of one, and a step read over a
+        // short stencil is a jump in the slope, so the first run drew the humps as contour rings. Smoothed first (a
+        // box blur as wide as the stencil, twice), the steps are gone and the slope is the hump's own.
+        float[] smooth = Blur(depth, w, h, s);
+        for (int y = 0; y < h; y++)
+        {
+            int yu = Math.Max(0, y - s), yd = Math.Min(h - 1, y + s);
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x;
+                if (!water[i] || !untouchedByPetals[i]) continue;
+                float open = Math.Clamp((depth[i] / 255f - 0.25f) / 0.45f, 0f, 1f);
+                if (open <= 0) continue;
+                open = open * open * (3 - 2 * open);
+                int xl = Math.Max(0, x - s), xr = Math.Min(w - 1, x + s);
+                float gx = (smooth[y * w + xr] - smooth[y * w + xl]) * zPx / (xr - xl);   // how fast the bed deepens going right (a slope, u per u)
+                float gy = (smooth[yd * w + x] - smooth[yu * w + x]) * zPx / (yd - yu);   // and going down the screen
+                // A flank that deepens going down and right faces up and left, toward the sun: lit. The other way: shaded.
+                float tilt = Math.Clamp(gx * 0.6f + gy * 0.8f, -0.35f, 0.35f);
+                int light = 256 + (int)(256 * tilt * open);
+                if (light == 256) continue;
+                uint c = px[i];
+                int r = Math.Min(255, (int)((c >> 16) & 0xFF) * light >> 8), g = Math.Min(255, (int)((c >> 8) & 0xFF) * light >> 8), b = Math.Min(255, (int)(c & 0xFF) * light >> 8);
+                px[i] = (uint)(r << 16 | g << 8 | b);
+            }
+        }
+    }
+
+    /// <summary>A byte picture smoothed by a box blur of radius r, run twice (near enough a soft bell), as floats.</summary>
+    private static float[] Blur(byte[] src, int w, int h, int r)
+    {
+        var a = new float[src.Length];
+        for (int i = 0; i < a.Length; i++) a[i] = src[i];
+        var b = new float[src.Length];
+        for (int pass = 0; pass < 2; pass++)
+        {
+            // Across: a running sum along each row, divided by the window it covers (narrower at the edges).
+            for (int y = 0; y < h; y++)
+            {
+                int row = y * w;
+                float sum = 0; int n = 0;
+                for (int x = 0; x < Math.Min(w, r); x++) { sum += a[row + x]; n++; }
+                for (int x = 0; x < w; x++)
+                {
+                    if (x + r < w) { sum += a[row + x + r]; n++; }
+                    if (x - r - 1 >= 0) { sum -= a[row + x - r - 1]; n--; }
+                    b[row + x] = sum / n;
+                }
+            }
+            // Down: the same along each column, back into a.
+            for (int x = 0; x < w; x++)
+            {
+                float sum = 0; int n = 0;
+                for (int y = 0; y < Math.Min(h, r); y++) { sum += b[y * w + x]; n++; }
+                for (int y = 0; y < h; y++)
+                {
+                    if (y + r < h) { sum += b[(y + r) * w + x]; n++; }
+                    if (y - r - 1 >= 0) { sum -= b[(y - r - 1) * w + x]; n--; }
+                    a[y * w + x] = sum / n;
+                }
+            }
+        }
+        return a;
+    }
+
+    /// <summary>
     /// How much of the bed shows through water of depth d (0 the edge, 1 the
     /// pond's full depth), 0 to 1. One curve for everything that lies on the
     /// bed: the pebbles (PourWater) and a submerged stone (WrapIsland), so a
@@ -802,10 +919,11 @@ internal static class PondPainter
     /// middle (the notch real lily pads have), seen at our slant, so a little
     /// flatter than round. Veins run out from the middle.
     /// </summary>
-    private static void LilyPads(Graphics g, Graphics gb, List<LilyPad> pads, bool[] inPond, int[] dist, PointF cattails, Island? island, Island? formation, Island? formation2, int w, int h, float u, Random rng)
+    private static void LilyPads(List<LilyPad> pads, bool[] inPond, int[] dist, PointF cattails, Island? island, Island? formation, Island? formation2, int w, int h, float u, Random rng)
     {
         int clusters = 3;
         int tries = 0;
+        var sheets = new List<(Bitmap, Graphics)>();
         while (clusters > 0 && tries++ < 400)
         {
             int x = rng.Next(w), y = rng.Next(h);
@@ -826,18 +944,38 @@ internal static class PondPainter
                 int pi = Math.Clamp((int)py, 0, h - 1) * w + Math.Clamp((int)px, 0, w - 1);
                 if (!inPond[pi] || dist[pi] < r * 1.2f * 10) continue;
                 if (pads.Any(p => Dist(p.Center, new PointF(px, py)) < (p.Radius + r) * 0.75f)) continue;
-                Pad(g, gb, px, py, r, rng);
+                // Each pad is painted onto a clear sheet of its own (round forty), the pad's middle at the sheet's
+                // middle, with room round it for the shadow it throws on the water: the sheet becomes the pad's
+                // Sprite below, and the scene stamps it wherever the pad has drifted to. The same rolls of the dice
+                // as when it was painted into the backdrop, in the same order, so the pads are where they were.
+                int side = (int)MathF.Ceiling(r * 2.4f) + 4;
+                var sheet = new Bitmap(side, side, PixelFormat.Format32bppArgb);
+                var gs = Graphics.FromImage(sheet);
+                gs.SmoothingMode = SmoothingMode.AntiAlias;
+                gs.Clear(Color.Transparent);
+                Pad(gs, side * 0.5f, side * 0.5f, r, rng);
+                sheets.Add((sheet, gs));
                 pads.Add(new LilyPad(new PointF(px, py), r));
             }
         }
-        // Water lilies on a few of the pads.
+        // Water lilies on a few of the pads (onto the pad's own sheet, at the same spot on the pad as before).
         foreach (LilyPad p in pads.OrderBy(_ => rng.Next()).Take(Math.Max(1, pads.Count / 4)))
-            WaterLily(g, new PointF(p.Center.X + p.Radius * 0.15f, p.Center.Y - p.Radius * 0.2f), p.Radius * 0.75f, rng);
+        {
+            (Bitmap sheet, Graphics gs) = sheets[pads.IndexOf(p)];
+            WaterLily(gs, new PointF(sheet.Width * 0.5f + p.Radius * 0.15f, sheet.Height * 0.5f - p.Radius * 0.2f), p.Radius * 0.75f, rng);
+        }
+        for (int i = 0; i < pads.Count; i++)
+        {
+            (Bitmap sheet, Graphics gs) = sheets[i];
+            gs.Dispose();
+            pads[i].Picture = Sprite.FromPixels(sheet.Width, sheet.Height, ReadArgb(sheet));
+            sheet.Dispose();
+        }
     }
 
     private static float Dist(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
 
-    private static void Pad(Graphics g, Graphics gb, float x, float y, float r, Random rng)
+    private static void Pad(Graphics g, float x, float y, float r, Random rng)
     {
         float ry = r * 0.82f;
         float notch = (float)(rng.NextDouble() * 360);
@@ -867,7 +1005,8 @@ internal static class PondPainter
                 float a = (notch + 30 + k * 30) * MathF.PI / 180;
                 g.DrawLine(vein, x, y, x + MathF.Cos(a) * r * 0.9f, y + MathF.Sin(a) * ry * 0.9f);
             }
-        gb.FillPie(Brushes.White, rect.X, rect.Y, rect.Width, rect.Height, notch + 14, 332);
+        // (Until round forty the pad was also painted white onto a mask sheet that kept the koi from being drawn under
+        // it. The pad covers them itself now, stamped over the water after everything under it.)
     }
 
     /// <summary>A water lily seen from above: two rings of pointed petals, white flushed pink, round a gold heart.</summary>

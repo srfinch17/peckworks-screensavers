@@ -250,14 +250,21 @@ internal abstract class Body
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     protected static void Deepen(ref int r, ref int g, ref int b, int murk256)
     {
-        int t = murk256 - 36;                                   // 0.14 * 256: the surface's own haze is not depth
+        // ROUND FORTY ("animals lose a little color when they go deeper because not all that light can reflect back
+        // out of the water"): the veil (Light.Murk) is thinner now and tops out at 0.62, so this is where depth shows.
+        // The dial runs 0 at the surface to about 100 on the deepest bed (0.42 - 0.12 in 256ths; held at 110). On the
+        // typical bed (dial 66) a thing keeps six tenths of its saturation, and its brightness goes to half in the red,
+        // two thirds in the green and seven tenths in the blue: water eats the warm end of the light first, so a red koi
+        // down there is a dull brown-red and a white one a pale blue-grey, both plainly fish and plainly deep.
+        int t = murk256 - 31;                                   // 0.12 * 256: the surface's own haze is not depth
         if (t <= 0) return;
-        if (t > 220) t = 220;
+        if (t > 110) t = 110;
         int lum = (r * 77 + g * 150 + b * 29) >> 8;             // the pixel's brightness, the eye's weights
-        int sat = 256 - t * 150 / 220, dark = 256 - t * 140 / 220;   // (100 until 2026-10-28, "when fish swim deeper, i want them to look a little dimmer": 0.45 of the brightness at the limit of sight, six tenths before; the veil thinned at the same time (Light.SeeU), so in the formula a white koi on the bed is 180 to 164 in its own colour and 96 to 99 painted: dimmer in itself, a shade less veiled)
-        r = (lum + ((r - lum) * sat >> 8)) * dark >> 8;
-        g = (lum + ((g - lum) * sat >> 8)) * dark >> 8;
-        b = (lum + ((b - lum) * sat >> 8)) * dark >> 8;
+        int sat = 256 - t * 3 / 2;                              // (until 2026-10-29: 256 - t * 150 / 220 and one darkening for all three channels, 256 - t * 140 / 220, with t up to 220)
+        int darkR = 256 - t * 2, darkG = 256 - t * 7 / 5, darkB = 256 - t * 6 / 5;
+        r = (lum + ((r - lum) * sat >> 8)) * darkR >> 8;
+        g = (lum + ((g - lum) * sat >> 8)) * darkG >> 8;
+        b = (lum + ((b - lum) * sat >> 8)) * darkB >> 8;
     }
 
     /// <summary>

@@ -109,7 +109,8 @@ src/
   SakuraPond/                      a koi pond seen from above, under cherry branches
     Program.cs                     Main(), plus the definition (draws at most 2560 wide)
     SakuraPondScene.cs             the layers, back to front
-    PondPainter.cs                 paints the pond bed and water, lily pads, branches and their shadows; calls the shore painter
+    PondPainter.cs                 paints the pond bed and water (lit by the bed's own slope), the lily pads' pictures, branches and their shadows; calls the shore painter
+    LilyPads.cs                    the lily pads as a live layer: stamped on the water each frame, shoved by what swims into them, drawn back to their roots
     Shore.cs                       paints the corner of land: the lawn's mottled ground and carpet (clover and moss patches, worn earth), the sand edge, rocks that look like rocks, the island and the small rock formation, the fallen log (off by default)
     Shoreline.cs                   the water's edge, alive: laps up the sand and back along the bank every frame, and tells the animals where the water is right now
     Body.cs                        draws an animal (koi, snake, turtle) along its spine
@@ -1611,7 +1612,20 @@ it is (the murk is the dial: nothing at the surface, four tenths of its saturati
 of its brightness left at the limit of sight), the way water eats the warm end of the light first,
 so an orange koi on the bed is a dull brownish grey where the murk mix alone had left it a bright
 orange half-veiled in teal (worked through the painter's own sums: (121, 104, 65) before,
-(82, 94, 75) after; a white koi 154 to 94 bright). The bed is UNEVEN too (the same day, "make the depths be uneven, like the pondbed has
+(82, 94, 75) after; a white koi 154 to 94 bright). ROUND FORTY turned the balance the other way
+("when fish swim deeper, they get a little darker, it's a little murky down there, but not so murky
+that I can't see the bottom"; "animals lose a little color when they go deeper because not all that
+light can reflect back out of the water"): the veil (`Light.Murk`) now tops out at 0.62 instead of 1,
+so nothing is ever a ghost, and the darkening (`Body.Deepen`) does the work of depth, per channel,
+red most (water eats the warm end of the light first): on the typical bed a thing keeps six tenths of
+its saturation, half its red, two thirds of its green and seven tenths of its blue. And the BED IS
+LIT BY ITS OWN SLOPE (`PondPainter.LightBed`, "i need this to be a 3d terrain"): the painted depth,
+smoothed, gives each water pixel a tilt, and the side of a hump that faces the sun (up and left) is
+brightened by up to a third and the side facing away darkened, so the humps and hollows read as
+ground with a shape instead of lighter and darker patches on a sheet. Only the open pond is lit
+(from a quarter of the depth to seven tenths); the shallows keep their painted look, and the stones'
+hills shade themselves (lit by their slope, each stone sat in a big dark saucer, because a hill
+reaches far past the stone as painted). The bed is UNEVEN too (the same day, "make the depths be uneven, like the pondbed has
 deeper and shallower spots"): seven broad soft bumps, humps and hollows by turns, a fifth to a
 third of u across, scale the depth by up to 18 percent either way, more the further from the
 bank, in `PourWater`; and because everything reads depth from that one array (the water's colour,
