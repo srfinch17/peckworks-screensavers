@@ -198,7 +198,7 @@ public sealed class SceneView : Control
         for (double t = 0; t < PrewarmSeconds; t += 1.0 / 30)
             _scene.Update(1.0 / 30);
 
-        _scene.Render(_frames[0]);
+        _scene.Render(_frames[0]!);
         return true;
     }
 
