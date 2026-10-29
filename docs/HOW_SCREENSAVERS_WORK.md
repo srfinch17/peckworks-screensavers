@@ -219,7 +219,14 @@ page and lands on the next, 33 ms later; a scene hovering round the limit then s
 recent frames took and, when they are too close to the page time to make it reliably, waits for
 two pages per frame on purpose, every frame (an even 30), coming back to one page per frame once
 frames are clearly quick again. The scene is told the real time that passed either way, so
-nothing moves slower, only in bigger steps. The other lever is drawing fewer pixels: Sakura Pond's
+nothing moves slower, only in bigger steps. (Two pages means two pages from the FRAME'S START,
+since round forty: a frame whose own work ran past a page had its first wait land on the second
+page and its second on the third, 50 ms a frame, a steady 20 instead of the even 30; now the second
+wait is skipped once a page and a half has passed since the frame began.) On the owner's 4K screen at
+the 1920 draw width the pond's frame sits at the page's edge: the scene is 12.4 to 12.6 ms and the
+present (the stretch to 3840 by 2160, `StretchDIBits`) about 4, so one build holds one page and the
+next, three tenths of a millisecond dearer, drops to an even 30 after a hundred frames; the next
+lever there is a GPU present. The other lever is drawing fewer pixels: Sakura Pond's
 "Draw width" setting (1920 by default) is the width it draws at on a wider screen, and Windows
 enlarges the picture; on the owner's 4K laptop 2048 held 60 frames a second where 2560 held an
 even 30. The default went from 2048 to 1920 when the boughs began to sway (2026-10-22): the new

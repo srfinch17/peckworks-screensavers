@@ -25,10 +25,53 @@ internal sealed class Pads
     private readonly Pond _pond;
     private readonly float _u, _touchZ;
 
-    public Pads(Pond pond)
+    // Each pad AT REST, laid over the backdrop once: the frame's pixel index and the finished colour of every pixel the
+    // pad touches where no still branch covers it. A pad at rest (nearly all of them, nearly all the time) is then a
+    // straight copy of these, not a blend of its sheet pixel by pixel through a stencil: a third of the stamping's cost,
+    // and on a 4K screen the four tenths of a millisecond that stamping cost was the margin between one page and two.
+    // (What is lost: a fish or a ring under the pad's thin shadow crescent shows the water there instead. A pad that has
+    // been shoved is stamped from its sheet at its place, as before.)
+    private readonly int[][] _restIndex;
+    private readonly uint[][] _restPixel;
+
+    public Pads(Pond pond, bool[] open)
     {
         _pond = pond; _u = pond.U;
         _touchZ = 0.12f * Pond.DepthU * _u;          // a body point deeper than this (pixels of depth) is under the pad, not against it
+        int n = pond.Pads.Count;
+        _restIndex = new int[n][]; _restPixel = new uint[n][];
+        var idx = new List<int>(); var px = new List<uint>();
+        for (int p = 0; p < n; p++)
+        {
+            LilyPad pad = pond.Pads[p];
+            idx.Clear(); px.Clear();
+            if (pad.Picture is Sprite s)
+            {
+                int left = (int)(pad.Anchor.X - s.Width / 2f), top = (int)(pad.Anchor.Y - s.Height / 2f);   // the same corner DrawCentered uses
+                ReadOnlySpan<uint> argb = s.Argb;
+                for (int sy = 0; sy < s.Height; sy++)
+                {
+                    int y = top + sy;
+                    if (y < 0 || y >= pond.Height) continue;
+                    for (int sx = 0; sx < s.Width; sx++)
+                    {
+                        int x = left + sx;
+                        if (x < 0 || x >= pond.Width) continue;
+                        uint c = argb[sy * s.Width + sx];
+                        int a = (int)(c >> 24);
+                        if (a == 0) continue;
+                        int i = y * pond.Width + x;
+                        if (!open[i]) continue;
+                        uint bg = pond.Pixels[i];
+                        int br = (int)((bg >> 16) & 0xFF), bgn = (int)((bg >> 8) & 0xFF), bb = (int)(bg & 0xFF);
+                        int cr = (int)((c >> 16) & 0xFF), cg = (int)((c >> 8) & 0xFF), cb = (int)(c & 0xFF);
+                        int rr = br + ((cr - br) * a >> 8), gg = bgn + ((cg - bgn) * a >> 8), b2 = bb + ((cb - bb) * a >> 8);   // the stamp's own sum (Sprite.DrawRows)
+                        idx.Add(i); px.Add((uint)((rr << 16) | (gg << 8) | b2));
+                    }
+                }
+            }
+            _restIndex[p] = idx.ToArray(); _restPixel[p] = px.ToArray();
+        }
     }
 
     /// <summary>Pushes every pad by the bodies at the surface this frame, then eases each toward its root.</summary>
@@ -63,7 +106,9 @@ internal sealed class Pads
             float d = MathF.Sqrt(dx * dx + dy * dy);
             if (d > reach) { dx *= reach / d; dy *= reach / d; }
             float home = 1 - MathF.Exp(-dt * (most > 0 ? 0.15f : 0.8f));
-            pad.Center = new PointF(pad.Anchor.X + dx * (1 - home), pad.Anchor.Y + dy * (1 - home));
+            dx *= 1 - home; dy *= 1 - home;
+            if (MathF.Abs(dx) < 0.3f && MathF.Abs(dy) < 0.3f) { dx = 0; dy = 0; }   // home: within a third of a pixel is at rest (the cheap copy below)
+            pad.Center = new PointF(pad.Anchor.X + dx, pad.Anchor.Y + dy);
         }
     }
 
@@ -93,10 +138,16 @@ internal sealed class Pads
     public void Draw(FrameBuffer fb, bool[] onlyWhere)
     {
         IReadOnlyList<LilyPad> pads = _pond.Pads;
+        uint[] frame = fb.Pixels;
         for (int p = 0; p < pads.Count; p++)
         {
             LilyPad pad = pads[p];
-            pad.Picture?.DrawCentered(fb, pad.Center.X, pad.Center.Y, onlyWhere: onlyWhere);
+            if (pad.Center == pad.Anchor)
+            {
+                int[] idx = _restIndex[p]; uint[] px = _restPixel[p];
+                for (int k = 0; k < idx.Length; k++) frame[idx[k]] = px[k];
+            }
+            else pad.Picture?.DrawCentered(fb, pad.Center.X, pad.Center.Y, onlyWhere: onlyWhere);
         }
     }
 }

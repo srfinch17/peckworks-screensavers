@@ -262,7 +262,10 @@ internal static class FramePump
             if (!_halfRate && _costAvg > PageMs * 0.9 && _since > 30) { _halfRate = true; _since = 0; }
             else if (_halfRate && _costAvg < PageMs * 0.78 && _since > 45) { _halfRate = false; _since = 0; }
             WaitForNextRefresh();
-            if (_halfRate) WaitForNextRefresh();
+            // Two pages a frame means two pages FROM THE FRAME'S START, not two waits after the work: a frame whose
+            // work itself ran past a page (17 ms on a 4K screen, round forty) had its first wait land on the second
+            // page and its second on the third, 50 ms a frame, a steady 20 instead of the even 30 this is for.
+            if (_halfRate && Clock.Elapsed.TotalMilliseconds - start < PageMs * 1.5) WaitForNextRefresh();
         }
     }
 

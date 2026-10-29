@@ -1037,8 +1037,39 @@ public sealed class Boughs
     /// </summary>
     public void Uncover(bool[] open)
     {
-        for (int i = 0; i < _amp.Length; i++)
-            if ((_ag[i] >> 16) != 0 && _amp[i] >= StillByte) open[i] = true;
+        // Only where something under the sheet could ever SHOW: a live pixel within the sway's reach of a translucent
+        // pixel or of the sheet's edge. Under the opaque middle of a blossom cluster nothing shows through at any lean,
+        // and a koi painted there is painted for nothing (opened everywhere, the koi's draw cost rose by four tenths of a
+        // millisecond on a 4K screen, which was the margin between one page and two). "Thin" is every pixel the sheet
+        // does not cover solidly (no bough at all, or alpha under 250); the reach is the tips' full sway plus two.
+        int r = (int)MathF.Ceiling(_maxPx) + 2;
+        var thin = new bool[_amp.Length];
+        for (int i = 0; i < thin.Length; i++) thin[i] = (_ag[i] >> 16) < 250;
+        // Any thin pixel within r, as a square: a running count along each row, then along each column.
+        var row = new bool[_amp.Length];
+        for (int y = 0; y < _h; y++)
+        {
+            int n = 0, o = y * _w;
+            for (int x = 0; x < Math.Min(_w, r); x++) if (thin[o + x]) n++;
+            for (int x = 0; x < _w; x++)
+            {
+                if (x + r < _w && thin[o + x + r]) n++;
+                if (x - r - 1 >= 0 && thin[o + x - r - 1]) n--;
+                row[o + x] = n > 0;
+            }
+        }
+        for (int x = 0; x < _w; x++)
+        {
+            int n = 0;
+            for (int y = 0; y < Math.Min(_h, r); y++) if (row[y * _w + x]) n++;
+            for (int y = 0; y < _h; y++)
+            {
+                if (y + r < _h && row[(y + r) * _w + x]) n++;
+                if (y - r - 1 >= 0 && row[(y - r - 1) * _w + x]) n--;
+                int i = y * _w + x;
+                if (n > 0 && (_ag[i] >> 16) != 0 && _amp[i] >= StillByte) open[i] = true;
+            }
+        }
     }
 
     /// <summary>How many pixels are laid live each frame (bough pixels outside the still zone), and how many pixels the live tiles hold: the cost, in numbers a log can carry.</summary>

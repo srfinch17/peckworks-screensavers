@@ -36,6 +36,9 @@ public sealed class Sprite
     public int Width { get; }
     public int Height { get; }
 
+    /// <summary>The sheet itself, one 0xAARRGGBB number per pixel, row by row: for a scene that wants to lay a sprite into a backdrop once by its own hand.</summary>
+    public ReadOnlySpan<uint> Argb => _argb;
+
     private Sprite(int width, int height, uint[] argb)
     {
         Width = width;

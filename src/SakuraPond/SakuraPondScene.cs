@@ -99,7 +99,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _waterInViewDeep = new bool[_waterInView.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInViewDeep[i] = _waterInView[i] && !_pond.StoneTop[i];
         _ripples = new Ripples(_pond, _waterInView);
-        _pads = new Pads(_pond);                                   // (no dice of its own: nothing else moves)
+        _pads = new Pads(_pond, _pond.Open);                       // (no dice of its own: nothing else moves; the pads at rest are laid over the backdrop once, here)
         _lawn = new Lawn(width, height, _pond.Carpet, _pond.Grassy, u, _wind, Light.View, _rng, _pond.Open, _pond.Sun);   // never over a branch; shaded by its shadow
         Lap("lawn");
 
