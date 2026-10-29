@@ -110,6 +110,23 @@ These are in the code comments too; here they are in one place.
 - **Deal the dials; do not roll them one by one.** Eight fish rolled independently gave two
   that nobody could tell apart. `Traits.Deal` spreads them out.
 - **Timers are floats in seconds, phases are wrapped.** A screensaver runs for days.
+- **One owner of "clear".** Every function that answers whether a step may be taken (the step itself,
+  the refused step's probe, a shove, a placement) calls the step's own test list, never a subset. A probe
+  that tested the bed and the land but not the closing-room rule sent a koi into a pocket the step then
+  refused (50 s); the shore added to the step and not the probe held one 42 s; a shove tested at the head
+  alone carried one onto the bank (131 s). Three rounds, one class. The next wall class goes in through one
+  `Allowed(from, to)` that all of them call.
+- **A wall class is in every grid the animal steers by.** The koi's stone shoulders were in the step and
+  in the feelers' samples but not in the room grid the feelers climb when nothing is clear (the grid is
+  built before the hills, earlier in the same function), so a shoulder was a cliff with no slope and the
+  fallback climbed INTO it against the probe's way out: a goldfish stood 115 s. When a wall is added for
+  one animal, grep every grid and mask that animal reads, or give it a grid of its own (`Pond.KoiRoomAt`).
+- **A turn of half a circle has no side, and a probe has a floor in pixels.** "Straight behind" as the
+  answer to "nothing is clear" gave `Wrap` a different sign each frame, and the eased turn rate oscillated
+  about nought at the clamp times the easing share (0.9 at 8 per second: 0.09), which is the TELL of two
+  pulls balanced; answer with the grid's uphill, or a turn short of half a circle to one side. And a probe
+  placed at a multiple of the step shrinks with a slowed animal to a fraction of a pixel and reads its own
+  pixel: floor it (a pixel and a half).
 - **Sizes and speeds are in u** (the screen's size unit), never "cross the screen in N seconds".
 - **A behaviour shared by many animals is a small object each one OWNS, not a doing in each.**
   The chance meal of a tadpole (`Snatch` in `Tadpoles.cs`) holds the dice, the claim on the prey,
