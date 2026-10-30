@@ -8,13 +8,14 @@ namespace SakuraPond;
 /// </summary>
 public sealed class SakuraPondSettings : ScreensaverSettings
 {
-    private readonly IntSetting _petals, _koi, _goldfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _frogs, _tadpoles, _crayfish, _prawns, _deep, _ducks, _log, _sun, _drawWidth;
+    private readonly IntSetting _petals, _koi, _goldfish, _catfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _frogs, _tadpoles, _crayfish, _prawns, _deep, _ducks, _log, _sun, _drawWidth;
 
     public SakuraPondSettings() : base("SakuraPond")
     {
         _petals = Add(nameof(PetalPercent), "Petals", 0, 300, 100, "%");
         _koi = Add(nameof(KoiCount), "Koi", 0, 14, 10);   // ten since the pond went deep: they have the depth to spread out in
         _goldfish = Add(nameof(GoldfishCount), "Goldfish", 0, 6, 3);   // a small shoal among the koi
+        _catfish = Add(nameof(CatfishCount), "Catfish", 0, 3, 1);      // the bottom fish of the deep bed (round forty-four)
         _koiPlay = Add(nameof(KoiPlayPercent), "Koi play", 0, 300, 100, "%");
         _minnows = Add(nameof(MinnowSchools), "Minnow schools", 0, 4, 2);
         _turtles = Add(nameof(TurtleCount), "Turtles", 0, 3, 1);
@@ -78,6 +79,9 @@ public sealed class SakuraPondSettings : ScreensaverSettings
 
     /// <summary>How many goldfish swim among the koi (small, orange, shoaling). 0 = none.</summary>
     public int GoldfishCount => _goldfish.Value;
+
+    /// <summary>How many catfish live on the deep bed (dark, whiskered, slow). 0 = none.</summary>
+    public int CatfishCount => _catfish.Value;
 
     /// <summary>How playful the koi are: how often they go and look at things, follow a friend or chase one. 0 = they only cruise and rest.</summary>
     public int KoiPlayPercent => _koiPlay.Value;

@@ -123,7 +123,11 @@ and drifts in a lull, so no two fall the same way.
   and then a koi goes up the slope on purpose (a visit to the shallows, a few seconds nosing in the
   sand with its back out, then away). And the open pond's bed is not one depth: humps and hollows
   take it a fifth either way of its usual depth, so the fish on the bottom are deeper in some places
-  than others. A
+  than others. THE BED IS A CARPET OF THINGS, not a painted floor (round forty-four, from photographs of real pond
+  bottoms): olive silt with a fine grain, gravel bars of fist-sized stones each lit on top and shaded under, filmed
+  with algae, a heap of rubble round the foot of every boulder, last year's leaves lying flat in five browns, the
+  odd dark twig, and soft patches of algae; and the water itself is a pond's green, olive in the shallows to bottle
+  green in the deep, not a swimming pool's teal. A
   deep fish
   sits lower on the screen than the water above it (we look at the pond at a slant) and comes up
   the screen as it rises, and in the shallows it throws a shadow on the bed, a soft echo right
@@ -179,6 +183,15 @@ and drifts in a lull, so no two fall the same way.
   top, the way a goldfish in a bowl does, and pairs of them chase each other twice as readily as the koi do; and every
   goldfish keeps a little under the surface with a touch more of the water's haze on it, so it never looks to be
   sitting on top of the water. Every fish's idle drift reaches deeper than it did.
+- **A catfish** (one by default, a "Catfish" knob from 0 to 3; round forty-four) lives on the deep bed: a bullhead
+  as long as a koi, broad and flat with a wide head, dark olive mottled with darker blotches and paler patches, four
+  whiskers that sway as it swims, and no bright colour anywhere. It is the koi's body and mind a third time, with a
+  bottom fish's nature: it starts deep and asks for no depth shallower than three quarters of the pond's, never
+  gulps at the surface or leaps, never comes up to look at a petal or to visit the shallows, follows and chases no
+  one, and cruises slowly along the bottom (half a koi's pace), foraging in the silt more than any koi and resting on
+  the bed for long spells. Its feelers see as wall only what it can never ride over (bed under six tenths of the
+  depth: the bank's slope and the boulders), and it never answers a wall with a climb; the bumps and the mounds'
+  skirts it follows with the bed. Its dice are its own, so the knob moves no other fish.
 - **Each koi has a mind of its own.** Three personality dials are dealt when it is born (spread
   across the school, so near-twins are rare): how
   energetic it is (how much it beats rather than glides, how fast it cruises), how sociable, and
@@ -448,7 +461,7 @@ and drifts in a lull, so no two fall the same way.
   in the shallows when the land is in that corner, or drifting out on the water when it is not.
   Bark streaks, cracks, a knot or two, moss on top, and the cut end's rings where it faces us.
 
-Settings: draw width (sharpness against smoothness), petals, number of koi (ten by default), number of goldfish (three by default), how playful the koi are (0 means they only cruise and rest),
+Settings: draw width (sharpness against smoothness), petals, number of koi (ten by default), number of goldfish (three by default), number of catfish (one by default), how playful the koi are (0 means they only cruise and rest),
 number of minnow schools (0 means no game), number of turtles, number of frogs (two by default),
 number of dragonflies, how often the swallows visit, how often the snake crosses, how many
 lizards there are (0 to 3), how often the lizards come out (Lizard visits), how many field

@@ -120,7 +120,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
             _irises.Add(root, Flipbook.IrisClump(u * 0.11f, toward, _rng), 0.45f, 40);
 
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _wind, _rng);
-        _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng, settings.KoiPlayPercent / 100f, _petals, settings.GoldfishCount);   // the koi (and goldfish) nose at and eat the floating petals
+        _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng, settings.KoiPlayPercent / 100f, _petals, settings.GoldfishCount, settings.CatfishCount);   // the koi (and goldfish) nose at and eat the floating petals; the catfish keep to the bed
         _petals.Landed = (x, y) => _koi.Notice(x, y, petal: true);                                                                // and the hungry ones come when one settles
         _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _ripples, _rng);   // (the deep stencil too: a school that dips to the bed is drawn through it)
         _koi.Minnows = _minnows;   // the big koi may rush a school of minnows for the fun of it

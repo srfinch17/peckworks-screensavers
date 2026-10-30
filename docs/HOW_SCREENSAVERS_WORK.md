@@ -799,6 +799,36 @@ and the depth are what say "under". The idle drift of every fish reaches deeper 
 more fish willing to swim deeper": a koi's to 0.55 and 0.8 of the pond where it reached 0.4 and 0.6, a
 goldfish's to 0.38 where it reached 0.25).
 
+*A catfish is the same fish a third time* (`Koi.Kind.Catfish`, round forty-four, "a little more activity in the deep ...
+add something else down in the deep that im forgetting"). A bullhead: as long as a koi (0.1 to 0.14u), broad (half
+width 0.17 to 0.19 of the length) and flat (a height of 0.2 of its length, so it may lie closer to the bed than a
+koi), its `Profile` widest at the eyes a sixth of the way back with a blunt snout two thirds of that, the body stout
+to its middle and tapering to a stalk a third of the widest, a short rounded tail (1.22 lengths, a notch of 0.03),
+broad pectorals right behind the head, small eyes set wide on the flat top, and four whiskers (`Barbels`: two long
+ones from the corners of the mouth trailing back at about a hundred and twenty degrees off the nose, two short ones
+under the chin, thin dark ovals through the same depth test and haze as the body, swaying with the fin beat). Its
+colouring (`CatfishVariety`) is dark olive with darker ragged blotches and pale mottling; it takes a fifth less of the
+water's haze than a koi, because on the bed, under the pond's whole depth, every mid tone goes the water's way and a
+dark back without contrast was a shadow on a shadow (the first renders showed nothing where the log said a fish was).
+Its nature: born over bed at least 0.72 deep, every depth it asks for is at least 0.75 (`Depth`), it never gulps,
+bumps the surface or leaps, never goes to look at a petal or a tap (`Notice` returns at once), never visits the
+shallows, follows and chases no one (those faces of the dice are nought), forages 1.8 times as readily as a koi and
+rests on the bed for the koi's long rests, cruises at 0.22 to 0.4 of its length a second (half a koi's), and its
+idle wander keeps to the deep bed and to spots that are drawn on the screen (a spot low on the screen is drawn off
+it once sunk by the pond's depth). Two things its steering needed that a koi's did not (both found in the first
+logged runs): its feelers read the stacked room grid on ONE fixed floor, 0.6 (`WallZ`), because a bottom fish lives
+within a hair of its own cap, so the cap's floor turned round made every hollow and every mound's skirt a wall (it
+yo-yoed in mid water, Z 0.42 to 0.68 over a bed of 0.88) and a floor that followed its depth down a mound kept the
+hill just open all the way up (seed 3's catfish climbed a boulder's mound to a hair under the surface); and it never
+answers a wall with a climb (`_dodge` is held at nought when the feelers choose one), since shallower is always
+roomier in the stack and the climbs lifted it off the bed on 18 percent of frames. The bumps and the mounds' skirts
+it follows with the bed cap as a forager does; a slope too steep for its pace is refused at the step and answered by
+the creep and the jam's memory. Measured on the first build (120 s, three seeds): Z within 0.03 of its cap on
+average, no climbs, 1 to 4 refused frames in 7200, no confined spell over 1.8 s, in view 77 to 100 percent of the
+time. Its dice are its own (`KoiSchool` deals its dials and makes it from a Random seeded by the screen's size,
+after every koi and goldfish), so the knob moves no other fish and the same-scene gate holds against the build
+before it. The koi's log numbers it 200 and up.
+
 *Rigid animals turn as a whole.* A dragonfly or a swallow does not bend, so it is a picture
 painted once (several, for the wingbeat) and stamped at any angle every frame (`TurningStamp.cs`),
 reading the picture smoothly between its pixels so a slow turn never steps. Never flipped. The
@@ -1733,9 +1763,19 @@ tall hills at today's `Pond.DepthU` 0.6u and `Light.Sink` 0.55) is the owner's c
 Deeper also
 means lower on the screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier
 and lower. The painted bed shows through the deepest water by two fifths (`PondPainter.BedClear`,
-one curve for the pebbles and for a submerged stone), and the deep bed has small dark stones
-lying in its silt (`Pebbles`, rolled by their own dice so the scene's hold), so the deep is a
-place and not a flat colour. (Measured in a box of deep water, the earlier steps of that curve,
+one curve for the pebbles and for a submerged stone), and the deep bed is DRESSED (`DressBed`, round forty-four,
+rolled by its own dice so the scene's hold): the sand goes to an olive silt with a fine grain past a fifth of the
+depth; gravel bars of cobbles (each one of six stone colours filmed with its own share of algae, lit top left and
+shaded lower right, the rim turning under) with silt between; rubble at the foot of every boulder, densest
+against its painted edge and thinning down the mound over 0.16u, so the eye reads a boulder on a heap of stones
+where it read a bald lit dome; dead leaves in five browns, each with a midrib, lying at any angle; dark kinked
+twigs; and soft patches of algae green. All of it goes into the bed's ground picture BEFORE the water is laid
+over it, so `SinkBed` tints it by depth and sinks it with the bed. (From 2026-10-26 to round forty-four the deep
+bed was a scatter of small dark discs: alone on a flat field they read as polka dots, the one grain the owner has
+always called fake. The photographs of real pond bottoms that set this round's brief all have the same thing in
+common: a carpet of distinct things, algae on everything, leaves.) The water's own colour went green with it
+(`PondPainter.Deep` and `Shallow`: olive in the shallows to bottle green in the deep; the teal was a pool's), and
+a stone's flank is a third of the way to an algae olive (`StoneColour`). So the deep is a place and not a flat colour. (Measured in a box of deep water, the earlier steps of that curve,
 a twentieth to a twelfth, had moved the picture by about two grey levels: the bed's green-tinted
 colour is close to the deep water's own, and the deep bed was silt alone, with nothing to see
 through the water to. What the owner had been seeing change was the fish. Four asks in four
@@ -2003,7 +2043,7 @@ lowered by the stone's profile (`Lower`): at the surface on a COLLAR round the c
 radius wide), then THE ONE SHAPE OF A
 STONE (`PondPainter.StoneZ`, round forty-one, the review's step 2): the boulder's side falls at
 about forty-five degrees to a shoulder 0.12 of the pond's depth down at the stone's painted edge,
-and from there a mound slopes down to the bed over 0.28u. Until then the hill fell from the cap to
+and from there a mound slopes down to the bed over 0.24u (0.28u until round forty-four, when the run was tightened and a seven-lobed ripple put on its contour, `MoundShape.Rubble`, so the foot reads as a heap and not a dome). Until then the hill fell from the cap to
 the full bed within 0.05u of the stone's edge: 570 px of height over 102 px of run at 1080 lines,
 a column five times taller than wide, drawn 508 px tall under the pond's slant ("the current
 rocks look like 40 ft tall"). The mound is in the one terrain, so it is in the painted depth (the
