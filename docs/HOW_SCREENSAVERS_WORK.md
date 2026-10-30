@@ -1916,9 +1916,17 @@ its cap, in depth as well as in paint (2026-10-26 night, after the owner watched
 under the top, but over the bottom" and said "the top of the rock is just floating in the water"
 and "making the rock one object might be the way to go"). Its depth at every pixel is the hill
 the bed climbs under the swimmers (`Hill`): at the surface on a COLLAR round the cap (half a cap
-radius wide, read from the cap's painted rim so it follows the lumps), then down to full depth a
-little outside the stone. Nothing swims between the cap and its collar, because there is no water
-there. The stone is painted through that depth BY THE FISH'S OWN RULE (round forty-one): a point
+radius wide, read from the cap's painted rim so it follows the lumps), then THE ONE SHAPE OF A
+STONE (`PondPainter.StoneZ`, round forty-one, the review's step 2): the boulder's side falls at
+about forty-five degrees to a shoulder 0.12 of the pond's depth down at the stone's painted edge,
+and from there a mound slopes down to the bed over 0.28u. Until then the hill fell from the cap to
+the full bed within 0.05u of the stone's edge: 570 px of height over 102 px of run at 1080 lines,
+a column five times taller than wide, drawn 508 px tall under the pond's slant ("the current
+rocks look like 40 ft tall"). The mound is in the painted depth as well (`Mound`: the water is
+poured again over it from the bed kept before the first pour, so it shows as the shoal round a
+boulder, lit by its slope like every hump), in the bed the animals feel (`Hill`, the same
+function) and in the stone's own flank (`WrapIsland`). Nothing swims between the cap and its
+collar, because there is no water there. The stone is painted through that depth BY THE FISH'S OWN RULE (round forty-one): a point
 of the flank is the mound's colour (a mid grey, lit on the side facing the sun and shaded on the
 other, darker toward its silhouette as a cylinder is), deepened by the murk at its depth exactly
 as a koi is (`Body.Deepen`, darker and bluer per channel) and veiled by the same murk
@@ -1950,8 +1958,10 @@ drop shadow on the water as a dark wedge.) Along the cap's rim a dark line: the 
 the stone.
 The cap alone goes into the blockers: a wall to the koi, a thing for a turtle to haul out onto
 (the turtle reads the cap's painted shape from the blockers, not a circle). `Pond.Floor` climbs the
-stone's shoulders from full depth a little outside it to nothing at the collar, so a fish
-crossing it rises up and over and goes round the top, with its shadow on the stone. `Pond.Island`
+stone's mound and shoulder (the same `StoneZ`) to nothing at the collar, so a fish crossing it
+rises up and over the mound and goes round the top, with its shadow on the stone; only the
+boulder itself (the collar and its side, to the shoulder) is the koi's shoal wall now, the mound
+beyond is bed a fish rises over. `Pond.Island`
 holds the stone and its cap; `Pond.IslandPerch` and `Pond.LogPerch` say who is sitting on them.
 
 *The small rock formation (2026-10-23).* The owner's word: "remove the log entirely and instead give

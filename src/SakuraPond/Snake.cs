@@ -1187,6 +1187,10 @@ internal sealed class Snake : Body
         float excess = MathF.Abs(corner) - SharpestBend * d / _len;
         if (excess <= 1e-4f) return;
         float by = excess * MathF.Sign(corner);
+        // A strike is a snap by nature (the head shoots at the prey on the bank, the neck straightens after it), and its
+        // neck swings over the bank's edge: tested against the land there it could not bend and the launch's whole
+        // angle stayed as one 80 degree joint that slid down the body for four seconds after a miss (seed 3, 220 s).
+        if (_doing is Doing.Strike or Doing.Miss or Doing.Swallow) { Bend(head, by); _headingLaid = Wrap(_headingLaid + by); return; }
         for (int t = 0; t < 3; t++, by *= 0.5f)
             if (NeckClear(head, by)) { Bend(head, by); _headingLaid = Wrap(_headingLaid + by); return; }
         _headingLaid = _moveDir;                                                // hemmed in: the corner stays, and is not tried again until the head turns further
@@ -1231,7 +1235,7 @@ internal sealed class Snake : Body
             // the margin was "inside") and the drawn body kept a corner of 105 degrees sliding down it for four
             // seconds (seed 5, 195 s, the first three runs: the raw path's corner was 43 degrees, the DRAWN one 105).
             if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height) continue;
-            if (_pond.Land[iy * _pond.Width + ix] || Clear(rx, ry, edges: false) < 0 || (_trailZ[at] > 0.06f && _trailZ[at] > 0.9f * FloorZ(rx, ry))) return false;
+            if (_pond.Land[iy * _pond.Width + ix] || Clear(rx, ry, edges: false) < 0) return false;   // (the bed is not a wall to the bend: LaySpine caps every point to the bed under it; refused over a stone's mound the corner stayed)
         }
         return true;
     }

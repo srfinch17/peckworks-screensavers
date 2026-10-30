@@ -339,6 +339,7 @@ internal static class PondPainter
         // ---- 2: the water, pixel by pixel ----
         var depth = new byte[w * h];
         uint[] px = Read(bmp);
+        uint[] bedPx = (uint[])px.Clone();                   // the bed before the water: poured again over the stones' mounds below (round forty-one)
         PourWater(px, inPond, dist, depth, w, h, u);
         Write(bmp, px);
         Murk(g, inPond, w, h, u, rng);
@@ -378,28 +379,47 @@ internal static class PondPainter
         byte[] shade = BranchShadow(w, h, u, seed, shadowX, shadowY);
         Island? island = ShorePainter.PlaceIsland(inPond, dist, shade, log, w, h, u, rng);
         byte[] near = new byte[w * h];                   // the stones' drawn surface as nearness per screen pixel (Pond.Near), filled by the wraps below
+        // THE STONES ARE PLACED BEFORE ANY IS PAINTED, AND EACH STANDS ON A MOUND (round forty-one, the review's step 2:
+        // "the current rocks look like 40 ft tall"). Until now a stone's hill fell from its dry cap to the full bed within
+        // 0.05u of its painted edge: 570 px of height over 102 px of run at 1080 lines, a column five times taller than
+        // wide, drawn 508 px tall under the pond's slant. Now one profile (StoneZ) shapes every stone for the picture,
+        // the bed the animals feel and the stone's own flank: the collar at the surface, the boulder's side falling at
+        // about forty-five degrees to a shoulder 0.12 of the depth down at its painted edge, and from there a mound
+        // sloping to the bed over 0.35u. The mound is in the PAINTED depth too (the water poured again over it from
+        // the bed kept before the pour), so it shows as the shoal round a boulder that it is, lit by its slope like
+        // every hump of the bed (LightBed), and the fish rise over it. Placing both formations before the island is
+        // painted moves the painter's dice: a whole-scene change, said as one.
+        Formation? formation = fallenLog ? null : ShorePainter.PlaceFormation(inPond, dist, shade, island, w, h, u, rng);
+        Formation? formation2 = null;
+        Random? rng2 = null;
+        if (formation is Formation first)
+        {
+            rng2 = new Random(unchecked((int)first.Stone.Centre.X * 31 + (int)first.Stone.Centre.Y * 7 + w));
+            formation2 = ShorePainter.PlaceFormation(inPond, dist, shade, island, w, h, u, rng2, new RectangleF(0.5f, 0.08f, 0.45f, 0.42f), new PointF(w, 0), first.Stone);
+        }
+        {
+            uint[] sheet = Read(bmp);
+            if (island is Island mound) Mound(sheet, bedPx, depth, inPond, dist, mound.Cap, mound.CapRadius, mound.CapRadius * 0.5f, mound.Radius, w, h, u);
+            if (formation is Formation fm)
+                for (int k = 0; k < fm.Caps.Length; k++) Mound(sheet, bedPx, depth, inPond, dist, fm.Caps[k], fm.CapRadii[k], fm.CapRadii[0] * 0.4f, fm.Stone.Radius, w, h, u);
+            if (formation2 is Formation fm2)
+                for (int k = 0; k < fm2.Caps.Length; k++) Mound(sheet, bedPx, depth, inPond, dist, fm2.Caps[k], fm2.CapRadii[k], fm2.CapRadii[0] * 0.4f, fm2.Stone.Radius, w, h, u);
+            Write(bmp, sheet);
+        }
         if (island is Island isle)
         {
             uint[] beforeIsland = Read(bmp);
             bool[] stone = ShorePainter.IslandStone(g, isle, w, h, u, rng);
             bool[] cap = ShorePainter.IslandCap(g, gb, isle, w, h, u, rng);
-            WrapIsland(bmp, beforeIsland, stone, cap, isle, dist, isle.Radius + u * 0.05f, isle.CapRadius * 0.5f, near, w, h, u);   // the same hill the bed climbs (below): one shape for the picture and for the swimmers
+            WrapIsland(bmp, beforeIsland, stone, cap, isle, dist, isle.Radius + u * 0.05f, isle.CapRadius * 0.5f, near, w, h, u);   // the same profile the bed climbs (StoneZ): one shape for the picture and for the swimmers
             rocks.Add(new BankRock(isle.Cap, isle.CapRadius, InWater: true));   // the snake keeps off the cap; the lizard never sees an in-water rock
         }
-        // The small rock formation at the lower left, where the log lay (none while the log is on): the same
-        // painting as the island's, a stone going under with little dry caps, each cap a rock to every animal.
-        Formation? formation = fallenLog ? null : ShorePainter.PlaceFormation(inPond, dist, shade, island, w, h, u, rng);
-        // A second formation (2026-10-27, "i like the rocks we have. add one more"): the same thing in the upper right
-        // half, nearest the upper right corner, clear of the island and the first. Its dice are its own, seeded from
-        // the first formation's place, so every roll after it (the pads, the cattails, the irises) is what it was.
-        Formation? formation2 = null;
-        if (formation is Formation first)
+        if (formation is Formation firstForm)
         {
-            var rng2 = new Random(unchecked((int)first.Stone.Centre.X * 31 + (int)first.Stone.Centre.Y * 7 + w));
-            formation2 = ShorePainter.PlaceFormation(inPond, dist, shade, island, w, h, u, rng2, new RectangleF(0.5f, 0.08f, 0.45f, 0.42f), new PointF(w, 0), first.Stone);
-            PaintFormation(first, rng);
-            if (formation2 is Formation second) PaintFormation(second, rng2);
+            PaintFormation(firstForm, rng);
+            if (formation2 is Formation second) PaintFormation(second, rng2!);
         }
+
         // One stone with little dry caps, painted the island's way: the stone bare, each cap a rock of its own and a
         // blocker, the water wrapped over the union of the caps. The wrap reads the stone's depth from the nearest
         // cap's rim, so between two caps half a radius apart the stone stays shallow and in sight, one stone with two
@@ -562,11 +582,11 @@ internal static class PondPainter
         // bed under it is the lowest of the hills, so between two caps it stays
         // shallow.)
         var stoneShoal = new bool[w * h];                      // the hills' shoulders with too little water for a koi (StoneShoal)
-        if (island is Island hill) Hill(floor, stoneShoal, hill.Cap, hill.Radius + u * 0.05f, hill.CapRadius * 1.5f, w, h);
-        if (formation is Formation fm)
-            for (int k = 0; k < fm.Caps.Length; k++) Hill(floor, stoneShoal, fm.Caps[k], fm.Stone.Radius + u * 0.04f, fm.CapRadii[k] * 1.4f, w, h);
-        if (formation2 is Formation fm2)
-            for (int k = 0; k < fm2.Caps.Length; k++) Hill(floor, stoneShoal, fm2.Caps[k], fm2.Stone.Radius + u * 0.04f, fm2.CapRadii[k] * 1.4f, w, h);
+        if (island is Island hill) Hill(floor, stoneShoal, hill.Cap, hill.CapRadius, hill.CapRadius * 0.5f, hill.Radius, w, h, u);
+        if (formation is Formation fmh)
+            for (int k = 0; k < fmh.Caps.Length; k++) Hill(floor, stoneShoal, fmh.Caps[k], fmh.CapRadii[k], fmh.CapRadii[0] * 0.4f, fmh.Stone.Radius, w, h, u);
+        if (formation2 is Formation fm2h)
+            for (int k = 0; k < fm2h.Caps.Length; k++) Hill(floor, stoneShoal, fm2h.Caps[k], fm2h.CapRadii[k], fm2h.CapRadii[0] * 0.4f, fm2h.Stone.Radius, w, h, u);
         // The bed lit by its own shape (round forty): every hump and hollow shades the water over it. The painted
         // depth, not the floor: the stones' hills are far wider than the stones as painted (a hill reaches 0.05u past
         // the stone), and lit by their slope each stone sat in a big dark saucer; a stone's flank has its own shading
@@ -1323,20 +1343,73 @@ internal static class PondPainter
     /// </summary>
     /// <summary>Raises one hill into the bed (see the island note in Paint), and marks its shoulder where the water left
     /// over it is under 0.45 of the pond's depth (Pond.StoneShoal: a koi keeps off it).</summary>
-    private static void Hill(byte[] floor, bool[] shoal, PointF cap, float outer, float inner, int w, int h)
+    /// <summary>The shoulder of a stone: how deep the boulder's side has fallen by its painted edge, in Z (0.12 of the pond's depth: about forty-five degrees over the ring from the collar to the edge).</summary>
+    public const float ShoulderZ = 0.12f;
+    /// <summary>How far past its painted edge a stone's mound slopes down to the bed, in u (0.28u: about sixty degrees to the typical bed; at 0.35u the island's shoal was a pale disc near a screen height across).</summary>
+    public const float MoundU = 0.28f;
+
+    /// <summary>
+    /// THE ONE SHAPE OF A STONE (round forty-one): how deep the stone's surface is, in Z, at a ground distance r
+    /// from its cap's centre, for a cap of radius capR with a collar of width collar at the surface and a painted
+    /// footprint of radius footR. The collar is at the surface; the boulder's side falls, eased, to ShoulderZ at
+    /// the painted edge; beyond it the mound falls, eased, to the full depth over MoundU. The painter (the painted
+    /// depth, the stone's own flank in WrapIsland), the bed the animals feel (Floor, through Hill) and the koi's
+    /// shoal all read this, never a shape of their own. The caller takes the lower of this and the water's own
+    /// depth at the pixel (a stone near the bank stands in shallow water).
+    /// </summary>
+    public static float StoneZ(float r, float capR, float collar, float footR, float u)
     {
-        int x0 = Math.Max(0, (int)(cap.X - outer)), x1 = Math.Min(w - 1, (int)(cap.X + outer));
-        int y0 = Math.Max(0, (int)(cap.Y - outer)), y1 = Math.Min(h - 1, (int)(cap.Y + outer));
+        float side0 = capR + collar;
+        if (r <= side0) return 0;
+        if (r <= footR) { float t = (r - side0) / MathF.Max(1, footR - side0); return ShoulderZ * t * t * (3 - 2 * t); }
+        float m = (r - footR) / (MoundU * u);
+        if (m >= 1) return 1;
+        return ShoulderZ + (1 - ShoulderZ) * m * m * (3 - 2 * m);
+    }
+
+    /// <summary>
+    /// A stone's mound in the painted depth, with the water poured again over it (round forty-one): for every pond
+    /// pixel within the mound's reach of the cap, the depth is the lower of what it was and the stone's profile, and
+    /// where that lowered it the water is painted afresh from the bed kept before the first pour. The mound then
+    /// shows as the shoal round a boulder and LightBed lights its slope like any hump.
+    /// </summary>
+    private static void Mound(uint[] sheet, uint[] bedPx, byte[] depth, bool[] inPond, int[] dist, PointF cap, float capR, float collar, float footR, int w, int h, float u)
+    {
+        float reach = footR + MoundU * u + 2, full = u * 0.24f * 10;
+        int x0 = Math.Max(0, (int)(cap.X - reach)), x1 = Math.Min(w - 1, (int)(cap.X + reach));
+        int y0 = Math.Max(0, (int)(cap.Y - reach)), y1 = Math.Min(h - 1, (int)(cap.Y + reach));
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                int i = y * w + x;
+                if (!inPond[i]) continue;
+                float dx = x + 0.5f - cap.X, dy = y + 0.5f - cap.Y;
+                float z = StoneZ(MathF.Sqrt(dx * dx + dy * dy), capR, collar, footR, u);
+                if (z >= 1) continue;
+                float wd = Math.Clamp(dist[i] / full, 0, 1);
+                wd = wd * wd * (3 - 2 * wd);                                               // the water's own depth here, as PourWater shapes it from the bank
+                z = MathF.Min(z, wd);
+                int zb = (int)(z * 255);
+                if (zb >= depth[i]) continue;
+                depth[i] = (byte)zb;
+                sheet[i] = WaterOver(bedPx[i], z, BedClear(z), y, h, 1);
+            }
+    }
+
+    private static void Hill(byte[] floor, bool[] shoal, PointF cap, float capR, float collar, float footR, int w, int h, float u)
+    {
+        float reach = footR + MoundU * u + 2;
+        int x0 = Math.Max(0, (int)(cap.X - reach)), x1 = Math.Min(w - 1, (int)(cap.X + reach));
+        int y0 = Math.Max(0, (int)(cap.Y - reach)), y1 = Math.Min(h - 1, (int)(cap.Y + reach));
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++)
             {
                 float dx = x + 0.5f - cap.X, dy = y + 0.5f - cap.Y;
-                float d = (MathF.Sqrt(dx * dx + dy * dy) - inner) / (outer - inner);
-                if (d >= 1) continue;
-                float f = d <= 0 ? 0 : d * d * (3 - 2 * d);
+                float z = StoneZ(MathF.Sqrt(dx * dx + dy * dy), capR, collar, footR, u);
+                if (z >= 1) continue;
                 int i = y * w + x;
-                floor[i] = (byte)Math.Min(floor[i], (int)(f * 255));
-                if (f * Pond.DepthU < 0.243f) shoal[i] = true;   // (under 0.243u of water over the shoulder: 0.45 of the old 0.54u depth, the number round thirty-six set, kept in u when the depth changed)
+                floor[i] = (byte)Math.Min(floor[i], (int)(z * 255));
+                if (z <= ShoulderZ + 0.005f) shoal[i] = true;   // the boulder itself (collar and side) is the koi's shoal; the mound beyond is bed a fish rises over
             }
     }
 
@@ -1381,7 +1454,6 @@ internal static class PondPainter
         uint[] px = Read(bmp);                                                          // the stone and its cap, painted whole, each at its place on the ground
         uint[] outPx = (uint[])px.Clone();                                              // what the water leaves of them
         float edge = isle.Radius * 0.2f * 10, band = u * 0.012f * 10, full = u * 0.24f * 10;
-        float slope = MathF.Max(1, hillOuter - isle.CapRadius - collar);              // pixels from the collar's edge down to full depth
         float sinkMax = Light.SinkPx(1, u);                                            // how far down the screen the deepest part of the stone is drawn
         // The box: the stone, the drop shadows the rock painter threw down and to the right of it and of the
         // caps (0.05u, put back to water below), and the sunk flank under it. (A box of 1.5 radii left the far
@@ -1401,8 +1473,9 @@ internal static class PondPainter
         // than the water itself is (near the bank the pond is shallow and so is the stone).
         float DepthAt(int k)
         {
-            float hd = Math.Clamp((outCap[k] / 10f - collar) / slope, 0, 1);
-            float hill = hd * hd * (3 - 2 * hd);
+            // The one shape (StoneZ), read from the cap's PAINTED rim so the collar follows the cap's lumps: the
+            // distance out from the rim plus the cap's radius stands in for the distance from the cap's centre.
+            float hill = StoneZ(isle.CapRadius + outCap[k] / 10f, isle.CapRadius, collar, isle.Radius, u);
             float wd = Math.Clamp(dist[k] / full, 0, 1);
             wd = wd * wd * (3 - 2 * wd);
             return MathF.Min(hill, wd);

@@ -152,8 +152,8 @@ and drifts in a lull, so no two fall the same way.
   through a floating petal: whatever has its back up at the surface (a koi gulping or brushing
   it, a paddling turtle, the snake) shoves the petals in its way aside, and they glide off and
   slow; a fish swimming under them leaves them be.
-- **An island rock** stands out in the open water: a boulder that goes down deep, darker and
-  bluer the deeper it goes until the water hides it (never see-through: it covers the bed), with a small dry cap breaking the surface:
+- **An island rock** stands out in the open water: a boulder on a mound of the bed, darker and
+  bluer down its side until the shoal round it takes over (never see-through: it covers the bed), with a small dry cap breaking the surface:
   the cap's rim is wet, the stone just under the surface round it is a lit grey shoulder,
   and the stone is drawn sunk by its depth the way every fish is, so the dry top is the top of the
   same boulder and nothing swims between them; a fish deep behind the cap is hidden by it. Two

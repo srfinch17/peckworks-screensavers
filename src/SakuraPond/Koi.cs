@@ -1013,7 +1013,7 @@ internal sealed class Koi : Body
             prev = q;
             float dx = q.X - _x, dy = q.Y - _y;
             PointF r = ToScreen(_x + dx * c - dy * s, _y + dx * s + dy * c);
-            if (OnLand(r) || _trailZ[at] > CapOf(FloorAt(r))) return false;
+            if (OnLand(r)) return false;                                        // (the bed is not a wall to the sweep: LaySpine caps the swept body to the bed under it next frame, and refusing the sweep over a stone's mound laid a 135 degree corner into a foraging goldfish, round forty-one's step 2)
         }
         return true;
     }
