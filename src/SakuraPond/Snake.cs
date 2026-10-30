@@ -388,6 +388,7 @@ internal sealed class Snake : Body
         _travelled = 0; _alive = 0; _flee = 0; _calm.Start(0); _blocked = false; _blockedT = 0; _weaveAmp = 1;
         _trailCount = 0;
         _crumbCount = 0; _wayN = _wayI = 0;
+        _moveDir = _heading; _zRate = 0; _weaveDir = _heading;
         // Its body starts laid out straight behind it, off the screen.
         for (int i = 60; i >= 0; i--) Remember(new PointF(_x - MathF.Cos(_heading) * _len * 1.2f * i / 60, _y - MathF.Sin(_heading) * _len * 1.2f * i / 60));
         _live = true;
@@ -1113,6 +1114,7 @@ internal sealed class Snake : Body
         for (int i = Points - 1; i >= 0; i--) Remember(Spine[i]);
         _x = Spine[0].X; _y = Spine[0].Y;
         _heading = Wrap(_pond.Log!.Value.Angle + (_logDir < 0 ? MathF.PI : 0));
+        _moveDir = _heading; _headingLaid = _heading; _weaveDir = _heading;
         _weaveAmp = 0;                                      // eases back to a full weave, so the head does not jump sideways
         _phase = 3; _slipFrom = _travelled; _mind.Left = 10; _blocked = false;
         _speed = _cruise * 0.8f;                            // it slides off at once; it has been lying there long enough
@@ -1149,6 +1151,107 @@ internal sealed class Snake : Body
         _trail[_trailHead] = p;
         _trailZ[_trailHead] = _zHead;
         _trailCount = Math.Min(_trail.Length, _trailCount + 1);
+        _headingLaid = _moveDir;
+    }
+
+    /// <summary>The direction the newest trail point was laid along (the way the head moved, or its heading when still): re-based at every Remember, and moved by BendNeck as it takes a turn into the neck.</summary>
+    private float _headingLaid;
+    /// <summary>The way the head really moved this frame (set in Update before BendNeck); its heading when it stood still or was just placed.</summary>
+    private float _moveDir;
+    /// <summary>How fast the head is going down (positive) or up, depth units a second: eased, so a dive's pitch comes on over a second.</summary>
+    private float _zRate;
+    /// <summary>The direction the weave's sideways offset hangs off: follows the heading at no more than 1.5 radians a second.</summary>
+    private float _weaveDir;
+    /// <summary>The tightest bend the trail may take, radians per body length: the turning circle's own number (a circle 0.3 of a length in radius).</summary>
+    private const float SharpestBend = 3.3f;
+    /// <summary>How far back from the head a turn on the spot is bent into: the neck, four tenths of the body.</summary>
+    private const float NeckShare = 0.4f;
+
+    /// <summary>
+    /// A TURN ON THE SPOT BENDS THE NECK (round forty-one, the koi's SweepBody for a snake). The body is laid along
+    /// the trail the head swam, so a head that turned while standing still (a swallow on the bank: the steering kept
+    /// turning the head at its floor of 0.42 radians a second for the six seconds the mouthful took, 97 degrees in
+    /// all; a step refused at a stone's hill with the heading still turning toward the way out) laid the whole angle
+    /// into ONE corner of the trail, and the corner slid down the body as it moved off ("a snake on the bottom make a
+    /// 90 turn ... near a rock"). A snake that turns its head without moving bends its neck: the front of the body
+    /// curves round after the head and the rest lies where it was. So each frame the heading is compared with the
+    /// heading the newest trail point was laid at, and the excess over the tightest bend the trail may take for the
+    /// distance moved since (SharpestBend, the turning circle's own number: a snake that is moving never triggers
+    /// this, its steering holds the same floor) turns the trail's points about the head by that excess, fully at
+    /// the head and fading to nothing four tenths of a length back. The bent neck is tested where it lands (land,
+    /// the stones' circles, the bed at each point's depth): blocked, half the bend, a quarter, or none (the old
+    /// corner, in a snake wedged in a pocket). The koi, stiff, swings its whole body as a rod instead.
+    /// </summary>
+    private void BendNeck(PointF head)
+    {
+        if (_trailCount < 2) return;
+        float d = Dist(head, _trail[_trailHead]);
+        float corner = Wrap(_moveDir - _headingLaid);
+        float excess = MathF.Abs(corner) - SharpestBend * d / _len;
+        if (excess <= 1e-4f) return;
+        float by = excess * MathF.Sign(corner);
+        for (int t = 0; t < 3; t++, by *= 0.5f)
+            if (NeckClear(head, by)) { Bend(head, by); _headingLaid = Wrap(_headingLaid + by); return; }
+        _headingLaid = _moveDir;                                                // hemmed in: the corner stays, and is not tried again until the head turns further
+    }
+
+    /// <summary>The sharpest joint of the drawn spine as laid last frame, in degrees (the angle between one segment and the next, segments under half a pixel skipped), and which joint. For the log alone.</summary>
+    private float SharpestJoint(out int at)
+    {
+        float worst = 0; at = -1;
+        for (int i = 1; i < Points - 1; i++)
+        {
+            float ax = Spine[i].X - Spine[i - 1].X, ay = Spine[i].Y - Spine[i - 1].Y, bx = Spine[i + 1].X - Spine[i].X, by = Spine[i + 1].Y - Spine[i].Y;
+            float la = MathF.Sqrt(ax * ax + ay * ay), lb = MathF.Sqrt(bx * bx + by * by);
+            if (la < 0.5f || lb < 0.5f) continue;
+            float c = Math.Clamp((ax * bx + ay * by) / (la * lb), -1f, 1f);
+            float ang = MathF.Acos(c) * 180f / MathF.PI;
+            if (ang > worst) { worst = ang; at = i; }
+        }
+        return worst;
+    }
+
+    /// <summary>The bend's weight at a point this far back along the trail: 1 at the head, 0 at the neck's end, eased.</summary>
+    private float NeckWeight(float back) { float k = Math.Clamp(1 - back / (NeckShare * _len), 0f, 1f); return k * k; }
+
+    /// <summary>Would the neck, bent about the head by this angle, land clear of land, the stones' circles and the bed at each point's depth?</summary>
+    private bool NeckClear(PointF head, float by)
+    {
+        float run = 0; PointF prev = head;
+        for (int i = 0; i < _trailCount && run < NeckShare * _len; i++)
+        {
+            int at = (_trailHead - i + _trail.Length) % _trail.Length;
+            PointF q = _trail[at];
+            run += Dist(prev, q); prev = q;
+            float a = by * NeckWeight(run), c = MathF.Cos(a), s = MathF.Sin(a);
+            float dx = q.X - head.X, dy = q.Y - head.Y;
+            float rx = head.X + dx * c - dy * s, ry = head.Y + dx * s + dy * c;
+            int ix = (int)rx, iy = (int)ry;
+            // Only a point ON the picture is tested, and without the picture's edge wall (Clear's edges: false): that
+            // wall, with its margin of 0.03u, is for the head (an explorer stays on the picture), not the body, which
+            // trails off the edge on every entry, and off the picture the bed reads 0. Tested with the wall, a deep
+            // snake entering at the top edge and walking out of the wall could not bend its neck (every neck point in
+            // the margin was "inside") and the drawn body kept a corner of 105 degrees sliding down it for four
+            // seconds (seed 5, 195 s, the first three runs: the raw path's corner was 43 degrees, the DRAWN one 105).
+            if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height) continue;
+            if (_pond.Land[iy * _pond.Width + ix] || Clear(rx, ry, edges: false) < 0 || (_trailZ[at] > 0.06f && _trailZ[at] > 0.9f * FloorZ(rx, ry))) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Turn the trail's points about the head by this angle, weighted by NeckWeight along the trail.</summary>
+    private void Bend(PointF head, float by)
+    {
+        float run = 0; PointF prev = head;
+        for (int i = 0; i < _trailCount && run < NeckShare * _len; i++)
+        {
+            int at = (_trailHead - i + _trail.Length) % _trail.Length;
+            PointF q = _trail[at];
+            run += Dist(prev, q); prev = q;
+            float a = by * NeckWeight(run), c = MathF.Cos(a), s = MathF.Sin(a);
+            float dx = q.X - head.X, dy = q.Y - head.Y;
+            _trail[at] = new PointF(head.X + dx * c - dy * s, head.Y + dx * s + dy * c);
+        }
     }
 
     /// <summary>
@@ -1165,7 +1268,7 @@ internal sealed class Snake : Body
 
     private int _padObs;                                    // the first _padObs obstacles are the lily pads
 
-    private float Clear(float px, float py)
+    private float Clear(float px, float py, bool edges = true)
     {
         float best = _u;
         for (int i = 0; i < _obsCentre.Length; i++)
@@ -1203,7 +1306,7 @@ internal sealed class Snake : Body
         // the bank rocks, under the bottom edge, and ran east BELOW the picture for a thousand pixels, the goal's pull too weak
         // to bend it back. The exit edge stays open, so the crossing can leave.
         // A retreat along its crumbs has no walls: the crumbs were laid without them (a prowl's may lie a little off the picture).
-        if ((_doing == Doing.Explore && _phase == 0 || _doing is Doing.Cross or Doing.Snatch) && !Retreating && _x >= 0 && _y >= 0 && _x < _pond.Width && _y < _pond.Height)
+        if (edges && (_doing == Doing.Explore && _phase == 0 || _doing is Doing.Cross or Doing.Snatch) && !Retreating && _x >= 0 && _y >= 0 && _x < _pond.Width && _y < _pond.Height)
         {
             float wall = _u;
             if (!(_doing == Doing.Cross && _goal.X < 0)) wall = MathF.Min(wall, px);
@@ -1302,9 +1405,24 @@ internal sealed class Snake : Body
         float aheadPx = _u * 0.06f;
         float bedZ = MathF.Max(0, 0.9f * MathF.Min(FloorZ(_x, _y), FloorZ(_x + MathF.Cos(_heading) * aheadPx, _y + MathF.Sin(_heading) * aheadPx)) - 0.05f);
         bool onBed = _doing == Doing.Snatch && _snatch.Hunting && _snatch.Prey.Stage >= 6;   // after a dweller of the deep bed: the head goes down to it four times as fast as a dive eases (the chase is eight seconds; at the dive's ease the head was still a reach above the prey when the patience ran out)
-        _zHead += (MathF.Min(_zTarget, bedZ) - _zHead) * (1 - MathF.Exp(-dt * (onBed ? 1f : 0.25f)));
-        if (_zHead > bedZ) _zHead = MathF.Max(bedZ, _zHead - 0.2f * dt);              // too deep for the bed ahead: up at a set rate, not the slow ease (which never got there while the step stood refused)              // too deep for the bed ahead: up at a set rate, not the slow ease (which never got there while the step stood refused)
-        MotionLog?.Invoke(FormattableString.Invariant($"F,{_clock:F3},{_doing},{_phase},{_x:F1},{_y:F1},{_zHead:F3},{_zTarget:F2},{_speed:F1},{HuntNote},{(_blocked ? 1 : 0)},{bedZ:F3},{_heading:F3},{_drawnLen / _len:F3},{_capped}"));   // (round forty added the heading, the drawn body's length over its own, and how many points the bed lifted last frame: the stretch and the swim-through, in numbers)
+        // THE DIVE'S PITCH COMES ON OVER A SECOND (round forty-one): an exponential ease is fastest at its first frame, so
+        // the head went from level to its full dive slope (40 degrees of pitch at a cruise) in one frame, and that
+        // corner in the trail's depth profile was drawn as a joint of 30 to 50 degrees at the neck that slid down the
+        // body for a second as the head went under (seed 3, 44.3 s: the same kink as a turn laid on the spot, in
+        // the vertical). So the RATE of descent eases toward the ease's own rate, and the pitch ramps.
+        float rateWant = (MathF.Min(_zTarget, bedZ) - _zHead) * (onBed ? 1f : 0.25f);   // the old ease's rate, depth units a second
+        float pitchMost = _speed / (Pond.DepthU * _u);                                    // forty-five degrees of pitch at the speed it is going (the body is laid at no more, LaySpine)
+        rateWant = Math.Clamp(rateWant, -pitchMost, pitchMost);
+        _zRate += (rateWant - _zRate) * (1 - MathF.Exp(-dt * 1.5f));
+        _zHead = MathF.Max(0, _zHead + _zRate * dt);
+        // Too deep for the bed ahead: up at a set rate, not the slow ease (which never got there while the step stood
+        // refused); moving, no steeper than the pitch above (a climb steeper than the body is laid at was a corner).
+        if (_zHead > bedZ) { _zHead = MathF.Max(bedZ, _zHead - (_blocked ? 0.2f * dt : MathF.Min(0.2f * dt, pitchMost * dt))); _zRate = MathF.Min(_zRate, 0); }
+        if (MotionLog != null)
+        {
+            float sharp = SharpestJoint(out int at);
+            MotionLog(FormattableString.Invariant($"F,{_clock:F3},{_doing},{_phase},{_x:F1},{_y:F1},{_zHead:F3},{_zTarget:F2},{_speed:F1},{HuntNote},{(_blocked ? 1 : 0)},{bedZ:F3},{_heading:F3},{_drawnLen / _len:F3},{_capped},{sharp:F1},{at}"));   // (round forty added the heading, the drawn body's length over its own, and how many points the bed lifted last frame: the stretch and the swim-through, in numbers; forty-one the sharpest joint of the DRAWN spine in degrees and its index: the head's own path is not the body's once the neck bends, so a corner is measured on the picture)
+        }
 
         // ---- A touch from another animal: startle ----
         // A bold snake feels a touch only when it is close (0.035u), a nervous one
@@ -1473,6 +1591,7 @@ internal sealed class Snake : Body
         }
 
         // ---- Forward, unless the next step would be inside something ----
+        float oldX = _x, oldY = _y;                                               // (where the head was, for the way it really moved this frame: BendNeck)
         float step = _speed * dt;
         float nx = _x + MathF.Cos(_heading) * step, ny = _y + MathF.Sin(_heading) * step;
         float clearNext = Clear(nx, ny);
@@ -1558,8 +1677,20 @@ internal sealed class Snake : Body
         // does not hang off to one side of a held pose, and opens when it moves.
         _weaveGate += ((_speed > _cruise * 0.15f ? 1f : 0f) - _weaveGate) * (1 - MathF.Exp(-dt * 8f));
         float weave = _len * 0.085f * _weaveAmp * _weaveGate * MathF.Sin(_travelled / (_len * 0.65f) * MathF.Tau);
-        float hx = MathF.Cos(_heading), hy = MathF.Sin(_heading);
+        // The weave's sideways offset hangs off a direction that FOLLOWS the heading at no more than 1.5 radians a
+        // second (round forty-one): hung off the heading itself, a heading that swung 50 degrees in a sixth of a second
+        // (the walk out of the picture's edge wall, 4 radians a second) swung the offset's 18 px round with it, a
+        // sideways hook of the head laid into the trail as a corner of 105 degrees at the neck that slid down the body
+        // for four seconds (seed 5, 195 s, dive stress), while the head's own path turned only 43. The neck bend could
+        // not take it out: the corner was never between the path and the heading, it was in the weave.
+        _weaveDir = Wrap(_weaveDir + Math.Clamp(Wrap(_heading - _weaveDir), -1.5f * dt, 1.5f * dt));
+        float hx = MathF.Cos(_weaveDir), hy = MathF.Sin(_weaveDir);
         var head = new PointF(_x - hy * weave, _y + hx * weave * Ripples.Squash);
+        // The way the head really moved this frame (the walk out of an obstacle steps along the clearance's uphill, not
+        // the heading: judged by the heading alone a deep head walking out of a hill laid the walk-out's corner, 43
+        // degrees at the picture's edge wall on seed 5); standing still, the heading itself.
+        _moveDir = (_x - oldX) * (_x - oldX) + (_y - oldY) * (_y - oldY) > 1e-6f ? MathF.Atan2(_y - oldY, _x - oldX) : _heading;
+        BendNeck(head);                                                         // a head that turned faster than its path bends curves the neck round after it (no corner laid)
         if (Dist(head, _trail[_trailHead]) > _len / 150) Remember(head);
 
         // A frightened snake thrashes: rings pushed out from its head while it flees. (Until 2026-10-23 it
@@ -1686,7 +1817,10 @@ internal sealed class Snake : Body
         // than the ground distance between them times 1.7 (a slope of sixty degrees, as steep as a snake dives), run
         // once each way along the body, so a point lifted by the bed lifts a smooth ramp of the body beside it. The
         // pass only ever makes a point shallower, so nothing it does puts a point back under the bed.
-        float slope = 1.7f * (_len / (Points - 1)) / zPx;
+        // (1.7, sixty degrees, until round forty-one: a body draped over the island's shoulder by the cap was drawn with a
+        // joint of 50 to 81 degrees at the bend, the sink and the squash sharpening a sixty degree pitch past a right
+        // angle on the picture; at forty-five degrees of pitch the drawn bend stays under thirty.)
+        float slope = 1.0f * (_len / (Points - 1)) / zPx;
         for (int i = 1; i < Points; i++) _zAt[i] = MathF.Min(_zAt[i], _zAt[i - 1] + slope);
         for (int i = Points - 2; i >= 0; i--) _zAt[i] = MathF.Min(_zAt[i], _zAt[i + 1] + slope);
         _drawnLen = 0;

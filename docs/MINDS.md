@@ -155,7 +155,22 @@ These are in the code comments too; here they are in one place.
   head a pixel in a frame and read as a turn. The metric is the sharpest joint of the logged spine per
   frame (kit `motion/pond41/kink41.py`), and a depth change on a refused frame is all drift (`made`): judged
   against the step the fish meant to make, a rising stand laid a vertical trail segment at the head and the
-  drawn head pointed wherever two coincident points said. MEASURED (kinkB, 720p, 300 s natural): seed 3's sharpest joint 93 to 34.5 degrees, frames over 45 degrees 158 to 0, over 25 degrees 794 to 168, episodes within two seconds of a refusal 60 to 3, the drawn head against the steered heading while refused p90 35 to 13 degrees and max 99 to 19; seed 5 (no pivot corner before either) worst 40 both ways, all at the tail base in hard turns at cruise; no confined spell over 10 s on either seed (longest 5.0 and 5.9 s, resting).
+  drawn head pointed wherever two coincident points said. THE SNAKE BENDS ITS NECK instead (`Snake.BendNeck`,
+  his next line the same evening: "a snake on the bottom make a 90 turn ... near a rock"): a swallow on the
+  bank stood six seconds with the steering turning the head at its floor, 97 degrees in all, laid as one
+  corner when it moved off (kit `snakekink41.py`, the trail's own corners from the logged head: 493 frames
+  over 30 degrees on one dive-stress seed, none after); the excess over the same bend fades out four tenths
+  of a length back, and is judged against the way the head MOVED, not its heading, because the walk out of
+  an obstacle steps along the clearance's uphill (a 43 degree corner at the picture's edge wall). Two corners
+  the neck bend cannot see, found by logging the DRAWN spine's sharpest joint: an offset hung off the heading (the
+  snake's weave, 18 px) swings round with a fast heading swing, a sideways hook of the head laid into the trail
+  (105 degrees on the picture where the path turned 43): hang it off a direction that follows the heading at a
+  rate (`_weaveDir`, 1.5 rad/s). And an exponential ease of depth is fastest at its first frame, so a dive's pitch
+  came on in one frame and the sink drew the corner in the depth profile as a joint of 30 to 51 degrees sliding
+  down the body: ease the RATE of descent (`_zRate`). And a body draped over a stone's shoulder by the bed cap
+  at sixty degrees of pitch was a joint of 50 to 81 degrees on the picture (the sink and the squash sharpen it):
+  forty-five degrees of pitch at most, laid and swum (the one that fits "a snake on the bottom make a 90 turn ...
+  near a rock"). MEASURED (kinkB, 720p, 300 s natural): seed 3's sharpest joint 93 to 34.5 degrees, frames over 45 degrees 158 to 0, over 25 degrees 794 to 168, episodes within two seconds of a refusal 60 to 3, the drawn head against the steered heading while refused p90 35 to 13 degrees and max 99 to 19; seed 5 (no pivot corner before either) worst 40 both ways, all at the tail base in hard turns at cruise; no confined spell over 10 s on either seed (longest 5.0 and 5.9 s, resting).
 - **A frightened small thing turns and accelerates at a rate, not in a frame (round forty).** The
   tadpole's flight turned at 30 radians a second (a whole-body snap of 29 degrees in one frame: one frame
   in a hundred) and went from nought to six lengths a second in one frame (nine hundred times in five

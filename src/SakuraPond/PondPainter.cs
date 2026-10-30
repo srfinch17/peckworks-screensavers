@@ -897,6 +897,50 @@ internal static class PondPainter
     private static float BedClear(float d) => 0.4f + 0.48f * (1 - d);
 
     /// <summary>
+    /// The three colour channels of a box of the sheet, box-blurred (two passes, radius r) within the box: the
+    /// local colour of the water with its pebbles averaged out. Indexed (y - y0) * (x1 - x0 + 1) + (x - x0).
+    /// </summary>
+    private static (float[], float[], float[]) BlurBox(uint[] src, int w, int x0, int y0, int x1, int y1, int r)
+    {
+        int bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+        float[][] ch = [new float[bw * bh], new float[bw * bh], new float[bw * bh]];
+        for (int y = 0; y < bh; y++)
+            for (int x = 0; x < bw; x++)
+            {
+                uint c = src[(y + y0) * w + x + x0];
+                ch[0][y * bw + x] = (c >> 16) & 0xFF; ch[1][y * bw + x] = (c >> 8) & 0xFF; ch[2][y * bw + x] = c & 0xFF;
+            }
+        var tmp = new float[bw * bh];
+        foreach (float[] a in ch)
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int y = 0; y < bh; y++)
+                {
+                    int row = y * bw; float sum = 0; int n = 0;
+                    for (int x = 0; x < Math.Min(bw, r); x++) { sum += a[row + x]; n++; }
+                    for (int x = 0; x < bw; x++)
+                    {
+                        if (x + r < bw) { sum += a[row + x + r]; n++; }
+                        if (x - r - 1 >= 0) { sum -= a[row + x - r - 1]; n--; }
+                        tmp[row + x] = sum / n;
+                    }
+                }
+                for (int x = 0; x < bw; x++)
+                {
+                    float sum = 0; int n = 0;
+                    for (int y = 0; y < Math.Min(bh, r); y++) { sum += tmp[y * bw + x]; n++; }
+                    for (int y = 0; y < bh; y++)
+                    {
+                        if (y + r < bh) { sum += tmp[(y + r) * bw + x]; n++; }
+                        if (y - r - 1 >= 0) { sum -= tmp[(y - r - 1) * bw + x]; n--; }
+                        a[y * bw + x] = sum / n;
+                    }
+                }
+            }
+        return (ch[0], ch[1], ch[2]);
+    }
+
+    /// <summary>
     /// The water laid over one pixel of the bed: the water's own colour at
     /// depth d (clear teal near the edge, dark teal in the middle), the bed
     /// under it green-tinted and showing through by "clear" (BedClear, or less
@@ -1383,6 +1427,13 @@ internal static class PondPainter
         //    the stone's upper flank, which stands above it, and the cap looked to float.)
         float[] zbuf = new float[bw * (y1 - y0 + 1)];
         Array.Fill(zbuf, 2f);
+        // THE WATER THE MOUND FADES INTO IS THE WATER'S COLOUR, NOT THE PEBBLES UNDER IT (round forty-one, "transparent
+        // rocks on the slope by the edge in the water. you can see right through them"): mixed toward the backdrop pixel
+        // it covers, the stone's flank showed every pebble of the bed through itself, a pale ghost over the gravel, and the
+        // fish steering round its shoal looked to be dodging nothing. A boulder covers the bed. So the flank is mixed toward
+        // the water AROUND it with the bed's texture averaged out: the backdrop blurred over 0.03u, which keeps the
+        // teal of the deep and the green of the shallows where each is, and loses the pebbles.
+        (float[] waterR, float[] waterG, float[] waterB) = BlurBox(before, w, x0, y0, x1, y1, Math.Max(2, (int)(u * 0.03f)));
         // THE MOUND'S OWN COLOUR (round forty, "take a hard look at the rocks ... looked cut off"): the stone used to be
         // the flat rock painting (a dry rock's lit face, shaded face, creases and grain) sunk row by row, and sinking
         // stretches the lower flank three times over: the grain became vertical streaks, a crease a long diagonal
@@ -1404,59 +1455,71 @@ internal static class PondPainter
         // The painting's average carries its shaded faces, so it is darker than the stone's lit top; the mound's base is
         // that hue brought up to a pale stone's brightness (155 of 255: a wet grey-green boulder in the sun), and the depth
         // darkening below does the rest. (The first run of the mound used the average as it was: a black pillar.)
-        float lum0 = (baseR * 77 + baseG * 150 + baseB * 29) / 256f, lift = lum0 > 1 ? 155f / lum0 : 1;
+        float lum0 = (baseR * 77 + baseG * 150 + baseB * 29) / 256f, lift = lum0 > 1 ? 110f / lum0 : 1;   // (155 until round forty-one: with the flank no longer faded out by 0.42 of the depth, a pale base was a white column; a wet boulder under the water is a mid grey, 110, lit and shaded by its hill)
         baseR = MathF.Min(255, baseR * lift); baseG = MathF.Min(255, baseG * lift); baseB = MathF.Min(255, baseB * lift);
         float zPx = Pond.DepthU * u;                                                   // pixels of depth per unit of Z, for the slope
+        // THE FLANK'S COLOUR FOLLOWS THE FISH'S OWN RULE (round forty-one, "transparent rocks ... you can see right
+        // through them"): until now the flank was mixed toward the water by a fade of its own that reached nothing by
+        // 0.42 of the depth, so it was gone into the water's colour before its darkening could show, and the whole
+        // sunk flank was a pale veil the colour of the water, with the bed's pebbles through it: glass. A boulder is
+        // the one thing in the pond that is not see-through. Now a point of the flank is the mound's lit colour,
+        // deepened by the murk at its depth exactly as a koi is (Body.Deepen: darker and bluer per channel, never
+        // paler) and veiled by the same murk (Light.Murk) toward the water around it, pebbles averaged out; the only
+        // fade of its own is at its painted edge. Its foot, at the bed's depth, is as dark as the deep bed round it,
+        // which is where a boulder's foot goes. The stone is a tall thing in deep water: the sunk flank below the cap
+        // is the honest picture of that under the pond's slant, and a dark flank under a lit top reads as a boulder
+        // where a pale one read as a ghost.
+        // Each ground pixel's colour and depth first (the box), so the fill can blend between a ground row and the
+        // next across the rows the sink stretches them over: filled with one row's colour, the stretch showed as
+        // stairs of three rows along the island's lit flank.
+        int bh = y1 - y0 + 1;
+        float[] cR = new float[bw * bh], cG = new float[bw * bh], cB = new float[bw * bh], cD = new float[bw * bh], cA = new float[bw * bh];
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++)
             {
-                int i = y * w + x;
+                int i = y * w + x, k = (y - y0) * bw + (x - x0);
+                cA[k] = -1;                                                               // no stone here
                 if (!stone[i] || cap[i]) continue;
                 float depth = DepthAt(i);
-                // The hill's slope here (depth per pixel, as a slope in u per u), and how much it faces the sun.
-                float gx = (DepthAt(Math.Min(i + 2, px.Length - 1)) - DepthAt(Math.Max(i - 2, 0))) * zPx / 4f;
-                float gy = (DepthAt(Math.Min(i + 2 * w, px.Length - 1)) - DepthAt(Math.Max(i - 2 * w, 0))) * zPx / 4f;
-                float lit = 1 - Math.Clamp(gx * 0.6f + gy * 0.8f, -0.3f, 0.3f);       // rising toward the sun: lit; falling away: shaded
+                // The hill's slope here (depth per pixel), and how much it faces the sun (up and left, the bed's rule).
+                float gx = (DepthAt(Math.Min(i + 3, px.Length - 1)) - DepthAt(Math.Max(i - 3, 0))) * zPx / 6f;
+                float gy = (DepthAt(Math.Min(i + 3 * w, px.Length - 1)) - DepthAt(Math.Max(i - 3 * w, 0))) * zPx / 6f;
+                float lit = 1 - Math.Clamp(gx * 0.6f + gy * 0.8f, -0.3f, 0.3f);
+                // And the roundness: a boulder's flank turns away from the eye toward its silhouette, so it darkens
+                // there the way a cylinder does, from the painted edge in over three tenths of the radius. Lit by
+                // the sun's side alone the column was a flat grey slab ("tombstones" on the first solid render).
+                float round = MathF.Sqrt(Math.Clamp(inStone[i] / (edge * 1.5f), 0, 1));
+                lit *= 0.55f + 0.45f * round;
                 int r = (int)(baseR * lit), g = (int)(baseG * lit), b = (int)(baseB * lit);
-                // How much of the stone shows through that much water, from the bed's own curve
-                // (BedClear, one curve for the pebbles and the stone) with the stone's faster fade
-                // below, and fading out over the last fifth of the stone's radius from its own
-                // painted edge so the painting ends in water and not a step.
-                float kEdge = 1 - Math.Clamp(inStone[i] / (edge * 1.75f), 0, 1);   // (the fade from the painted edge 0.2 of the radius until round forty; 0.35 now, a mound's foot dissolves, it does not stop)
-                // The flank darkens fast going down, red most and blue least (it slopes away from
-                // the light, and the water takes the warm colours first), and the murk takes it
-                // faster than it takes the flat bed: a bright collar, a dark slope, then water by
-                // half the pond's depth, which is where the painted stone ends. (Through the bed's
-                // recipe alone a flat grey stone at half depth was lighter than the deep water
-                // round it, and the whole mound was a pale green ghost with a cap on it: the first
-                // two renders of this change. A boulder rising out of murky water is seen at its
-                // top and lost on the way down; the bed's own curve is for a bed lit from above.)
-                float dk = Math.Clamp(depth / 0.42f, 0, 1);   // (0.55 until round forty: the sunk flank reached 200 px down the screen as a dark pillar; a boulder's deep flank is lost in the murk sooner than its top, and the eye sees a rounded top, not a column)
-                dk = dk * dk * (3 - 2 * dk);
-                float clear = BedClear(depth) * (1 - dk) * (1 - dk) * (1 - kEdge * kEdge);
-                float line = Math.Clamp(1 - outCap[i] / band, 0, 1) * 0.2f;         // the dark line where the surface meets the stone
-                // The stone's colour under the water: green-tinted as the bed is (WaterOver's tint),
-                // darkened for its depth, and the surface's dark line at the cap's rim. It is mixed
-                // toward the water AROUND it (the pixel the water wrap painted there, dark teal out
-                // in the deep), never toward the pond's colour for water of the mound's own depth:
-                // that colour is the pale green of the shallows, and a mound of pale shallow-water
-                // colour in the dark deep was the ghost the first renders showed (the water over a
-                // boulder is shallow, but the eye reads the pond's colour as the water's, and the
-                // stone's own fade below is what says "deep" instead).
-                float sr = r * (1 - 0.8f * dk) * 0.62f * (1 - line), sg = g * (1 - 0.72f * dk) * 0.8f * (1 - line), sb = b * (1 - 0.62f * dk) * 0.74f * (1 - line);
-                float sink = depth * sinkMax;
-                float sinkBelow = y < y1 && stone[i + w] && !cap[i + w] ? DepthAt(i + w) * sinkMax : sink;
+                float murk = Light.Murk(depth);
+                Body.Deepen(ref r, ref g, ref b, (int)(murk * 256));
+                float kEdge = 1 - Math.Clamp(inStone[i] / (edge * 1.75f), 0, 1);           // the mound's foot dissolves over 0.35 of the radius from its painted edge
+                float line = Math.Clamp(1 - outCap[i] / band, 0, 1) * 0.2f;                 // the dark line where the surface meets the stone
+                cR[k] = r * 0.9f * (1 - line); cG[k] = g * (1 - line); cB[k] = b * (1 - line);   // (the green cast of the water, lightly)
+                cD[k] = depth;
+                cA[k] = (1 - murk) * (1 - kEdge * kEdge);
+            }
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                int k = (y - y0) * bw + (x - x0);
+                if (cA[k] < 0) continue;
+                int kn = y < y1 && cA[k + bw] >= 0 ? k + bw : k;                            // the ground row below, where the stone goes on
+                float sink = cD[k] * sinkMax, sinkBelow = cD[kn] * sinkMax;
                 int sy0 = y + (int)sink, sy1 = Math.Max(sy0, y + (int)sinkBelow);
                 for (int sy = sy0; sy <= sy1 && sy <= y1; sy++)
                 {
                     int j = sy * w + x;
                     if (cap[j]) continue;                                               // the dry top is nearest the eye of all: nothing is drawn over it
-                    int k = (sy - y0) * bw + (x - x0);
-                    if (depth >= zbuf[k]) continue;
-                    zbuf[k] = depth;
-                    uint o = before[j];
-                    float wr = (o >> 16) & 0xFF, wg = (o >> 8) & 0xFF, wb = o & 0xFF;
-                    int rr = (int)(wr + (sr - wr) * clear), gg = (int)(wg + (sg - wg) * clear), bb = (int)(wb + (sb - wb) * clear);
+                    float f = sy1 > sy0 ? (sy - sy0) / (float)(sy1 - sy0) : 0;
+                    float depth = cD[k] + (cD[kn] - cD[k]) * f;
+                    int kz = (sy - y0) * bw + (x - x0);
+                    if (depth >= zbuf[kz]) continue;
+                    zbuf[kz] = depth;
+                    float a = cA[k] + (cA[kn] - cA[k]) * f;
+                    float sr = cR[k] + (cR[kn] - cR[k]) * f, sg = cG[k] + (cG[kn] - cG[k]) * f, sb = cB[k] + (cB[kn] - cB[k]) * f;
+                    float wr = waterR[kz], wg = waterG[kz], wb = waterB[kz];
+                    int rr = (int)(wr + (sr - wr) * a), gg = (int)(wg + (sg - wg) * a), bb = (int)(wb + (sb - wb) * a);
                     outPx[j] = (uint)(Math.Clamp(rr, 0, 255) << 16 | Math.Clamp(gg, 0, 255) << 8 | Math.Clamp(bb, 0, 255));
                 }
             }

@@ -1918,11 +1918,18 @@ and "making the rock one object might be the way to go"). Its depth at every pix
 the bed climbs under the swimmers (`Hill`): at the surface on a COLLAR round the cap (half a cap
 radius wide, read from the cap's painted rim so it follows the lumps), then down to full depth a
 little outside the stone. Nothing swims between the cap and its collar, because there is no water
-there. The stone is painted through that depth: mixed toward the water around it by the bed's own
-curve (`BedClear`) with a faster fade of its own below (gone by half the pond's depth, where the
-painting ends), green-tinted, and darkening fast down the flank (red most, blue least), so the
-collar is nearly as bright as the cap and the flank is a dark slope that is darker than the
-water, which is what a boulder under murky water looks like; and every point of it is DRAWN SUNK,
+there. The stone is painted through that depth BY THE FISH'S OWN RULE (round forty-one): a point
+of the flank is the mound's colour (a mid grey, lit on the side facing the sun and shaded on the
+other, darker toward its silhouette as a cylinder is), deepened by the murk at its depth exactly
+as a koi is (`Body.Deepen`, darker and bluer per channel) and veiled by the same murk
+(`Light.Murk`) toward the water around it with the pebbles averaged out (the backdrop blurred
+over 0.03u), fading only at its own painted edge. Until forty-one it had a fade of its own that
+was gone by 0.42 of the depth and was mixed toward the very pixel it covered: it vanished into
+the water's colour before its darkening could show, with the bed's gravel seen through it
+("transparent rocks on the slope by the edge in the water. you can see right through them"), and
+the fish steering round its shoal looked to be dodging nothing. A boulder is the one thing in
+the pond that is not see-through. It is a tall thing in deep water, and the sunk flank below the
+cap is the honest picture of that under the pond's slant; and every point of it is DRAWN SUNK,
 down the screen by its depth exactly as a fish at that depth is (`Light.SinkPx`), the ground rows
 stretched to fill and the nearest point winning at each screen pixel, so the far side of the
 boulder slides in under the cap and the near flank trails below its place on the ground. A deep

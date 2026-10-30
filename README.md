@@ -88,8 +88,8 @@ aside a little and it eases back over its root, and a pad with a frog or a drago
 put; and the branches throw dappled shadows on the water. The pond bed is ground with a shape:
 humps and hollows lit on the side that faces the sun and shaded on the other, seen through water
 that darkens with depth but never hides the bottom; the island and the rock formations are
-boulders standing on it, each a smooth mound lit the same way, pale where it nears the surface
-round its dry cap and lost in the murk down its flanks. The lawn is a meadow corner in a breeze, different on every seed:
+boulders standing on it, each a smooth mound lit the same way, a solid grey stone going down into
+the murk the way a deep fish does, darker and bluer the deeper it goes. The lawn is a meadow corner in a breeze, different on every seed:
 lush and sun-baked patches, a worn spot or two where the earth shows, drifts of clover and
 velvety moss, tufts of grass in three heights and three greens with dry tawny ones among them,
 taller grass gone to seed along the edges, and drifts of wildflowers (daisies, buttercups,
@@ -153,8 +153,8 @@ and drifts in a lull, so no two fall the same way.
   it, a paddling turtle, the snake) shoves the petals in its way aside, and they glide off and
   slow; a fish swimming under them leaves them be.
 - **An island rock** stands out in the open water: a boulder that goes down deep, darker and
-  bluer the deeper it goes until the water hides it, with a small dry cap breaking the surface:
-  the cap's rim is wet, the stone just under the surface round it is nearly as bright as the cap,
+  bluer the deeper it goes until the water hides it (never see-through: it covers the bed), with a small dry cap breaking the surface:
+  the cap's rim is wet, the stone just under the surface round it is a lit grey shoulder,
   and the stone is drawn sunk by its depth the way every fish is, so the dry top is the top of the
   same boulder and nothing swims between them; a fish deep behind the cap is hidden by it. Two
   small rock formations stand in the water as well, one toward the lower left and one toward the

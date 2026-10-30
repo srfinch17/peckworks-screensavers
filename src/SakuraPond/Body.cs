@@ -248,7 +248,7 @@ internal abstract class Body
     /// Whole numbers only: this runs once per painted pixel.
     /// </summary>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    protected static void Deepen(ref int r, ref int g, ref int b, int murk256)
+    internal static void Deepen(ref int r, ref int g, ref int b, int murk256)      // (internal since round forty-one: the submerged stones share the rule, PondPainter.WrapIsland)
     {
         // ROUND FORTY ("animals lose a little color when they go deeper because not all that light can reflect back
         // out of the water"): the veil (Light.Murk) is thinner now and tops out at 0.62, so this is where depth shows.
