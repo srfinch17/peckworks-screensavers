@@ -59,6 +59,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Ducks _ducks;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
+    private readonly Sunlight _sun;               // the beams through the boughs' gaps, their pools on the bed, the glitter on the surface (2026-10-30)
     private readonly Pads _pads;                  // the lily pads, live: stamped on the water, shoved by what swims into them, held by their roots (round forty)
     private readonly List<Body> _surface = new();   // what else is solid in the water this frame (the snake, while it swims), refilled per frame, never reallocated
 
@@ -88,6 +89,13 @@ internal sealed class SakuraPondScene : IScreensaverScene
             Lap(padLine.ToString());
         }
         float u = _pond.U;
+        // The dice salt every late-comer shares (the frogs, tadpoles, crayfish, ducks, sunlight each take their own Random
+        // from it with a different offset), so adding any of them moves nothing else in the scene.
+        int salt = unchecked(_pond.Pads.Count * 7919 + (_pond.Pads.Count > 0 ? (int)_pond.Pads[0].Center.X * 31 + (int)_pond.Pads[0].Center.Y : 0) + width);
+        // The sunlight's beams are baked into the backdrop here, BEFORE the boughs bake their still parts over it (a bough
+        // is over the water, a beam is in it).
+        _sun = new Sunlight(_pond, settings.SunlightPercent / 100f, new Random(unchecked(salt + 606)));
+        Lap($"sunlight gaps {_sun.Gaps}{_sun.Where}");
         _wind = new Wind(0.26f, u, Light.View);                   // to the right and a little toward us
         // The cherry boughs sway in that wind: full sway 0.7u out from a trunk, the tips swinging 0.018u at a full lean.
         _boughs = new Boughs(width, height, _pond.Branches, _pond.TreeRoots, u * 0.7f, u * 0.018f, _wind, Light.View, _pond.Pixels);   // the still parts go into the backdrop here
@@ -95,6 +103,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Lap($"boughs (live pixels {_boughs.LivePixels}, tile pixels {_boughs.TilePixels})");
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
+        _sun.PlaceGlints(_waterInView);
+        Lap($"sunlight glint sites {_sun.GlintSites}");
         _ripples = new Ripples(_pond, _waterInView);
         _pads = new Pads(_pond, _pond.Open);                       // (no dice of its own: nothing else moves; the pads at rest are laid over the backdrop once, here)
         _lawn = new Lawn(width, height, _pond.Carpet, _pond.Grassy, u, _wind, Light.View, _rng, _pond.Open, _pond.Sun);   // never over a branch; shaded by its shadow
@@ -126,7 +136,6 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _swallows.Shadow = (x, y) => { _lizards.Startle(x, y); _mice.Startle(x, y); _frogs.Startle(x, y); };   // and sends the lizards, mice and frogs bolting for cover
         // The tadpoles, the crayfish and the ducks each take dice of their own (seeded from the scene, with a
         // different salt each), for the same reason as the frogs: nothing else in the scene moves when they are added.
-        int salt = unchecked(_pond.Pads.Count * 7919 + (_pond.Pads.Count > 0 ? (int)_pond.Pads[0].Center.X * 31 + (int)_pond.Pads[0].Center.Y : 0) + width);
         _tadpoles = new Tadpoles(_pond, settings.TadpoleClutches, _ripples, _waterInView, HeapFree(_waterInView), new Random(unchecked(salt + 101)), _petals);
         _crayfish = new Crayfish(_pond, _ripples, settings.CrayfishPercent / 100f, new Random(unchecked(salt + 202)));
         _prawns = new Prawns(_pond, _ripples, settings.PrawnCount, _waterInView, new Random(unchecked(salt + 404)));   // the prawns too: their own dice
@@ -264,6 +273,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _prawns.Update(dt, bedThreats);                                                   // the prawns flick backward from the same things the crayfish does
         _deep.Update(dt, _snake.Live && _snake.Deep ? Scratch.Gather(ref _deepThreats, bedThreats, one: _snake.Head) : bedThreats);   // the deep dwellers too, and from the diving snake's head
         _pads.Update(dt, _surface, _koi.Bodies, _turtles.All);                              // last: the pads are shoved by where everything at the surface IS this frame
+        _sun.Update(dt);
         Sections.Mark("update: crayfish to ripples");
     }
 
@@ -305,6 +315,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         fb.Restore(_pond.Pixels);                 // (not with the lawn's box left out: the carpet reads the frame inside its box, round thirty-five found the smear)
         Sections.Mark("backdrop copy");
         _pond.Shore.Draw(fb);                     // the water lapping at the sand: first, so the lawn's blades overhang it
+        _sun.DrawPools(fb);                       // the pools of sunlight on the bed: under every swimmer (the beams themselves are in the backdrop)
         Sections.Mark("shore");
         _lawn.Draw(fb);
         Sections.Mark("lawn");
@@ -329,6 +340,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _ripples.Draw(fb);
         Sections.Mark("ripples");
         _pads.Draw(fb, _pond.Open);               // the lily pads float on the water: over the ripples and everything under the surface, under the petals that settle on them (round forty)
+        _sun.DrawGlints(fb, _waterInView);        // the glitter on the surface: over the water and the pads (none under a pad), under the floating petals
         _petals.DrawFloating(fb);
         Sections.Mark("petals afloat");
         _snake.Draw(fb);

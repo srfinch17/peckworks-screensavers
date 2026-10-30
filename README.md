@@ -357,6 +357,14 @@ and drifts in a lull, so no two fall the same way.
   touch the water with a tiny ring, then float, drifting slowly and gathering against the banks.
 - **Dragonflies** (shiokara tombo, the pale blue dragonfly of Japanese ponds) hover, dart and stop
   dead, perch on lily pads, and the golden female dips to touch her tail to the water.
+- **Sunlight** (the "Sunlight" knob, 100 percent by default, 0 for none): where the sun gets through a hole in the
+  cherry boughs' shade, a shaft of light goes down into the water, bent steeper by the water as real light is, bright
+  under the surface and fading fast with depth (water absorbs it) and veiled by the water above it, and lands on the
+  bed as a warm pool of light that drifts and breathes a little, as light refracted through a moving surface does,
+  dimmer where the bed is deep. On the surface a few hundred glints of the sky's colour blink on the ripple crests,
+  short horizontal dashes drifting with a slow breeze, in sheets here and there and calm elsewhere, more toward the
+  far side, none in the shade and none under a lily pad. Light is solid to nothing; the beams are painted into the
+  backdrop once (no cost per frame), the pools and glints are small stamps.
 - **Swallows** visit to drink: low, fast, sweeping curves with bursts of wingbeats and swept-back
   glides, skimming the surface with a line of rings, their shadows racing below them.
 - Now and then a **snake** (one of four Japanese kinds, a different one each visit: the shimahebi,

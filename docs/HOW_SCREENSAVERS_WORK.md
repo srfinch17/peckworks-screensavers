@@ -1660,6 +1660,33 @@ the bed's clearness, the floor the swimmers feel, the sink and the haze), a hump
 the bed to every fish, which climbs it as it climbs a stone's flank. The bumps roll their own dice,
 seeded from the screen's size, so nothing else in the scene moved when they came.
 
+*Sunlight in and on the water (2026-10-30, `Sunlight.cs`).* His ask: "little patches of light rays that illuminate
+the pond all the way through the water to the bottom and account for the water's effect on the light", and "some
+light shimmering on the water". Three things, all light, solid to nothing. THE BEAMS: a hole in the boughs' shade over
+the water is found as full sun (`Pond.Sun` 250 or more) inside a patch that is mostly shaded (the shade map blurred
+over 0.06u under 225), up to seven of them, none within three radii of another. From each the beam goes down into the
+water, bent toward the vertical the way water bends light (the shadow above water runs 0.45 right and 0.6 down per
+unit of height; in water, by Snell's law with n 1.33, the beam runs 0.30 and 0.40 per unit of depth), dimming by exp
+of minus five times the depth (water absorbs it: the shaft is a short bright wedge, not a pillar) and veiled by the
+water above it (`Light.Murk`), every point drawn sunk down the screen by its depth (`Light.SinkPx`) like everything in
+the water. The sun does not move, so the beams are BAKED into the backdrop once, before the boughs bake their still
+parts over it (a bough is over the water, a beam is in it): no cost per frame. THE POOLS: where a beam meets the bed
+(the terrain) it leaves a pool, as bright as the light that got down there and as visible as the bed is at that depth
+(`BedClear`), warm, blurred softer the deeper; each is a `Sprite` stamped every frame right after the backdrop and
+the lapping shore, under every swimmer, drifting a few pixels and breathing a little on four rhythms of its own (what
+light refracted through a moving surface does), hidden where a stone is nearer the eye (`Pond.Near`, the depth test)
+and never painted where the shore's own band may paint (`Shoreline.EverDry`). THE GLINTS: 380 sites per screen's worth
+of sunlit open water (more toward the far side, where the surface is seen at more of a slant), each a short horizontal
+dash in the sky's colour (a ripple crest seen from above at a slant is wider than tall; 6 to 13 px at 1080 lines)
+with its own clock (on for the top of its sine only, so each blinks briefly and is dark most of the time), drifting
+slowly with the breeze; the breeze is a slow field of two phases that makes sheets of glitter here and calm there.
+None in the shade (`Pond.Sun` weights them), none under a lily pad (the live centres, read each frame), drawn after
+the pads and under the floating petals. Every rhythm keeps its own wrapped phase (no long clock). Its own Random
+(nothing else in the scene moves); the knob "Sunlight" scales the beams, the pools and the glints, 0 is none. The
+instruments: the start log lists the gaps and each pool's box and depth, PECKWORKS_SUNLOG counts the glints lit per
+frame, and the brightness lift in a disc at each logged spot against the same build with the knob at 0 (2.7 to 17
+grey levels under the gaps, 18 at a shallow pool, 2 to 3 at the deep ones) is the "is it there" count.
+
 *The bed is DRAWN SUNK (round forty-one, the review's step 3).* Every swimmer has been drawn down the
 screen by its depth since round thirty-eight (`Light.SinkPx`: the deeper, the lower in the view, which is
 how a slant reads from above), but the bed itself was painted at its place on the ground, flat. So a

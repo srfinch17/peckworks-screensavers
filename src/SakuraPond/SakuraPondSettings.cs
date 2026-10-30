@@ -8,7 +8,7 @@ namespace SakuraPond;
 /// </summary>
 public sealed class SakuraPondSettings : ScreensaverSettings
 {
-    private readonly IntSetting _petals, _koi, _goldfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _frogs, _tadpoles, _crayfish, _prawns, _deep, _ducks, _log, _drawWidth;
+    private readonly IntSetting _petals, _koi, _goldfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _frogs, _tadpoles, _crayfish, _prawns, _deep, _ducks, _log, _sun, _drawWidth;
 
     public SakuraPondSettings() : base("SakuraPond")
     {
@@ -30,6 +30,7 @@ public sealed class SakuraPondSettings : ScreensaverSettings
         _prawns = Add(nameof(PrawnCount), "Prawns", 0, 6, 3);           // a few freshwater prawns on the bed of the shallows (round thirty-two)
         _deep = Add(nameof(DeepDwellerCount), "Deep dwellers", 0, 6, 4);   // the crayfish and long-armed prawns of the deep bed (round thirty-seven): every third from the first is a crayfish, so 4 is two of each
         _ducks = Add(nameof(DuckPercent), "Ducks", 0, 300, 0, "%");   // off by default since 2026-10-23 (his word: "turn off the ducks for now"); the slider brings them back
+        _sun = Add(nameof(SunlightPercent), "Sunlight", 0, 200, 100, "%");   // the beams through the boughs' gaps, their pools on the bed and the glitter on the surface (Sunlight.cs, 2026-10-30); 0 is none
         _log = Add(nameof(FallenLog), "Fallen log", 0, 1, 0);          // off by default since 2026-10-23 ("the log just feels outta place"; the code stays, 1 brings it back); a small rock formation stands where it lay
         // 1920 since the boughs sway (round twenty-five): on a 4K screen the new build at 2048 took two pages on one
         // frame in ten during a gust where the old took one in forty; at 1920 it costs what the old did at 2048,
@@ -60,6 +61,8 @@ public sealed class SakuraPondSettings : ScreensaverSettings
 
     /// <summary>1 = a fallen log lies at the lower left (beached or afloat); 0 = no log, a small rock formation stands out in the water there instead.</summary>
     public bool FallenLog => _log.Value != 0;
+
+    public int SunlightPercent => _sun.Value;
 
     /// <summary>How many field mice live in the bank's grass (each with its own nerve). 0 = none.</summary>
     public int MouseCount => _mice.Value;
