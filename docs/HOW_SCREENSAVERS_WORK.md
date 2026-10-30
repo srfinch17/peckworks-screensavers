@@ -1660,6 +1660,29 @@ the bed's clearness, the floor the swimmers feel, the sink and the haze), a hump
 the bed to every fish, which climbs it as it climbs a stone's flank. The bumps roll their own dice,
 seeded from the screen's size, so nothing else in the scene moved when they came.
 
+*The bed varied, and a sunken log (2026-10-30, his line on the sunk bed: "make the underwater landscape look less
+like boobs. like there is a mount then a small rock protrusion on top. looks like a nipple. all im saying is vary it
+up. maybe give me an old submerged log down there. maybe a home for a cray fish or the deep water prawns").* The one
+stone profile (`StoneZ`) swept round in a circle made every stone a perfect dome with a cap on it, three to a pond.
+The profile stays one; what varies is how far the mound runs in each direction (`MoundShape`, dealt from the stone's
+own position with no dice: longer along one axis, longest on one side as a bar of silt banked behind a boulder, three
+lobes), written as cosines of the direction straight from the offset, never an angle (an atan2 per pixel over the
+seven mound boxes cost 600 ms at the start). The bed's own bumps are stretched along an axis each and turned, rolled
+AFTER the old rolls so every bump keeps its place. THE LOG (`SunkenLog`): placed by dice of its own where a length of
+deep bed off the mounds is open to the sky (a second pass takes a shorter log under the boughs: three mounds' tails
+leave seed 3 at 16:9 no open room), then LOWERED INTO THE TERRAIN (`LowerLog`) as a half cylinder on the bed with
+its outer third eased into the silt banked against it (a wall one ground pixel wide drew as a stair of nine screen
+rows per column) and an edge that swells and narrows along it (`HalfWidthAt`, read by the terrain and the colour
+alike). From there on it IS bed: the koi rise over it by the cap rule, the deep dwellers walk over it, `SinkBed`
+draws it sunk and fills `Pond.Near` so a stone in front hides it, with no new stencil, margin or obstacle list. Its
+colour (`LogColour`) goes into the stones' flank arrays: pale drowned wood lit by the terrain's slope (the cylinder
+shades itself), grain wandering along it, two small knots, a split that tapers at both ends (one width the whole
+way read as a pen line), the cut face dark into its hollow, then the fish's own depth rule (`Body.Deepen`, solid by
+one less the murk). MEASURED, not guessed: the deep bed draws at about 43,66,60; at a wood of 118,98,74 the log drew
+39,50,45 (a black pipe), at 158,130,96 as 48,59,53 (the bed's brightness, a hue apart), at 200,172,132 as 58,72,65
+(kit pond42, `logpix42.py`). The hollow's mouth (`Den`) is handed to the deep dwellers: the first dweller's home is
+swapped for it after the homes are dealt, so no roll moves (`DeepDwellers`, `DenHomed` in the start log).
+
 *Sunlight in and on the water (2026-10-30, `Sunlight.cs`).* His ask: "little patches of light rays that illuminate
 the pond all the way through the water to the bottom and account for the water's effect on the light", and "some
 light shimmering on the water". Three things, all light, solid to nothing. THE BEAMS: a hole in the boughs' shade over

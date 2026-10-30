@@ -357,6 +357,10 @@ and drifts in a lull, so no two fall the same way.
   touch the water with a tiny ring, then float, drifting slowly and gathering against the banks.
 - **Dragonflies** (shiokara tombo, the pale blue dragonfly of Japanese ponds) hover, dart and stop
   dead, perch on lily pads, and the golden female dips to touch her tail to the water.
+- **An old sunken log** on the deep bed, pale as long-drowned wood is, with knots, a split along the grain and a
+  hollow end facing you: it is part of the bed itself (the fish rise over it, the shadows fall on it, a stone in
+  front hides it), and the hollow is the first deep dweller's den, so a crayfish is usually found at its mouth.
+  The stones' mounds run out unevenly too, a long bar of silt on one side and three lobes, so no two read alike.
 - **Sunlight** (the "Sunlight" knob, 100 percent by default, 0 for none): where the sun gets through a hole in the
   cherry boughs' shade, a shaft of light goes down into the water, bent steeper by the water as real light is, bright
   under the surface and fading fast with depth (water absorbs it) and veiled by the water above it, and lands on the

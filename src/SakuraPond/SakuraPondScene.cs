@@ -142,6 +142,9 @@ internal sealed class SakuraPondScene : IScreensaverScene
         // The crayfish and long-armed prawns of the DEEP bed (round thirty-seven), their own dice as well; they take a
         // minnow of a school that dips down to them, so they are handed the schools.
         _deep = new DeepDwellers(_pond, settings.DeepDwellerCount, _waterInView, settings.MinnowSchools > 0 ? _minnows : null, new Random(unchecked(salt + 505)));
+        Lap(_pond.Sunken is SunkenLog sl
+            ? FormattableString.Invariant($"sunken log {sl.Centre.X:F0},{sl.Centre.Y:F0} angle {sl.Angle:F2} len {sl.Length:F0} wide {sl.Width:F0} den {sl.Den.X:F0},{sl.Den.Y:F0} homed {_deep.DenHomed}")
+            : "sunken log none");
         // Who may eat a tadpole or froglet it happens upon (Snatch in Tadpoles.cs): nothing goes looking for them.
         _koi.Prey = _tadpoles;
         _turtles.Prey = _tadpoles;

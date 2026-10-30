@@ -46,6 +46,7 @@ internal sealed class DeepDwellers : ISnackField
     private double _t;
     private long _frame;
     public int Bouts;                            // fights so far (the instruments read it)
+    public bool DenHomed { get; }                // whether the first dweller's home is the sunken log's hollow (the start log reads it)
 
     /// <param name="count">How many dwellers (the "Deep dwellers" knob). Every third from the first is a crayfish, the rest are prawns. 0 = none.</param>
     /// <param name="view">Open water in view less the stones' caps and collars (the scene's deep stencil): where a dweller may stand and be drawn.</param>
@@ -57,6 +58,14 @@ internal sealed class DeepDwellers : ISnackField
         if (count <= 0) { _all = []; _bouts = []; _pairCool = []; return; }
         float[] bold = Traits.Deal(rng, count), busy = Traits.Deal(rng, count);
         List<PointF> homes = _bed.Spots(rng, count, pond.U * 0.15f);
+        // The sunken log's hollow is the first dweller's home (a crayfish: every third from the first) when its mouth is
+        // free deep bed in view: swapped in AFTER the spots are dealt, so no roll moves (2026-10-30, "a home for a cray
+        // fish or the deep water prawns").
+        if (pond.Sunken is SunkenLog log && homes.Count > 0)
+        {
+            (float gx, float gy) = _bed.ToGround(log.Den.X, log.Den.Y);
+            if (_bed.Free(gx, gy)) { homes[0] = new PointF(gx, gy); DenHomed = true; }
+        }
         var animals = new List<Dweller>();
         for (int k = 0; k < homes.Count; k++)
             animals.Add(new Dweller(_bed, k, k % 3 == 0 ? DeepKind.Crayfish : DeepKind.Prawn, homes[k], bold[k], busy[k], rng, minnows));
