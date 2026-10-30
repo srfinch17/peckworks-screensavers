@@ -39,7 +39,6 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Random _rng = HappeningDirector.SceneRandom();   // new dice every launch, unless PECKWORKS_SEED asks for a repeat
     private readonly Pond _pond;
     private readonly bool[] _waterInView;     // open water that no branch hides
-    private readonly bool[] _waterInViewDeep; // the same less the island's and the formation's collars and caps (Pond.StoneTop): the stencil for a swimmer deeper than a quarter of the pond, which those stones stand in front of
     private readonly Wind _wind;
     private readonly Boughs _boughs;
     private readonly Ripples _ripples;
@@ -96,8 +95,6 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Lap($"boughs (live pixels {_boughs.LivePixels}, tile pixels {_boughs.TilePixels})");
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
-        _waterInViewDeep = new bool[_waterInView.Length];
-        for (int i = 0; i < _waterInView.Length; i++) _waterInViewDeep[i] = _waterInView[i] && !_pond.StoneTop[i];
         _ripples = new Ripples(_pond, _waterInView);
         _pads = new Pads(_pond, _pond.Open);                       // (no dice of its own: nothing else moves; the pads at rest are laid over the backdrop once, here)
         _lawn = new Lawn(width, height, _pond.Carpet, _pond.Grassy, u, _wind, Light.View, _rng, _pond.Open, _pond.Sun);   // never over a branch; shaded by its shadow
@@ -113,11 +110,11 @@ internal sealed class SakuraPondScene : IScreensaverScene
             _irises.Add(root, Flipbook.IrisClump(u * 0.11f, toward, _rng), 0.45f, 40);
 
         _petals = new Petals(_pond, _ripples, _waterInView, settings.PetalPercent / 100f, _wind, _rng);
-        _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _waterInViewDeep, _rng, settings.KoiPlayPercent / 100f, _petals, settings.GoldfishCount);   // the koi (and goldfish) nose at and eat the floating petals
+        _koi = new KoiSchool(_pond, settings.KoiCount, _ripples, _waterInView, _rng, settings.KoiPlayPercent / 100f, _petals, settings.GoldfishCount);   // the koi (and goldfish) nose at and eat the floating petals
         _petals.Landed = (x, y) => _koi.Notice(x, y, petal: true);                                                                // and the hungry ones come when one settles
-        _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _waterInViewDeep, _ripples, _rng);   // (the deep stencil too: a school that dips to the bed is drawn through it)
+        _minnows = new Minnows(_pond, settings.MinnowSchools, _waterInView, _ripples, _rng);   // (the deep stencil too: a school that dips to the bed is drawn through it)
         _koi.Minnows = _minnows;   // the big koi may rush a school of minnows for the fun of it
-        _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _waterInViewDeep, _rng, _petals);   // a floating turtle nibbles at a petal
+        _turtles = new Turtles(_pond, settings.TurtleCount, _ripples, _waterInView, _rng, _petals);   // a floating turtle nibbles at a petal
         _snake = new Snake(_pond, _ripples, settings.MinnowSchools > 0 ? _minnows : null, settings.SnakePercent / 100f, _rng);
         _dragonflies = new Dragonflies(_pond, _ripples, settings.DragonflyCount, _rng, settings.MinnowSchools > 0 ? _minnows : null, _koi);
         _lizards = new Lizards(_pond, settings.LizardCount, _ripples, settings.LizardPercent / 100f, _rng, _dragonflies);   // a lizard stalks a dragonfly sitting on a rock
@@ -135,7 +132,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _prawns = new Prawns(_pond, _ripples, settings.PrawnCount, _waterInView, new Random(unchecked(salt + 404)));   // the prawns too: their own dice
         // The crayfish and long-armed prawns of the DEEP bed (round thirty-seven), their own dice as well; they take a
         // minnow of a school that dips down to them, so they are handed the schools.
-        _deep = new DeepDwellers(_pond, settings.DeepDwellerCount, _waterInViewDeep, settings.MinnowSchools > 0 ? _minnows : null, new Random(unchecked(salt + 505)));
+        _deep = new DeepDwellers(_pond, settings.DeepDwellerCount, _waterInView, settings.MinnowSchools > 0 ? _minnows : null, new Random(unchecked(salt + 505)));
         // Who may eat a tadpole or froglet it happens upon (Snatch in Tadpoles.cs): nothing goes looking for them.
         _koi.Prey = _tadpoles;
         _turtles.Prey = _tadpoles;
@@ -274,7 +271,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     // file; then a snapshot run writes what each part of the frame costs.
     /// <summary>
     /// Writes the steering masks as grey pictures (PGM, one byte a pixel: a format any script reads
-    /// with no library) into a folder: Water, Open, Land and StoneTop as 0 or 255, and the room grid
+    /// with no library) into a folder: Water, Open and Land as 0 or 255, the stones' nearness (near) and depth (stonez), and the room grid
     /// sampled at every pixel (RoomAt, pixels of water around that spot, capped at 255). An instrument
     /// for PECKWORKS_MASKDUMP, never on in a real run.
     /// </summary>
@@ -293,7 +290,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Pgm("water", (x, y) => _pond.Water[y * w + x] ? (byte)255 : (byte)0);
         Pgm("open", (x, y) => _pond.Open[y * w + x] ? (byte)255 : (byte)0);
         Pgm("land", (x, y) => _pond.Land[y * w + x] ? (byte)255 : (byte)0);
-        Pgm("stonetop", (x, y) => _pond.StoneTop[y * w + x] ? (byte)255 : (byte)0);
+        Pgm("near", (x, y) => _pond.Near[y * w + x]);                                        // the stones' drawn surface as nearness (0 none, 255 the cap)
+        Pgm("stonez", (x, y) => _pond.Near[y * w + x] == 0 ? (byte)255 : (byte)(255 - _pond.Near[y * w + x]));   // the same as depth times 250 (the review's instrument, behind.py, reads this)
         Pgm("shoal", (x, y) => _pond.StoneShoal[y * w + x] ? (byte)255 : (byte)0);
         Pgm("room", (x, y) => (byte)Math.Clamp((int)(_pond.RoomAt(x, y) + 0.5f), 0, 255));
         Pgm("roomkoi", (x, y) => (byte)Math.Clamp((int)(_pond.KoiRoomAt(x, y) + 0.5f), 0, 255));   // the koi's grid, the stones' shoulders as walls (round thirty-nine)

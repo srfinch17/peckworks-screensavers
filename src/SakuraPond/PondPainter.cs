@@ -157,15 +157,15 @@ internal sealed class Pond
     public required bool[] Land { get; init; }
 
     /// <summary>
-    /// Screen pixels where a stone's DRAWN surface (the island's and the formation's, sunk by
-    /// depth as the fish are, WrapIsland) is within a quarter of the pond's depth of the top:
-    /// the caps and the collars round them. A swimmer deeper than that is behind the stone
-    /// there, so it is drawn through a stencil that leaves these out (the scene's deep water
-    /// stencil) and the stone hides it, as a rock hides a fish behind it. Without this a deep
-    /// forager whose sunk picture landed on the collar was painted across it, 17 to 26 s per
-    /// five minutes of koi noses on the first runs: the floating cap in another costume.
+    /// How near the eye a stone's DRAWN surface is at each screen pixel, on the sprites' 0 (far, no stone) to 255
+    /// (the dry cap) scale (round forty-one, the review's depth test). Every painter of a thing under the water
+    /// skips a pixel where this is more than the thing's own nearness (Light.Nearness of its depth), so a stone hides
+    /// what is behind it the way a rock hides a fish, bit by bit, fins and all. Until this, one yes-or-no stencil of
+    /// the stone's top quarter (StoneTop), chosen by the head's depth, left three holes: a fish with its head above a
+    /// quarter of the depth painted across the collar, a deep fish painted over a flank deeper than a quarter, and
+    /// the fins at any depth (3 to 9 seconds of every minute with a koi on a rock).
     /// </summary>
-    public required bool[] StoneTop { get; init; }
+    public required byte[] Near { get; init; }
 
     /// <summary>
     /// A stone's shoulder with under 0.45 of the pond's depth of water over it (the island's hill and the
@@ -377,13 +377,13 @@ internal static class PondPainter
         float shadowX = u * 0.035f, shadowY = u * 0.05f;      // sun up and to the left: shadows fall down and right
         byte[] shade = BranchShadow(w, h, u, seed, shadowX, shadowY);
         Island? island = ShorePainter.PlaceIsland(inPond, dist, shade, log, w, h, u, rng);
-        bool[] stoneTop = new bool[w * h];                   // the stones' drawn surface near the top (Pond.StoneTop), filled by the wraps
+        byte[] near = new byte[w * h];                   // the stones' drawn surface as nearness per screen pixel (Pond.Near), filled by the wraps below
         if (island is Island isle)
         {
             uint[] beforeIsland = Read(bmp);
             bool[] stone = ShorePainter.IslandStone(g, isle, w, h, u, rng);
             bool[] cap = ShorePainter.IslandCap(g, gb, isle, w, h, u, rng);
-            WrapIsland(bmp, beforeIsland, stone, cap, isle, dist, isle.Radius + u * 0.05f, isle.CapRadius * 0.5f, stoneTop, w, h, u);   // the same hill the bed climbs (below): one shape for the picture and for the swimmers
+            WrapIsland(bmp, beforeIsland, stone, cap, isle, dist, isle.Radius + u * 0.05f, isle.CapRadius * 0.5f, near, w, h, u);   // the same hill the bed climbs (below): one shape for the picture and for the swimmers
             rocks.Add(new BankRock(isle.Cap, isle.CapRadius, InWater: true));   // the snake keeps off the cap; the lizard never sees an in-water rock
         }
         // The small rock formation at the lower left, where the log lay (none while the log is on): the same
@@ -416,7 +416,7 @@ internal static class PondPainter
                 for (int i = 0; i < caps.Length; i++) caps[i] |= one[i];
                 rocks.Add(new BankRock(form.Caps[k], form.CapRadii[k], InWater: true));
             }
-            WrapIsland(bmp, beforeForm, stone, caps, form.Stone with { Cap = form.Caps[0], CapRadius = form.CapRadii[0] }, dist, form.Stone.Radius + u * 0.04f, form.CapRadii[0] * 0.4f, stoneTop, w, h, u);
+            WrapIsland(bmp, beforeForm, stone, caps, form.Stone with { Cap = form.Caps[0], CapRadius = form.CapRadii[0] }, dist, form.Stone.Radius + u * 0.04f, form.CapRadii[0] * 0.4f, near, w, h, u);
         }
         PointF cattails = CattailSpot(bank, corner, inPond, dist, w, h, u, rng);
         List<(PointF Root, float Toward)> irises = IrisSpots(gn, Read(noGrassSheet), inPond, bank, corner, cattails, u, w, h, rng);   // after the rocks and the sand: on the lawn behind them
@@ -498,8 +498,8 @@ internal static class PondPainter
         // so the bank's own nooks are as they were. Only the room grid changes: the picture, the bed and the Land
         // mask are untouched (a frog still sits on a cap; a koi's step test reads Land, not this).
         int crevT = (int)(u * 0.016f * 10);                                             // r, in the transform's tenths of a pixel
-        var near = new bool[w * h];
-        for (int i = 0; i < near.Length; i++) near[i] = swimDist[i] <= crevT;          // walls and the water within r of one
+        var nearWall = new bool[w * h];
+        for (int i = 0; i < nearWall.Length; i++) nearWall[i] = swimDist[i] <= crevT;  // walls and the water within r of one
         bool closedAny = false;
         foreach (Island? st in (ReadOnlySpan<Island?>)[island, formation?.Stone, formation2?.Stone])
         {
@@ -507,12 +507,12 @@ internal static class PondPainter
             int boxR = (int)(stone.Radius + u * 0.1f);
             int bx0 = Math.Max(0, (int)stone.Centre.X - boxR), bx1 = Math.Min(w - 1, (int)stone.Centre.X + boxR);
             int by0 = Math.Max(0, (int)stone.Centre.Y - boxR), by1 = Math.Min(h - 1, (int)stone.Centre.Y + boxR);
-            int[] toWide = DistanceToEdge(near, w, h, false, bx0, by0, bx1, by1);     // from a near pixel to the nearest wide water, inside the box
+            int[] toWide = DistanceToEdge(nearWall, w, h, false, bx0, by0, bx1, by1);     // from a near pixel to the nearest wide water, inside the box
             for (int y = by0; y <= by1; y++)
                 for (int x = bx0; x <= bx1; x++)
                 {
                     int i = y * w + x;
-                    if (swim[i] && near[i] && toWide[i] > crevT) { swim[i] = false; closedAny = true; }
+                    if (swim[i] && nearWall[i] && toWide[i] > crevT) { swim[i] = false; closedAny = true; }
                 }
         }
         if (closedAny) swimDist = DistanceToEdge(swim, w, h, edgeIsBank: true);
@@ -598,7 +598,7 @@ internal static class PondPainter
         {
             Width = w, Height = h, U = u,
             Pixels = beforeBranches, Branches = boughs, TreeRoots = treeRoots,
-            Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(), StoneTop = stoneTop, StoneShoal = stoneShoal,
+            Water = waterMask, Open = open, Grassy = grassy, Carpet = ReadArgb(carpetSheet), Depth = depth, Floor = floor, Sun = sun, Heap = heap.ToArray(), Near = near, StoneShoal = stoneShoal,
             BlossomSpots = spots, Pads = pads, CattailSpot = cattails, IrisSpots = irises, Centre = centre, Reach = reach,
             Land = inPond.Select((p, i) => !p || (blocked[i] & 0xFF) >= 128).ToArray(),    // the ground, plus whatever stands in the water (a rock's wet side, the log)
             Rocks = rocks, Log = log, Island = island, Formation = formation, Formation2 = formation2,
@@ -1375,8 +1375,8 @@ internal static class PondPainter
     /// <param name="dist">Tenths of a pixel from the bank, for the water's own depth here (PourWater's number).</param>
     /// <param name="hillOuter">Pixels from the cap's centre at which the stone's hill reaches full depth: the number handed to Hill for the bed.</param>
     /// <param name="collar">Pixels out from the cap's painted rim over which the stone is still at the surface (Hill's inner radius less the cap's).</param>
-    /// <param name="stoneTop">Filled: the screen pixels where the stone's drawn surface is within a quarter of the pond's depth of the top, and the cap (Pond.StoneTop).</param>
-    private static void WrapIsland(Bitmap bmp, uint[] before, bool[] stone, bool[] cap, Island isle, int[] dist, float hillOuter, float collar, bool[] stoneTop, int w, int h, float u)
+    /// <param name="near">Filled: how near the eye the stone's drawn surface is at each screen pixel (Pond.Near).</param>
+    private static void WrapIsland(Bitmap bmp, uint[] before, bool[] stone, bool[] cap, Island isle, int[] dist, float hillOuter, float collar, byte[] near, int w, int h, float u)
     {
         uint[] px = Read(bmp);                                                          // the stone and its cap, painted whole, each at its place on the ground
         uint[] outPx = (uint[])px.Clone();                                              // what the water leaves of them
@@ -1523,10 +1523,17 @@ internal static class PondPainter
                     outPx[j] = (uint)(Math.Clamp(rr, 0, 255) << 16 | Math.Clamp(gg, 0, 255) << 8 | Math.Clamp(bb, 0, 255));
                 }
             }
-        // The stone's drawn surface near the top, for the swimmers' deep stencil (Pond.StoneTop).
+        // The stone's drawn surface per screen pixel, as nearness (Pond.Near): the cap nearest of all, the flank by its
+        // depth, the nearer stone winning where two overlap. What the painters test against (Body.Paint, Oval, Line).
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++)
-                if (cap[y * w + x] || zbuf[(y - y0) * bw + (x - x0)] < 0.25f) stoneTop[y * w + x] = true;
+            {
+                int j = y * w + x;
+                float zs = cap[j] ? 0f : zbuf[(y - y0) * bw + (x - x0)];
+                if (zs > 1.5f) continue;                                                   // nothing of the stone drawn here
+                int n = Math.Clamp((int)(255 - zs * 250), 1, 255);
+                if (n > near[j]) near[j] = (byte)n;
+            }
         // 3. The dry top, in place and over everything: untouched but for the wet band just inside
         //    its rim, which is the bank rocks' own wet flank (WrapWater): mixed toward the water
         //    darkened by a third, fully at the rim. Until 2026-10-23 the cap was only dimmed a little

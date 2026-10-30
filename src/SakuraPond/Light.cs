@@ -73,6 +73,14 @@ internal static class Light
     public static float SinkPx(float z, float u) => DepthOf(z) * u * Sink;
 
     /// <summary>
+    /// How near to the eye a thing at depth Z is, on the sprites' 0 (far) to 255 (near) scale (round forty-one,
+    /// the review's depth test): the stones' drawn surface is kept per screen pixel on the same scale (Pond.Near),
+    /// and a painter skips a pixel where the stone there is nearer than the thing it paints. The 260 is a margin
+    /// of 0.02 of the depth: a thing right on a stone's surface is drawn, not hidden by its own rounding.
+    /// </summary>
+    public static int Nearness(float z) => Math.Clamp((int)(260 - z * 250), 0, 255);
+
+    /// <summary>
     /// Holds a change of depth to what the animal's own forward motion can
     /// hide, and returns the depth it may have this frame. Depth moves the
     /// picture up and down the screen (SinkPx), so a thing rising faster than

@@ -48,12 +48,11 @@ internal sealed class Minnows
     public static Func<Random, PointF?>? DipNear;
 
     /// <param name="where">Open water in view: where a school near the surface is drawn and may go.</param>
-    /// <param name="whereDeep">The same less the stones' caps and collars (the scene's deep stencil): what a school that has dipped to the bed is drawn through, since those stones stand in front of it.</param>
-    public Minnows(Pond pond, int schools, bool[] where, bool[] whereDeep, Ripples ripples, Random rng)
+    public Minnows(Pond pond, int schools, bool[] where, Ripples ripples, Random rng)
     {
         _u = pond.U;
         _schools = new School[Math.Max(0, schools)];
-        for (int i = 0; i < _schools.Length; i++) _schools[i] = new School(pond, where, whereDeep, ripples, rng, 12 + rng.Next(8));
+        for (int i = 0; i < _schools.Length; i++) _schools[i] = new School(pond, where, ripples, rng, 12 + rng.Next(8));
     }
 
     /// <param name="koiHeads">Points along each koi near the surface this frame (head and middle), in screen pixels: a school near the surface keeps clear of them.</param>
@@ -328,7 +327,7 @@ internal sealed class School
     /// <summary>Is the school's middle on open water that can be seen (a safe place to look up, and a pixel inside the picture)?</summary>
     public bool CentreInView => Centre.X >= 0 && Centre.Y >= 0 && Centre.X < _pond.Width && Centre.Y < _pond.Height && InView(Centre.X, Centre.Y);
 
-    public School(Pond pond, bool[] where, bool[] whereDeep, Ripples ripples, Random rng, int count)
+    public School(Pond pond, bool[] where, Ripples ripples, Random rng, int count)
     {
         _pond = pond;
         _rng = rng;
@@ -349,7 +348,7 @@ internal sealed class School
         for (int i = 0; i < count; i++)
         {
             float a = (float)(rng.NextDouble() * MathF.Tau), d = _u * 0.045f * MathF.Sqrt((float)rng.NextDouble());
-            _fish[i] = new Minnow(pond, where, whereDeep, rng, _cx + MathF.Cos(a) * d, _cy + MathF.Sin(a) * d, heading + 0.5f * ((float)rng.NextDouble() - 0.5f));
+            _fish[i] = new Minnow(pond, where, rng, _cx + MathF.Cos(a) * d, _cy + MathF.Sin(a) * d, heading + 0.5f * ((float)rng.NextDouble() - 0.5f));
         }
         _live = count;
         _own = new Random(unchecked(count * 7919 + (int)home.X * 31 + (int)home.Y * 17 + 12345));
@@ -609,7 +608,7 @@ internal sealed class Minnow : Body
     private const float FinEnd = 1.25f;
 
     private readonly Pond _pond;
-    private readonly bool[] _where, _whereDeep;    // where it is drawn: open water in view, or (down on the bed) the same less the stones' caps and collars
+    private readonly bool[] _where;                 // where it is drawn: open water in view (and the depth test against the stones per paint call, Pond.Near)
     private readonly Random _rng;
     private readonly float _len, _wide, _u;
     private readonly float _jitter;                // this fish swims a little faster or slower than its school
@@ -655,10 +654,10 @@ internal sealed class Minnow : Body
         LaySpine();
     }
 
-    public Minnow(Pond pond, bool[] where, bool[] whereDeep, Random rng, float x, float y, float heading) : base(Points)
+    public Minnow(Pond pond, bool[] where, Random rng, float x, float y, float heading) : base(Points)
     {
         _pond = pond;
-        _where = where; _whereDeep = whereDeep;
+        _where = where;
         _rng = rng;
         _u = pond.U;
         _len = _u * (0.017f + 0.006f * (float)rng.NextDouble());
@@ -997,8 +996,8 @@ internal sealed class Minnow : Body
         // Just under the surface: a little of the water's colour (0.2), no haze. Down on the bed (a dip): the pond's own
         // haze for its depth (Light.Murk), through the deep stencil, with a softer edge, as a koi down there is drawn.
         float murk = MathF.Max(0.2f, Light.Murk(Z));
-        bool[] where = Z > 0.25f ? _whereDeep : _where;
-        Paint(fb, where, _pond.Sun, murk, MathF.Max(0.8f, _u * 0.0007f) * (1 + Z), _pond.Pixels);   // hazed toward the water, not toward a koi it crosses
+        bool[] where = _where;
+        Paint(fb, where, _pond.Sun, murk, MathF.Max(0.8f, _u * 0.0007f) * (1 + Z), _pond.Pixels, near: _pond.Near, nearness: Light.Nearness(Z));   // hazed toward the water, not toward a koi it crosses
         // Two tiny dark eyes either side of the head.
         PointF e0 = Spine[0], e1 = Spine[1];
         float ex = e1.X - e0.X, ey = e1.Y - e0.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));
@@ -1006,7 +1005,7 @@ internal sealed class Minnow : Body
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
         {
             var c = new PointF(e0.X + ex / el * HalfWidth[1] * 0.5f - ey / el * HalfWidth[1] * 0.7f * side, e0.Y + ey / el * HalfWidth[1] * 0.5f + ex / el * HalfWidth[1] * 0.7f * side);
-            Oval(fb, where, c, 0, er, er, 20, 22, 24, 0.9f, murk, _pond.Sun, rays: false);   // (no "water" here: the eye sits on the body and takes its haze from it, as before; with the backdrop it moved a few pixels of every eye at the surface)
+            Oval(fb, where, c, 0, er, er, 20, 22, 24, 0.9f, murk, _pond.Sun, rays: false, near: _pond.Near, nearness: Light.Nearness(Z));   // (no "water" here: the eye sits on the body and takes its haze from it, as before; with the backdrop it moved a few pixels of every eye at the surface)
         }
     }
 }

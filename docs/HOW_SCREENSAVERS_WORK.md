@@ -1933,10 +1933,17 @@ cap is the honest picture of that under the pond's slant; and every point of it 
 down the screen by its depth exactly as a fish at that depth is (`Light.SinkPx`), the ground rows
 stretched to fill and the nearest point winning at each screen pixel, so the far side of the
 boulder slides in under the cap and the near flank trails below its place on the ground. A deep
-forager, sunk a fifth of u, is therefore never painted across a flank that stands above it, and
-a swimmer deeper than a quarter of the pond is drawn through a stencil that leaves out the
-stones' collars and caps (`Pond.StoneTop`, the scene's deep water stencil), so the stone hides
-what is behind it. (Three renders on the way: the stone through the bed's curve alone was a pale
+forager, sunk a fifth of u, is therefore never painted across a flank that stands above it: the
+painter keeps, for every screen pixel, how near the eye the stone's drawn surface is there
+(`Pond.Near`, on the same 0 far to 255 near scale Core's sprites use), and every painter of a
+thing under the water skips a pixel where the stone is nearer than the thing it paints (a body
+per spine point, `Body.Paint`; a fin, an eye, a shadow, a leg, a claw by its own depth: the
+`near` and `nearness` parameters of `Paint`, `Oval` and Core's `FrameBuffer.Line`). A DEPTH
+TEST, the review of round forty-one called it: until then a stone hid a fish through one yes or
+no stencil of its top quarter, chosen by the fish's head depth, and that left three holes (a fish
+with its head above a quarter of the depth painted across the collar; a deep fish painted over a
+flank deeper than a quarter; the fins at any depth), a koi on a rock for 3 to 9 seconds of every
+minute: "i just watched a fish swim under a rock". (Three renders on the way: the stone through the bed's curve alone was a pale
 slab lighter than the deep water; mixed toward the pond's colour for water of the mound's own
 depth it was the pale green of the shallows, a ghost; a box of 1.5 radii left the formation's
 drop shadow on the water as a dark wedge.) Along the cap's rim a dark line: the surface meeting

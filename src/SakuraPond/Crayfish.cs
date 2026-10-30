@@ -953,11 +953,11 @@ internal sealed class CrayfishBody : Body
         // The shadow on the bed: the body's own shape, a hair down and to the right (never more than 0.012u), faint and soft.
         float reach = _u * 0.012f;
         _shadowPass = true;
-        PaintShadow(fb, _view, reach * 0.6f, reach * 0.8f, 0.25f * (1 - murk), soft * 2f);
+        PaintShadow(fb, _view, reach * 0.6f, reach * 0.8f, 0.25f * (1 - murk), soft * 2f, near: _pond.Near, nearness: Light.Nearness(_z));
         _shadowPass = false;
         DrawLegs(fb, murk);
         DrawFeelers(fb, murk);
-        Paint(fb, _view, _pond.Sun, murk, soft, _pond.Pixels);
+        Paint(fb, _view, _pond.Sun, murk, soft, _pond.Pixels, near: _pond.Near, nearness: Light.Nearness(_z));
         DrawClaws(fb, murk);
         DrawEyes(fb, murk);
     }
@@ -981,7 +981,7 @@ internal sealed class CrayfishBody : Body
         float widK = MathF.Sqrt(pa * pa + pb * pb);
         PointF c = ToScreen(gx, gy);
         Oval(fb, _view, new PointF(c.X, c.Y + _sinkPx), MathF.Atan2(sa, ca), MathF.Max(0.8f, semiLen * lenK), MathF.Max(0.9f, semiWid * widK),
-            r, g, b, alpha, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+            r, g, b, alpha, murk, _pond.Sun, rays: false, water: _pond.Pixels, near: _pond.Near, nearness: Light.Nearness(_z));
     }
 
     /// <summary>Eight thin walking legs, four a side, each swinging fore and aft on a wave down the body (front to back), the two sides half a step apart. Folded back when it curls.</summary>
@@ -1042,7 +1042,7 @@ internal sealed class CrayfishBody : Body
         int ix = Math.Clamp((int)a.X, 0, _pond.Width - 1), iy = Math.Clamp((int)a.Y, 0, _pond.Height - 1);
         uint wc = _pond.Pixels[iy * _pond.Width + ix];
         r += (int)((((wc >> 16) & 0xFF) - r) * murk); g += (int)((((wc >> 8) & 0xFF) - g) * murk); bl += (int)(((wc & 0xFF) - bl) * murk);
-        fb.Line(a, b, Color.FromArgb(r, g, bl), alpha, thick, _view);
+        fb.Line(a, b, Color.FromArgb(r, g, bl), alpha, thick, _view, _pond.Near, Light.Nearness(_z));
     }
 
     /// <summary>

@@ -892,12 +892,12 @@ internal sealed class Prawn : Body, ISnack
         // The shadow on the bed: its own shape, a hair down and to the right (within 0.006u on the bed; more as it lifts, never past 0.012u), faint and soft.
         float reach = MathF.Min(_u * 0.012f, _u * 0.006f + _lift * _u * 0.5f);
         _shadowPass = true;
-        PaintShadow(fb, _view, reach * 0.6f, reach * 0.8f, 0.15f * (1 - murk), soft * 2f);
+        PaintShadow(fb, _view, reach * 0.6f, reach * 0.8f, 0.15f * (1 - murk), soft * 2f, near: _pond.Near, nearness: Light.Nearness(_z));
         _shadowPass = false;
         DrawLegs(fb, murk);
         if (_len > 40f && _lift > 0.002f) DrawSwimmerets(fb, murk);
         DrawFeelers(fb, murk);
-        Paint(fb, _view, _pond.Sun, murk, soft, _pond.Pixels);
+        Paint(fb, _view, _pond.Sun, murk, soft, _pond.Pixels, near: _pond.Near, nearness: Light.Nearness(_z));
         DrawEyes(fb, murk);
     }
 
@@ -910,7 +910,7 @@ internal sealed class Prawn : Body, ISnack
         float widK = MathF.Sqrt(pa * pa + pb * pb);
         PointF c = ToScreen(gx, gy);
         Oval(fb, _view, new PointF(c.X, c.Y + _sinkPx), MathF.Atan2(sa, ca), MathF.Max(0.8f, semiLen * lenK), MathF.Max(0.9f, semiWid * widK),
-            r, g, b, alpha, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+            r, g, b, alpha, murk, _pond.Sun, rays: false, water: _pond.Pixels, near: _pond.Near, nearness: Light.Nearness(_z));
     }
 
     /// <summary>
@@ -1015,6 +1015,6 @@ internal sealed class Prawn : Body, ISnack
         int ix = Math.Clamp((int)a.X, 0, _pond.Width - 1), iy = Math.Clamp((int)a.Y, 0, _pond.Height - 1);
         uint wc = _pond.Pixels[iy * _pond.Width + ix];
         r += (int)((((wc >> 16) & 0xFF) - r) * murk); g += (int)((((wc >> 8) & 0xFF) - g) * murk); bl += (int)(((wc & 0xFF) - bl) * murk);
-        fb.Line(a, b, Color.FromArgb(Math.Clamp(r, 0, 255), Math.Clamp(g, 0, 255), Math.Clamp(bl, 0, 255)), alpha, thick, _view);
+        fb.Line(a, b, Color.FromArgb(Math.Clamp(r, 0, 255), Math.Clamp(g, 0, 255), Math.Clamp(bl, 0, 255)), alpha, thick, _view, _pond.Near, Light.Nearness(_z));
     }
 }

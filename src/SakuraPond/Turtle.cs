@@ -9,8 +9,7 @@ internal sealed class Turtles
     private readonly Turtle[] _all;
 
     /// <param name="petals">The floating petals, for a floating turtle to nibble at (null: none).</param>
-    /// <param name="whereDeep">The water stencil for a turtle deeper than a quarter of the pond: "where" less the stones' collars and caps (Pond.StoneTop), which stand in front of it.</param>
-    public Turtles(Pond pond, int count, Ripples ripples, bool[] where, bool[] whereDeep, Random rng, Petals? petals = null)
+    public Turtles(Pond pond, int count, Ripples ripples, bool[] where, Random rng, Petals? petals = null)
     {
         _all = new Turtle[Math.Max(0, count)];
         // Two dials each, dealt (Core/Minds Traits.Deal) so no two turtles are near-twins: one
@@ -21,7 +20,7 @@ internal sealed class Turtles
         bool[] perchMask = new bool[pond.Land.Length];
         if (_all.Length > 0)
             for (int i = 0; i < perchMask.Length; i++) perchMask[i] = pond.Land[i] && pond.Open[i];
-        for (int i = 0; i < _all.Length; i++) _all[i] = new Turtle(pond, ripples, where, whereDeep, rng, sunny[i], nerve[i], perchMask, petals) { Index = i };
+        for (int i = 0; i < _all.Length; i++) _all[i] = new Turtle(pond, ripples, where, rng, sunny[i], nerve[i], perchMask, petals) { Index = i };
         foreach (Turtle t in _all) t.MeetPeers(_all);
         // The instrument log, unset in the real pond: PECKWORKS_TURTLELOG names a file that gets one line per turtle per
         // frame (where it is, how deep, its heading and how fast that is changing, its speed, where its legs are in the
@@ -173,7 +172,6 @@ internal sealed class Turtle : Body
     private readonly Pond _pond;
     private readonly Ripples _ripples;
     private readonly bool[] _where;
-    private readonly bool[] _whereDeep;                   // the same less the stones' collars and caps: the stencil when it is deeper than a quarter of the pond (see Draw)
     private readonly bool[] _perchMask;                   // dry and in view: where the shadow of a turtle up on a perch may land
     private readonly Random _rng;
     private readonly float _len, _wide;                   // nose to tail tip, and half the shell's width, ground pixels
@@ -262,12 +260,11 @@ internal sealed class Turtle : Body
     /// <summary>The highest part of the body above the water, 0 to 1 (for logs and tests).</summary>
     public float Height01 => _out;
 
-    public Turtle(Pond pond, Ripples ripples, bool[] where, bool[] whereDeep, Random rng, float sunny, float nerve, bool[] perchMask, Petals? petals = null) : base(Points)
+    public Turtle(Pond pond, Ripples ripples, bool[] where, Random rng, float sunny, float nerve, bool[] perchMask, Petals? petals = null) : base(Points)
     {
         _pond = pond;
         _ripples = ripples;
         _where = where;
-        _whereDeep = whereDeep;
         _perchMask = perchMask;
         _rng = rng;
         _petals = petals;
@@ -1474,7 +1471,7 @@ internal sealed class Turtle : Body
         float murk = Light.Murk(Z) * (1 - MathF.Min(1, 6 * _out));
         if (murk > 0.985f) return;                                               // dived out of sight (Light.SeeU): nothing left to paint
         float soft = MathF.Max(1f, _pond.U * 0.0012f) * (1 + 3 * Z);
-        bool[] stencil = _out >= 0.001f ? _pond.Open : Z > 0.25f ? _whereDeep : _where;   // deeper than a quarter of the pond, the island's collar and cap stand in front of it (Pond.StoneTop)
+        bool[] stencil = _out >= 0.001f ? _pond.Open : _where;   // (and the depth test against the stones, Pond.Near, per paint call: round forty-one)
         if (_out > 0.02f)
         {
             // Its shadow on the perch: the sun is up and to the left, so it falls down and to the right
@@ -1497,15 +1494,15 @@ internal sealed class Turtle : Body
             // little behind those middles. The fold at the elbow or knee is the recovery's.
             // Short legs: a slider's leg reaches about a fifth of its length past the shell's rim, no more
             // (0.34 and 0.3 of the length until 2026-10-27, "turtles legs are too long", said twice).
-            Leg(fb, stencil, 0.3f, side, 1.15f - 0.55f * Stroke(front) * _stroke - 0.12f * (1 - _stroke), 0.2f, Thrust(front) * _stroke, Fold(front) * _stroke, +1, murk);
+            Leg(fb, stencil, _pond.Near, Light.Nearness(Z), 0.3f, side, 1.15f - 0.55f * Stroke(front) * _stroke - 0.12f * (1 - _stroke), 0.2f, Thrust(front) * _stroke, Fold(front) * _stroke, +1, murk);
             // The stretch (while basking) swings one back leg further back and out.
-            Leg(fb, stencil, 0.74f, side, 2.3f - 0.45f * Stroke(rear) * _stroke + 0.3f * (1 - _stroke) + (side > 0 ? 0.4f * _stretch : 0), 0.19f + (side > 0 ? 0.07f * _stretch : 0), Thrust(rear) * _stroke, Fold(rear) * _stroke, -1, murk);
+            Leg(fb, stencil, _pond.Near, Light.Nearness(Z), 0.74f, side, 2.3f - 0.45f * Stroke(rear) * _stroke + 0.3f * (1 - _stroke) + (side > 0 ? 0.4f * _stretch : 0), 0.19f + (side > 0 ? 0.07f * _stretch : 0), Thrust(rear) * _stroke, Fold(rear) * _stroke, -1, murk);
         }
-        Paint(fb, stencil, _pond.Sun, murk, soft, _pond.Pixels, mark: mark);
+        Paint(fb, stencil, _pond.Sun, murk, soft, _pond.Pixels, mark: mark, near: _pond.Near, nearness: Light.Nearness(Z));
         // The eyes: a dark dot each side of the head, toward the front.
         float er = MathF.Max(0.8f, _len * 0.014f * Scale);
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
-            Oval(fb, stencil, At(0.07f, side * 0.7f), 0, er, er, 20, 24, 16, 0.95f, murk * 0.7f, _pond.Sun, water: _pond.Pixels);
+            Oval(fb, stencil, At(0.07f, side * 0.7f), 0, er, er, 20, 24, 16, 0.95f, murk * 0.7f, _pond.Sun, water: _pond.Pixels, near: _pond.Near, nearness: Light.Nearness(Z));
     }
 
     /// <summary>
@@ -1569,7 +1566,7 @@ internal sealed class Turtle : Body
     /// says which way "in" is: a front leg folds back toward the tail (+1), a
     /// back leg forward toward the head (-1).
     /// </summary>
-    private void Leg(FrameBuffer fb, bool[] stencil, float s, int side, float angle, float length, float spread, float fold, int foldSign, float murk)
+    private void Leg(FrameBuffer fb, bool[] stencil, byte[] near, int nearness, float s, int side, float angle, float length, float spread, float fold, int foldSign, float murk)
     {
         float a = _heading + side * angle;
         float dx = MathF.Cos(a), dy = MathF.Sin(a);
@@ -1579,19 +1576,19 @@ internal sealed class Turtle : Body
         float hw = _wide * Profile(s) * 0.8f * k;
         float hx = _x - hdx * s * _len * k - hdy * side * hw, hy = _y - hdy * s * _len * k + hdx * side * hw;
         PointF upper = Lift(ToScreen(hx + dx * l * 0.25f, hy + dy * l * 0.25f));
-        Oval(fb, stencil, upper, a, l * 0.3f, l * 0.2f, 78, 98, 50, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        Oval(fb, stencil, upper, a, l * 0.3f, l * 0.2f, 78, 98, 50, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels, near: near, nearness: nearness);
         // The elbow (or knee) at the end of the upper leg; the lower leg hangs from it, turned in by the fold.
         float ex = hx + dx * l * 0.48f, ey = hy + dy * l * 0.48f;
         float b = a + side * foldSign * fold * 1.0f;
         float bx = MathF.Cos(b), by = MathF.Sin(b);
         PointF lower = Lift(ToScreen(ex + bx * l * 0.17f, ey + by * l * 0.17f));
-        Oval(fb, stencil, lower, b, l * 0.22f, l * 0.14f, 74, 94, 48, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        Oval(fb, stencil, lower, b, l * 0.22f, l * 0.14f, 74, 94, 48, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels, near: near, nearness: nearness);
         float toe = l * 0.17f;
         if (toe < 2.5f)
         {
             // Too small for toes: one small foot.
             PointF foot = Lift(ToScreen(ex + bx * l * 0.4f, ey + by * l * 0.4f));
-            Oval(fb, stencil, foot, b, l * 0.2f, l * (0.12f + 0.06f * spread), 66, 86, 44, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+            Oval(fb, stencil, foot, b, l * 0.2f, l * (0.12f + 0.06f * spread), 66, 86, 44, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels, near: near, nearness: nearness);
             return;
         }
         // The palm at the end of the lower leg, then four toes fanned from its far edge (the fan widens as the
@@ -1599,7 +1596,7 @@ internal sealed class Turtle : Body
         // and a dark claw at each tip.
         float px0 = ex + bx * l * 0.35f, py0 = ey + by * l * 0.35f;
         PointF palm = Lift(ToScreen(px0, py0));
-        Oval(fb, stencil, palm, b, l * 0.13f, l * (0.11f + 0.07f * spread - 0.04f * fold), 70, 90, 46, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+        Oval(fb, stencil, palm, b, l * 0.13f, l * (0.11f + 0.07f * spread - 0.04f * fold), 70, 90, 46, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels, near: near, nearness: nearness);
         float fan = 0.5f + 0.35f * spread - 0.3f * fold;
         for (int i = 0; i < 4; i++)
         {
@@ -1607,8 +1604,8 @@ internal sealed class Turtle : Body
             float tdx = MathF.Cos(ta), tdy = MathF.Sin(ta);
             PointF mid = Lift(ToScreen(px0 + tdx * toe * 0.7f, py0 + tdy * toe * 0.7f));
             PointF tip = Lift(ToScreen(px0 + tdx * toe * 1.25f, py0 + tdy * toe * 1.25f));
-            Oval(fb, stencil, mid, ta, toe * 0.6f, MathF.Max(0.6f, l * 0.03f), 72, 92, 48, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
-            Oval(fb, stencil, tip, ta, MathF.Max(0.7f, l * 0.03f), MathF.Max(0.6f, l * 0.022f), 38, 44, 26, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+            Oval(fb, stencil, mid, ta, toe * 0.6f, MathF.Max(0.6f, l * 0.03f), 72, 92, 48, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels, near: near, nearness: nearness);
+            Oval(fb, stencil, tip, ta, MathF.Max(0.7f, l * 0.03f), MathF.Max(0.6f, l * 0.022f), 38, 44, 26, 1f, murk, _pond.Sun, rays: false, water: _pond.Pixels, near: near, nearness: nearness);
         }
     }
 

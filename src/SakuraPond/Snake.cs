@@ -145,11 +145,10 @@ internal sealed class Snake : Body
     private int _trailHead, _trailCount;
     // THE DIVE (2026-10-27): the head's depth, where it is going, the depth the head had at each remembered spot (so the body
     // follows it down and up the way the koi's does, Koi._trailZ), each spine point's depth and haze this frame, and the
-    // stencil for a deep snake (Open less the stones' collars and caps, Pond.StoneTop, which stand in front of it).
+    // (a deep snake is hidden by the stones through the depth test per point, Pond.Near, since round forty-one).
     private readonly float[] _trailZ = new float[400];
     private float _zHead, _zTarget;
     private readonly float[] _zAt = new float[Points], _murkAt = new float[Points];
-    private readonly bool[] _openDeep;
 
     // Everything on the pond it must go round, as circles (lily pads, rocks,
     // the cattail clump, the iris clumps) plus the log as a thick line.
@@ -294,8 +293,6 @@ internal sealed class Snake : Body
             MotionLog = line => writer.WriteLine(line);
             AppDomain.CurrentDomain.ProcessExit += (_, _) => writer.Flush();
         }
-        _openDeep = new bool[pond.Open.Length];
-        for (int i = 0; i < _openDeep.Length; i++) _openDeep[i] = pond.Open[i] && !pond.StoneTop[i];
         _len = _u * 0.3f;
         _wide = _u * 0.0068f;
         for (int i = 0; i < Points; i++) Along[i] = i / (Points - 1f);
@@ -1992,14 +1989,14 @@ internal sealed class Snake : Body
 
     private void DrawBody(FrameBuffer fb)
     {
-        bool[] st = Deep ? _openDeep : _pond.Open;
-        Paint(fb, st, _pond.Sun, 0, MathF.Max(1f, _u * 0.0012f) * (1 + 2 * _zHead), water: _pond.Pixels, murkAt: _murkAt);
+        bool[] st = _pond.Open;                                                   // (the stones hide it by the depth test per point, Pond.Near: round forty-one)
+        Paint(fb, st, _pond.Sun, 0, MathF.Max(1f, _u * 0.0012f) * (1 + 2 * _zHead), water: _pond.Pixels, murkAt: _murkAt, near: _pond.Near, zAt: _zAt);
         // The eyes: tiny dark dots either side of the head.
         PointF e0 = Spine[1], e1 = Spine[2];
         float ex = e1.X - e0.X, ey = e1.Y - e0.Y, el = MathF.Max(1e-3f, MathF.Sqrt(ex * ex + ey * ey));
         float er = MathF.Max(0.7f, _wide * 0.3f);
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
-            Oval(fb, st, new PointF(e0.X - ey / el * HalfWidth[1] * 0.7f * side, e0.Y + ex / el * HalfWidth[1] * 0.7f * side), 0, er, er, 20, 20, 16, 0.9f, _murkAt[1], _pond.Sun, water: _pond.Pixels);
+            Oval(fb, st, new PointF(e0.X - ey / el * HalfWidth[1] * 0.7f * side, e0.Y + ex / el * HalfWidth[1] * 0.7f * side), 0, er, er, 20, 20, 16, 0.9f, _murkAt[1], _pond.Sun, water: _pond.Pixels, near: _pond.Near, nearness: Light.Nearness(_zAt[1]));
     }
 }
 

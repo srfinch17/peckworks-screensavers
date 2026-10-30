@@ -35,8 +35,7 @@ internal sealed class KoiSchool
     /// together, so with no goldfish the dice fall exactly as they did before
     /// there were any.
     /// </param>
-    /// <param name="whereDeep">The water stencil for a fish deeper than a quarter of the pond: "where" less the stones' collars and caps (Pond.StoneTop), which stand in front of such a fish.</param>
-    public KoiSchool(Pond pond, int count, Ripples ripples, bool[] where, bool[] whereDeep, Random rng, float play = 1, Petals? petals = null, int goldfish = 0)
+    public KoiSchool(Pond pond, int count, Ripples ripples, bool[] where, Random rng, float play = 1, Petals? petals = null, int goldfish = 0)
     {
         _pond = pond;
         // Instrument hooks, both unset in the real pond: PECKWORKS_TEASE multiplies the tease's chance (so a look
@@ -82,8 +81,8 @@ internal sealed class KoiSchool
         float[] energy = Traits.Deal(rng, _fish.Length), social = Traits.Deal(rng, _fish.Length), curious = Traits.Deal(rng, _fish.Length);
         for (int i = 0; i < _fish.Length; i++)
             _fish[i] = i < koi
-                ? new Koi(pond, ripples, where, whereDeep, rng, i, (energy[i], social[i], curious[i]), play, petals)
-                : new Koi(pond, ripples, where, whereDeep, rng, i - koi, (energy[i], social[i], curious[i]), play, petals, Koi.Kind.Goldfish);   // its own number among the goldfish picks its colouring
+                ? new Koi(pond, ripples, where, rng, i, (energy[i], social[i], curious[i]), play, petals)
+                : new Koi(pond, ripples, where, rng, i - koi, (energy[i], social[i], curious[i]), play, petals, Koi.Kind.Goldfish);   // its own number among the goldfish picks its colouring
         foreach (Koi k in _fish) k.Meet(_fish);               // each fish opens its notebook of who it likes (a match of the dials: no dice)
         foreach (Koi k in _fish) k.Puff = AddPuff;            // a fish rooting in the deep bed stirs up a puff of silt, drawn here under every fish
         Room(_fish.Length);
@@ -554,7 +553,6 @@ internal sealed class Koi : Body
     private readonly Pond _pond;
     private readonly Ripples _ripples;
     private readonly bool[] _where;
-    private readonly bool[] _whereDeep;                   // the same less the stones' collars and caps: the stencil when it is deeper than a quarter of the pond (see Draw)
     private readonly Random _rng;
     private readonly float _len, _wide;                   // body length and half its widest width, ground pixels
     // THE FISH HAS A HEIGHT (round thirty-eight, "the land gradually rises underwater until it sticks out of the water
@@ -844,7 +842,7 @@ internal sealed class Koi : Body
 
     /// <param name="dials">Its personality, each 0 to 1: energy, sociability, curiosity (dealt by KoiSchool so the school is a spread).</param>
     /// <param name="kind">Koi or goldfish. For a goldfish, "index" counts among the goldfish (it picks the colouring).</param>
-    public Koi(Pond pond, Ripples ripples, bool[] where, bool[] whereDeep, Random rng, int index, (float Energy, float Social, float Curious) dials, float play = 1, Petals? petals = null, Kind kind = Kind.Koi) : base(Points)
+    public Koi(Pond pond, Ripples ripples, bool[] where, Random rng, int index, (float Energy, float Social, float Curious) dials, float play = 1, Petals? petals = null, Kind kind = Kind.Koi) : base(Points)
     {
         _kind = kind;
         bool gold = kind == Kind.Goldfish;
@@ -857,7 +855,6 @@ internal sealed class Koi : Body
         _pond = pond;
         _ripples = ripples;
         _where = where;
-        _whereDeep = whereDeep;
         _rng = rng;
         _play = play;
         _petals = petals;
@@ -3250,9 +3247,9 @@ internal sealed class Koi : Body
         Fins(fb, 4, 0.2f, 0.12f, 0.95f + scull, alt, mark);
         Fins(fb, 11, 0.11f, 0.065f, 0.75f + scull * 0.5f, alt * 0.5f, mark);
         // Deeper than a quarter of the pond, the island's collar and cap stand in front of it: drawn through the
-        // stencil that leaves them out, so the stone hides it there (Pond.StoneTop).
-        bool[] st = Z > 0.25f ? _whereDeep : _where;
-        Paint(fb, st, _pond.Sun, _murkAt[0], soft, _pond.Pixels, mark: mark, murkAt: _murkAt);
+        // the depth test per spine point (Pond.Near): a stone nearer the eye hides the bit of body behind it.
+        bool[] st = _where;
+        Paint(fb, st, _pond.Sun, _murkAt[0], soft, _pond.Pixels, mark: mark, murkAt: _murkAt, near: _pond.Near, zAt: _zAt);   // the depth test: a stone nearer the eye hides the bit of body behind it (Pond.Near)
         // THE BACK OUT OF THE WATER (round thirty-eight): where a point's back breaks the surface, the dorsal fin stands
         // up out of it as a dark ridge along the backbone (a carp's dorsal runs from a third of the way back to the base
         // of the tail), with a wet gleam beside it on the sun's side. Faint where the back is just awash, full where the
@@ -3280,7 +3277,7 @@ internal sealed class Koi : Body
         foreach (int side in (ReadOnlySpan<int>)[1, -1])
         {
             var c = new PointF(e0.X - ey / el * HalfWidth[1] * 0.62f * side, e0.Y + ex / el * HalfWidth[1] * 0.62f * side);
-            Oval(fb, st, c, 0, er, er, 24, 26, 28, 0.95f, _murkAt[1] * 0.7f, _pond.Sun, water: _pond.Pixels);
+            Oval(fb, st, c, 0, er, er, 24, 26, 28, 0.95f, _murkAt[1] * 0.7f, _pond.Sun, water: _pond.Pixels, near: _pond.Near, nearness: Light.Nearness(_zAt[1]));
         }
     }
 
@@ -3295,7 +3292,7 @@ internal sealed class Koi : Body
     public void DrawShadow(FrameBuffer fb)
     {
         if (_shadowAlpha <= 0) return;
-        PaintShadow(fb, _where, _shadowDx, _shadowDy, _shadowAlpha, _shadowSoft);
+        PaintShadow(fb, _where, _shadowDx, _shadowDy, _shadowAlpha, _shadowSoft, near: _pond.Near, nearness: Light.Nearness(Z));
     }
 
     /// <summary>A pair of side fins at spine point i, swept back from the body by "sweep" radians, one side "alt" further back and the other "alt" further forward (the sculling by turns).</summary>
@@ -3310,7 +3307,7 @@ internal sealed class Koi : Body
             float nx = MathF.Cos(back + side * -MathF.PI / 2), ny = MathF.Sin(back + side * -MathF.PI / 2);
             float l = _len * len * scale;
             var c = new PointF(p.X + nx * HalfWidth[i] * 0.8f + MathF.Cos(a) * l * 0.5f, p.Y + ny * HalfWidth[i] * 0.8f + MathF.Sin(a) * l * 0.5f * Ripples.Squash);
-            Oval(fb, _where, c, a, l * 0.5f, _len * wid * 0.5f * scale, _fin.R, _fin.G, _fin.B, _finAlpha * 0.9f, murk, _pond.Sun, water: _pond.Pixels, mark: mark);
+            Oval(fb, _where, c, a, l * 0.5f, _len * wid * 0.5f * scale, _fin.R, _fin.G, _fin.B, _finAlpha * 0.9f, murk, _pond.Sun, water: _pond.Pixels, mark: mark, near: _pond.Near, nearness: Light.Nearness(_zAt[i]));   // (the fins were never behind a stone until round forty-one: hole C)
         }
     }
 

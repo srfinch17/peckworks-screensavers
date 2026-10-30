@@ -119,7 +119,9 @@ public sealed class FrameBuffer
     /// </summary>
     /// <param name="alpha">0 = invisible, 1 = solid.</param>
     /// <param name="onlyWhere">An optional stencil, as in Sprite.Draw: where it is false the line leaves the frame alone.</param>
-    public void Line(PointF a, PointF b, Color color, float alpha = 1f, float thickness = 1f, bool[]? onlyWhere = null)
+    /// <param name="depth">An optional depth map, as in Sprite.Draw: how near each pixel's scenery is, 0 far to 255 near. With it the line is hidden where the scenery is nearer than its own nearness.</param>
+    /// <param name="nearness">How near the line itself is, on the same scale.</param>
+    public void Line(PointF a, PointF b, Color color, float alpha = 1f, float thickness = 1f, bool[]? onlyWhere = null, byte[]? depth = null, int nearness = 255)
     {
         alpha *= color.A / 255f;
         if (alpha <= 0) return;
@@ -142,6 +144,7 @@ public sealed class FrameBuffer
                 if (px < 0 || px >= Width || py < 0 || py >= Height) continue;
                 int at = py * Width + px;
                 if (onlyWhere != null && !onlyWhere[at]) continue;
+                if (depth != null && depth[at] > nearness) continue;    // something nearer stands in front
                 Pixels[at] = Blend(Pixels[at], color.R, color.G, color.B, alpha * cover);
             }
         }

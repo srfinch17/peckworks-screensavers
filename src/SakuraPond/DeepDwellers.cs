@@ -48,12 +48,12 @@ internal sealed class DeepDwellers : ISnackField
     public int Bouts;                            // fights so far (the instruments read it)
 
     /// <param name="count">How many dwellers (the "Deep dwellers" knob). Every third from the first is a crayfish, the rest are prawns. 0 = none.</param>
-    /// <param name="viewDeep">Open water in view less the stones' caps and collars (the scene's deep stencil): where a dweller may stand and be drawn.</param>
+    /// <param name="view">Open water in view less the stones' caps and collars (the scene's deep stencil): where a dweller may stand and be drawn.</param>
     /// <param name="minnows">The schools, so a dweller may take a fish that comes down to it (null without minnows).</param>
-    public DeepDwellers(Pond pond, int count, bool[] viewDeep, Minnows? minnows, Random rng)
+    public DeepDwellers(Pond pond, int count, bool[] view, Minnows? minnows, Random rng)
     {
         _rng = rng;
-        _bed = new DeepBed(pond, viewDeep);
+        _bed = new DeepBed(pond, view);
         if (count <= 0) { _all = []; _bouts = []; _pairCool = []; return; }
         float[] bold = Traits.Deal(rng, count), busy = Traits.Deal(rng, count);
         List<PointF> homes = _bed.Spots(rng, count, pond.U * 0.15f);
@@ -194,12 +194,12 @@ internal sealed class DeepBed
     public readonly bool[] View;               // open deep water in view: where a dweller may be drawn AND walk (the stones' caps and collars left out)
     public readonly float U;
 
-    public DeepBed(Pond pond, bool[] viewDeep)
+    public DeepBed(Pond pond, bool[] view)
     {
         Pond = pond;
         U = pond.U;
         View = new bool[pond.Width * pond.Height];
-        for (int i = 0; i < View.Length; i++) View[i] = viewDeep[i] && pond.Water[i] && pond.Open[i];
+        for (int i = 0; i < View.Length; i++) View[i] = view[i] && pond.Water[i] && pond.Open[i];
     }
 
     public float CentreY => Pond.Centre.Y;
@@ -1198,11 +1198,11 @@ internal sealed class Dweller : Body, ISnack
         // The shadow on the bed: its own shape, a hair down and to the right (within 0.006u on the bed), faint and soft.
         float reach = _u * 0.006f;
         _shadowPass = true;
-        PaintShadow(fb, _view, reach * 0.6f, reach * 0.8f, 0.2f * (1 - murk), soft * 2f);
+        PaintShadow(fb, _view, reach * 0.6f, reach * 0.8f, 0.2f * (1 - murk), soft * 2f, near: _pond.Near, nearness: Light.Nearness(_z));
         _shadowPass = false;
         DrawLegs(fb, murk);
         DrawFeelers(fb, murk);
-        Paint(fb, _view, _pond.Sun, murk, soft, _pond.Pixels);
+        Paint(fb, _view, _pond.Sun, murk, soft, _pond.Pixels, near: _pond.Near, nearness: Light.Nearness(_z));
         DrawClaws(fb, murk);
         DrawEyes(fb, murk);
     }
@@ -1216,7 +1216,7 @@ internal sealed class Dweller : Body, ISnack
         float widK = MathF.Sqrt(pa * pa + pb * pb);
         PointF c = ToScreen(gx, gy);
         Oval(fb, _view, new PointF(c.X, c.Y + _sinkPx), MathF.Atan2(sa, ca), MathF.Max(0.8f, semiLen * lenK), MathF.Max(0.9f, semiWid * widK),
-            r, g, b, alpha, murk, _pond.Sun, rays: false, water: _pond.Pixels);
+            r, g, b, alpha, murk, _pond.Sun, rays: false, water: _pond.Pixels, near: _pond.Near, nearness: Light.Nearness(_z));
     }
 
     /// <summary>
@@ -1412,7 +1412,7 @@ internal sealed class Dweller : Body, ISnack
         Deepen(ref r, ref g, ref bl, (int)(murk * 256));
         uint wc = _pond.Pixels[iy * _pond.Width + ix];
         r += (int)((((wc >> 16) & 0xFF) - r) * murk); g += (int)((((wc >> 8) & 0xFF) - g) * murk); bl += (int)(((wc & 0xFF) - bl) * murk);
-        fb.Line(a, b, Color.FromArgb(Math.Clamp(r, 0, 255), Math.Clamp(g, 0, 255), Math.Clamp(bl, 0, 255)), alpha, thick, _view);
+        fb.Line(a, b, Color.FromArgb(Math.Clamp(r, 0, 255), Math.Clamp(g, 0, 255), Math.Clamp(bl, 0, 255)), alpha, thick, _view, _pond.Near, Light.Nearness(_z));
     }
 }
 

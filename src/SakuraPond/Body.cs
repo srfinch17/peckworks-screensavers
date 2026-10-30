@@ -108,8 +108,14 @@ internal abstract class Body
     /// body (between two points, the slope between theirs): a fish diving
     /// head first is deeper, so hazier, at the head than at the tail.
     /// </param>
+    /// <param name="near">THE DEPTH TEST (round forty-one, the review's finding F1): the stones' drawn surface per
+    /// screen pixel on the sprites' nearness scale (Pond.Near). A pixel is skipped where the stone there is nearer
+    /// than the body at that point (zAt per spine point, or nearness for the whole body). Until this, a stone hid a
+    /// fish through one yes-or-no stencil at a quarter of the depth, chosen by the head's depth, and a fish was
+    /// painted across a stone that stood in front of it for 3 to 9 seconds of every minute.</param>
     protected void Paint(FrameBuffer fb, bool[]? onlyWhere, byte[]? sun, float murk, float soft, uint[]? water = null,
-        float ox = 0, float oy = 0, float shadow = 0, bool[]? mark = null, Rectangle? clip = null, float[]? murkAt = null)
+        float ox = 0, float oy = 0, float shadow = 0, bool[]? mark = null, Rectangle? clip = null, float[]? murkAt = null,
+        byte[]? near = null, float[]? zAt = null, int nearness = 255)
     {
         int n = Spine.Length, w = fb.Width, h = fb.Height;
         uint[] px = fb.Pixels;
@@ -190,6 +196,7 @@ internal abstract class Body
                     float along = rx * dx + ry * dy;                // pixels along the piece from its start
                     float side = rx * nx + ry * ny;                 // signed: pixels out to one side
                     float t = along <= 0 ? 0 : along >= len ? 1 : along * invLen;
+                    if (near != null && near[idx] > (zAt != null ? Light.Nearness(zAt[i] + (zAt[i + 1] - zAt[i]) * t) : nearness)) continue;   // a stone nearer the eye stands in front of this bit of the body
                     float hw = hwA + (hwB - hwA) * t;
                     // Past the very nose or the tail tip, measure round the end, so the ends are rounded.
                     float overrun = (first && along < 0) ? -along : (last && along > len) ? along - len : 0;
@@ -273,7 +280,7 @@ internal abstract class Body
     /// shadow on the bed, and (through CastShadow) for its shadow on the back
     /// of a deeper fish it swims over.
     /// </summary>
-    protected void PaintShadow(FrameBuffer fb, bool[]? onlyWhere, float dx, float dy, float alpha, float soft, Rectangle? clip = null)
+    protected void PaintShadow(FrameBuffer fb, bool[]? onlyWhere, float dx, float dy, float alpha, float soft, Rectangle? clip = null, byte[]? near = null, int nearness = 255)
     {
         // Paint tells a shadow from a body by the shadow's strength in 256ths being more than
         // nothing. A strength under a 256th rounds to nothing, and Paint then painted the BODY,
@@ -284,7 +291,7 @@ internal abstract class Body
         // glitch", 2026-10-27, found on frame 40 of seed 7 at 720p). A shadow too faint to paint
         // is not painted at all; every animal's shadow comes through here.
         if (alpha * 256 < 1) return;
-        Paint(fb, onlyWhere, null, 0, soft, null, dx, dy, alpha, null, clip);
+        Paint(fb, onlyWhere, null, 0, soft, null, dx, dy, alpha, null, clip, near: near, nearness: nearness);
     }
 
     /// <summary>
@@ -342,7 +349,8 @@ internal abstract class Body
     /// <param name="rays">Faint rays across a long oval (a fin). False for a solid limb.</param>
     /// <param name="mark">If given, set true at every pixel painted (so a fin counts as part of the body for the shadows that land on it).</param>
     protected static void Oval(FrameBuffer fb, bool[]? onlyWhere, PointF c, float angle, float len, float wid,
-        int r, int g, int b, float alpha, float murk, byte[]? sun, bool rays = true, uint[]? water = null, bool[]? mark = null)
+        int r, int g, int b, float alpha, float murk, byte[]? sun, bool rays = true, uint[]? water = null, bool[]? mark = null,
+        byte[]? near = null, int nearness = 255)
     {
         float ca = MathF.Cos(angle), sa = MathF.Sin(angle);
         int reach = (int)MathF.Ceiling(MathF.Max(len, wid)) + 2;
@@ -371,6 +379,7 @@ internal abstract class Body
             {
                 int idx = y * fb.Width + x;
                 if (onlyWhere != null && !onlyWhere[idx]) continue;
+                if (near != null && near[idx] > nearness) continue;        // a stone nearer the eye stands in front
                 float dx = x + 0.5f - c.X;
                 float u = (dx * ca + dySa) * invLen, v = (dyCa - dx * sa) * invWid;
                 float q = u * u + v * v;
