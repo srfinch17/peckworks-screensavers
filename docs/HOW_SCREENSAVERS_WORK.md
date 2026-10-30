@@ -1592,9 +1592,14 @@ for giving a new animal a mind, and the rules learned building these three, is
 [MINDS.md](MINDS.md).
 
 *Depth is real.* A koi lives on the water's plane at some depth below it, and the pond has a
-bed. `Pond.Floor` says how deep the water is under every pixel: it slopes up to the bank the way
-the painted water does, and it also rises to meet each rock's rim over a short slope, because a
-stone standing in the water widens out under the surface like the foot of a hill. A fish may be
+bed. `Pond.Floor` says how deep the water is under every pixel, and since round forty-one's step 3 it
+IS the painted depth (`Pond.Depth`), the same array: ONE TERRAIN (`PondPainter.Terrain`, a height map
+in ground pixels) holds the slope up to the bank, the humps and hollows, every stone's profile
+(`StoneZ`, lowered into it by `Lower`) and each bank rock's foot (`LowerRocks`, a short slope up to
+the rim, because a stone standing in the water widens out under the surface like the foot of a hill).
+The water's colour, the bed the fish are held off, the sink and the haze all read that one map, so the
+bed a swimmer stands on is the bed drawn under it (before this the floor and the painted depth were
+two arrays that disagreed by the stones' hills and the rocks' feet). A fish may be
 no deeper than nine tenths of the floor under ANY part of its body (the spine is laid, the
 shallowest floor under it found, and the depth capped there and then, so it holds on every
 frame), and it looks a body length and a half ahead so it rises up the slope as the bank or a
@@ -1641,8 +1646,8 @@ light can reflect back out of the water"): the veil (`Light.Murk`) now tops out 
 so nothing is ever a ghost, and the darkening (`Body.Deepen`) does the work of depth, per channel,
 red most (water eats the warm end of the light first): on the typical bed a thing keeps six tenths of
 its saturation, half its red, two thirds of its green and seven tenths of its blue. And the BED IS
-LIT BY ITS OWN SLOPE (`PondPainter.LightBed`, "i need this to be a 3d terrain"): the painted depth,
-smoothed, gives each water pixel a tilt, and the side of a hump that faces the sun (up and left) is
+LIT BY ITS OWN SLOPE ("i need this to be a 3d terrain"; `PondPainter.SinkBed` since step 3, `LightBed`
+before it): the terrain, smoothed, gives each ground pixel a tilt, and the side of a hump that faces the sun (up and left) is
 brightened by up to a third and the side facing away darkened, so the humps and hollows read as
 ground with a shape instead of lighter and darker patches on a sheet. Only the open pond is lit
 (from a quarter of the depth to seven tenths); the shallows keep their painted look, and the stones'
@@ -1653,7 +1658,28 @@ third of u across, scale the depth by up to 18 percent either way, more the furt
 bank, in `PourWater`; and because everything reads depth from that one array (the water's colour,
 the bed's clearness, the floor the swimmers feel, the sink and the haze), a hump is a real rise of
 the bed to every fish, which climbs it as it climbs a stone's flank. The bumps roll their own dice,
-seeded from the screen's size, so nothing else in the scene moved when they came. Deeper also
+seeded from the screen's size, so nothing else in the scene moved when they came.
+
+*The bed is DRAWN SUNK (round forty-one, the review's step 3).* Every swimmer has been drawn down the
+screen by its depth since round thirty-eight (`Light.SinkPx`: the deeper, the lower in the view, which is
+how a slant reads from above), but the bed itself was painted at its place on the ground, flat. So a
+crayfish standing exactly on the bed stood, in the picture, on bed that was 0.22 to 0.37 of the pond's
+depth away from it, and every bed shadow fell on bed that was not under its fish (the review's F3, the
+largest painter-to-animal mismatch by area). Now ONE FILL (`PondPainter.SinkBed`) draws the whole bed the
+way the stones' flanks were drawn: each ground pixel's colour is worked out first (the bed through the
+water, `WaterOver`, lit by the terrain's tilt; or a stone's flank from `StoneColour`), then each ground
+pixel fills the screen rows from its own sunk place to the next ground row's, the colour blended between
+the two, and at any screen pixel the NEAREST (shallowest) point of the bed wins. The near side of a hump
+hides the far side; the bank's shallow slope, which rises toward the eye, hides the deep bed behind it and
+is drawn at about a fifth of its ground width under today's slant; the terrain reaches a band of ground
+ABOVE the screen (`Light.SinkPx(1)` rows), because that deep bed is drawn down into the top of the view.
+`Pond.Near` takes the drawn depth of every bed pixel too, so the painters hide a fish behind a hump as
+they hide it behind a stone. What FLOATS is kept off the sink: the murk patches and the drifted petals
+are painted onto a clear sheet and laid over the sunk water at their own place, and whatever the land
+painters put on the water (a bank rock's wet rim, an afloat log) is copied back where it was. The dice
+do not move (the same calls in the same order). The slant this reveals (the mounds round the stones as
+tall hills at today's `Pond.DepthU` 0.6u and `Light.Sink` 0.55) is the owner's choice, the review's step 4.
+Deeper also
 means lower on the screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier
 and lower. The painted bed shows through the deepest water by two fifths (`PondPainter.BedClear`,
 one curve for the pebbles and for a submerged stone), and the deep bed has small dark stones
@@ -1903,8 +1929,10 @@ under the log's edge, which is what a log floating over a fish looks like.
 blossom: the branches' shadow map is made before the island is placed and the spot must be open
 sky). The stone is painted as any rock is, whole and bare (no moss: green survived the water as a
 lime glow), the cap on top of it as a small rock of its own with faces, creases, grain and moss, and
-THEN the water is laid back over both (`WrapIsland`). The cap keeps a wet band just inside its own
-rim, the waterline every bank rock has, and no shadow on the water. Under the water the stone is a
+THEN the painting is read, not kept (`StoneColour`): the cap stays, in place, with a wet band just inside
+its own rim, the waterline every bank rock has, and no shadow on the water; the stone under the water is
+drawn sunk by the one fill that draws the bed (`SinkBed`), from the colour `StoneColour` works out for
+every ground pixel of its footprint. Under the water the stone is a
 SMOOTH MOUND since round forty, not the rock painting sunk: the painting's average hue, lifted to a
 pale stone's brightness, lit by the hill's slope toward the sun (up and left, the bed's own rule)
 and darkened and hazed by depth. Sinking the flat painting row by row had stretched its lower flank
@@ -1914,18 +1942,18 @@ that is a smooth function of the hill cannot show the stretch. The cap's wet ban
 toward three quarters of the water now (at 0.85 toward six tenths it was a black ring). The stone is ONE OBJECT with
 its cap, in depth as well as in paint (2026-10-26 night, after the owner watched a turtle "swim
 under the top, but over the bottom" and said "the top of the rock is just floating in the water"
-and "making the rock one object might be the way to go"). Its depth at every pixel is the hill
-the bed climbs under the swimmers (`Hill`): at the surface on a COLLAR round the cap (half a cap
-radius wide, read from the cap's painted rim so it follows the lumps), then THE ONE SHAPE OF A
+and "making the rock one object might be the way to go"). Its depth at every pixel is the terrain's,
+lowered by the stone's profile (`Lower`): at the surface on a COLLAR round the cap (half a cap
+radius wide), then THE ONE SHAPE OF A
 STONE (`PondPainter.StoneZ`, round forty-one, the review's step 2): the boulder's side falls at
 about forty-five degrees to a shoulder 0.12 of the pond's depth down at the stone's painted edge,
 and from there a mound slopes down to the bed over 0.28u. Until then the hill fell from the cap to
 the full bed within 0.05u of the stone's edge: 570 px of height over 102 px of run at 1080 lines,
 a column five times taller than wide, drawn 508 px tall under the pond's slant ("the current
-rocks look like 40 ft tall"). The mound is in the painted depth as well (`Mound`: the water is
-poured again over it from the bed kept before the first pour, so it shows as the shoal round a
-boulder, lit by its slope like every hump), in the bed the animals feel (`Hill`, the same
-function) and in the stone's own flank (`WrapIsland`). Nothing swims between the cap and its
+rocks look like 40 ft tall"). The mound is in the one terrain, so it is in the painted depth (the
+shoal round a boulder, lit by its slope like every hump), in the bed the animals feel and in the
+stone's own flank at once (until step 3 it was lowered three times, by `Mound`, `Hill` and
+`WrapIsland`'s own reading of the cap's rim, and every sighting lived in a gap between them). Nothing swims between the cap and its
 collar, because there is no water there. The stone is painted through that depth BY THE FISH'S OWN RULE (round forty-one): a point
 of the flank is the mound's colour (a mid grey, lit on the side facing the sun and shaded on the
 other, darker toward its silhouette as a cylinder is), deepened by the murk at its depth exactly
@@ -1970,11 +1998,11 @@ the code stays), and in its place `ShorePainter.PlaceFormation` puts one small s
 left of the pond (of several hundred random spots in the lower left half that are open water a fifth
 of u from the bank, under open sky and clear of the island, the one nearest the lower left corner),
 with two or three little caps evenly round its middle so no two touch. It is painted with the island's
-own three steps (`IslandStone`, `IslandCap` once per cap, `WrapIsland` over the union of the caps,
-its depth read from the NEAREST cap's rim, so the stone between two caps stays shallow and in sight,
-one stone and not a dark cloud per cap), each cap goes into the blockers and into `Pond.Rocks` (so every
-animal's obstacle list has it without a new list), and the bed climbs to each cap's rim (`Hill`, once
-per cap; the lowest hill wins between them). `Pond.Formation` holds it. Placement is counted, never
+own three steps (`IslandStone`, `IslandCap` once per cap, `StoneColour` over the union of the caps,
+the terrain lowered once per cap so the stone between two caps stays shallow and in sight, one stone
+and not a dark cloud per cap), each cap goes into the blockers and into `Pond.Rocks` (so every
+animal's obstacle list has it without a new list), and the bed climbs to each cap's rim (`Lower`, once
+per cap; the lowest wins between them). `Pond.Formation` holds it. Placement is counted, never
 assumed: the start log prints it, 12 of 12 seeds at 1920x1080. A SECOND formation (2026-10-27, "i
 like the rocks we have. add one more") is placed the same way in the upper right half, nearest the
 upper right corner, clear of the island and the first; it rolls its own dice (seeded from the first

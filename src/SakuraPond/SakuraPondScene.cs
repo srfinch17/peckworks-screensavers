@@ -290,13 +290,13 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Pgm("water", (x, y) => _pond.Water[y * w + x] ? (byte)255 : (byte)0);
         Pgm("open", (x, y) => _pond.Open[y * w + x] ? (byte)255 : (byte)0);
         Pgm("land", (x, y) => _pond.Land[y * w + x] ? (byte)255 : (byte)0);
-        Pgm("near", (x, y) => _pond.Near[y * w + x]);                                        // the stones' drawn surface as nearness (0 none, 255 the cap)
+        Pgm("near", (x, y) => _pond.Near[y * w + x]);                                        // the drawn surface of the bed and the stones as nearness (0 none, 255 the cap); the bed too since step 3
         Pgm("stonez", (x, y) => _pond.Near[y * w + x] == 0 ? (byte)255 : (byte)(255 - _pond.Near[y * w + x]));   // the same as depth times 250 (the review's instrument, behind.py, reads this)
         Pgm("shoal", (x, y) => _pond.StoneShoal[y * w + x] ? (byte)255 : (byte)0);
         Pgm("room", (x, y) => (byte)Math.Clamp((int)(_pond.RoomAt(x, y) + 0.5f), 0, 255));
         Pgm("roomkoi", (x, y) => (byte)Math.Clamp((int)(_pond.KoiRoomAt(x, y) + 0.5f), 0, 255));   // the koi's grid, the stones' shoulders as walls (round thirty-nine)
         Pgm("floor", (x, y) => _pond.Floor[y * w + x]);    // the bed the swimmers feel, 0 at the edge to 255 at full depth (round thirty-eight: the shore's slope and the hollows read off it)
-        Pgm("depth", (x, y) => _pond.Depth[y * w + x]);    // the painted depth (the floor without the stones' hills)
+        Pgm("depth", (x, y) => _pond.Depth[y * w + x]);    // the painted depth: the same array as floor since round forty-one's step 3 (one terrain)
     }
 
     public void Render(FrameBuffer fb)
