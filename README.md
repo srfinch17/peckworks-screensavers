@@ -112,7 +112,9 @@ and drifts in a lull, so no two fall the same way.
   the water under any part of its body and rises up the slope before the shallows (and keeps off
   a stone's shoulders, where the water would be under half the pond's depth; since round thirty-nine it feels those shoulders coming by a room grid of its
   own, so it turns before a stone instead of nosing against it, creeps up a stone's flank instead of freezing
-  on it a frame at a time, and lets its tail go quiet when it is held). The fish has a HEIGHT
+  on it a frame at a time, and lets its tail go quiet when it is held; since round forty-three that grid is
+  stacked by depth, so every slope of the bed and every mound is felt the same way, at the depth the fish is
+  at). The fish has a HEIGHT
   (a carp's body is about three tenths of its length deep, a goldfish a little more), and the bed
   rises gently to the bank over a third of the screen's unit, so a fish heading for the shore swims up
   the slope, then its back and dorsal fin break the surface (drawn clear of the water's haze, with a

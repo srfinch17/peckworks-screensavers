@@ -121,6 +121,12 @@ These are in the code comments too; here they are in one place.
   built before the hills, earlier in the same function), so a shoulder was a cliff with no slope and the
   fallback climbed INTO it against the probe's way out: a goldfish stood 115 s. When a wall is added for
   one animal, grep every grid and mask that animal reads, or give it a grid of its own (`Pond.KoiRoomAt`).
+  Since round forty-three the room grid is STACKED BY DEPTH (`Pond.RoomAt(x, y, wallZ)`, sixteen floors; on
+  each the bed shallower than that floor is a wall as the land is), so a wall that is a depth is in the
+  grid too: a swimmer reads the floor its own step rule would refuse it at (`Koi.WallZ`, the cap and the
+  shore turned round; the turtle nine tenths of its depth; the minnows their dip's rule) for its feelers,
+  its search trigger and its "nothing is clear" fallback, and a mound ahead is falling room, not a cliff.
+  The koi's stack keeps the shoulders as walls; the snake still steers on its own flat plane (step 5).
 - **A turn of half a circle has no side, and a probe has a floor in pixels.** "Straight behind" as the
   answer to "nothing is clear" gave `Wrap` a different sign each frame, and the eased turn rate oscillated
   about nought at the clamp times the easing share (0.9 at 8 per second: 0.09), which is the TELL of two
@@ -318,7 +324,9 @@ water left under the point (0.9 of the floor, less the point's depth, stretched 
 body below) as room, read under a ball as wide as the animal (`Koi.BedUnder`: the point and four
 more most of a half width out; a resting fish drifting along a rock with its nose heading clear
 had its flank ride up the stone unfelt), so a bed rising ahead is felt before any sample is
-inside it. A plain
+inside it; and read the room grid on the floor of its depth stack for the point's own depth
+(`Pond.RoomAt(x, y, wallZ)`, round forty-three), so the same rising bed is falling room sideways as
+well as a shrinking gap below, and a feeler that climbs reads a roomier floor. A plain
 "inside or not" test left the animal's depth clamp to do the steering, one floor step a frame,
 which is a hop on the screen (the koi near a rock, the turtle on a dive). And make the animal WANT
 to be a margin above the bed (the koi: 0.3 of its length of water under it; the turtle: 0.35),

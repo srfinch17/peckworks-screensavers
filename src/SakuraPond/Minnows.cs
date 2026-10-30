@@ -730,6 +730,11 @@ internal sealed class Minnow : Body
         }
         // 5. The bank (or a rock, or the edge of the view): turn toward more open water.
         PointF here = ToScreen(_pond, X, Y);
+        // The SURFACE floor of the stacked room grid, here and in the wall-following below: the land, the stones' caps and
+        // the picture's edge. Not the floor of its depth (round forty-three tried it): a dipped school reads the bed it
+        // grazes over as a maze of walls a few pixels tall (every bump of the bed within 0.03 of its own), the push toward
+        // "more open water" fired all the while, and the schools milled a fifth more (spin36: 496 to 592 fish-seconds).
+        // The bed is the STEP'S business (TryStep, on the depth's floor), as it always was for a minnow.
         float roomHere = _pond.RoomAt(here.X, here.Y), wall = _u * 0.04f;
         if (roomHere < wall)
         {
@@ -779,7 +784,7 @@ internal sealed class Minnow : Body
             else FollowWall(here);
         }
         float step = _speed * dt, moved = 0;
-        if (TryStep(step, roomHere)) moved = step;
+        if (TryStep(step)) moved = step;
         else
         {
             // THE STEP WAS REFUSED: the nose is on the wall. Pick the side that leads toward the school when the
@@ -793,13 +798,13 @@ internal sealed class Minnow : Body
             }
             else _wallSide = -_wallSide;
             FollowWall(here);
-            if (TryStep(step, roomHere)) moved = step;
+            if (TryStep(step)) moved = step;
             else
             {
                 // Blocked both ways along (a pocket no wider than a step): straight away from the wall.
                 PointF ow = _pond.OpenWay(here.X, here.Y);
                 float l = MathF.Sqrt(ow.X * ow.X + ow.Y * ow.Y);
-                if (l > 1e-4f) { _heading = MathF.Atan2(ow.Y, ow.X); if (TryStep(step, roomHere)) moved = step; }
+                if (l > 1e-4f) { _heading = MathF.Atan2(ow.Y, ow.X); if (TryStep(step)) moved = step; }
             }
         }
         PointF last = _trail[_trailHead];
@@ -819,32 +824,35 @@ internal sealed class Minnow : Body
 
     /// <summary>
     /// Takes one step along the heading if the water there is open, and says whether it did. "Open" is the
-    /// pond's room grid: a step may go anywhere with a couple of pixels of water round it, or anywhere with
-    /// at least as much room as here (so a fish already against a wall may slide along it, never into it).
+    /// pond's room grid on this fish's own floor (WallZ: the land, and down on the bed any bed shallower than
+    /// it may be over): a step may go anywhere with a couple of pixels of water round it, or anywhere with at
+    /// least as much room as here (so a fish already against a wall may slide along it, never into it; and a
+    /// fish already inside one may step any way out). The room here is read on the same floor: read at the
+    /// surface, as the steering's is, a step beside a hump would always be "less room than here" and refused.
     /// </summary>
-    private bool TryStep(float step, float roomHere)
+    private bool TryStep(float step)
     {
         float nx = X + MathF.Cos(_heading) * step, ny = Y + MathF.Sin(_heading) * step;
-        PointF next = ToScreen(_pond, nx, ny);
-        float roomNext = _pond.RoomAt(next.X, next.Y);
-        if (roomNext > 2 || roomNext >= roomHere)
+        PointF next = ToScreen(_pond, nx, ny), here = ToScreen(_pond, X, Y);
+        float wallZ = WallZ();
+        float roomNext = _pond.RoomAt(next.X, next.Y, wallZ);
+        if (roomNext > 2 || roomNext >= _pond.RoomAt(here.X, here.Y, wallZ))
         {
-            // Down on the bed (a dip): never onto a bed shallower than the fish is deep, unless the bed here is shallower
-            // still (then any way out is allowed): the slope of a hollow or a stone's hill is a wall to a deep fish, as to
-            // a koi (the snake's rule, round thirty-five), so the school keeps inside its hollow instead of riding up the
-            // wall and being lifted in a jump.
-            if (Z > 0.3f)
-            {
-                float bedNext = 0.9f * BedAt(next) - 0.03f;
-                if (bedNext < Z - 0.02f && bedNext < 0.9f * BedAt(ToScreen(_pond, X, Y)) - 0.03f) return false;
-            }
             X = nx; Y = ny; return true;
         }
         return false;
     }
 
-    /// <summary>The bed under a screen point, 0 to 1 of the pond's full depth (Pond.Floor; a point off the picture counts as its nearest pixel).</summary>
-    private float BedAt(PointF s) => _pond.Floor[Math.Clamp((int)s.Y, 0, _pond.Height - 1) * _pond.Width + Math.Clamp((int)s.X, 0, _pond.Width - 1)] / 255f;
+    /// <summary>
+    /// The shallowest bed this fish may be over, as the floor of the pond's stacked room grid it reads (round
+    /// forty-three). Down on the bed (a dip, deeper than 0.3) the slope of a hollow or a stone's hill is a wall to it,
+    /// as to a koi (the snake's rule, round thirty-five), so the school keeps inside its hollow instead of riding up
+    /// the wall and being lifted in a jump: the bed is a wall where nine tenths of it, less 0.03, is shallower than
+    /// the fish is deep less 0.02 (the dip's old step test, now a floor of the grid, so the school feels the slope
+    /// coming instead of the step alone refusing it). Near the surface the bed is no wall at all: a school swims over
+    /// the stones' shoulders and the bank's shallows.
+    /// </summary>
+    private float WallZ() => Z > 0.3f ? (Z + 0.01f) / 0.9f : 0f;
 
     /// <summary>
     /// Points the fish along the wall it is following: across the "uphill to open water" direction of the

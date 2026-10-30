@@ -1420,7 +1420,8 @@ prawns live, was refused until the 5 s jam breaker, the koi's old deadlock in a 
 speed, wall side, room, whether it moved, flash), `PECKWORKS_MINNOWGOAL=island|formation|formation2`
 sends every school's idle target to that stone for a stress run, and `PECKWORKS_MASKDUMP` names a
 folder for the steering masks as PGM pictures (water, open, land, stonetop, shoal, the room grid at
-every pixel, and since round thirty-nine `roomkoi.pgm`, the koi's own grid) so a script can flood-fill them for a pocket before a mind is blamed (all three round
+every pixel, since round thirty-nine `roomkoi.pgm`, the koi's own grid, and since round forty-three `room_z50.pgm` and
+`roomkoi_z30.pgm`, two floors of the depth stack) so a script can flood-fill them for a pocket before a mind is blamed (all three round
 thirty-six); `PECKWORKS_DEEPLOG`, `PECKWORKS_DEEPBOUT` and `PECKWORKS_MINNOWDIP` are round thirty-seven's (the
 deep dwellers' log, their fights raised, the minnows' dips raised). Round thirty-nine added refusal cause 5 to the koi
 log (a creep: part of a step taken up a slope the cap refused whole) and a `way=` token at the row's end (the refused
@@ -1787,7 +1788,11 @@ fish lets its tail fall to the glide's flutter. And the shoulders themselves wer
 room grid is built before the hills are, so a shoulder was no wall until a fish stood on it, and 1500 to 1700 steps
 per run were refused as land there with the feelers asking for no turn. The koi has a room grid of its own now
 (`Pond.KoiRoomAt`, the shared grid with the shoulders as walls, one more distance transform at the start), so the
-room falls off toward a stone the way it falls off toward the bank and a fish turns before it. Two jams came out on
+room falls off toward a stone the way it falls off toward the bank and a fish turns before it. (Since round forty-three
+both grids are stacks of sixteen floors by depth, `Pond.RoomAt(x, y, wallZ)`: on each floor the bed shallower than
+that floor is a wall too, and a swimmer reads the floor its own step rule would refuse it at, `Koi.WallZ`, so the
+bed's slopes and the mounds are felt as falling room the way the shoulders are; one distance transform per floor,
+four at a time, about a tenth of a second of the start.) Two jams came out on
 the way, each a rule with two owners. With the first build's speed decay a goldfish stood at a shoulder's edge for
 115 s: the probe answered "up" every frame and the fish began to turn, and the feelers' fallback (uphill on the
 shared grid, which climbs INTO the stone) swung it back, a third of a second each way; the probe has the last word
@@ -1879,7 +1884,8 @@ bed's clamp did the steering in hops.) When something is in the way the feelers 
 smallest change of course: turn, climb over or dive under. When EVERY feeler is blocked (its nose
 in a pocket between a rock and the bank; the search reaches a right angle either side and the way
 out is behind it) it turns toward more open water by the koi's own room grid (`Pond.KoiRoomAt`, the shared grid
-with the stones' shoulders as walls, round thirty-nine), as the turtle does by the shared one; before
+with the stones' shoulders as walls, round thirty-nine; read on the floor of its depth since round forty-three, so
+"more open water" is away from the bed's wall as much as the land's), as the turtle does by the shared one; before
 that fallback a koi stood nose against a rock for forty seconds. Feelers can miss, so as a last resort
 `KoiSchool.Update` finds any two bodies that overlap (`Chain.Touch`) and pushes them apart as a
 recoil, no faster than a body length a second, with a sideways push if the bed or the surface

@@ -570,6 +570,16 @@ internal sealed class Koi : Body
     private float CapOf(float bed) => MathF.Max(0f, MathF.Min(0.9f * bed, bed - 0.6f * HeightZ));
     /// <summary>Water too shallow for this fish at all: under three quarters of its height. A step there is refused and the feelers call it no room.</summary>
     private bool OnShore(float bed) => bed < 0.75f * HeightZ;
+    /// <summary>
+    /// The shallowest bed the step rule lets this fish be over when its spine is at depth z: CapOf and OnShore turned
+    /// round (a bed is refused when z is over its cap, that is when the bed is under z / 0.9 or under z plus six tenths
+    /// of the height; and the shore whatever z is). This is the floor of the pond's stacked room grid the fish steers
+    /// by (Pond.KoiRoomAt with a depth, round forty-three): its feelers, the search trigger and the "nothing is clear"
+    /// fallback read the room there, so the very wall the step would refuse is a slope they feel coming. The step's
+    /// own closing-room test and the probe keep the surface floor: theirs is the land's pocket test, and the bed's
+    /// wall is the cap's, with its creep up a slope.
+    /// </summary>
+    private float WallZ(float z) => MathF.Max(0.75f * HeightZ, MathF.Max(z / 0.9f, z + 0.6f * HeightZ));
     /// <summary>The shallows' spots (screen pixels, water in view over the bank's slope, listed once by KoiSchool): where a visit to the shallows picks its goal from.</summary>
     internal static PointF[] ShallowSpots = [];
     private readonly float[] _outAt = new float[Points];  // how far each point's back is out of the water, 0 under to 1 with the spine at the surface
@@ -1151,8 +1161,10 @@ internal sealed class Koi : Body
         Vector3 here3 = Here, level = new(MathF.Cos(_heading), MathF.Sin(_heading), 0);
         // The feelers reach out along the heading in three dimensions, asking
         // RoomAround at each sample: land, the bed, the surface and every other
-        // body in the water all count (Core/Minds Feelers).
-        float roomAhead = Feelers.Along(_room, in here3, in level, look), roomHere = _pond.KoiRoomAt(here.X, here.Y);
+        // body in the water all count (Core/Minds Feelers). The room here is read
+        // on the floor of the stacked grid its step would refuse it at (WallZ), as
+        // the feelers read theirs: a mound rising under it is closing room.
+        float roomAhead = Feelers.Along(_room, in here3, in level, look), roomHere = _pond.KoiRoomAt(here.X, here.Y, WallZ(Z));
         bool cornered = false;
         _dodge = 0;
         if (roomAhead < _len * 0.55f || roomHere < _len * 0.35f || _stuckFor > 0)       // a refused step last frame also sends it looking for a way
@@ -1183,9 +1195,9 @@ internal sealed class Koi : Body
                 // every step refused the fish stood nose against a rock for forty
                 // seconds (one seed in three). The way out is behind it, and a
                 // fish cannot reverse: so, as the turtle does, it turns toward
-                // more open water by the room grid (uphill of RoomAt), swinging
-                // round in place until a feeler finds water.
-                PointF open = _pond.KoiOpenWay(here.X, here.Y);
+                // more open water by the room grid (uphill of RoomAt, on its own
+                // depth's floor), swinging round in place until a feeler finds water.
+                PointF open = _pond.KoiOpenWay(here.X, here.Y, WallZ(Z));
                 if (open.X * open.X + open.Y * open.Y > 1e-6f) best = MathF.Atan2(open.Y / Ripples.Squash, open.X);
                 urgency = 1;
             }
@@ -1253,7 +1265,11 @@ internal sealed class Koi : Body
 
         float step = _speed * dt;
         PointF next = ToScreen(_x + MathF.Cos(_heading) * step, _y + MathF.Sin(_heading) * step);
-        float roomNext = _pond.KoiRoomAt(next.X, next.Y);
+        // The closing-room test reads the SURFACE floor of the stacked grid, here and at the next step (the land's pocket
+        // test, round thirty-nine); the bed's own wall is the cap's, below, with its creep up a slope. Read on the depth's
+        // floor it would refuse the climb up a slope outright, where the cap lets the fish take the part of the step the
+        // bed allows and rise.
+        float roomNext = _pond.KoiRoomAt(next.X, next.Y), roomHereS = _pond.KoiRoomAt(here.X, here.Y);
         // Never stuck: a step is refused only onto land or a rock, or when the
         // water is closing in AND it does not open up again half a length on.
         // (A pocket between two rocks is a tiny hill in the coarse room grid:
@@ -1277,7 +1293,7 @@ internal sealed class Koi : Body
         float shoreReach = MathF.Max(step, 1.5f);
         bool shore = OnShore(bedNext) && BedUnder(_x + ca * shoreReach, _y + sa * shoreReach) < BedUnder(_x, _y) - 1e-4f;   // (strictly shallower: a body with no water under it at all, shoved onto the bank, may step any way that is not onto land, and the water comes back under it as it goes)
         bool capBlocked = Z > CapOf(bedNext);
-        bool roomClosing = roomNext <= _len * 0.15f && roomNext < roomHere && RoomAlong(_heading, _len * 0.5f) <= roomHere;
+        bool roomClosing = roomNext <= _len * 0.15f && roomNext < roomHereS && RoomAlong(_heading, _len * 0.5f) <= roomHereS;
         bool bedBlocked = shore || capBlocked;
         bool refused = OnLand(next) || bedBlocked || roomClosing;
         // THE CREEP (round thirty-nine, "the fish get all janky" near the rocks). A step refused by the depth cap
@@ -2434,7 +2450,10 @@ internal sealed class Koi : Body
     /// The world as the feelers see it (Core/Minds Feelers.Room): how much
     /// open space there is round a point of the water, in pixels. Nothing on
     /// land, in the bed or above the surface; otherwise the distance to the
-    /// nearest bank or rock (the room grid), or to the nearest other body in
+    /// nearest bank, rock or bed too shallow for the fish at the sample's own
+    /// depth (the stacked room grid, read on the floor WallZ names for that
+    /// depth: a feeler that climbs reads a roomier floor, so a climb over a
+    /// mound reads as clearing it), or to the nearest other body in
     /// the water if that is closer, measured for a ball as wide as this fish
     /// (so "room" means room for ME). A gap up or down counts two and a half
     /// times a gap sideways (Chain.Gap's stretch): a fish passes over
@@ -2469,7 +2488,7 @@ internal sealed class Koi : Body
         if (OnShore(under)) return 0;                                             // the shore: no water for a fish of its height at all (round thirty-eight)
         float bed = (CapOf(under) * DepthPx - p.Z) * 2.5f;
         if (bed <= 0) return 0;
-        float room = MathF.Min(_pond.KoiRoomAt(s.X, s.Y), bed);
+        float room = MathF.Min(_pond.KoiRoomAt(s.X, s.Y, WallZ(p.Z / DepthPx)), bed);
         // The fish it is chasing is not a wall: counted as one, the feelers
         // steered the chaser ROUND its own quarry (the review watched a koi
         // "chase" a goldfish at full speed while swimming away from it for
@@ -2623,8 +2642,9 @@ internal sealed class Koi : Body
         // Nothing clear: swing round. Straight behind is NOT the answer (round thirty-nine): a turn of exactly half
         // a circle has no side, Wrap gave it a different sign each frame, and the eased turn rate averaged nought
         // (a goldfish stood at a shoulder's edge with its turn rate flipping sign for 115 s). So the way the koi's
-        // room grid rises, or, with no slope under it, a turn a little short of half a circle, always to the left.
-        PointF open = _pond.KoiOpenWay(here.X, here.Y);
+        // room grid rises (on its own depth's floor: away from the bed's wall as much as the land's), or, with no slope
+        // under it, a turn a little short of half a circle, always to the left.
+        PointF open = _pond.KoiOpenWay(here.X, here.Y, WallZ(Z));
         if (open.X * open.X + open.Y * open.Y > 1e-6f) return MathF.Atan2(open.Y / Ripples.Squash, open.X);
         return _heading + 3f;
     }

@@ -382,7 +382,9 @@ internal sealed class Turtle : Body
         // feels coming, like the koi do.
         float bed = (0.9f * BedUnder(p.X, p.Y) * DepthPx - p.Z) * 2.5f;
         if (bed <= 0) return 0;
-        float room = MathF.Min(_pond.RoomAt(s.X, s.Y), bed);
+        // The room on the floor of the stacked grid its step would refuse it at (a bed shallower than its depth over nine
+        // tenths, the cap above): a mound ahead at its depth is falling room, felt as the bank is (round forty-three).
+        float room = MathF.Min(_pond.RoomAt(s.X, s.Y, p.Z / DepthPx / 0.9f), bed);
         foreach (Body b in _bodies)
         {
             if (b == this || !b.Shape.Near(p, _wide, room)) continue;
@@ -810,7 +812,7 @@ internal sealed class Turtle : Body
             // review counted a third to a half of dive frames): no feeler can
             // choose, so it turns toward more open water by the room grid and
             // levels off, the way a slider feels its way off the bottom.
-            PointF here = ToScreen(_x, _y), open = _pond.OpenWay(here.X, here.Y);
+            PointF here = ToScreen(_x, _y), open = _pond.OpenWay(here.X, here.Y, _z / 0.9f);   // (on its own depth's floor: out of a hollow is uphill on THAT room)
             if (open.X * open.X + open.Y * open.Y > 1e-6f) turn += Wrap(GroundHeading(open.X, open.Y) - _heading) * 2f;
             else
             {
@@ -836,7 +838,7 @@ internal sealed class Turtle : Body
         float bestH = _heading, bestR = -1;
         for (int k = 0; k < 8; k++)
         {
-            float h = k * (MathF.Tau / 8), r = _pond.RoomAt(at.X + MathF.Cos(h) * _len * 0.5f, at.Y + MathF.Sin(h) * _len * 0.5f * Ripples.Squash);
+            float h = k * (MathF.Tau / 8), r = _pond.RoomAt(at.X + MathF.Cos(h) * _len * 0.5f, at.Y + MathF.Sin(h) * _len * 0.5f * Ripples.Squash, _z / 0.9f);
             if (r > bestR) { bestR = r; bestH = h; }
         }
         return bestH;

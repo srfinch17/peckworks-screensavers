@@ -291,35 +291,63 @@ internal sealed class Pond
     public required PointF Centre { get; init; }
     public required SizeF Reach { get; init; }
 
-    // A coarse grid of "how far is the nearest bank or rock", in pixels, for
-    // steering: a koi asks it to know when to turn away from the edge.
-    private readonly float[] _room;
-    private readonly float[] _roomKoi;                   // the same grid with the stones' shoulders (StoneShoal) as walls: what a KOI steers by (round thirty-nine)
+    // A coarse grid of "how far is the nearest wall", in pixels, for steering, STACKED BY DEPTH (round forty-three,
+    // the review's step 3 part C: one clearance field). Think of the pond as a stack of sixteen floors, the top one at
+    // the surface and the bottom one at the pond's full depth. On each floor the walls are the land, whatever stands
+    // in the water, the picture's edge, AND every bit of bed that is shallower than that floor: the deeper the floor,
+    // the more of the bed's slopes and the stones' mounds stand up through it as walls. A swimmer asks for its room
+    // on the floor its OWN step rule would refuse it at (Koi.WallZ: its cap and its shore; the turtle nine tenths of
+    // its depth; the minnows their dip's rule), so a mound rising ahead is falling room to its feelers, a slope they
+    // turn from early, instead of an invisible wall its step then refuses. That was round thirty-nine's class of jam
+    // at the stones' shoulders: a wall only the step knew was a cliff to the feelers, and the "uphill on the room"
+    // fallback climbed INTO it while the refused step's probe pointed out (a goldfish stood 115 s). Between floors
+    // the room is blended, so it changes smoothly as a fish rises or sinks, never in steps. The top floor is the old
+    // grid exactly: what every placement test and every surface animal reads, as before.
+    private readonly float[][] _rooms;
+    private readonly float[][] _roomsKoi;                // the same floors with the stones' shoulders (StoneShoal) as walls too: what a KOI steers by (round thirty-nine); a floor the shoal adds no wall to is the shared one
     private readonly int _gw, _gh;
     private readonly float _cell;
 
-    public Pond(float[] room, float[] roomKoi, int gw, int gh, float cell)
+    /// <summary>How many depth floors the room is stacked in: the first at the surface, the last at the pond's full depth.</summary>
+    public const int Layers = 16;
+
+    public Pond(float[][] rooms, float[][] roomsKoi, int gw, int gh, float cell)
     {
-        _room = room; _roomKoi = roomKoi; _gw = gw; _gh = gh; _cell = cell;
+        _rooms = rooms; _roomsKoi = roomsKoi; _gw = gw; _gh = gh; _cell = cell;
     }
 
     /// <summary>
-    /// How much open water there is around a point: the distance to the
-    /// nearest bank or rock, in pixels (0 on land). Read from the coarse grid
-    /// and blended between its four nearest cells, so it changes smoothly as
-    /// a fish swims, never in steps.
+    /// How much open water there is around a point at the SURFACE: the distance
+    /// to the nearest bank or rock, in pixels (0 on land). Read from the coarse
+    /// grid and blended between its four nearest cells, so it changes smoothly
+    /// as a fish swims, never in steps. What placements and surface animals ask.
     /// </summary>
-    public float RoomAt(float x, float y) => Sample(_room, x, y);
+    public float RoomAt(float x, float y) => Sample(_rooms[0], x, y);
 
     /// <summary>
-    /// The room a KOI has (round thirty-nine): the same grid with every stone's shoulder (StoneShoal, where a koi may
-    /// not swim) as a wall, so the room falls off toward a stone the way it falls off toward the bank. By the shared
-    /// grid a stone's shoulder was no wall until a fish stood on it (a cliff, not a slope): the feelers' "uphill on
-    /// clearance" fallback pointed INTO a stone while the refused step's probe pointed out, the two balanced, and a
-    /// goldfish stood at a shoulder's edge for 115 s with its turn rate flipping sign every frame. The minnows, the
-    /// turtle and the snake swim or walk over the shoulders, so they keep the shared grid.
+    /// The room at a point for a swimmer whose step rule refuses any bed shallower than "wallZ" (0 the surface, 1 the
+    /// pond's full depth): the distance to the nearest land, rock, picture edge OR bed that shallow, in pixels. Blended
+    /// between the two nearest floors of the stack.
     /// </summary>
-    public float KoiRoomAt(float x, float y) => Sample(_roomKoi, x, y);
+    public float RoomAt(float x, float y, float wallZ) => SampleZ(_rooms, x, y, wallZ);
+
+    /// <summary>
+    /// The room a KOI has (round thirty-nine): the same stack with every stone's shoulder (StoneShoal, where a koi may
+    /// not swim: the boulder itself, collar and side) as a wall on every floor, so the room falls off toward a stone
+    /// the way it falls off toward the bank. The minnows, the turtle and the snake swim or walk over the shoulders,
+    /// so they keep the shared stack. Without a depth: the surface floor, for placements.
+    /// </summary>
+    public float KoiRoomAt(float x, float y) => Sample(_roomsKoi[0], x, y);
+    public float KoiRoomAt(float x, float y, float wallZ) => SampleZ(_roomsKoi, x, y, wallZ);
+
+    private float SampleZ(float[][] floors, float x, float y, float wallZ)
+    {
+        float f = Math.Clamp(wallZ, 0f, 1f) * (Layers - 1);
+        int k = Math.Min((int)f, Layers - 2);
+        float t = f - k;
+        float a = Sample(floors[k], x, y);
+        return t <= 0 ? a : a + (Sample(floors[k + 1], x, y) - a) * t;
+    }
 
     private float Sample(float[] grid, float x, float y)
     {
@@ -331,18 +359,18 @@ internal sealed class Pond
         return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
     }
 
-    /// <summary>Which way is "more open water" from here: the uphill direction of RoomAt (not normalised).</summary>
-    public PointF OpenWay(float x, float y)
+    /// <summary>Which way is "more open water" from here: the uphill direction of RoomAt (not normalised), on the floor a bed shallower than wallZ is a wall at (the surface when left out).</summary>
+    public PointF OpenWay(float x, float y, float wallZ = 0)
     {
         float s = _cell;
-        return new PointF(RoomAt(x + s, y) - RoomAt(x - s, y), RoomAt(x, y + s) - RoomAt(x, y - s));
+        return new PointF(RoomAt(x + s, y, wallZ) - RoomAt(x - s, y, wallZ), RoomAt(x, y + s, wallZ) - RoomAt(x, y - s, wallZ));
     }
 
-    /// <summary>The koi's "more open water": the uphill direction of KoiRoomAt, the stones' shoulders being walls to it.</summary>
-    public PointF KoiOpenWay(float x, float y)
+    /// <summary>The koi's "more open water": the uphill direction of KoiRoomAt, the stones' shoulders being walls to it, on the floor for wallZ.</summary>
+    public PointF KoiOpenWay(float x, float y, float wallZ = 0)
     {
         float s = _cell;
-        return new PointF(KoiRoomAt(x + s, y) - KoiRoomAt(x - s, y), KoiRoomAt(x, y + s) - KoiRoomAt(x, y - s));
+        return new PointF(KoiRoomAt(x + s, y, wallZ) - KoiRoomAt(x - s, y, wallZ), KoiRoomAt(x, y + s, wallZ) - KoiRoomAt(x, y - s, wallZ));
     }
 }
 
@@ -640,7 +668,6 @@ internal static class PondPainter
         int crevT = (int)(u * 0.016f * 10);                                             // r, in the transform's tenths of a pixel
         var nearWall = new bool[w * h];
         for (int i = 0; i < nearWall.Length; i++) nearWall[i] = swimDist[i] <= crevT;  // walls and the water within r of one
-        bool closedAny = false;
         foreach (Island? st in (ReadOnlySpan<Island?>)[island, formation?.Stone, formation2?.Stone])
         {
             if (st is not Island stone) continue;
@@ -652,37 +679,52 @@ internal static class PondPainter
                 for (int x = bx0; x <= bx1; x++)
                 {
                     int i = y * w + x;
-                    if (swim[i] && nearWall[i] && toWide[i] > crevT) { swim[i] = false; closedAny = true; }
+                    if (swim[i] && nearWall[i] && toWide[i] > crevT) swim[i] = false;
                 }
         }
-        if (closedAny) swimDist = DistanceToEdge(swim, w, h, edgeIsBank: true);
-        var room = new float[gw * gh];
-        for (int gy = 0; gy < gh; gy++)
-            for (int gx = 0; gx < gw; gx++)
-            {
-                int x = Math.Min(w - 1, (int)(gx * cell)), y = Math.Min(h - 1, (int)(gy * cell));
-                room[gy * gw + gx] = swimDist[y * w + x] / 10f;
-            }
-
         // ---- the floor under the fish IS the painted depth: the one terrain (round forty-one, the review's step 3) ----
         // Until this the floor was the painted depth with every rock's foot and every stone's hill raised into it on its
         // own; the stones' profiles and the rocks' feet are in the terrain itself now (Lower, LowerRocks above), so the
         // bed a swimmer is capped by is the bed that is drawn under it, pixel for pixel.
         byte[] floor = depth;
-        // The KOI'S room grid (round thirty-nine): the steering grid again with the stones' shoulders as walls, so a
-        // koi's feelers feel a stone coming the way they feel the bank, a slope of falling room, not a cliff at the
-        // shoulder's edge (Pond.KoiRoomAt tells the rest). One more distance transform at the start, the same cost
-        // as the first.
-        var swimKoi = new bool[w * h];
-        for (int i = 0; i < swimKoi.Length; i++) swimKoi[i] = swim[i] && !stoneShoal[i];
-        int[] swimDistKoi = DistanceToEdge(swimKoi, w, h, edgeIsBank: true);
-        var roomKoi = new float[gw * gh];
-        for (int gy = 0; gy < gh; gy++)
-            for (int gx = 0; gx < gw; gx++)
+        // THE ROOM, STACKED BY DEPTH (round forty-three, the review's one clearance field; Pond's grid fields tell the
+        // rest). Floor k of the stack is for a swimmer whose step rule refuses any bed shallower than k / (Layers - 1) of
+        // the pond's full depth: on that floor every such pixel of bed is a wall, as the land is, so the room falls off
+        // toward a mound or the bank's slope the way it falls off toward the bank itself. Floor 0 is the surface: the old
+        // grid, the land alone. The koi's stack (round thirty-nine) has the stones' shoulders as walls too; a floor the
+        // shoal adds nothing to (every shoal pixel already too shallow for it) shares the common floor. One distance
+        // transform per floor, four at a time (each wants 8 MB of scratch at 1080p; all sixteen at once would be a
+        // burst of 130 MB), about 0.1 s of the start.
+        var rooms = new float[Pond.Layers][];
+        var roomsKoi = new float[Pond.Layers][];
+        float[] Coarse(int[] dist)
+        {
+            var grid = new float[gw * gh];
+            for (int gy = 0; gy < gh; gy++)
+                for (int gx = 0; gx < gw; gx++)
+                {
+                    int x = Math.Min(w - 1, (int)(gx * cell)), y = Math.Min(h - 1, (int)(gy * cell));
+                    grid[gy * gw + gx] = dist[y * w + x] / 10f;
+                }
+            return grid;
+        }
+        Parallel.For(0, Pond.Layers, new ParallelOptions { MaxDegreeOfParallelism = 4 }, k =>
+        {
+            int wallUnder = (int)MathF.Ceiling(255f * k / (Pond.Layers - 1));      // bed with a depth byte under this is a wall on this floor
+            bool[] swimK = swim;
+            if (k > 0)
             {
-                int x = Math.Min(w - 1, (int)(gx * cell)), y = Math.Min(h - 1, (int)(gy * cell));
-                roomKoi[gy * gw + gx] = swimDistKoi[y * w + x] / 10f;
+                swimK = new bool[w * h];
+                for (int i = 0; i < swimK.Length; i++) swimK[i] = swim[i] && depth[i] >= wallUnder;
             }
+            rooms[k] = Coarse(DistanceToEdge(swimK, w, h, edgeIsBank: true));
+            bool shoalAdds = false;
+            for (int i = 0; i < swimK.Length && !shoalAdds; i++) shoalAdds = swimK[i] && stoneShoal[i];
+            if (!shoalAdds) { roomsKoi[k] = rooms[k]; return; }
+            var swimKoi = new bool[w * h];
+            for (int i = 0; i < swimKoi.Length; i++) swimKoi[i] = swimK[i] && !stoneShoal[i];
+            roomsKoi[k] = Coarse(DistanceToEdge(swimKoi, w, h, edgeIsBank: true));
+        });
 
         // The heap: every pixel a drifted petal touched that is still open water in the finished picture (a rock or the
         // log painted over it later is not water, so it is left out; the branch shade darkened it, and the backdrop pixel
@@ -690,7 +732,7 @@ internal static class PondPainter
         var heap = new List<int>();
         for (int i = 0; i < waterMask.Length; i++) if (!heapTouched[i] && waterMask[i]) heap.Add(i);
 
-        return new Pond(room, roomKoi, gw, gh, cell)
+        return new Pond(rooms, roomsKoi, gw, gh, cell)
         {
             Width = w, Height = h, U = u,
             Pixels = beforeBranches, Branches = boughs, TreeRoots = treeRoots,
