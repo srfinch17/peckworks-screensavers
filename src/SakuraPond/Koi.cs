@@ -778,11 +778,13 @@ internal sealed class Koi : Body
     private float _shyX, _shyY;                           // where to swim to get away from the thing it bumped, ground pixels
     private float _refusedFor;                            // seconds in a row the step rule has refused its step (a jam against a stone's hill: BackOff)
     private float _swum;
-    private float _logWay = float.NaN;                    // the refused step's probe answer (WayOut), for the log alone                                  // the speed it really made good last frame, eased (ground px/s): 0 while refused, the step while creeping up a slope; the tail beat follows it
+    private float _logWay = float.NaN;                    // the refused step's probe answer (WayOut), for the log alone
+    private float _logTurnGoal, _logTurnFeel, _logTurnWay, _logTurnLean, _logBest = float.NaN, _logFound, _logMost, _logTurn;   // the turn's parts this frame, for the log alone (round forty-five: a jam is two pulls balanced, and the log must show which two)                                  // the speed it really made good last frame, eased (ground px/s): 0 while refused, the step while creeping up a slope; the tail beat follows it
     private float _avoidX, _avoidY;                       // where it last backed off from (ground), and until when its goals and looks keep clear of it
     private double _avoidUntil;
     private float _stuckFor;                              // seconds its steps have been refused (nosed against something)
     private float _wayOut = float.NaN;                    // a refused step's answer: the nearest clear heading round the centre, turned to next frame (WayOut)
+    private float _wayHeld = float.NaN;                   // THE COMMITTED ESCAPE (round forty-five): the probe's answer is kept, and turned to, until the heading reaches it or a step succeeds; re-probed each frame it flipped sides
     private float _dodge;                                 // the climb (negative) or dive (positive) its feelers chose this frame, z per unit forward; 0 = holding its depth
     private Body[] _bodies = [];                          // every body in the water this frame (the school and the turtles), for the feelers
     private Koi[] _school = [];                           // the whole school, kept from Update so an idle goal can be picked near a shoalmate
@@ -1188,8 +1190,9 @@ internal sealed class Koi : Body
         float turn = idle * (0.32f * MathF.Sin(_wave1 + _p1) + 0.22f * MathF.Sin(_wave2 + _p2));
         (float gx, float gy, float pull) = Goal();
         float gdx = gx - _x, gdy = gy - _y;
+        _logTurnGoal = _logTurnFeel = _logTurnWay = _logTurnLean = 0; _logBest = float.NaN; _logFound = 0;
         if (gdx * gdx + gdy * gdy > _len * _len * 0.04f)                         // right on top of it: no direction to pull toward
-            turn += Wrap(MathF.Atan2(gdy, gdx) - _heading) * pull;
+            turn += _logTurnGoal = Wrap(MathF.Atan2(gdy, gdx) - _heading) * pull;
         float look = _len * 1.0f + _speed * 1.0f;
         PointF here = ToScreen(_x, _y);
         Vector3 here3 = Here, level = new(MathF.Cos(_heading), MathF.Sin(_heading), 0);
@@ -1238,7 +1241,8 @@ internal sealed class Koi : Body
             // A refused step's own probe (WayOut, below) has the last word over the feelers this frame (round
             // thirty-nine): pulled both ways at once, a goldfish at a stone's shoulder turned toward the probe's
             // way out and the feelers' fallback swung it back, a third of a second each way, for 115 s.
-            if (float.IsNaN(_wayOut)) turn += Wrap(best - _heading) * (1f + 3f * urgency);
+            _logBest = best; _logFound = found;
+            if (float.IsNaN(_wayOut)) turn += _logTurnFeel = Wrap(best - _heading) * (1f + 3f * urgency);
             cornered = urgency > 0.5f && climb == 0;                                  // a climb or dive is not a corner: no need to slow and swing round
         }
         // THE REFUSED STEP ITSELF FORCES THE TURN (the kit's rule). The feelers look ahead from the
@@ -1248,7 +1252,7 @@ internal sealed class Koi : Body
         // heading within a tenth of a radian the whole time, through five shies. So a refused step probes
         // round the centre with the step's own tests for the nearest clear heading (WayOut), and the
         // next frame turns to it, hard, as a cornered fish does.
-        if (!float.IsNaN(_wayOut)) { turn += Wrap(_wayOut - _heading) * 4f; cornered = true; _wayOut = float.NaN; }
+        if (!float.IsNaN(_wayOut)) { turn += _logTurnWay = Wrap(_wayOut - _heading) * 4f; cornered = true; _wayOut = float.NaN; }
         // The leap's burst is a climb SWUM at the steepest slope a fish can
         // swim (the dodge's 0.8), not an easing: eased at the gulp's rate from
         // a quarter of the way down it took three and a half seconds to reach
@@ -1264,7 +1268,7 @@ internal sealed class Koi : Body
             if (other == _partner) near *= _doing == Doing.Chase ? 0.3f : 0.7f;   // a friend may come closer; a chaser nearly touches
             if (d2 > near * near || dx * dx + dy * dy < 1) continue;
             float away = MathF.Atan2(dy, dx);
-            turn += Wrap(away - _heading) * 0.5f * (1 - MathF.Sqrt(d2) / near);
+            turn += _logTurnLean = Wrap(away - _heading) * 0.5f * (1 - MathF.Sqrt(d2) / near);
         }
         // A fish cannot turn on the spot: the faster, the wider its turns, and
         // however slowly it is moving its turning circle is never tighter than
@@ -1294,6 +1298,7 @@ internal sealed class Koi : Body
         // kink: the worm's other half. A fish has mass; its heading cannot
         // change rate in a sixtieth of a second either.
         turn = Math.Clamp(turn, -most, most);
+        _logMost = most; _logTurn = turn;
         _turnRate += (turn - _turnRate) * (1 - MathF.Exp(-dt * 8f));
         _heading = Wrap(_heading + _turnRate * dt);
 
@@ -1369,6 +1374,7 @@ internal sealed class Koi : Body
         if (!refused)
         {
             _logWay = float.NaN;
+            _wayHeld = float.NaN;                                                 // a step taken ends the committed escape
             _x += ca * stepTaken;
             _y += sa * stepTaken;
             _stuckFor = 0;
@@ -1378,7 +1384,16 @@ internal sealed class Koi : Body
             // Nose right at the bank: hold here (still turning) rather than swim into it;
             // and after two seconds of that, whatever it was doing is given up.
             _stuckFor += dt;
-            _wayOut = WayOut(step);
+            // THE COMMITTED ESCAPE (round forty-five, "some koi got hung up in a weird shape down in the lower left forever"):
+            // probed afresh every refused frame, the answer FLIPPED between a right angle to the left and three quarters
+            // to the right as the heading wobbled a fiftieth of a radian (the left probe was marginal against the bed's
+            // byte raster), each answer undid the last through the eased turn rate (plus and minus 0.29 a second, four
+            // times a second), and a koi stood in the bottom corner by the formation for 32 s at seed 2, 1080p, through
+            // six shies and wanders, its tail bent up into view (C:\Temp\pond45\jam\koi2.csv, fish 6, 22 to 55 s). So the
+            // first answer is KEPT and turned to until the heading is within 0.15 radians of it (then the probe runs again
+            // from there, a side at a time as before) or a step succeeds: the minnows' remembered side, for the probe.
+            if (float.IsNaN(_wayHeld) || MathF.Abs(Wrap(_wayHeld - _heading)) < 0.15f) _wayHeld = WayOut(step);
+            _wayOut = _wayHeld;
             _logWay = _wayOut;                                                    // (for the log: the probe's answer this frame)
             if (_stuckFor > 2) { _stuckFor = 0; Begin(Doing.Wander); }
         }
@@ -1552,7 +1567,7 @@ internal sealed class Koi : Body
             // After the spine (so a reader that takes "x:y tokens" still finds them all): the swimming wave's phase, its
             // width and the body length, for measuring the stride (lengths travelled per tail beat) and the wave's speed.
             sb.Append(FormattableString.Invariant($",beat={_phase:F3}:{_amp:F2}:{_len:F1}"));
-            sb.Append(FormattableString.Invariant($",zat={_zAt[0]:F4}:{_zAt[9]:F4}:{_zAt[17]:F4}:{_murkMin:F3}:{_zTop:F4},out={_out:F3}:{_floor:F4}:{FloorAt(ToScreen(_goalX, _goalY)):F3},way={_logWay:F3}:{_shyX:F0}:{_shyY:F0}"));   // the drawn depths (head, middle, tail base), the clearest point's murk and depth: what the picture is painted from; how far its back is out of the water, the bed under its body and the bed at its goal (a visit to the shallows whose goal is deep never found the band)
+            sb.Append(FormattableString.Invariant($",zat={_zAt[0]:F4}:{_zAt[9]:F4}:{_zAt[17]:F4}:{_murkMin:F3}:{_zTop:F4},out={_out:F3}:{_floor:F4}:{FloorAt(ToScreen(_goalX, _goalY)):F3},way={_logWay:F3}:{_shyX:F0}:{_shyY:F0},turn={_logTurnGoal:F2}:{_logTurnFeel:F2}:{_logTurnWay:F2}:{_logTurnLean:F2}:{_logMost:F2}:{_logTurn:F2}:{_logBest:F2}:{_logFound:F0}"));   // the drawn depths (head, middle, tail base), the clearest point's murk and depth: what the picture is painted from; how far its back is out of the water, the bed under its body and the bed at its goal (a visit to the shallows whose goal is deep never found the band)
             MotionLog(sb.ToString());
         }
     }

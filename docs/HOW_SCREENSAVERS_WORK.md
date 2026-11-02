@@ -1833,15 +1833,21 @@ room falls off toward a stone the way it falls off toward the bank and a fish tu
 both grids are stacks of sixteen floors by depth, `Pond.RoomAt(x, y, wallZ)`: on each floor the bed shallower than
 that floor is a wall too, and a swimmer reads the floor its own step rule would refuse it at, `Koi.WallZ`, so the
 bed's slopes and the mounds are felt as falling room the way the shoulders are; one distance transform per floor,
-four at a time, about a tenth of a second of the start. Round forty-five made the mounds steep again and found the
-minnow reading its refused step's way out, and its wall-following, on the surface floor, where a mound is open water:
-a dipped school pinned at the island's foot for 55 s; those read the step's own floor now, `Minnow.FollowWall`.) Two jams came out on
+four at a time, about a tenth of a second of the start. Round forty-five made the mounds steep again and found a
+dipped minnow school pinned at the island's foot for 55 s: its step refused by the bed, its wall-following reading the
+surface floor where a mound is open water. Following on the depth's floor instead spun the fish on the mound's bumps,
+so the answer is the koi's: a refused dipped minnow rises a tenth of the depth a second until its step passes,
+`Minnow.Refused` in the school's depth loop.) Two jams came out on
 the way, each a rule with two owners. With the first build's speed decay a goldfish stood at a shoulder's edge for
 115 s: the probe answered "up" every frame and the fish began to turn, and the feelers' fallback (uphill on the
 shared grid, which climbs INTO the stone) swung it back, a third of a second each way; the probe has the last word
 over the feelers now, and the probe's "nothing clear, straight behind" was itself a trap (a turn of exactly half a
 circle has no side, `Wrap` gave it a different sign each frame, the eased turn rate averaged nought), so it answers
-with the koi grid's uphill instead. Then a forager crept into a pocket at a stone's foot for 50 s: the probe called a
+with the koi grid's uphill instead. And since round forty-five the probe's answer is COMMITTED (`_wayHeld`): kept
+and turned to until the heading is within 0.15 radians of it or a step succeeds, because probed afresh every
+refused frame a marginal probe flipped between left a right angle and right three quarters as the heading wobbled,
+and a koi stood 32 s in the bottom corner by the formation (seed 2, 1080p: the log's new turn-parts columns showed
+the way-out term alternating +6.28 and -9.42 while the goal pulled -1.9 and the clamp was 0.9). Then a forager crept into a pocket at a stone's foot for 50 s: the probe called a
 heading clear by the bed and the land, and the step's closing-room rule refused it; the probe tests every rule of
 the step now. The final numbers at 1080p, two seeds, five minutes, old then new: refused steps within 0.08u of a
 stone 3.4 and 2.7 percent to 0.3 and 0.5; land refusals at the shoulders 1519 and 1735 to none; the longest refused run

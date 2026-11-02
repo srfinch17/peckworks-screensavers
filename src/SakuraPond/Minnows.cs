@@ -573,6 +573,11 @@ internal sealed class School
             // And no faster than half ITS OWN swim can hide (a fidgeting fish slower than the school's mean lags behind in
             // depth and catches up when it speeds up: a third of the deep fish-frames read as slides on the mean alone).
             float own = 0.5f * (f.Moved / MathF.Max(1e-3f, dt)) / (Pond.DepthU * _u * Light.Sink);   // (the distance it really stepped last frame, not the speed it wanted: refused at a slope it sank on the spot)
+            // REFUSED, IT RISES (round forty-five): a step refused by the bed is a slope it is too deep for (the koi's rule),
+            // and with "own" at nought it could never rise off it; a tenth of the depth a second lifts it off a mound's
+            // skirt in two or three seconds, and the step passes again. (Applied only while refused, so a grazing fish
+            // over a hollow's edge keeps its rest: a floor for every fish bobbed one 17 px/s there once.)
+            if (f.Refused) { want = MathF.Max(0f, MathF.Min(want, f.Z - 0.2f)); own = MathF.Max(own, 0.1f); }   // (want is the school's depth where the bed HERE is deep: the wall is the bed AHEAD, so the rise needs a target above it)
             float lim = (want > f.Z ? MathF.Min(maxRate, own) : MathF.Max(MathF.Min(maxRate, own), 0.03f)) * dt;   // (a rise floor of 0.08 bobbed a grazing fish 17 px/s over a hollow's edge)
             f.Z += Math.Clamp(want - f.Z, -lim, lim);
             float tx = _tx, ty = _ty;
@@ -619,6 +624,8 @@ internal sealed class Minnow : Body
     public float Speed => _speed;
     /// <summary>How far it actually stepped last frame, ground pixels (its own depth may change no faster than half of THIS can hide: a fish refused at a slope wants a speed but goes nowhere, and sank on the spot).</summary>
     public float Moved => _logMoved;
+    /// <summary>Was its last step refused while it had way on (it is nosing a wall or a slope)? The school lifts a refused dipped fish (round forty-five).</summary>
+    public bool Refused => _logMoved == 0 && _speed > 1;
 
     /// <summary>Its own place in the swirl round a lure: where on the ring (radians) and how far out (0.5 to 1).</summary>
     public float RingPlace { get; }
@@ -774,22 +781,22 @@ internal sealed class Minnow : Body
         // along the wall on that side with a little "away" mixed in, flip the side when the way along is blocked
         // too (a corner), and only when there is open water round the fish AND a clear line to the school's
         // target let the school's pull have it back. A minnow turns in a flick, so the heading is set outright.
-        // THE WALL A REFUSED STEP MET IS READ ON THE STEP'S OWN FLOOR (round forty-five). The soft push above reads the
-        // surface floor on purpose (the note there), but the step rule refuses on the floor of the fish's depth, and a
-        // dipped fish that met a stone's mound, which is open water at the surface, read "room all round, nothing to
-        // follow" here, kept its heading on the school's target past the mound and was refused on the spot every frame:
-        // a school of five pinned at the island's foot for 55 s at seed 7 the moment the mounds became a boulder's
-        // skirt (steep) instead of a hill. So the room round it and the way out, in the wall-following and when the
-        // step is refused, are read at WallZ: the same floor TryStep refuses on (0 near the surface, the same as before).
-        float wallZ = WallZ(), roomWall = _pond.RoomAt(here.X, here.Y, wallZ);
+        // A MOUND IS A SLOPE TO A DIPPED MINNOW, NOT A WALL TO FOLLOW (round forty-five). The step rule refuses on the floor
+        // of the fish's depth, and when the mounds became a boulder's steep skirt a dipped school that met the island's
+        // foot was refused on the spot every frame, 55 s at seed 7 (the wall-following below reads the surface floor,
+        // where a mound is open water, so it had nothing to follow). Reading the wall-following on the depth's floor
+        // instead made the ridge rule flip the side every frame on the mound's bumps and nine fish spun there for 45 s
+        // (seed 6, 1080p: spin36). The koi's answer is the right one: a refusal by the bed is a slope, and the fish RISES
+        // while refused (the school's depth loop, Refused), off the skirt in a couple of seconds, with the following left
+        // on the surface floor for the land, the caps and the edge, as the note above says.
         if (_wallSide != 0)
         {
             // Let go when there is room round it AND the school's target is in clear sight, or when it has
             // followed for two seconds with room round it whatever the line says (a target behind a stone is
             // never in clear sight: a fish zigzagged on a ridge of open water for 75 s on the stress run).
             _wallFor += dt;
-            if (roomWall >= wall && (LineClear(tx, ty) || _wallFor > 2f)) { _wallSide = 0; _wallFor = 0; }
-            else FollowWall(here, wallZ);
+            if (roomHere >= wall && (LineClear(tx, ty) || _wallFor > 2f)) { _wallSide = 0; _wallFor = 0; }
+            else FollowWall(here);
         }
         float step = _speed * dt, moved = 0;
         if (TryStep(step)) moved = step;
@@ -799,13 +806,13 @@ internal sealed class Minnow : Body
             // fish was free, flip it when it was already following (the way along is a dead end), and step at once.
             if (_wallSide == 0)
             {
-                PointF ow = _pond.OpenWay(here.X, here.Y, wallZ);
+                PointF ow = _pond.OpenWay(here.X, here.Y);
                 float alongX = -ow.Y, alongY = ow.X;              // the wall runs across the uphill direction
                 _wallSide = alongX * (tx - X) + alongY * (ty - Y) < 0 ? -1 : 1;
                 _wallFor = 0;
             }
             else _wallSide = -_wallSide;
-            FollowWall(here, wallZ);
+            FollowWall(here);
             if (TryStep(step)) moved = step;
             else
             {
@@ -867,10 +874,9 @@ internal sealed class Minnow : Body
     /// pond's room grid, on its remembered side, with a little "away from the wall" mixed in so it keeps a
     /// hair of water between itself and the stone (straight along, it scraped the rim and was refused).
     /// </summary>
-    /// <param name="wallZ">The floor of the room grid to read the wall on: the step's own (WallZ), so a dipped fish follows a mound the surface does not see.</param>
-    private void FollowWall(PointF here, float wallZ)
+    private void FollowWall(PointF here)
     {
-        PointF ow = _pond.OpenWay(here.X, here.Y, wallZ);
+        PointF ow = _pond.OpenWay(here.X, here.Y);
         float l = MathF.Sqrt(ow.X * ow.X + ow.Y * ow.Y);
         if (l < 1e-4f) return;
         float awayX = ow.X / l, awayY = ow.Y / l;

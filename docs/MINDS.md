@@ -126,14 +126,28 @@ These are in the code comments too; here they are in one place.
   grid too: a swimmer reads the floor its own step rule would refuse it at (`Koi.WallZ`, the cap and the
   shore turned round; the turtle nine tenths of its depth; the minnows their dip's rule) for its feelers,
   its search trigger and its "nothing is clear" fallback, and a mound ahead is falling room, not a cliff.
-  AND ITS ANSWER TO A REFUSED STEP (round forty-five): the minnow's step refused on its depth's floor, but
-  its "which way along the wall" and its wall-following read the surface floor, where a stone's mound is
-  open water, so the fish read "room all round, nothing to follow", kept its heading on the school's target
-  past the mound and was refused on the spot every frame: five fish pinned at the island's foot for 55 s the
-  moment the mound became a boulder's steep skirt (it had been a hill the step was never refused on). Every
-  reader of the grid in one animal is on one floor: the feelers, the fallback, the release test, the side
-  chosen at a refusal and the following (`Minnow.FollowWall(here, wallZ)`).
+  BUT A WALL THAT IS A DEPTH IS ANSWERED BY A RISE, NOT BY FOLLOWING (round forty-five): the minnow's step
+  refused on its depth's floor while its wall-following read the surface floor, where a stone's mound is
+  open water, so the fish read "nothing to follow", kept its heading on the school's target past the mound
+  and was refused on the spot every frame: five fish pinned at the island's foot for 55 s the moment the
+  mound became a boulder's steep skirt. Reading the following on the depth's floor instead made the ridge
+  rule flip its side every frame on the mound's bumps, and nine fish spun there for 45 s (seed 6, 1080p:
+  spin36, side flips 300 to 500 each). The koi's rule held: a refusal by the bed is a slope, so a refused
+  dipped minnow RISES (a tenth of the depth a second, a target a fifth above it, `Minnow.Refused` in the
+  school's depth loop) and the step passes again; the following stays on the surface floor for the land,
+  the caps and the edge.
   The koi's stack keeps the shoulders as walls; the snake still steers on its own flat plane (step 5).
+- **A probe that answers afresh every frame can answer two ways, and the escape must be COMMITTED (round
+  forty-five).** The koi's refused-step probe tries headings a side at a time and answers the nearest clear
+  one; re-run every refused frame, a marginal probe (a right angle to the left, clear or blocked by a pixel of
+  the bed's byte raster as the heading wobbled a fiftieth of a radian) flipped its answer between "left a right
+  angle" and "right three quarters", each answer undid the last through the eased turn rate (plus and minus
+  0.29 a second, four times a second: the balanced-pulls tell below, at a slower beat), and a koi stood in
+  the bottom corner by the formation for 32 s through six shies and wanders with its tail bent up into view
+  (seed 2, 1080p; the new turn-parts columns of the koi log, `turn=goal:feelers:way:lean:most:final`,
+  named it in one read). Now the first answer is KEPT and turned to until the heading is within 0.15
+  radians of it or a step succeeds (`Koi._wayHeld`); then it probes again from there. The minnows' remembered
+  wall side is the same rule. An escape is a state, never a per-frame opinion.
 - **A turn of half a circle has no side, and a probe has a floor in pixels.** "Straight behind" as the
   answer to "nothing is clear" gave `Wrap` a different sign each frame, and the eased turn rate oscillated
   about nought at the clamp times the easing share (0.9 at 8 per second: 0.09), which is the TELL of two
