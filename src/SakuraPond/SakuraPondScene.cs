@@ -56,6 +56,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Crayfish _crayfish;
     private readonly Prawns _prawns;
     private readonly DeepDwellers _deep;
+    private readonly Eel _eel;                    // the freshwater eel in the sunken log's hollow (round forty-six)
     private readonly Ducks _ducks;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
@@ -150,6 +151,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _turtles.Prey = _tadpoles;
         _koi.PrawnPrey = _prawns;                  // and a hungry koi, or the turtle, may take a prawn it happens upon (2026-10-27)
         _turtles.PrawnPrey = _prawns;
+        _eel = new Eel(_pond, _waterInView, settings.MinnowSchools > 0 ? _minnows : null, _deep, settings.EelCount, new Random(unchecked(salt + 707)));   // the eel in the log's hollow: its own dice (round forty-six)
+        Lap($"eel lives {_eel.Lives}");
         _koi.DeepPrey = _deep;                     // and a dweller of the deep bed: one of the largest koi down there, a diving turtle, a diving snake (round thirty-seven)
         _turtles.DeepPrey = _deep;
         _snake.DeepPrey = _deep;
@@ -274,7 +277,9 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _swallows.Update(dt);
         _ripples.Update(dt);
         _prawns.Update(dt, bedThreats);                                                   // the prawns flick backward from the same things the crayfish does
-        _deep.Update(dt, _snake.Live && _snake.Deep ? Scratch.Gather(ref _deepThreats, bedThreats, one: _snake.Head) : bedThreats);   // the deep dwellers too, and from the diving snake's head
+        PointF[] deepThreats = _snake.Live && _snake.Deep ? Scratch.Gather(ref _deepThreats, bedThreats, one: _snake.Head) : bedThreats;
+        _deep.Update(dt, deepThreats);
+        _eel.Update(dt, deepThreats);                                                    // the eel in the log fears what the deep dwellers fear (round forty-six)   // the deep dwellers too, and from the diving snake's head
         _pads.Update(dt, _surface, _koi.Bodies, _turtles.All);                              // last: the pads are shoved by where everything at the surface IS this frame
         _sun.Update(dt);
         Sections.Mark("update: crayfish to ripples");
@@ -329,7 +334,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("mice");
         _crayfish.Draw(fb);                       // on the bed of the shallows: under every fish
         _prawns.Draw(fb);                         // the prawns, on the same bed: under every fish too
-        _deep.Draw(fb);                           // the crayfish and prawns of the deep bed: under every fish (through the deep stencil, so a stone's cap stands in front of them)
+        _deep.Draw(fb);                           // the crayfish and prawns of the deep bed
+        _eel.DrawDeep(fb);                        // the eel, on the deep bed and in the log's hollow: under every fish, through the depth test (round forty-six): under every fish (through the deep stencil, so a stone's cap stands in front of them)
         _minnows.DrawDeep(fb);                    // a school that has dipped toward the bed: under every fish (the rest of the minnows are drawn after the fish, below)
         Sections.Mark("crayfish, prawns");
         _tadpoles.DrawUnder(fb);                  // the tadpoles, just over the bed in the shallows, and a froglet deep under the surface: under every fish (drawn after the koi, a clutch sat on the back of a fish passing over it)
