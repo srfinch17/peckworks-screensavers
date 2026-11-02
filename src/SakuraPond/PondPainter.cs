@@ -1764,31 +1764,40 @@ internal static class PondPainter
 
     /// <summary>
     /// What the sunken log looks like at every ground pixel of its footprint, into the same arrays as the stones'
-    /// flanks (StoneColour), for SinkBed to draw sunk with the bed. Old wet wood: a dark brown, lit by the terrain's
-    /// slope toward the sun exactly as the stones and the bed are (the half cylinder's own slope shades it round),
-    /// with the grain running along it (a slow ripple of light and dark across its width, bark long gone), the cut
-    /// face at the near end dark to its hollow middle (the den), then deepened by the murk at its depth as every fish
-    /// is (Body.Deepen) and as solid as the murk leaves it (one less Light.Murk), the stones' rule.
+    /// flanks (StoneColour), for SinkBed to draw sunk with the bed. OLD WET WOOD WITH ITS BARK ON (round forty-six, his
+    /// line: "the underwater log looks less like a log than it does a log shaped pile of sediment"): until this it was
+    /// a pale smooth tube ("driftwood", 200,172,132) with two knots and a split, lit by the half cylinder's slope and
+    /// then veiled by the murk toward the bed around it, which left a soft grey pill. What says LOG to the eye is bark:
+    /// ridges running along the trunk, dark fissures between them, the ridges breaking and wandering, a patch or two
+    /// where the bark has fallen off and the paler wood shows, and at the near end the CUT FACE with its growth rings
+    /// round the black hollow. The catfish's lesson rules the colours (round forty-four): on the deep bed the depth rule
+    /// keeps a fraction of every channel and the murk mixes most of the water in, so a flat colour lands on the silt's;
+    /// what reads is CONTRAST inside the thing (a ridge lit 1.3 times against a fissure at 0.35) and a smaller share of
+    /// the haze (0.8 of the murk, the catfish's own). Lit by the terrain's slope toward the sun exactly as the stones
+    /// and the bed are (the half cylinder's own slope shades it round), then deepened by the murk at its depth as every
+    /// fish is (Body.Deepen). Everything is dealt from the log's own angle and position (no dice).
     /// </summary>
     private static void LogColour(in SunkenLog log, float[] terrain, int band, uint[] stoneCol, byte[] stoneA, bool[] isStone, int w, int h, float u)
     {
         float hw = log.Width * 0.5f, reach = log.Length * 0.5f + hw + 2;
         float ca = MathF.Cos(log.Angle), sa = MathF.Sin(log.Angle), halfLen = log.Length * 0.5f - hw;
-        float mx = log.Centre.X + ca * (log.NearEnd > 0.5f ? halfLen : -halfLen), my = log.Centre.Y + sa * (log.NearEnd > 0.5f ? halfLen : -halfLen);   // the near end's disc centre
+        float endSign = log.NearEnd > 0.5f ? 1 : -1;
+        float mx = log.Centre.X + ca * endSign * halfLen, my = log.Centre.Y + sa * endSign * halfLen;   // the near end's disc centre
         int x0 = Math.Max(0, (int)(log.Centre.X - reach)), x1 = Math.Min(w - 1, (int)(log.Centre.X + reach));
         int y0 = Math.Max(0, (int)(log.Centre.Y - reach)), y1 = Math.Min(h - 1, (int)(log.Centre.Y + reach));
         float Z(int x, int y) => terrain[(Math.Clamp(y, 0, h - 1) + band) * w + Math.Clamp(x, 0, w - 1)];
         float zPx = Pond.DepthU * u;
-        // Old wood long under water: pale, like driftwood, so that it READS on the deep bed. The deep bed is drawn at
-        // about 43,66,60 and the log is veiled toward it by the murk (stoneA, 0.45 solid at its depth) after Body.Deepen
-        // has taken four tenths of its colour: at 118,98,74 it drew as 39,50,45 (a black pipe), at 158,130,96 as 48,59,53
-        // (the bed's own brightness, told apart by its hue alone). Measured, not guessed: the drawn colour is read off
-        // the render against the bed beside it (kit pond42, logpix42.py).
-        const float baseR = 200, baseG = 172, baseB = 132;
-        // Two knots (where branches were) and a split along the grain, dealt from the log's own angle (no dice).
-        float k1 = -halfLen * 0.55f + halfLen * 0.3f * MathF.Sin(log.Angle * 7), k2 = halfLen * 0.45f + halfLen * 0.3f * MathF.Cos(log.Angle * 5);
-        float k1side = 0.45f * MathF.Sin(log.Angle * 3), k2side = -0.4f * MathF.Cos(log.Angle * 9);
-        float split0 = -halfLen * 0.3f, split1 = halfLen * 0.75f, splitSide = 0.25f * MathF.Cos(log.Angle * 4);
+        // The wood's colours before the water: a dark red-brown bark, its lit ridges toward a warm grey-brown, the bare
+        // wood where the bark is gone a pale tan, the cut face's sapwood paler still with darker heartwood rings. These
+        // are what the depth rule FILTERS; the drawn colours are read off a render (kit pond46), never guessed.
+        const float barkR = 96, barkG = 70, barkB = 46;
+        const float bareR = 168, bareG = 138, bareB = 92;
+        const float faceR = 182, faceG = 150, faceB = 100;
+        // Two bare patches (the bark fallen away) and a knot, dealt from the angle (no dice): where along, which side.
+        float p1 = -halfLen * 0.45f + halfLen * 0.25f * MathF.Sin(log.Angle * 7), p1side = 0.4f * MathF.Sin(log.Angle * 3);
+        float p2 = halfLen * 0.35f + halfLen * 0.25f * MathF.Cos(log.Angle * 5), p2side = -0.35f * MathF.Cos(log.Angle * 9);
+        float knotAlong = halfLen * 0.05f * MathF.Cos(log.Angle * 11), knotSide = 0.3f * MathF.Sin(log.Angle * 13);
+        float phase = log.Angle * 4;
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++)
             {
@@ -1797,26 +1806,60 @@ internal static class PondPainter
                 float ex = dx - along * ca, ey = dy - along * sa, d = MathF.Sqrt(ex * ex + ey * ey);
                 float hwHere = log.HalfWidthAt(along);
                 if (d >= hwHere) continue;
-                float across = -dx * sa + dy * ca;                                                      // signed: which side of the middle line
+                float across = (-dx * sa + dy * ca) / hw;                                               // signed, -1 to 1 across the trunk
+                // The half cylinder's shading from the terrain's slope (the bed's rule).
                 float gx = (Z(x + 2, y) - Z(x - 2, y)) * zPx / 4f, gy = (Z(x, y + 2) - Z(x, y - 2)) * zPx / 4f;
                 float lit = 1 - Math.Clamp(gx * 0.6f + gy * 0.8f, -0.4f, 0.4f);
-                lit *= 1 + 0.12f * MathF.Sin(across / hw * 8.5f + log.Angle * 3 + 0.4f * MathF.Sin(along / hw * 0.7f)) + 0.06f * MathF.Sin(along * 0.07f + across / hw * 3f);   // the grain, wandering a little along the trunk
-                float a1 = (along - k1) / hw, s1 = (across / hw - k1side) / 0.3f, a2 = (along - k2) / hw, s2 = (across / hw - k2side) / 0.32f;
-                float knot = MathF.Max(1 - (a1 * a1 * 8 + s1 * s1), 1 - (a2 * a2 * 8 + s2 * s2));     // an oval about each knot, 1 at its middle (a third of the width across)
-                if (knot > 0) lit *= 1 - 0.35f * MathF.Min(1, knot * 2.5f) + 0.2f * Math.Clamp((knot - 0.1f) * 4, 0, 1) * Math.Clamp((0.45f - knot) * 4, 0, 1);   // dark heart, a paler ring round it
-                if (along > split0 && along < split1)
+                // THE BARK. Ridges run along the trunk: a wave across it (about eleven ridges over the width), its phase
+                // wandering slowly along the length so no ridge is a ruled line, and broken now and then by a cross crack.
+                // The wave is sharpened: most of the surface is ridge (lit), the fissure between is narrow and dark.
+                float wander = 0.9f * MathF.Sin(along / hw * 0.55f + phase) + 0.5f * MathF.Sin(along / hw * 1.7f + phase * 2.1f);
+                // Each ridge is warped on its own (a term that varies ACROSS as well as along, so no two ridges wobble
+                // alike: all wobbling together they were a barcode), and the grooves fade in and out along the trunk
+                // like the plates of real bark, so no groove is a line from end to end.
+                float warp = 1.3f * MathF.Sin(across * 3.7f + along / hw * 0.9f + phase) + 0.6f * MathF.Sin(across * 6.1f - along / hw * 1.4f);
+                float ridge = MathF.Sin(across * 9f + wander + warp);
+                float plate = 0.55f + 0.45f * MathF.Sin(along / hw * 1.25f + across * 4.5f + phase * 1.7f);   // how deep the groove is here
+                float fissure = Math.Clamp((0.3f - ridge) / 0.5f, 0, 1) * plate;                           // 1 in the groove, 0 on the ridge's top
+                fissure = fissure * fissure;
+                float crack = MathF.Sin(along / hw * 2.3f + across * 1.5f + phase * 3f);                  // a cross crack where this sine is near its top
+                crack = Math.Clamp((crack - 0.93f) / 0.07f, 0, 1);
+                float r = barkR, g = barkG, b = barkB;
+                float shade = 1.3f - 0.95f * fissure - 0.5f * crack;                                      // ridge 1.3, groove 0.35, a crack darker still
+                // Bare wood where the bark has fallen off: two ovals, soft edged, paler and smoother (a faint grain only).
+                float a1 = (along - p1) / (hw * 1.6f), s1 = (across - p1side) / 0.38f;
+                float a2 = (along - p2) / (hw * 1.2f), s2 = (across - p2side) / 0.3f;
+                float bare = MathF.Max(1 - (a1 * a1 + s1 * s1), 1 - (a2 * a2 + s2 * s2));
+                if (bare > 0)
                 {
-                    // The split: widest and darkest in its middle, gone at both ends (a line of one width along the whole log read as a pen line).
-                    float t = MathF.Sin(MathF.PI * (along - split0) / (split1 - split0));
-                    if (MathF.Abs(across / hw - splitSide - 0.1f * MathF.Sin(along / hw)) < 0.06f * t) lit *= 1 - 0.55f * t;
+                    bare = Math.Clamp(bare * 2.5f, 0, 1);
+                    float grain = 1 + 0.08f * MathF.Sin(across * 9f + along / hw * 0.4f);
+                    r += (bareR * grain - r) * bare; g += (bareG * grain - g) * bare; b += (bareB * grain - b) * bare;
+                    shade += (1f - shade) * bare;                                                           // the bark's ridges end at the patch's edge
                 }
-                float ddx = x + 0.5f - mx, ddy = y + 0.5f - my, dEnd = MathF.Sqrt(ddx * ddx + ddy * ddy);
-                if (dEnd < hw * 0.85f) lit *= 0.25f + 0.75f * MathF.Pow(dEnd / (hw * 0.85f), 1.5f);   // the cut face: dark into the hollow
-                int r = (int)(baseR * lit), g = (int)(baseG * lit), b = (int)(baseB * lit);
-                float depth = Z(x, y), murk = Light.Murk(depth);
-                Body.Deepen(ref r, ref g, ref b, (int)(murk * 256));
+                // A knot: a dark oval with a pale ring, where a branch was.
+                float ka = (along - knotAlong) / (hw * 0.5f), ks = (across - knotSide) / 0.22f, knot = 1 - (ka * ka + ks * ks);
+                if (knot > 0) shade *= 1 - 0.5f * Math.Clamp(knot * 3, 0, 1) + 0.35f * Math.Clamp((knot - 0.05f) * 6, 0, 1) * Math.Clamp((0.4f - knot) * 6, 0, 1);
+                // THE CUT FACE at the near end: inside the end's disc the bark gives way to sawn wood, pale, with the
+                // growth rings as a slow ripple from the middle out (darker every few rings), and the hollow in the
+                // middle, black, where the heart has rotted away (the den). The disc is the log's width across.
+                float ddx = x + 0.5f - mx, ddy = y + 0.5f - my, dEnd = MathF.Sqrt(ddx * ddx + ddy * ddy) / hw;
+                if (dEnd < 0.95f)
+                {
+                    float face = Math.Clamp((0.95f - dEnd) / 0.12f, 0, 1);                                // a soft edge where the bark meets the face
+                    float rings = 1 + 0.14f * MathF.Sin(dEnd * 26f + phase) - 0.08f * Math.Clamp(MathF.Sin(dEnd * 9f), 0, 1);
+                    float hollow = Math.Clamp((0.62f - dEnd) / 0.14f, 0, 1);                               // 1 in the hole, 0 on the wood
+                    float fr = faceR * rings, fg = faceG * rings, fb = faceB * rings;
+                    fr *= 1 - 0.92f * hollow; fg *= 1 - 0.92f * hollow; fb *= 1 - 0.9f * hollow;
+                    r += (fr - r) * face; g += (fg - g) * face; b += (fb - b) * face;
+                    shade += (1f - shade) * face;
+                }
+                lit *= shade;
+                int ir = (int)(r * lit), ig = (int)(g * lit), ib = (int)(b * lit);
+                float depth = Z(x, y), murk = Light.Murk(depth) * 0.8f;                                      // the catfish's haze share: a thing on the deep bed keeps more of itself
+                Body.Deepen(ref ir, ref ig, ref ib, (int)(murk * 256));
                 int i = y * w + x;
-                stoneCol[i] = (uint)(Math.Clamp(r, 0, 255) << 16 | Math.Clamp(g, 0, 255) << 8 | Math.Clamp(b, 0, 255));
+                stoneCol[i] = (uint)(Math.Clamp(ir, 0, 255) << 16 | Math.Clamp(ig, 0, 255) << 8 | Math.Clamp(ib, 0, 255));
                 stoneA[i] = (byte)(Math.Clamp(1 - murk, 0, 1) * 255);
                 isStone[i] = true;
             }

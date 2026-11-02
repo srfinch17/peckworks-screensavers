@@ -1706,12 +1706,20 @@ its outer third eased into the silt banked against it (a wall one ground pixel w
 rows per column) and an edge that swells and narrows along it (`HalfWidthAt`, read by the terrain and the colour
 alike). From there on it IS bed: the koi rise over it by the cap rule, the deep dwellers walk over it, `SinkBed`
 draws it sunk and fills `Pond.Near` so a stone in front hides it, with no new stencil, margin or obstacle list. Its
-colour (`LogColour`) goes into the stones' flank arrays: pale drowned wood lit by the terrain's slope (the cylinder
-shades itself), grain wandering along it, two small knots, a split that tapers at both ends (one width the whole
-way read as a pen line), the cut face dark into its hollow, then the fish's own depth rule (`Body.Deepen`, solid by
-one less the murk). MEASURED, not guessed: the deep bed draws at about 43,66,60; at a wood of 118,98,74 the log drew
-39,50,45 (a black pipe), at 158,130,96 as 48,59,53 (the bed's brightness, a hue apart), at 200,172,132 as 58,72,65
-(kit pond42, `logpix42.py`). The hollow's mouth (`Den`) is handed to the deep dwellers: the first dweller's home is
+colour (`LogColour`) goes into the stones' flank arrays. SINCE ROUND FORTY-SIX IT HAS ITS BARK ON (his line: "the
+underwater log looks less like a log than it does a log shaped pile of sediment"): until then it was pale drowned
+wood, smooth, with two knots and a split, a colour chosen by measurement (at 118,98,74 it drew as a black pipe, at
+200,172,132 as 58,72,65 against a bed of 43,66,60, kit pond42) and it still read as a grey pill, because a flat
+colour under the depth rule lands on the silt's whatever its brightness (the catfish's lesson, round forty-four).
+What says LOG is contrast inside the thing: a dark red-brown bark (96,70,46) whose ridges are lit 1.3 times and
+whose grooves fall to 0.35, the ridges running along the trunk as a sine across it (nine over the width), each
+ridge warped on its own by a term that varies across as well as along (warped all alike they were a barcode) and
+the grooves fading in and out along the length like bark plates (no groove is a line end to end); cross cracks
+where a slow sine peaks; two bare ovals where the bark has fallen off, pale tan with a faint grain; a knot (a dark
+oval with a pale ring); and at the near end the CUT FACE, pale sawn wood with growth rings as a ripple from the
+middle out, the hollow black in its middle (0.62 of the half width), the bark giving way to the face over a soft
+edge. The half cylinder's own slope still shades it (the terrain's rule), `Body.Deepen` deepens it, and its haze
+share is the catfish's 0.8 of the murk. Everything is dealt from the log's angle and place, no dice. The hollow's mouth (`Den`) is handed to the deep dwellers: the first dweller's home is
 swapped for it after the homes are dealt, so no roll moves (`DeepDwellers`, `DenHomed` in the start log).
 
 *Sunlight on the water (2026-10-30, `Sunlight.cs`; its beams and pools removed 2026-11-02).* His ask: "some light
