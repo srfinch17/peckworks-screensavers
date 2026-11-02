@@ -60,7 +60,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Ducks _ducks;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
-    private readonly Sunlight _sun;               // the glitter on the surface (2026-10-30; its beams and pools went 2026-11-02)
+    private readonly Sunlight _sun;
+    private readonly Caustics _caustics;         // the caustic net on the bed and the shimmer under the surface, folded into the backdrop copy (round forty-six)               // the glitter on the surface (2026-10-30; its beams and pools went 2026-11-02)
     private readonly Pads _pads;                  // the lily pads, live: stamped on the water, shoved by what swims into them, held by their roots (round forty)
     private readonly List<Body> _surface = new();   // what else is solid in the water this frame (the snake, while it swims), refilled per frame, never reallocated
 
@@ -105,6 +106,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
         _sun.PlaceGlints(_waterInView);
+        _caustics = new Caustics(_pond, _waterInView, settings.SunlightPercent / 100f);
+        Lap($"caustics lit {_caustics.LitPixels} px, mean strength {_caustics.MeanStrength:F1}");
         Lap($"sunlight glint sites {_sun.GlintSites}");
         _ripples = new Ripples(_pond, _waterInView);
         _pads = new Pads(_pond, _pond.Open);                       // (no dice of its own: nothing else moves; the pads at rest are laid over the backdrop once, here)
@@ -282,6 +285,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _eel.Update(dt, deepThreats);                                                    // the eel in the log fears what the deep dwellers fear (round forty-six)   // the deep dwellers too, and from the diving snake's head
         _pads.Update(dt, _surface, _koi.Bodies, _turtles.All);                              // last: the pads are shoved by where everything at the surface IS this frame
         _sun.Update(dt);
+        _caustics.Update(dt);
         Sections.Mark("update: crayfish to ripples");
     }
 
@@ -322,7 +326,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     public void Render(FrameBuffer fb)
     {
         Sections.Begin();
-        fb.Restore(_pond.Pixels);                 // (not with the lawn's box left out: the carpet reads the frame inside its box, round thirty-five found the smear)
+        _caustics.Restore(fb);                    // the backdrop copy, shimmering under the surface with the net's light on the bed (round forty-six; a plain Restore until then. Not with the lawn's box left out: the carpet reads the frame inside its box, round thirty-five found the smear)
         Sections.Mark("backdrop copy");
         _pond.Shore.Draw(fb);                     // the water lapping at the sand: first, so the lawn's blades overhang it
         Sections.Mark("shore");

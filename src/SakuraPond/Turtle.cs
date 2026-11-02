@@ -530,8 +530,11 @@ internal sealed class Turtle : Body
 
         LaySpine();
         // Paddling with its shell at the surface it pushes a small bow wave ahead of its nose (Ripples.Wake), as a koi does.
-        if (InWater && Z < Koi.WakeZ)
-            _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, 0.5f * MathF.Min(1, _speed / (_len * 0.4f)) * (1 - 0.6f * Z / Koi.WakeZ));
+        // (Z under 0.08, the koi's WakeZ, until round forty-six: a turtle cruises with its shell awash at Z 0.10, so it never
+        // left a wake at all; its own line is 0.15, and the wave is strongest with the shell right at the top.)
+        const float TurtleWakeZ = 0.15f;
+        if (InWater && Z < TurtleWakeZ)
+            _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, 0.6f * MathF.Min(1, _speed / (_len * 0.4f)) * (1 - 0.5f * Z / TurtleWakeZ));
         // The instrument's row (see Turtles): the clock, which turtle, the doing, the ground position, the depth, the
         // heading and its rate, the speed, the stroke's phase and how much the legs move, the feelers' slope, how long
         // the water has refused its step, and the nose and middle on the screen.

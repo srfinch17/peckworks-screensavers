@@ -1722,24 +1722,57 @@ edge. The half cylinder's own slope still shades it (the terrain's rule), `Body.
 share is the catfish's 0.8 of the murk. Everything is dealt from the log's angle and place, no dice. The hollow's mouth (`Den`) is handed to the deep dwellers: the first dweller's home is
 swapped for it after the homes are dealt, so no roll moves (`DeepDwellers`, `DenHomed` in the start log).
 
-*Sunlight on the water (2026-10-30, `Sunlight.cs`; its beams and pools removed 2026-11-02).* His ask: "some light
-shimmering on the water". THE GLINTS: 380 sites per screen's worth of sunlit open water (more toward the far side,
-where the surface is seen at more of a slant), each a short horizontal dash in the sky's colour (a ripple crest seen
-from above at a slant is wider than tall; 6 to 13 px at 1080 lines) with its own clock (on for the top of its sine
-only, so each blinks briefly and is dark most of the time), drifting slowly with the breeze; the breeze is a slow
-field of two phases that makes sheets of glitter here and calm there. None in the shade (`Pond.Sun` weights them),
-none under a lily pad (the live centres, read each frame), drawn after the pads and under the floating petals. Every
-rhythm keeps its own wrapped phase (no long clock). Its own Random (nothing else in the scene moves); the knob
-"Sunlight" scales the glints, 0 is none. PECKWORKS_SUNLOG counts the glints lit per frame.
+*The surface: the caustic net, the shimmer, the glitter and the wakes (round forty-six, 2026-11-02, `Caustics.cs`,
+`Sunlight.cs`, `Ripples.cs`).* His lines: "the shimmering light just ends up looking dumb. we need to rethink it and
+you need to learn how to look at light rays in pond water photos", and "the surface of our water is hard to divulge,
+need some visual cue. a shimmer. a ripple", and "when things swim through water and break the surface for more than a
+second, they leave v shaped bow wakes". What every photo of a sunlit pond seen from above shows is neither rays nor
+scattered sparkle; it is three things, and this is all three.
 
-WHAT WENT (round forty-five, "the whole light ray thing is a disaster either fix it or remove it"): from each hole in
-the boughs' shade a BEAM went down into the water, bent by Snell's law, dimmed by absorption and the murk, baked into
-the backdrop, and landed as a warm POOL of light on the bed, a sprite stamped each frame. Rendered at seeds 1 and 3
-with the knob at 0 against 100, the two together moved under 1.5 percent of the pixels by more than six grey levels
-(the glints are most of that): a shaft of light is a thing seen from the side or from under the water, and from above
-it is nothing. What he was calling light rays was the bed's own slope lighting, stretched into pale diagonal streaks
-by the slant (next paragraph). What an overhead view really shows of sun in water is caustics, bright wavy nets on a
-shallow bed; those are a round of their own if he asks.
+THE CAUSTIC NET (`Caustics`). The surface is never flat; each ripple is a lens, and the lenses focus the sun into bright
+branching lines on the bottom, a net of irregular cells that slides, stretches and merges as the ripples pass. The net
+is a Worley (cell) pattern baked once at the start into a flip-book of 64 pages of a 256 square tile: a few dozen points
+drift about the tile on small circles of a whole number of turns per loop (2 to 4, a ripple's pace, so page 0 follows
+the last with no jump), and at every tile pixel the nearest two points are found; the line is where those two are about
+equally near (the edge between two cells), its brightness 1 less the gap between the two distances over a line width of
+about an eighth of a cell. Two nets are summed, a fine one over a coarse one (18 and 48 points), times a slow brightness
+mask of two waves so the net is brighter here and fainter there (every cell as bright as every other was a honeycomb),
+then a soft glow. Where it lands is a STRENGTH per screen pixel, baked once: the sun map (none in the boughs' shade),
+how much of the bed shows at the DRAWN depth there (`Pond.Near` turned back into a depth; `BedClear`'s curve) and how
+much light reaches that bed (exp of minus 1.6 times the depth), nothing on land, under the boughs' baked parts or on a
+stone's dry cap (`Near` 255), scaled by the knob "Sunlight". The tile is sampled in SCREEN space (the bed is drawn
+sunk, and a cell is small next to the sink's change across it), scaled so a cell is about 0.045u, drifting slowly.
+
+THE SHIMMER (the same class). Everything under the surface is seen through the ripples, so it wobbles: a second
+flip-book of the same size holds a displacement (two signed bytes, x and y) from four sine waves each way at 4 to 8
+turns per loop (three quarters to one and a half wobbles a second), and every water pixel in view is read from the
+backdrop about 2 px away along it, only where that spot is water in view too (the bank never smears into the pond).
+The instrument for a moving field: pixels changed by more than 4 levels between frame 0 and 4 in a patch of open water,
+13 percent against 7 on the old build (the animals and the ripples alone).
+
+WHERE IT COSTS. Every frame already copied the whole backdrop into the frame (`FrameBuffer.Restore`, memory-bound, 1.5
+ms at 1080p). `Caustics.Restore` keeps a LIT copy of the backdrop and refreshes half its bands of rows each frame (the
+even bands on even frames, the odd on odd; the net and the shimmer move slowly enough that thirty refreshes a second of
+each row is more than the eye asks), in parallel, with no bounds checks in the hot loop (`Unsafe.Add` over the arrays'
+data; the indices all derive from the width and height), then copies the lit picture into the frame as the plain
+Restore did. Done whole every frame it was 6.4 ms against 1.5 on a loaded machine; the half-band way reads about 3.7
+loaded. The animals' painters still mix their murk toward the pristine backdrop (`Pond.Pixels`), so a koi over a bright
+line is not lit by it: a round of its own if he asks.
+
+THE GLITTER (`Sunlight.cs`). 170 sites per screen's worth of sunlit water (380 until this round: confetti everywhere),
+placed where the sun's reflection falls: a patch up and left of the middle (the sun is up and left, `Light.ShadowX`
+and `ShadowY`), dense in its middle and gone a little way off it, each a short horizontal dash in the sky's colour on
+its own short clock, drifting with the breeze field. None in the shade, none under a pad. The beams and the bed pools
+of 2026-10-30 went: with the knob at 0 against 100 they moved under 1.5 percent of the pixels by more than six levels.
+
+THE WAKES (`Ripples.Wake`, `Span`). A swimmer with its back at the surface leaves a wavelet of its bow wave every
+0.012u of travel, each a ring spreading at 0.022u a second for 2.6 s (1.5 s until this round: gone before the arms
+showed) and fading as one less its life to the three halves (the square until this round). A wavelet is drawn only
+INSIDE THE V behind its swimmer: nothing ahead of its origin, nothing further to the side than a wedge of about 35
+degrees either side of straight back (a little more near the origin). Whole half rings nested into a fan of arcs;
+clipped to the wedge they are the wake every photo shows, the arms of the V with the cross waves between them. The
+turtle's wake fires with its shell awash (Z under 0.15; the koi's 0.08 line left a cruising turtle with none), a koi's
+near the surface keeps six tenths of its strength (four until this round), with its back out two and a half times.
 
 *The bed is DRAWN SUNK (round forty-one, the review's step 3).* Every swimmer has been drawn down the
 screen by its depth since round thirty-eight (`Light.SinkPx`: the deeper, the lower in the view, which is

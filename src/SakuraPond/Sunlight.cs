@@ -75,14 +75,19 @@ internal sealed class Sunlight
     public void PlaceGlints(bool[] waterInView)
     {
         if (_strength <= 0) return;
-        int want = (int)(380 * _strength * (_w * (float)_h) / (_u * _u * 16f / 9f));   // 380 per 16:9 screen's worth of pond at 100 percent
+        int want = (int)(170 * _strength * (_w * (float)_h) / (_u * _u * 16f / 9f));   // 170 per 16:9 screen's worth of pond at 100 percent (380 until round forty-six: confetti everywhere, "the shimmering light just ends up looking dumb")
         var list = new List<Glint>(want);
         for (int tries = 0; tries < want * 40 && list.Count < want; tries++)
         {
             int x = _rng.Next(_w), y = _rng.Next(_h), i = y * _w + x;
             if (!waterInView[i] || _pond.Sun[i] < 200) continue;
-            float far = 0.45f + 0.55f * (1 - y / (float)_h);                            // more toward the far side
-            if (_rng.NextDouble() > far) continue;
+            // Where the sun's reflection falls (round forty-six, from the photos: the glitter is a PATCH on the water between
+            // the eye and the sun, dense in its middle and gone a little way off it, not a sprinkle over the whole pond). The
+            // sun is up and to the left (Light.ShadowX, ShadowY), so the patch sits up and left of the middle, stretched
+            // along the view's far side where the surface is seen at more of a slant.
+            float gx = (x - _w * 0.34f) / (_u * 0.55f), gy = (y - _h * 0.28f) / (_u * 0.32f);
+            float patch = MathF.Exp(-(gx * gx + gy * gy));
+            if (_rng.NextDouble() > patch) continue;
             list.Add(new Glint
             {
                 X = x, Y = y,

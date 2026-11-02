@@ -44,9 +44,9 @@ internal sealed class Ripples
         public float X, Y, Fx, Fy, Age, Strength;
     }
     private readonly List<Wavelet> _wake = new();
-    private const int MostWake = 96;                // wavelets in the pond at once: about eight swimmers' worth
+    private const int MostWake = 160;               // wavelets in the pond at once: about eight swimmers' worth at the longer life (96 at 1.5 s until round forty-six)
     private const float WakeStep = 0.012f;          // u swum between one wavelet and the next
-    private const float WakeLife = 1.5f;            // seconds a wavelet lasts
+    private const float WakeLife = 2.6f;            // seconds a wavelet lasts (1.5 until round forty-six, his line: "when things swim through water and break the surface for more than a second, they leave v shaped bow wakes": the V is the envelope of these rings, and at 1.5 s it was gone before it had drawn the arms)
 
     /// <summary>A ring worked out for this frame's draw: everything DrawRow needs, computed once per ring, not per row.</summary>
     private struct Prep
@@ -216,7 +216,7 @@ internal sealed class Ripples
             float life = v.Age / WakeLife;
             float radius = u * 0.002f + u * 0.022f * v.Age;
             float band = MathF.Max(1.2f, u * 0.0014f * (1 + 2 * life));
-            float a = v.Strength * 0.6f * (1 - life) * (1 - life) * MathF.Min(1, v.Age * 8);   // a koi at its cruise starts at 0.3, a gulp's ring at 0.22, but on a band half as wide
+            float a = v.Strength * 0.9f * (1 - life) * MathF.Sqrt(1 - life) * MathF.Min(1, v.Age * 8);   // a koi at its cruise starts at 0.45 (0.3 until round forty-six, fading as the square: the arms of the V never showed), a gulp's ring at 0.22, but on a band half as wide
             if (a < 0.005f) continue;
             float outer = radius + band * 2.5f, inner = MathF.Max(0, radius - band * 2.5f);
             float ry = outer * Squash;
@@ -277,7 +277,17 @@ internal sealed class Ripples
             int i = row + x;
             if (!_where[i]) continue;
             float dx = x + 0.5f - cx;
-            if (half && dx * fx + dy * fy > ahead) continue;                 // the front half of a wavelet, where the swimmer itself is
+            if (half)
+            {
+                // A wavelet is drawn only inside the V behind its swimmer (round forty-six, his line: "they leave v shaped
+                // bow wakes"): nothing ahead of its origin, and nothing further to the side than a wedge of about 35
+                // degrees either side of straight back allows (a little more near the origin, so the arc is not cut to
+                // a point). Drawn as whole half rings the wavelets nested into a fan of arcs; clipped to the wedge they
+                // are the wake every photo shows, the arms of the V with the cross waves between them.
+                float back = -(dx * fx + dy * fy), side = MathF.Abs(dx * fy - dy * fx);
+                if (back < -ahead) continue;
+                if (side > back * 0.7f + radius * 0.3f) continue;
+            }
             float d = (MathF.Sqrt(dx * dx + dy * dy) - radius) / band;     // 0 on the crest, negative inside
             int k = (int)((d - ProfileFrom) / ProfileStep);
             if (k < 0 || k >= Profile.Length) continue;                  // too far from the crest to show

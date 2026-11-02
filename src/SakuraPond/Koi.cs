@@ -1556,7 +1556,7 @@ internal sealed class Koi : Body
         // With its back OUT of the water (the shallows by the shore, round thirty-eight) the V is a real one: up to two and
         // a half times the strength, a fish ploughing the surface.
         if (_air <= 0 && (Z < WakeZ || _out > 0))
-            _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, MathF.Min(1f, 0.5f * MathF.Min(1, _speed / (_len * _cruise)) * (1 - 0.6f * MathF.Min(Z, WakeZ) / WakeZ) * (1 + 1.5f * _out)));
+            _ripples.Wake(ref _wakeRun, Spine[0].X, Spine[0].Y, _heading, _speed, dt, MathF.Min(1f, 0.5f * MathF.Min(1, _speed / (_len * _cruise)) * (1 - 0.4f * MathF.Min(Z, WakeZ) / WakeZ) * (1 + 1.5f * _out)));   // (0.6 of the depth's share until round forty-six: a koi just under the surface pushed a wave no eye found)
         if (MotionLog != null)
         {
             // The whole drawn spine after the columns, as x:y pairs (a goldfish's index is offset by 100 so no two fish share a row key).

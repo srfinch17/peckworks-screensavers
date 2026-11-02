@@ -1825,7 +1825,7 @@ internal static class PondPainter
                 float crack = MathF.Sin(along / hw * 2.3f + across * 1.5f + phase * 3f);                  // a cross crack where this sine is near its top
                 crack = Math.Clamp((crack - 0.93f) / 0.07f, 0, 1);
                 float r = barkR, g = barkG, b = barkB;
-                float shade = 1.3f - 0.95f * fissure - 0.5f * crack;                                      // ridge 1.3, groove 0.35, a crack darker still
+                float shade = 1.2f - 0.75f * fissure - 0.4f * crack;                                      // ridge 1.2, groove 0.45, a crack darker still (1.3 and 0.35 on the first render: crisp and dark, "doesn't look like it's under water")
                 // Bare wood where the bark has fallen off: two ovals, soft edged, paler and smoother (a faint grain only).
                 float a1 = (along - p1) / (hw * 1.6f), s1 = (across - p1side) / 0.38f;
                 float a2 = (along - p2) / (hw * 1.2f), s2 = (across - p2side) / 0.3f;
@@ -1856,7 +1856,7 @@ internal static class PondPainter
                 }
                 lit *= shade;
                 int ir = (int)(r * lit), ig = (int)(g * lit), ib = (int)(b * lit);
-                float depth = Z(x, y), murk = Light.Murk(depth) * 0.8f;                                      // the catfish's haze share: a thing on the deep bed keeps more of itself
+                float depth = Z(x, y), murk = Light.Murk(depth);                                             // the full haze, the stones' rule (0.8 of it on the first render read as pasted on)
                 Body.Deepen(ref ir, ref ig, ref ib, (int)(murk * 256));
                 int i = y * w + x;
                 stoneCol[i] = (uint)(Math.Clamp(ir, 0, 255) << 16 | Math.Clamp(ig, 0, 255) << 8 | Math.Clamp(ib, 0, 255));

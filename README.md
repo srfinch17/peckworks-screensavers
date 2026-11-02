@@ -378,12 +378,16 @@ and drifts in a lull, so no two fall the same way.
   rise over it, the shadows fall on it, a stone in front hides it), and the hollow is the first deep dweller's den,
   so a crayfish is usually found at its mouth.
   Each stone's foot runs out a little unevenly, so no two read alike.
-- **Sunlight** (the "Sunlight" knob, 100 percent by default, 0 for none): on the surface a few hundred glints of the
-  sky's colour blink on the ripple crests, short horizontal dashes drifting with a slow breeze, in sheets here and
-  there and calm elsewhere, more toward the far side, none in the shade and none under a lily pad. Light is solid
-  to nothing. (The beams through the boughs' gaps and their pools on the bed, added with the glints, were taken out
-  again on 2026-11-02: seen from above the water they moved the picture by under two grey levels, and what read as
-  "light rays" was the bed's own slope lighting under a slant that has since been eased.)
+- **Sunlight and the surface** (the "Sunlight" knob, 100 percent by default, 0 for none): what a sunlit pond shows from
+  above. A CAUSTIC NET on the bed: the ripples are lenses, and they focus the sun into bright branching lines, a net of
+  cells that slides and merges all the time, sharp in the shallows, faint on the deep bed, gone in the boughs' shade,
+  under everything that swims. A SHIMMER: everything under the surface is seen through the ripples, so the bed, the
+  stones and the log sway by a pixel or two at a ripple's pace, which is what says there is water between you and the
+  bottom. GLITTER where the sun's reflection falls: a patch of blinking dashes up and left of the middle, not a sprinkle
+  everywhere. And every swimmer that breaks the surface (a turtle paddling with its shell awash, the snake, a koi with
+  its back out) leaves a V-shaped bow wake, the cross waves held inside the wedge behind it. Light is solid to nothing.
+  (The beams and the bed pools of 2026-10-30 were taken out on 2026-11-02: seen from above the water they moved the
+  picture by under two grey levels, and what read as "light rays" was the bed's own slope lighting.)
 - **Swallows** visit to drink: low, fast, sweeping curves with bursts of wingbeats and swept-back
   glides, skimming the surface with a line of rings, their shadows racing below them.
 - Now and then a **snake** (one of four Japanese kinds, a different one each visit: the shimahebi,
