@@ -23,10 +23,22 @@ internal static class Light
     /// a depth below the surface shows this much further DOWN the screen, per
     /// unit of depth, than the spot of surface above it. Less than Lift,
     /// because water bends the light: looking into a pond at a slant, the
-    /// bottom looks shallower than it is (about three quarters of the true
-    /// depth, which is why a stick in water looks bent at the surface).
+    /// bottom looks shallower than it is (which is why a stick in water looks
+    /// bent at the surface).
+    ///
+    /// 0.2 since round forty-five (2026-11-02, "the bottom terrain generation
+    /// makes it look all weird, like the perspective is off"). It was 0.55, the
+    /// slant Lift 0.75 implies through water, and at the pond's depth (0.6u)
+    /// that drew the deepest bed 0.33u down the screen from the water above
+    /// it: a boulder from the bed to the surface was a tombstone 356 px tall
+    /// at 1080 lines, every mound an egg, the cobbles on a near flank vertical
+    /// ovals. The rest of the scene is drawn near-overhead (the pads squashed
+    /// 0.82), and this was the one number that said otherwise. 0.2 is a view
+    /// about fifteen degrees off vertical, 0.12u at the deepest bed. Everything
+    /// reads it from here (SinkPx, the band above the screen, HoldDepth), so a
+    /// change here moves every swimmer and the bed together.
     /// </summary>
-    public const float Sink = 0.55f;
+    public const float Sink = 0.2f;
 
     /// <summary>
     /// How high the eye is above the water, in u. Things under the water are

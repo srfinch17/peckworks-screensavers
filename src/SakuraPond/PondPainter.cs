@@ -80,12 +80,13 @@ internal readonly record struct MoundShape(float Angle, float Stretch, float Tai
     {
         uint hsh = (uint)((int)centre.X * 73856093 ^ (int)centre.Y * 19349663 ^ w * 83492791);
         float Next() { hsh = hsh * 1664525u + 1013904223u; return (hsh >> 8) / 16777216f; }   // a small linear congruential generator: enough for five dials
-        return new MoundShape((float)(Next() * Math.Tau), 0.15f + 0.25f * Next(), 0.3f + 0.4f * Next(), 0.1f + 0.1f * Next(), (float)(Next() * Math.Tau));
+        return new MoundShape((float)(Next() * Math.Tau), 0.08f + 0.12f * Next(), 0.1f + 0.15f * Next(), 0.1f + 0.1f * Next(), (float)(Next() * Math.Tau));
     }
 
     /// <summary>
     /// The mound's run in the direction of the offset (dx, dy) of length r from the cap, as a multiple of
-    /// PondPainter.MoundU: about 0.5 on the short side to 2 on the long. In cosines of the direction, never an angle:
+    /// PondPainter.MoundU: about 0.7 on the short side to 1.35 on the long (0.5 to 2 until round forty-five, when the
+    /// mound became a boulder's skirt and its long silt bars went with the big hills). In cosines of the direction, never an angle:
     /// cos(t - A) is the offset's dot product with the axis over r, cos 2x is 2 cos squared x less 1, and cos 3t and
     /// sin 3t come from the triple-angle formulas, all multiplies (an atan2 per pixel over seven boxes 1.5u wide cost
     /// 600 ms at the start on the first run).
@@ -1633,8 +1634,8 @@ internal static class PondPainter
 
     /// <summary>The shoulder of a stone: how deep the boulder's side has fallen by its painted edge, in Z (0.12 of the pond's depth: about forty-five degrees over the ring from the collar to the edge).</summary>
     public const float ShoulderZ = 0.12f;
-    /// <summary>How far past its painted edge a stone's mound slopes down to the bed, in u (0.24u since round forty-four, "the terrain need work": the hill a little tighter round its boulder; 0.28u from round forty-one; at 0.35u the island's shoal was a pale disc near a screen height across).</summary>
-    public const float MoundU = 0.24f;
+    /// <summary>How far past its painted edge a stone's mound slopes down to the bed, in u. 0.08u since round forty-five: a boulder's own skirt of rubble, now that Light.Sink is 0.2 (at 0.55 a tight mound drew as a column, so it was widened to a hill: 0.35u, then 0.28u in round forty-one, 0.24u in round forty-four, and the hill read as an egg ten times the cap). A steeper mound is a wall to more koi steps: measured by causes43 against the old build each time it moves.</summary>
+    public const float MoundU = 0.08f;
 
     /// <summary>
     /// THE ONE SHAPE OF A STONE (round forty-one): how deep the stone's surface is, in Z, at a ground distance r
@@ -2019,7 +2020,7 @@ internal static class PondPainter
                     int xl = Math.Max(0, x - s), xr = Math.Min(w - 1, x + s);
                     float gx = (smooth[ky * w + xr] - smooth[ky * w + xl]) * zPx / (xr - xl);   // how fast the bed deepens going right (u per u)
                     float gyy = (smooth[yd * w + x] - smooth[yu * w + x]) * zPx / (yd - yu);    // and going down the screen
-                    float tilt = -Math.Clamp(gx * 0.6f + gyy * 0.8f, -0.25f, 0.25f);   // (a third until round forty-four: lit that hard, a boulder's mound was a bald green dome; its rubble says "hill" now, DressBed)
+                    float tilt = -Math.Clamp(gx * 0.6f + gyy * 0.8f, -0.12f, 0.12f);   // (a third until round forty-four, a quarter until round forty-five: lit that hard, with the slant stretching the flanks, the slopes were pale diagonal streaks he read as light rays)
                     int light = 256 + (int)(256 * tilt * open);
                     if (light != 256)
                     {

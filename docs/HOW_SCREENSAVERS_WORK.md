@@ -1714,32 +1714,24 @@ one less the murk). MEASURED, not guessed: the deep bed draws at about 43,66,60;
 (kit pond42, `logpix42.py`). The hollow's mouth (`Den`) is handed to the deep dwellers: the first dweller's home is
 swapped for it after the homes are dealt, so no roll moves (`DeepDwellers`, `DenHomed` in the start log).
 
-*Sunlight in and on the water (2026-10-30, `Sunlight.cs`).* His ask: "little patches of light rays that illuminate
-the pond all the way through the water to the bottom and account for the water's effect on the light", and "some
-light shimmering on the water". Three things, all light, solid to nothing. THE BEAMS: a hole in the boughs' shade over
-the water is found as full sun (`Pond.Sun` 250 or more) inside a patch that is mostly shaded (the shade map blurred
-over 0.06u under 225), up to seven of them, none within three radii of another. From each the beam goes down into the
-water, bent toward the vertical the way water bends light (the shadow above water runs 0.45 right and 0.6 down per
-unit of height; in water, by Snell's law with n 1.33, the beam runs 0.30 and 0.40 per unit of depth), dimming by exp
-of minus five times the depth (water absorbs it: the shaft is a short bright wedge, not a pillar) and veiled by the
-water above it (`Light.Murk`), every point drawn sunk down the screen by its depth (`Light.SinkPx`) like everything in
-the water. The sun does not move, so the beams are BAKED into the backdrop once, before the boughs bake their still
-parts over it (a bough is over the water, a beam is in it): no cost per frame. THE POOLS: where a beam meets the bed
-(the terrain) it leaves a pool, as bright as the light that got down there and as visible as the bed is at that depth
-(`BedClear`), warm, blurred softer the deeper; each is a `Sprite` stamped every frame right after the backdrop and
-the lapping shore, under every swimmer, drifting a few pixels and breathing a little on four rhythms of its own (what
-light refracted through a moving surface does), hidden where a stone is nearer the eye (`Pond.Near`, the depth test)
-and never painted where the shore's own band may paint (`Shoreline.EverDry`). THE GLINTS: 380 sites per screen's worth
-of sunlit open water (more toward the far side, where the surface is seen at more of a slant), each a short horizontal
-dash in the sky's colour (a ripple crest seen from above at a slant is wider than tall; 6 to 13 px at 1080 lines)
-with its own clock (on for the top of its sine only, so each blinks briefly and is dark most of the time), drifting
-slowly with the breeze; the breeze is a slow field of two phases that makes sheets of glitter here and calm there.
-None in the shade (`Pond.Sun` weights them), none under a lily pad (the live centres, read each frame), drawn after
-the pads and under the floating petals. Every rhythm keeps its own wrapped phase (no long clock). Its own Random
-(nothing else in the scene moves); the knob "Sunlight" scales the beams, the pools and the glints, 0 is none. The
-instruments: the start log lists the gaps and each pool's box and depth, PECKWORKS_SUNLOG counts the glints lit per
-frame, and the brightness lift in a disc at each logged spot against the same build with the knob at 0 (2.7 to 17
-grey levels under the gaps, 18 at a shallow pool, 2 to 3 at the deep ones) is the "is it there" count.
+*Sunlight on the water (2026-10-30, `Sunlight.cs`; its beams and pools removed 2026-11-02).* His ask: "some light
+shimmering on the water". THE GLINTS: 380 sites per screen's worth of sunlit open water (more toward the far side,
+where the surface is seen at more of a slant), each a short horizontal dash in the sky's colour (a ripple crest seen
+from above at a slant is wider than tall; 6 to 13 px at 1080 lines) with its own clock (on for the top of its sine
+only, so each blinks briefly and is dark most of the time), drifting slowly with the breeze; the breeze is a slow
+field of two phases that makes sheets of glitter here and calm there. None in the shade (`Pond.Sun` weights them),
+none under a lily pad (the live centres, read each frame), drawn after the pads and under the floating petals. Every
+rhythm keeps its own wrapped phase (no long clock). Its own Random (nothing else in the scene moves); the knob
+"Sunlight" scales the glints, 0 is none. PECKWORKS_SUNLOG counts the glints lit per frame.
+
+WHAT WENT (round forty-five, "the whole light ray thing is a disaster either fix it or remove it"): from each hole in
+the boughs' shade a BEAM went down into the water, bent by Snell's law, dimmed by absorption and the murk, baked into
+the backdrop, and landed as a warm POOL of light on the bed, a sprite stamped each frame. Rendered at seeds 1 and 3
+with the knob at 0 against 100, the two together moved under 1.5 percent of the pixels by more than six grey levels
+(the glints are most of that): a shaft of light is a thing seen from the side or from under the water, and from above
+it is nothing. What he was calling light rays was the bed's own slope lighting, stretched into pale diagonal streaks
+by the slant (next paragraph). What an overhead view really shows of sun in water is caustics, bright wavy nets on a
+shallow bed; those are a round of their own if he asks.
 
 *The bed is DRAWN SUNK (round forty-one, the review's step 3).* Every swimmer has been drawn down the
 screen by its depth since round thirty-eight (`Light.SinkPx`: the deeper, the lower in the view, which is
@@ -1759,7 +1751,16 @@ they hide it behind a stone. What FLOATS is kept off the sink: the murk patches 
 are painted onto a clear sheet and laid over the sunk water at their own place, and whatever the land
 painters put on the water (a bank rock's wet rim, an afloat log) is copied back where it was. The dice
 do not move (the same calls in the same order). The slant this reveals (the mounds round the stones as
-tall hills at today's `Pond.DepthU` 0.6u and `Light.Sink` 0.55) is the owner's choice, the review's step 4.
+tall hills at `Pond.DepthU` 0.6u and `Light.Sink` 0.55) was the owner's choice, the review's step 4, and he gave
+his verdict on 2026-11-02 (round forty-five: "the bottom terrain generation makes it look all weird, like the
+perspective is off or something"). `Light.Sink` is 0.2 now: the deepest bed is drawn 0.12u down the screen from the
+water above it, not 0.33u. At 0.55 a boulder standing on the deep bed had its foot drawn 356 px below its cap at 1080
+lines, so every stone was a tombstone and every mound an egg with the cap near its top, the cobbles on the near
+flank were stretched into vertical ovals and the far flank was squeezed into a bright crescent; the slope lighting
+(`SinkBed`, a quarter) then painted the stretched flanks as pale diagonal streaks he read as light rays. The rest of
+the scene is drawn near-overhead (the pads squashed 0.82, `Light.Lift` 0.75 for what flies), and the slant under the
+water had been the one number that said otherwise. One constant, every swimmer and the bed read it (`SinkPx`, the
+band above the screen, `HoldDepth`), so nothing else changed; the slope light went to an eighth with it.
 Deeper also
 means lower on the screen (`Light.SinkPx`, as above). So a fish that dives goes smaller, hazier
 and lower. The painted bed shows through the deepest water by two fifths (`PondPainter.BedClear`,
@@ -1832,7 +1833,9 @@ room falls off toward a stone the way it falls off toward the bank and a fish tu
 both grids are stacks of sixteen floors by depth, `Pond.RoomAt(x, y, wallZ)`: on each floor the bed shallower than
 that floor is a wall too, and a swimmer reads the floor its own step rule would refuse it at, `Koi.WallZ`, so the
 bed's slopes and the mounds are felt as falling room the way the shoulders are; one distance transform per floor,
-four at a time, about a tenth of a second of the start.) Two jams came out on
+four at a time, about a tenth of a second of the start. Round forty-five made the mounds steep again and found the
+minnow reading its refused step's way out, and its wall-following, on the surface floor, where a mound is open water:
+a dipped school pinned at the island's foot for 55 s; those read the step's own floor now, `Minnow.FollowWall`.) Two jams came out on
 the way, each a rule with two owners. With the first build's speed decay a goldfish stood at a shoulder's edge for
 115 s: the probe answered "up" every frame and the fish began to turn, and the feelers' fallback (uphill on the
 shared grid, which climbs INTO the stone) swung it back, a third of a second each way; the probe has the last word
@@ -2043,7 +2046,10 @@ lowered by the stone's profile (`Lower`): at the surface on a COLLAR round the c
 radius wide), then THE ONE SHAPE OF A
 STONE (`PondPainter.StoneZ`, round forty-one, the review's step 2): the boulder's side falls at
 about forty-five degrees to a shoulder 0.12 of the pond's depth down at the stone's painted edge,
-and from there a mound slopes down to the bed over 0.24u (0.28u until round forty-four, when the run was tightened and a seven-lobed ripple put on its contour, `MoundShape.Rubble`, so the foot reads as a heap and not a dome). Until then the hill fell from the cap to
+and from there a mound slopes down to the bed over 0.08u (round forty-five; 0.24u in round forty-four and 0.28u before,
+when the slant was 0.55 and a tight mound drew as a column, so it was widened into a hill: the slant is 0.2 now and
+the mound can be a boulder's own skirt again; it still runs out unevenly by direction, 0.7 to 1.35 of that, with a
+seven-lobed ripple on its contour, `MoundShape.Rubble`, so the foot reads as a heap and not a dome). Until then the hill fell from the cap to
 the full bed within 0.05u of the stone's edge: 570 px of height over 102 px of run at 1080 lines,
 a column five times taller than wide, drawn 508 px tall under the pond's slant ("the current
 rocks look like 40 ft tall"). The mound is in the one terrain, so it is in the painted depth (the

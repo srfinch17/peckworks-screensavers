@@ -126,6 +126,13 @@ These are in the code comments too; here they are in one place.
   grid too: a swimmer reads the floor its own step rule would refuse it at (`Koi.WallZ`, the cap and the
   shore turned round; the turtle nine tenths of its depth; the minnows their dip's rule) for its feelers,
   its search trigger and its "nothing is clear" fallback, and a mound ahead is falling room, not a cliff.
+  AND ITS ANSWER TO A REFUSED STEP (round forty-five): the minnow's step refused on its depth's floor, but
+  its "which way along the wall" and its wall-following read the surface floor, where a stone's mound is
+  open water, so the fish read "room all round, nothing to follow", kept its heading on the school's target
+  past the mound and was refused on the spot every frame: five fish pinned at the island's foot for 55 s the
+  moment the mound became a boulder's steep skirt (it had been a hill the step was never refused on). Every
+  reader of the grid in one animal is on one floor: the feelers, the fallback, the release test, the side
+  chosen at a refusal and the following (`Minnow.FollowWall(here, wallZ)`).
   The koi's stack keeps the shoulders as walls; the snake still steers on its own flat plane (step 5).
 - **A turn of half a circle has no side, and a probe has a floor in pixels.** "Straight behind" as the
   answer to "nothing is clear" gave `Wrap` a different sign each frame, and the eased turn rate oscillated

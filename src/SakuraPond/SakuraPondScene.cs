@@ -59,7 +59,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Ducks _ducks;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
-    private readonly Sunlight _sun;               // the beams through the boughs' gaps, their pools on the bed, the glitter on the surface (2026-10-30)
+    private readonly Sunlight _sun;               // the glitter on the surface (2026-10-30; its beams and pools went 2026-11-02)
     private readonly Pads _pads;                  // the lily pads, live: stamped on the water, shoved by what swims into them, held by their roots (round forty)
     private readonly List<Body> _surface = new();   // what else is solid in the water this frame (the snake, while it swims), refilled per frame, never reallocated
 
@@ -95,7 +95,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         // The sunlight's beams are baked into the backdrop here, BEFORE the boughs bake their still parts over it (a bough
         // is over the water, a beam is in it).
         _sun = new Sunlight(_pond, settings.SunlightPercent / 100f, new Random(unchecked(salt + 606)));
-        Lap($"sunlight gaps {_sun.Gaps}{_sun.Where}");
+        Lap("sunlight");
         _wind = new Wind(0.26f, u, Light.View);                   // to the right and a little toward us
         // The cherry boughs sway in that wind: full sway 0.7u out from a trunk, the tips swinging 0.018u at a full lean.
         _boughs = new Boughs(width, height, _pond.Branches, _pond.TreeRoots, u * 0.7f, u * 0.018f, _wind, Light.View, _pond.Pixels);   // the still parts go into the backdrop here
@@ -320,7 +320,6 @@ internal sealed class SakuraPondScene : IScreensaverScene
         fb.Restore(_pond.Pixels);                 // (not with the lawn's box left out: the carpet reads the frame inside its box, round thirty-five found the smear)
         Sections.Mark("backdrop copy");
         _pond.Shore.Draw(fb);                     // the water lapping at the sand: first, so the lawn's blades overhang it
-        _sun.DrawPools(fb);                       // the pools of sunlight on the bed: under every swimmer (the beams themselves are in the backdrop)
         Sections.Mark("shore");
         _lawn.Draw(fb);
         Sections.Mark("lawn");

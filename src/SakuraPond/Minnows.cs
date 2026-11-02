@@ -774,14 +774,22 @@ internal sealed class Minnow : Body
         // along the wall on that side with a little "away" mixed in, flip the side when the way along is blocked
         // too (a corner), and only when there is open water round the fish AND a clear line to the school's
         // target let the school's pull have it back. A minnow turns in a flick, so the heading is set outright.
+        // THE WALL A REFUSED STEP MET IS READ ON THE STEP'S OWN FLOOR (round forty-five). The soft push above reads the
+        // surface floor on purpose (the note there), but the step rule refuses on the floor of the fish's depth, and a
+        // dipped fish that met a stone's mound, which is open water at the surface, read "room all round, nothing to
+        // follow" here, kept its heading on the school's target past the mound and was refused on the spot every frame:
+        // a school of five pinned at the island's foot for 55 s at seed 7 the moment the mounds became a boulder's
+        // skirt (steep) instead of a hill. So the room round it and the way out, in the wall-following and when the
+        // step is refused, are read at WallZ: the same floor TryStep refuses on (0 near the surface, the same as before).
+        float wallZ = WallZ(), roomWall = _pond.RoomAt(here.X, here.Y, wallZ);
         if (_wallSide != 0)
         {
             // Let go when there is room round it AND the school's target is in clear sight, or when it has
             // followed for two seconds with room round it whatever the line says (a target behind a stone is
             // never in clear sight: a fish zigzagged on a ridge of open water for 75 s on the stress run).
             _wallFor += dt;
-            if (roomHere >= wall && (LineClear(tx, ty) || _wallFor > 2f)) { _wallSide = 0; _wallFor = 0; }
-            else FollowWall(here);
+            if (roomWall >= wall && (LineClear(tx, ty) || _wallFor > 2f)) { _wallSide = 0; _wallFor = 0; }
+            else FollowWall(here, wallZ);
         }
         float step = _speed * dt, moved = 0;
         if (TryStep(step)) moved = step;
@@ -791,13 +799,13 @@ internal sealed class Minnow : Body
             // fish was free, flip it when it was already following (the way along is a dead end), and step at once.
             if (_wallSide == 0)
             {
-                PointF ow = _pond.OpenWay(here.X, here.Y);
+                PointF ow = _pond.OpenWay(here.X, here.Y, wallZ);
                 float alongX = -ow.Y, alongY = ow.X;              // the wall runs across the uphill direction
                 _wallSide = alongX * (tx - X) + alongY * (ty - Y) < 0 ? -1 : 1;
                 _wallFor = 0;
             }
             else _wallSide = -_wallSide;
-            FollowWall(here);
+            FollowWall(here, wallZ);
             if (TryStep(step)) moved = step;
             else
             {
@@ -859,9 +867,10 @@ internal sealed class Minnow : Body
     /// pond's room grid, on its remembered side, with a little "away from the wall" mixed in so it keeps a
     /// hair of water between itself and the stone (straight along, it scraped the rim and was refused).
     /// </summary>
-    private void FollowWall(PointF here)
+    /// <param name="wallZ">The floor of the room grid to read the wall on: the step's own (WallZ), so a dipped fish follows a mound the surface does not see.</param>
+    private void FollowWall(PointF here, float wallZ)
     {
-        PointF ow = _pond.OpenWay(here.X, here.Y);
+        PointF ow = _pond.OpenWay(here.X, here.Y, wallZ);
         float l = MathF.Sqrt(ow.X * ow.X + ow.Y * ow.Y);
         if (l < 1e-4f) return;
         float awayX = ow.X / l, awayY = ow.Y / l;
