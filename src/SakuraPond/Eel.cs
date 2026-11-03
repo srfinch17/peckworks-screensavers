@@ -328,7 +328,22 @@ internal sealed class EelBody : Body
         float distGoal = Dist(px, py, goalX, goalY);
         float look = MathF.Min(_len * 0.9f + _swum * 0.6f, distGoal + _len * 0.2f);   // the feelers never reach past the goal: a wall beyond it is not in the way
         float best = toGoal, bestRoom = look;
-        if (!float.IsNaN(_wayHeld)) { best = _wayHeld; _logAhead = 0; }
+        bool inWall = !StepOk(px, py, out _);
+        if (inWall)
+        {
+            // INSIDE A WALL (a flee at full speed drove the head into a rock formation's cliff): the way out is the roomiest or
+            // deepest of eight directions a short step away, and it turns straight to it (a held way-out that still pointed into
+            // the rock kept it there 140 s on the first natural run: the held answer is dropped here).
+            float bestV = float.MinValue;
+            for (int k = 0; k < 8; k++)
+            {
+                float a = k * MathF.Tau / 8, ox = px + MathF.Cos(a) * _len * 0.15f, oy = py + MathF.Sin(a) * _len * 0.15f;
+                float v = Room(ox, oy) + FloorAt(ox, oy) * _len;
+                if (v > bestV) { bestV = v; best = a; }
+            }
+            _wayHeld = float.NaN; _h = best; _turnRate = 0; _logAhead = 0;
+        }
+        else if (!float.IsNaN(_wayHeld)) { best = _wayHeld; _logAhead = 0; }
         else
         {
             float bestScore = float.MinValue;
@@ -343,7 +358,10 @@ internal sealed class EelBody : Body
         }
         _lastGoalX = goalX; _lastGoalY = goalY; _lastBest = best;
         float dh = Wrap(best - _h);
-        float most =MathF.Max(_swum, _len * 0.15f) / (0.32f * _len);
+        // A refused eel PIVOTS at nearly a radian a second (the floor was 0.47: pressed into a cliff's corner at seed 3 the half turn
+        // to the way out took longer than the jam memory, each new doing turned it back, and it stood 140 s), and the jam memory
+        // is 4 s, long enough for that turn (1.5 s was the koi's, a quicker turner).
+        float most = MathF.Max(_swum, _len * 0.3f) / (0.32f * _len);
         float turn = Math.Clamp(dh * 3f, -most, most);
         _turnRate += (turn - _turnRate) * (1 - MathF.Exp(-dt * 8f));
         _h = Wrap(_h + _turnRate * dt);
@@ -354,6 +372,11 @@ internal sealed class EelBody : Body
         float c = MathF.Cos(_h), s = MathF.Sin(_h);
         float nx = px + c * step, ny = py + s * step;
         bool ok = StepOk(nx, ny, out int cause);
+        // ALREADY INSIDE A WALL, ANY STEP OUT IS ALLOWED (the main model's pass, from a natural run: a flee at full speed drove
+        // the head into a rock formation's cliff, where every step was refused as land and every doing jammed in turn for
+        // the last 140 s of the run; the koi's rule from round thirty-eight). A step from unfree ground to a point with more
+        // room, or deeper water, is the way out and passes.
+        if (!ok && inWall && (Room(nx, ny) > Room(px, py) || FloorAt(nx, ny) > FloorAt(px, py) + 1e-4f)) { ok = true; cause = 0; }
         _cause = ok ? 0 : cause;
         if (ok)
         {
@@ -640,7 +663,7 @@ internal sealed class EelBody : Body
         _goalLeft -= dt;
         bool refused = StepLeader(dt, 0, _goalX, _goalY, Cruise);
         NoteRefusal(refused, dt);
-        if (_refFor > 1.5f) { LogEvent("jam", "forage"); _hasGoal = false; BeginApproach(false); }
+        if (_refFor > 4f) { LogEvent("jam", "forage"); _hasGoal = false; BeginApproach(false); }
     }
 
     /// <summary>A goal on open deep bed within half a unit of the mouth: tried thirty times with a line of clear steps to it. False when none is found.</summary>
@@ -808,7 +831,7 @@ internal sealed class EelBody : Body
         bool refused = StepLeader(dt, 0, sx, sy, _fast ? _len * 1.1f : _len * 0.5f);
         NoteRefusal(refused, dt);
         if (d < _len * 0.35f) { BeginBack(_fast); return; }
-        if (_refFor > 1.5f || _mind.Over) { LogEvent("jam", "approach"); _refFor = 0; Decide(); }
+        if (_refFor > 4f || _mind.Over) { LogEvent("jam", "approach"); _refFor = 0; Decide(); }
     }
 
     // ---------------------------------------------------------------- Back: the tail leads, backward, into the hollow
@@ -830,7 +853,7 @@ internal sealed class EelBody : Body
             bool refused = StepLeader(dt, N - 1, gx, gy, _fast ? _len * 0.5f : _len * 0.2f);
             NoteRefusal(refused, dt);
             if (tq < _mouthQ + 0.12f * _len && MathF.Abs(lat) < 0.45f * _wg) { _sliding = true; }
-            if (_refFor > 1.5f || _mind.Over) { LogEvent("jam", "back"); Decide(); }
+            if (_refFor > 4f || _mind.Over) { LogEvent("jam", "back"); Decide(); }
             return;
         }
         SlideIn(dt, 0.3f * _len);

@@ -1757,7 +1757,13 @@ now, the first a fraction of that, a peek goes out more often than not, and in i
 its reach (at the full reach every koi that cruised past the door reset its hide, 19 times in five minutes on seed 1). Its
 inside depth is the HOLLOW'S height, a little over half the log's height above the bed (at the bed's own depth the head was
 drawn a log's height below the hole), it hides with its snout at the hole (the face centre, half a width inside the
-capsule's tip) and peeks a tenth to four tenths of a width past the tip. THE HOLLOW INTERPLAY (the dweller homed at the
+capsule's tip) and peeks a tenth to four tenths of a width past the tip. Its walls got the koi's two lessons the same
+evening, from one natural run: a flee at full speed drove its head into a rock formation's cliff, and there every step
+was refused as land while each new doing turned it back toward its goal, 140 s to the run's end. Now a step out of ground
+it is already inside passes (toward more room or deeper water, the roomiest of eight directions chosen outright), a
+refused eel pivots at nearly a radian a second (a floor of 0.47 took longer to turn than the jam memory), and its jam
+memory is 4 s, long enough for that turn. After: 3 jams in 300 s each ended by the memory, the longest standstill out
+of the hollow 10 s at a cliff. THE HOLLOW INTERPLAY (the dweller homed at the
 mouth retreating inside while the eel is out, one body inside by a claim) is NOT built: the crayfish at the mouth and the
 eel's head can overlap there, a known pass. Instruments: `PECKWORKS_EELLOG` (the koi log's layout, event lines for every
 emerge, back-in, withdrawal and snap), `PECKWORKS_EELRATE` (a stress dial on the hide timer), the helper's `eelstats.py`
