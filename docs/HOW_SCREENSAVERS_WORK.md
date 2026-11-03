@@ -1868,6 +1868,12 @@ value is 0.4 percent of the page); the threshold read off the page lit thirty bu
 star nobody sees; white at the page's single brightest pixel 0.3; white at its top 0.2 percent 0.44 and about 100 on,
 and a strip of four frames shows them come and go on the knots. The beams and the bed pools of 2026-10-30 went
 earlier the same day: with the knob at 0 against 100 they moved under 1.5 percent of the pixels by more than six levels.
+His look at the sparkles: "make the sun a little bit brighter to go with the flashes on the water. the flashes seem
+brighter than the ambient sunlight would allow ... also, the flashes on the back of the animals is a bit too bright".
+The boughs' shade pass (`PondPainter`, stage 5) now lifts the open sun by 8 percent (276 of 256) and leaves the deepest
+shade where it was (154), so the whole sunlit picture is a shade sunnier against the same shade (open water 58,88,62 to
+67,101,72 at seed 3, the net's strength rising with the sun's patch; the lawn under the boughs 86,115,52 to 88,117,53),
+and the net's light on a swimmer is 0.56 of what it was (`Body.Paint`).
 
 THE WAKES (`Ripples.Wake`, `Span`). A swimmer with its back at the surface leaves a wavelet of its bow wave every
 0.012u of travel, each a ring spreading at 0.022u a second for 2.6 s (1.5 s until this round: gone before the arms

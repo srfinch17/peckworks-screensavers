@@ -244,7 +244,7 @@ internal abstract class Body
                         int f = Net.LiftAt(x, y);
                         if (f > 0)
                         {
-                            f = f * (256 - (m256 * 3 >> 2)) >> 8;
+                            f = f * (256 - (m256 * 3 >> 2)) * 9 >> 12;                         // (0.56 of the first strength: "the flashes on the back of the animals is a bit too bright")
                             // Light CONCENTRATED by a lens is brighter than the sun's flat light, so the net multiplies the thing's own
                             // colour (a line is a fifth brighter at full strength) and only a little toward white (a white koi has no
                             // brighter to go; a pull toward white alone put eight levels on a dark bed and nothing an eye could find on a fish).

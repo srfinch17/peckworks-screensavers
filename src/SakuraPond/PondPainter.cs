@@ -624,12 +624,14 @@ internal static class PondPainter
         var sun = new byte[w * h];
         for (int i = 0; i < px.Length; i++)
         {
-            // Up to 40% darker in the deepest shadow.
-            int keep = 256 - shade[i] * 102 / 255;
+            // THE SUN IS A LITTLE BRIGHTER (his line after the sparkles, round forty-six: "make the sun a little bit brighter to
+            // go with the flashes on the water. the flashes seem brighter than the ambient sunlight would allow"): the open sun
+            // lifts the painting by 8 percent (276 of 256), the deepest shade stays where it was (40 percent under the OLD
+            // full sun, 154), so the day is sunnier and the shade reads as shade against it.
+            int keep = 276 - shade[i] * 122 / 255;
             sun[i] = (byte)Math.Min(255, keep);
-            if (shade[i] == 0) continue;
             uint c = px[i];
-            px[i] = (uint)(((int)((c >> 16) & 0xFF) * keep >> 8) << 16 | ((int)((c >> 8) & 0xFF) * keep >> 8) << 8 | ((int)(c & 0xFF) * keep >> 8));
+            px[i] = (uint)(Math.Min(255, (int)((c >> 16) & 0xFF) * keep >> 8) << 16 | Math.Min(255, (int)((c >> 8) & 0xFF) * keep >> 8) << 8 | Math.Min(255, (int)(c & 0xFF) * keep >> 8));
         }
         // ---- the shore, alive (Shoreline): built from the finished, shaded picture; it bakes its rest state into px ----
         uint[] blocked = Read(blockers), padded = Read(padSheet), noGrass = Read(noGrassSheet);
