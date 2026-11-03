@@ -148,6 +148,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _snails = new Snails(_pond, settings.SnailCount, _waterInView, new Random(unchecked(salt + 808)));   // the snails: their own dice (round forty-seven)
         Lap($"snails {_snails.Count}");
         Lap($"skeletons{PondPainter.Skeletons}");
+        { string irises = ""; foreach ((PointF root, _) in _pond.IrisSpots) irises += FormattableString.Invariant($" {root.X:F0},{root.Y:F0}"); Lap($"irises{irises} cattails {_pond.CattailSpot.X:F0},{_pond.CattailSpot.Y:F0}"); }
         Lap(_pond.Sunken is SunkenLog sl
             ? FormattableString.Invariant($"sunken log {sl.Centre.X:F0},{sl.Centre.Y:F0} angle {sl.Angle:F2} len {sl.Length:F0} wide {sl.Width:F0} den {sl.Den.X:F0},{sl.Den.Y:F0} homed {_deep.DenHomed}")
             : "sunken log none");

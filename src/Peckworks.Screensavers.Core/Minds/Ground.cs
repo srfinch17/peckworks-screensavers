@@ -52,14 +52,24 @@ public static class Ground
     /// <param name="turnErr">How far round the goal is from the heading, radians, signed (0 when there is no goal: then only the straight step is tried).</param>
     public static Stepped Step(Solid ground, ref float x, ref float y, ref float heading, float step, float turnErr)
     {
-        float nx = x + MathF.Cos(heading) * step, ny = y + MathF.Sin(heading) * step;
-        if (ground(nx, ny)) { x = nx; y = ny; return Stepped.Forward; }
+        // The ground is asked at least two units ahead, however small the step (a dash's first step is a sixth of a pixel
+        // while the speed builds from nothing): the line test that chose the goal (LineClear) samples every few units, and
+        // a step that asked about the very next pixel disagreed with it at a jagged shore, refusing a dash whose line was
+        // clear (Sakura Pond's lizard on a bank stone, round forty-seven). The move is still the step itself.
+        // And a NOTCH is crossed: ground at two, four or six units ahead is a way forward (a three-pixel bay in a painted
+        // shoreline refused every step while the line test, sampling every four, had passed over it).
+        float probe = MathF.Max(step, 2f), ox = x, oy = y;   // (copies: a local function may not read a ref parameter)
+        bool Ahead(float a)
+        {
+            float ca = MathF.Cos(a), sa = MathF.Sin(a);
+            return ground(ox + ca * probe, oy + sa * probe) || ground(ox + ca * probe * 2, oy + sa * probe * 2) || ground(ox + ca * probe * 3, oy + sa * probe * 3);
+        }
+        if (Ahead(heading)) { x += MathF.Cos(heading) * step; y += MathF.Sin(heading) * step; return Stepped.Forward; }
         if (MathF.Abs(turnErr) > 0.5f)
             for (int k = 1; k <= 5; k++)
             {
                 float a = heading + (turnErr > 0 ? 0.6f : -0.6f) * k;
-                float sx = x + MathF.Cos(a) * step, sy = y + MathF.Sin(a) * step;
-                if (ground(sx, sy)) { x = sx; y = sy; heading = MathF.IEEERemainder(a, MathF.Tau); return Stepped.Slid; }
+                if (Ahead(a)) { x += MathF.Cos(a) * step; y += MathF.Sin(a) * step; heading = MathF.IEEERemainder(a, MathF.Tau); return Stepped.Slid; }
             }
         return Stepped.Refused;
     }

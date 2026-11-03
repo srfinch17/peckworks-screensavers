@@ -99,6 +99,22 @@ public sealed class Trail
     }
 
     /// <summary>
+    /// Turns every remembered point about a pivot (the head) by an angle: a PIVOT ON THE SPOT sweeps the whole body
+    /// round with the head (a lizard whipping round before a dash). Turning the heading alone, with nothing laid,
+    /// leaves the body on its old line and bends it at the neck by the whole turn (Sakura Pond, round forty-seven).
+    /// </summary>
+    public void Sweep(PointF about, float by)
+    {
+        float c = MathF.Cos(by), s = MathF.Sin(by);
+        for (int i = 0; i < _count; i++)
+        {
+            int slot = (_head - i + _pts.Length) % _pts.Length;
+            float dx = _pts[slot].X - about.X, dy = _pts[slot].Y - about.Y;
+            _pts[slot] = new PointF(about.X + dx * c - dy * s, about.Y + dx * s + dy * c);
+        }
+    }
+
+    /// <summary>
     /// Changes every remembered depth: adds "settled" (a drift of the whole
     /// body up or down) and then eases each toward "toward" by "levelling"
     /// (0 none, 1 all the way): a resting animal levels out over a second or

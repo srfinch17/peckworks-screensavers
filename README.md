@@ -405,7 +405,8 @@ and drifts in a lull, so no two fall the same way.
   bottom. SPARKLES on the net itself: where the lines of the net cross, the surface flashes white for a moment, and
   the flashes come and go as the net slides, which is what the little flashes on a real pond are (the sun caught on
   one small wave, in the one spot your eye happened to be). Nothing drifts and nothing piles up. The open sun is a
-  little brighter than the shade under the boughs, so the flashes belong to the day they are in. And every swimmer that breaks the surface (a turtle paddling with its shell awash, the snake, a koi with
+  little brighter than the shade under the boughs, so the flashes belong to the day they are in, and the whole day, sun
+  and shade alike, is a shade brighter again (round forty-seven). And every swimmer that breaks the surface (a turtle paddling with its shell awash, the snake, a koi with
   its back out) leaves a V-shaped bow wake, the cross waves held inside the wedge behind it. Light is solid to nothing.
   (The beams and the bed pools of 2026-10-30 were taken out on 2026-11-02: seen from above the water they moved the
   picture by under two grey levels, and what read as "light rays" was the bed's own slope lighting.)
@@ -424,7 +425,11 @@ and drifts in a lull, so no two fall the same way.
   smaller and hazier under the fish, and comes up again before it hunts or basks. Down there a stone's
   underwater hill is a wall to it as the bank is: it feels the hill coming and turns early and smoothly
   round it, never tighter than its body can follow, and its body is laid over the bed under every point of
-  it, bending up a flank as a rope would, never through the stone and never stretched. The koi and
+  it, bending up a flank as a rope would, never through the stone and never stretched. A turn on the
+  spot bends its neck, in the water and on the land alike (on the land the bend was refused and each
+  turn was laid into the body as a corner that slid down it, round forty-seven); hemmed between two
+  bank things with no room on any side it probes a ring of headings with the step's own test and
+  crawls out between them instead of standing there. The koi and
   turtles treat its body as solid (they steer under or round it, and a fish that meets it is pushed out), and the minnows keep
   clear of it as they do of the koi. Each visit is a different snake: it rolls a boldness and a
   nerve, and then chooses what to do by weighted dice, a few things per visit. It may swim out
@@ -458,7 +463,12 @@ and drifts in a lull, so no two fall the same way.
   forward, five long clawed toes spread like a hand) stepping on opposite corners, then gone into
   the grass again. Each has its own temper, rolled once: a BOLD one stays
   out longer, basks longer and wins a standoff, an ENERGETIC one makes longer dashes with shorter
-  rests. They also run to the water's edge and drink (one tiny ring in front of the nose), creep
+  rests. A lizard may run through the irises' leaves but never stops under them (the leaves are drawn
+  over it, and one basking on a rock beside a clump showed as legs sticking out of the stone), so
+  every rock it climbs, spot it runs to and place it drinks is out from under a bank plant. A dash
+  begun facing the water turns on the spot first, then runs (on a bank stone's top every dash had
+  taken its first step into the water and ended there).
+  They also run to the water's edge and drink (one tiny ring in front of the nose), creep
   up on a dragonfly sitting on a bank rock (it takes off a body length short), bolt for cover
   when a swallow's shadow sweeps over them, and if
   both are out and meet, they square up nose to nose, then the bolder one charges and the other

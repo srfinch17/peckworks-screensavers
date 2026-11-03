@@ -38,6 +38,10 @@ internal sealed class Lizards
     // every frame would be garbage for the collector, so one array of each possible
     // size (0, 1, 2 ...) is made once and the right one is filled in and handed back.
     private readonly PointF[][] _noseArrays;
+    /// <summary>The instrument log (PECKWORKS_LIZARDLOG names a file, set up once here, flushed at exit): one line per visible lizard per frame. Null in the real pond.</summary>
+    public static Action<string>? MotionLog;
+    private double _t;
+    private long _frame;
 
     /// <param name="dragonflies">The dragonflies, for a lizard to stalk when one sits on a bank rock (null: none).</param>
     public Lizards(Pond pond, int count, Ripples ripples, float often, Random rng, Dragonflies? dragonflies = null)
@@ -56,6 +60,14 @@ internal sealed class Lizards
         // slices run the other way: the boldest lizard is the laziest, the shyest the
         // quickest. Which lizard gets which slice is a coin toss.
         bool flip = rng.Next(2) == 0;
+        string? file = Environment.GetEnvironmentVariable("PECKWORKS_LIZARDLOG");
+        if (!string.IsNullOrEmpty(file) && MotionLog == null)
+        {
+            var writer = new StreamWriter(file) { AutoFlush = false };
+            writer.WriteLine("# F,t,idx,doing,aim,gx,gy,noseX,noseY,heading,speed,step(-1 none,0 forward,1 along,2 refused: Ground.Stepped),dashes,leaving,stranded,mindLeft");
+            MotionLog = line => writer.WriteLine(line);
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => writer.Flush();
+        }
         for (int i = 0; i < n; i++)
         {
             float bold = Traits.Slice(rng, i, n, reverse: flip);
@@ -97,7 +109,9 @@ internal sealed class Lizards
                 }
             }
             else _all[i].Update(dt, snakeHead);
+            if (MotionLog != null && _all[i].Visible) _all[i].Log(_frame, _t, i, MotionLog);
         }
+        _t += dt; _frame++;
         for (int i = 0; i < _all.Length; i++)
             for (int j = i + 1; j < _all.Length; j++)
             {
@@ -217,6 +231,8 @@ internal sealed class Lizard : Body, IPrey
     private Aim _aim;
     private bool _leaving, _shadowPass;
     private bool _stranded;                       // its dash to leave was stopped by water at once: walk somewhere reachable first
+    private int _logStep = -1;                    // the step rule's answer this frame, for the log only (-1: no step taken)
+    private bool _refused;                        // the last step was refused: the pivot's trigger (a refused step itself forces the turn)
     private bool _met;                            // has it had its meeting this visit?
     private bool _dead;                           // eaten: gone for good (the Lizards wrapper brings a new one later)
     private bool _snakeSeen, _freezeOnSnake;      // it has noticed the snake (once per approach), and chose to freeze rather than run
@@ -396,6 +412,20 @@ internal sealed class Lizard : Body, IPrey
         return _pond.Land[iy * _pond.Width + ix];
     }
 
+    /// <summary>
+    /// Under a bank plant's leaves: within 0.1u of an iris clump's root (its sword leaves reach 0.11u, arching toward the
+    /// water) or 0.2u of the cattails' foot. The clumps are a live layer drawn OVER the lizards, so a lizard that STOPS here
+    /// is hidden by the leaves: on a rock beside a clump it showed as legs and a tail sticking out of the stone, still, for
+    /// the length of a bask (his line, round forty-seven: "lizard seems to be stuck in a rock"; seed 5 at 24 s, eleven
+    /// seconds). No stopping spot (a roam, a rock to climb, a drink) is chosen here; a run may still pass through.
+    /// </summary>
+    private bool UnderLeaves(PointF s)
+    {
+        foreach ((PointF root, _) in _pond.IrisSpots)
+            if (Dist(root, s) < _u * 0.1f) return true;
+        return Dist(_pond.CattailSpot, s) < _u * 0.2f;
+    }
+
     /// <summary>Land, and (on screen) out from under the branches: where a run is worth making.</summary>
     private bool ClearAt(float sx, float sy)
     {
@@ -441,15 +471,31 @@ internal sealed class Lizard : Body, IPrey
         float gdx = _goalX - _x, gdy = _goalY - _y, gd = MathF.Sqrt(gdx * gdx + gdy * gdy);
         bool moving = _doing == Doing.Dash || (_doing == Doing.Face && _approach);
         float turnErr = 0;                                                  // how far round it still has to turn to face the goal (radians)
+        bool mustTurn = false;                                              // turning on the spot first (see below): no speed, the body swept round with the head, the dash's timer held
         if (moving)
         {
             float want = gd > 1 ? MathF.Atan2(gdy, gdx) : _heading;
             turnErr = Wrap(want - _heading);
-            float most = MathF.Min(3.5f, MathF.Max(1.5f, _speed / (_len * 0.4f)));   // a pivot faster than this folded the tail into a hairpin
-            _heading = Wrap(_heading + Math.Clamp(Wrap(want - _heading), -most * dt, most * dt));
+            // TURN FIRST AT THE WATER'S EDGE (round forty-seven): a dash begun facing the water, with the goal off to the side or
+            // behind, took its first step along the old heading into the water, and one refused step ends a dash. On a small dry
+            // patch (a bank stone's top, a spur of the shore) that was every dash: freeze, dash, freeze, 252 times in 400 s at one
+            // spot (seed 4). So while the goal is off the heading (0.12 rad) and the ground a sixth of a body ahead is water, or
+            // the last step was refused, it pivots on the spot at the cap (a lizard whips round before it runs), the whole body swept round with
+            // the head (Trail.Sweep: the heading alone turning left the body on its old line, bent at the neck), the dash's timer
+            // held, and a refused step does not end the dash. Anywhere else a dash starts as it always did, running into its turn.
+            // (0.12 rad, not the slide's 0.5: with the goal within half a radian and water ahead, the dash's first step was refused
+            // and ended it, and the heading turned one frame's worth per dash, 36 dashes to turn a radian: seed 4 at 1920 wide.)
+            // (And a REFUSED STEP is the trigger too, the pond's standing rule: a three-pixel bay in the shoreline two pixels ahead,
+            // with land again beyond it, passed the look-ahead and refused the step, 12 dashes in 28 s on seed 5.)
+            mustTurn = MathF.Abs(turnErr) > 0.12f && (_refused || !OnLand(_x + MathF.Cos(_heading) * _len * 0.15f, _y + MathF.Sin(_heading) * _len * 0.15f));
+            float most = mustTurn ? 3.5f : MathF.Min(3.5f, MathF.Max(1.5f, _speed / (_len * 0.4f)));   // a pivot faster than this folded the tail into a hairpin
+            float swung = Math.Clamp(Wrap(want - _heading), -most * dt, most * dt);
+            _heading = Wrap(_heading + swung);
+            if (mustTurn) { _trail.Sweep(new PointF(_x, _y), swung); _mind.Left += dt; }
             if (_doing == Doing.Dash && gd < _arrive && !(_aim == Aim.Charge && _mind.Left > 0.6f)) _mind.End();   // arrived: the dash ends here (a charge runs at least 0.3 s, however near the other starts)
         }
-        float targetSpeed = moving ? _len * 2.6f * _pace : 0;
+        _logStep = -1;
+        float targetSpeed = moving && !mustTurn ? _len * 2.6f * _pace : 0;
         _speed += (targetSpeed - _speed) * (1 - MathF.Exp(-dt * (moving ? 12f : 10f)));   // off like a shot, stops dead
         float step = _speed * dt;
         if (step > 0.01f)
@@ -465,10 +511,14 @@ internal sealed class Lizard : Body, IPrey
             // drink spot on the stone's dry top) and the next dash must go somewhere it
             // can walk to. A walk up to the other lizard simply stops.
             Ground.Stepped took = Ground.Step(_landGround, ref _x, ref _y, ref _heading, step, moving ? turnErr : 0);
-            if (took != Ground.Stepped.Refused) _stranded = false;
-            else if (moving)
+            _logStep = (int)took;
+            _refused = took == Ground.Stepped.Refused;
+            if (!_refused) _stranded = false;
+            else if (moving && !mustTurn)
             {
-                if (_doing == Doing.Dash) { _mind.End(); _stranded = _leaving; }
+                // Refused while FACING the goal: truly blocked, the dash ends here. Refused with a turn still to make: the
+                // pivot takes over next frame (mustTurn reads _refused) and the dash goes on.
+                if (_doing == Doing.Dash) { if (MathF.Abs(turnErr) <= 0.12f) { _mind.End(); _stranded = _leaving; } }
                 else _approach = false;
             }
             _trail.RememberIfMoved(new PointF(_x, _y), _len / 30);
@@ -488,6 +538,13 @@ internal sealed class Lizard : Body, IPrey
         _phase = _gait;
         _amp += (_wide * 1.3f * run - _amp) * (1 - MathF.Exp(-dt * 8));
         LaySpine();
+    }
+
+    /// <summary>One log line (the instruments only): where it is, what it is doing and what the step rule answered.</summary>
+    public void Log(long frame, double t, int idx, Action<string> log)
+    {
+        PointF n = Spine[0];
+        log(FormattableString.Invariant($"F,{t:F3},{idx},{_doing},{_aim},{_x:F1},{_y:F1},{n.X:F1},{n.Y:F1},{_heading:F3},{_speed:F1},{_logStep},{_dashes},{(_leaving ? 1 : 0)},{(_stranded ? 1 : 0)},{(_mind.Left > 1e6f ? -1 : _mind.Left):F2}"));
     }
 
     /// <summary>The fling: 0.04u in 0.15 s along the dodge direction (only onto land), the legs going; then it runs for the way out.</summary>
@@ -664,6 +721,7 @@ internal sealed class Lizard : Body, IPrey
     {
         (_goalX, _goalY) = ToGround(screenGoal.X, screenGoal.Y);
         _mind.Begin(Doing.Dash, maxTime);
+        _refused = false;
         _aim = aim;
         _arrive = _len * (aim == Aim.Drink ? 0.1f : 0.15f);               // a drinker stops close to its spot: the spot is only a body width from the water
         // A flight is the fastest, a charge nearly so; the energy dial adds a little to everything.
@@ -794,7 +852,7 @@ internal sealed class Lizard : Body, IPrey
             for (int i = 0; i < _pond.Rocks.Count; i++)
             {
                 BankRock r = _pond.Rocks[i];
-                if (!r.InWater && r.Radius > _u * 0.02f && Dist(r.Centre, here) < _u * 0.35f && Dist(r.Centre, here) > r.Radius) near.Add(r);
+                if (!r.InWater && r.Radius > _u * 0.02f && Dist(r.Centre, here) < _u * 0.35f && Dist(r.Centre, here) > r.Radius && !UnderLeaves(r.Centre)) near.Add(r);   // (not a rock under a clump's leaves: it would bask there unseen)
             }
             if (near.Count > 0) { Go(Aim.Roam, near[_rng.Next(near.Count)].Centre, (0.3f + 0.7f * (float)_rng.NextDouble()) * DashScale); return; }
             face = 2;
@@ -818,7 +876,7 @@ internal sealed class Lizard : Body, IPrey
             int ix = (int)s.X, iy = (int)s.Y;
             if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height) continue;
             int i = iy * _pond.Width + ix;
-            if (!_pond.Land[i] || !_pond.Open[i]) continue;
+            if (!_pond.Land[i] || !_pond.Open[i] || UnderLeaves(s)) continue;
             if (!LandLine(here, s)) continue;      // the whole way there stays on land (testing only the midpoint let a lizard on a wet rock pick spots across the water, and stand refused)
             if (toward is not PointF t) return s;
             float gap = Dist(s, t);
@@ -913,7 +971,7 @@ internal sealed class Lizard : Body, IPrey
             float stop = d - 2 - _wide * 1.5f;              // the last land step, then half a body width back: close enough that a swell sometimes reaches the nose (Flinch)
             if (stop < _len * 0.8f) return false;           // already there: it would not even have to turn
             spot = new PointF(here.X + dx * stop, here.Y + dy * stop);
-            return _pond.Open[(int)spot.Y * _pond.Width + (int)spot.X];
+            return _pond.Open[(int)spot.Y * _pond.Width + (int)spot.X] && !UnderLeaves(spot);
         }
         return false;
     }
