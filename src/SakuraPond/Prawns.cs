@@ -175,7 +175,8 @@ internal sealed class PrawnBed
     /// also on open water. A pad, the land, a rock, the island's cap, the
     /// cattails' foot and the water that is too deep are all "no".
     /// </summary>
-    public bool Free(float gx, float gy)
+    /// <param name="deepestU">The deepest bed allowed, in u: the prawns' own band by default; a snail (Snails.cs) lifts it to the pond's full depth.</param>
+    public bool Free(float gx, float gy, float deepestU = DeepestU)
     {
         PointF s = ToScreen(gx, gy);
         int ix = (int)s.X, iy = (int)s.Y;
@@ -183,7 +184,7 @@ internal sealed class PrawnBed
         int i = iy * Pond.Width + ix;
         if (!View[i]) return false;
         float f = Pond.Floor[i] / 255f;
-        if (Light.Murk(f) > MurkLimit || f * Pond.DepthU > DeepestU) return false;
+        if (Light.Murk(f) > MurkLimit || f * Pond.DepthU > deepestU) return false;
         int jy = (int)(s.Y + Light.SinkPx(f, U));
         return jy >= 0 && jy < Pond.Height && View[jy * Pond.Width + ix];
     }

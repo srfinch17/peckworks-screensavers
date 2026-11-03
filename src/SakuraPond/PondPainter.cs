@@ -602,7 +602,7 @@ internal static class PondPainter
         if (island is Island b0) boulders.Add(b0);
         if (formation is Formation b1) boulders.Add(b1.Stone);
         if (formation2 is Formation b2) boulders.Add(b2.Stone);
-        DressBed(bedPx, inPond, terrain, band, boulders, w, h, u);
+        DressBed(bedPx, inPond, terrain, band, boulders, isStone, w, h, u);
         SinkBed(bmp, flat, beforeStones, surface, terrain, band, bedPx, stoneCol, stoneA, isStone, hollow, stoneGround, inPond, Read(blockers), near, w, h, u);
         // The one map, as the byte array everything in the scene reads (Pond.Depth and Pond.Floor are this same array).
         var depth = new byte[w * h];
@@ -885,7 +885,8 @@ internal static class PondPainter
     /// </summary>
     /// <param name="bedPx">The bed's ground picture before the water (Paint's clone of the bitmap after the sand and the shallows' pebbles); written.</param>
     /// <param name="stones">Every boulder in the water (the island and the formations' stones), for the rubble at their feet.</param>
-    private static void DressBed(uint[] bedPx, bool[] inPond, float[] terrain, int band, List<Island> stones, int w, int h, float u)
+    /// <param name="isStone">Where a stone's flank or the sunken log is drawn over the bed (SinkBed): the bones keep off it (a skeleton laid under the log showed as scraps at its edge).</param>
+    private static void DressBed(uint[] bedPx, bool[] inPond, float[] terrain, int band, List<Island> stones, bool[] isStone, int w, int h, float u)
     {
         var rng = new Random(w * 7919 + h * 104729 + 44);
         float Z(int x, int y) => terrain[(Math.Clamp(y, 0, h - 1) + band) * w + Math.Clamp(x, 0, w - 1)];
@@ -994,6 +995,68 @@ internal static class PondPainter
             float len = u * (0.02f + 0.016f * (float)rng.NextDouble()), ang = (float)(rng.NextDouble() * Math.Tau);
             Leaf(bedPx, w, h, p, len, ang, leafColours[rng.Next(leafColours.Length)], Dress);
         }
+
+        // ---- 7. bones (round forty-seven, his ask: "some subtle underwater things (maybe some bones or something)"): one or two
+        // fish skeletons lying on the open deep bed, what the catfish and the eel leave. A spine of small vertebrae, ribs in
+        // pairs swept back along its front half and shrinking toward the tail, a skull at the head end with a dark eye socket,
+        // all in old bone (pale, grey, a touch of yellow: paler than any leaf, which is how a bone on silt reads, and still
+        // tinted by the depth as SinkBed draws everything). On their OWN dice (the litter above keeps its places on every seed).
+        var boneRng = new Random(w * 7919 + h * 104729 + 77);
+        int skeletons = 1 + (int)(0.6f * area);
+        Skeletons = "";
+        for (int n = 0; n < skeletons; n++)
+        {
+            int edge = (int)(u * 0.08f);
+            PointF p = WaterPoint(inPond, w, h, boneRng, k => Z(k % w, k / w) > 0.55f && !isStone[k] && k % w > edge && k % w < w - edge && k / w > edge && k / w < h - edge);     // the deep bed only, never under the log, and a margin in from the picture's edge (one lay half off the left edge): a thing of the depths, meant to be found
+            float len = u * (0.05f + 0.04f * (float)boneRng.NextDouble()), ang = (float)(boneRng.NextDouble() * Math.Tau);
+            Skeleton(bedPx, w, h, p, len, ang, boneRng, (x, y) => Dress(x, y) && !isStone[y * w + x]);
+            Skeletons += FormattableString.Invariant($" {p.X:F0},{p.Y:F0},{len:F0},{ang:F2}");
+        }
+    }
+
+    /// <summary>Where the skeletons were laid, for the start log only (head x,y, length, angle, in ground pixels of the bed).</summary>
+    public static string Skeletons = "";
+
+    /// <summary>
+    /// A fish skeleton lying on the bed: the head at p, the tail "len" away along "ang". The spine is a row of short bone
+    /// dashes with a gap between (vertebrae), the ribs are pairs of bone strokes swept back at about 55 degrees, longest just
+    /// behind the skull and gone by six tenths of the length; the skull is a small bone oval with a dark socket.
+    /// </summary>
+    private static void Skeleton(uint[] px, int w, int h, PointF p, float len, float ang, Random rng, Func<int, int, bool> where)
+    {
+        float ca = MathF.Cos(ang), sa = MathF.Sin(ang);
+        int tone = rng.Next(14);
+        (int r, int g, int b) bone = (164 + tone, 156 + tone, 128 + tone);
+        PointF At(float along, float across) => new(p.X + ca * along - sa * across, p.Y + sa * along + ca * across);
+        // The skull: an oval a seventh of the length long, with the socket a little behind its front.
+        float sk = len * 0.14f;
+        for (float y = -sk * 0.4f; y <= sk * 0.4f; y += 0.7f)
+            for (float x = 0; x <= sk; x += 0.7f)
+            {
+                float ex = (x - sk * 0.5f) / (sk * 0.5f), ey = y / (sk * 0.4f);
+                if (ex * ex + ey * ey > 1) continue;
+                PointF q = At(x, y);
+                int ix = (int)q.X, iy = (int)q.Y;
+                if (where(ix, iy)) Mix(px, iy * w + ix, bone.r, bone.g, bone.b, 0.8f);
+            }
+        PointF eye = At(sk * 0.35f, sk * 0.12f);
+        for (int oy = -1; oy <= 1; oy++) for (int ox = -1; ox <= 1; ox++) { int ix = (int)eye.X + ox, iy = (int)eye.Y + oy; if (where(ix, iy) && ox * ox + oy * oy <= 1) Mix(px, iy * w + ix, 48, 44, 34, 0.7f); }
+        // The spine: dashes of bone with a one pixel gap, from the back of the skull to the tail.
+        float gap = MathF.Max(2.5f, len * 0.028f);
+        for (float x = sk; x < len; x += gap)
+            Twig(px, w, h, At(x, 0), At(MathF.Min(len, x + gap * 0.62f), 0), bone.r, bone.g, bone.b, where);
+        // The ribs: pairs, swept back, from just behind the skull to six tenths of the length, each shorter than the last.
+        float ribStep = MathF.Max(3f, len * 0.06f);
+        for (float x = sk + ribStep * 0.5f; x < len * 0.62f; x += ribStep)
+        {
+            float t = (x - sk) / (len * 0.62f - sk);
+            float rib = len * (0.16f - 0.11f * t) * (0.85f + 0.3f * (float)rng.NextDouble());
+            foreach (int side in (ReadOnlySpan<int>)[-1, 1])
+                Twig(px, w, h, At(x, 0), At(x + rib * 0.6f, side * rib * 0.8f), bone.r - 6, bone.g - 6, bone.b - 6, where);
+        }
+        // The tail: two bone rays in a fan.
+        foreach (int side in (ReadOnlySpan<int>)[-1, 1])
+            Twig(px, w, h, At(len, 0), At(len + len * 0.1f, side * len * 0.09f), bone.r - 6, bone.g - 6, bone.b - 6, where);
     }
 
     private static uint Pack(int r, int g, int b) => (uint)(Math.Clamp(r, 0, 255) << 16 | Math.Clamp(g, 0, 255) << 8 | Math.Clamp(b, 0, 255));

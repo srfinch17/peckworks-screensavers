@@ -325,6 +325,16 @@ and drifts in a lull, so no two fall the same way.
   A koi that is at least half hungry, or the turtle when it has not eaten for ten minutes, may spot a prawn within
   reach and go for it (the same chance meal as a tadpole); the prawn flicks away as it would from any fish, most
   chases end in a miss, and a prawn that is taken is back at its home from under the stones a few minutes later.
+- A few **pond snails** (tanishi, the river snail of a Japanese pond; the "Snails" knob, four by default, 0 for none)
+  creep over the bed: a coiled brown shell about a hundredth of the screen across with a paler whorl line winding
+  round it, a soft grey-tan foot showing ahead of it with two short tentacles that wave as it goes. A snail's pace
+  is a body length every twelve seconds, with stops of ten to forty seconds to graze, so one is noticed only by
+  someone who looks, and then it is seen to be moving. It rides the bed (its depth is the bed's under it, so it
+  climbs a submerged stone's mound and comes down the far side, drawn sunk, hazed and shrunk by that depth like
+  everything else down there), turns at the land, a standing rock or a pad's foot, and is solid to nothing: every
+  fish and every bed animal passes over it, and nothing eats it yet. On the deep bed, among the leaves and the
+  cobbles, lie a fish skeleton or two (skull, vertebrae, swept-back ribs, a fanned tail, in old bone), what the
+  catfish and the eel leave behind: painted into the bed once, like the rest of its litter.
 - **The deep dwellers** (the "Deep dwellers" knob, four by default: every third from the first a crayfish, the
   rest prawns) live on the bottom of the deepest water, where the pond's haze leaves them about four tenths of
   their own colour: barely visible, on purpose. The crayfish is a signal crayfish (uchida-zarigani): brown-olive,
@@ -482,7 +492,8 @@ number of dragonflies, how often the swallows visit, how often the snake crosses
 lizards there are (0 to 3), how often the lizards come out (Lizard visits), how many field
 mice live in the grass (0 to 3), how many clutches of tadpoles wriggle in the shallows (0 to 3,
 one by default), how often the crayfish comes out from under its rock, how many crayfish and long-armed
-prawns live on the deep bed (four by default), and how often a duck family swims by (never, by default).
+prawns live on the deep bed (four by default), how many snails creep over the bed (four by default), and how
+often a duck family swims by (never, by default).
 
 On a screen wider than the "Draw width" setting (1920 pixels by default) it draws at that width
 and Windows enlarges the picture: the scene is soft and painterly, so the enlarging loses little,

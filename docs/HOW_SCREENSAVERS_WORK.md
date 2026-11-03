@@ -122,6 +122,7 @@ src/
     Frog.cs                        the frogs: sitting on pads, rocks and the bank, leaping, kicking, floating, diving, climbing out
     Crayfish.cs                    a crayfish that comes out from under a bank rock, walks the shallow bed, feeds, and flips backward from a fish
     Prawns.cs                      a few see-through freshwater prawns on the bed of the shallows: they feed, walk, swim a little, and flick backward from a fish
+    Snails.cs                      the pond snails creeping over the bed at a snail's pace (round forty-seven): they ride the bed's depth, turn at a wall, and everything passes over them
     DeepDwellers.cs                the crayfish and long-armed prawns of the deep bed: they forage, skitter, fight each other, snap at a minnow that dips down, and are food for the biggest koi, a diving turtle and the diving snake
     Petals.cs                      petals falling from the blossom, landing, floating
     Ripples.cs                     rings spreading on the water, and the bow waves of swimmers at the surface

@@ -56,6 +56,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Crayfish _crayfish;
     private readonly Prawns _prawns;
     private readonly DeepDwellers _deep;
+    private readonly Snails _snails;              // the pond snails on the bed (round forty-seven)
     private readonly Eel _eel;                    // the freshwater eel in the sunken log's hollow (round forty-six)
     private readonly Ducks _ducks;
     private readonly Dragonflies _dragonflies;
@@ -144,6 +145,9 @@ internal sealed class SakuraPondScene : IScreensaverScene
         // The crayfish and long-armed prawns of the DEEP bed (round thirty-seven), their own dice as well; they take a
         // minnow of a school that dips down to them, so they are handed the schools.
         _deep = new DeepDwellers(_pond, settings.DeepDwellerCount, _waterInView, settings.MinnowSchools > 0 ? _minnows : null, new Random(unchecked(salt + 505)));
+        _snails = new Snails(_pond, settings.SnailCount, _waterInView, new Random(unchecked(salt + 808)));   // the snails: their own dice (round forty-seven)
+        Lap($"snails {_snails.Count}");
+        Lap($"skeletons{PondPainter.Skeletons}");
         Lap(_pond.Sunken is SunkenLog sl
             ? FormattableString.Invariant($"sunken log {sl.Centre.X:F0},{sl.Centre.Y:F0} angle {sl.Angle:F2} len {sl.Length:F0} wide {sl.Width:F0} den {sl.Den.X:F0},{sl.Den.Y:F0} homed {_deep.DenHomed}")
             : "sunken log none");
@@ -278,6 +282,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _dragonflies.Update(dt);
         _swallows.Update(dt);
         _ripples.Update(dt);
+        _snails.Update(dt);                                                               // the snails creep on, afraid of nothing (everything passes over them)
         _prawns.Update(dt, bedThreats);                                                   // the prawns flick backward from the same things the crayfish does
         PointF[] deepThreats = _snake.Live && _snake.Deep ? Scratch.Gather(ref _deepThreats, bedThreats, one: _snake.Head) : bedThreats;
         _deep.Update(dt, deepThreats);
@@ -333,6 +338,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Sections.Mark("lizard");
         _mice.Draw(fb);
         Sections.Mark("mice");
+        _snails.Draw(fb);                         // the snails, on the bed: under every bed animal and every fish (round forty-seven)
         _crayfish.Draw(fb);                       // on the bed of the shallows: under every fish
         _prawns.Draw(fb);                         // the prawns, on the same bed: under every fish too
         _deep.Draw(fb);                           // the crayfish and prawns of the deep bed

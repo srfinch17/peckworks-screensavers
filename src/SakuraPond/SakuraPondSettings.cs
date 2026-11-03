@@ -8,7 +8,7 @@ namespace SakuraPond;
 /// </summary>
 public sealed class SakuraPondSettings : ScreensaverSettings
 {
-    private readonly IntSetting _petals, _koi, _goldfish, _catfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _frogs, _tadpoles, _crayfish, _prawns, _eel, _deep, _ducks, _log, _sun, _drawWidth;
+    private readonly IntSetting _petals, _koi, _goldfish, _catfish, _koiPlay, _minnows, _turtles, _dragonflies, _birds, _snake, _lizard, _lizards, _mice, _frogs, _tadpoles, _crayfish, _prawns, _snails, _eel, _deep, _ducks, _log, _sun, _drawWidth;
 
     public SakuraPondSettings() : base("SakuraPond")
     {
@@ -30,6 +30,7 @@ public sealed class SakuraPondSettings : ScreensaverSettings
         _crayfish = Add(nameof(CrayfishPercent), "Crayfish", 0, 300, 100, "%");
         _prawns = Add(nameof(PrawnCount), "Prawns", 0, 6, 3);           // a few freshwater prawns on the bed of the shallows (round thirty-two)
         _deep = Add(nameof(DeepDwellerCount), "Deep dwellers", 0, 6, 4);   // the crayfish and long-armed prawns of the deep bed (round thirty-seven): every third from the first is a crayfish, so 4 is two of each
+        _snails = Add(nameof(SnailCount), "Snails", 0, 8, 4);          // the pond snails creeping over the bed (round forty-seven); 0 is none
         _eel = Add(nameof(EelCount), "Eel", 0, 1, 1);                 // the freshwater eel that lives in the sunken log's hollow (round forty-six); 0 is none
         _ducks = Add(nameof(DuckPercent), "Ducks", 0, 300, 0, "%");   // off by default since 2026-10-23 (his word: "turn off the ducks for now"); the slider brings them back
         _sun = Add(nameof(SunlightPercent), "Sunlight", 0, 200, 100, "%");   // the beams through the boughs' gaps, their pools on the bed and the glitter on the surface (Sunlight.cs, 2026-10-30); 0 is none
@@ -60,6 +61,9 @@ public sealed class SakuraPondSettings : ScreensaverSettings
 
     /// <summary>Whether an eel lives in the sunken log's hollow (1) or not (0). None when the pond has no log.</summary>
     public int EelCount => _eel.Value;
+
+    /// <summary>How many pond snails creep over the bed (0 to 8).</summary>
+    public int SnailCount => _snails.Value;
 
     /// <summary>How often a duck (often with ducklings) swims by. 100 = every several minutes, 0 = never.</summary>
     public int DuckPercent => _ducks.Value;
