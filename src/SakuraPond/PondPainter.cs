@@ -150,7 +150,7 @@ internal sealed class Pond
     public required float U { get; init; }
 
     /// <summary>The finished backdrop WITHOUT the branches, one 0x00RRGGBB number per pixel (the branches are a live layer: see Branches).</summary>
-    public required uint[] Pixels { get; init; }
+    public required uint[] Pixels { get; set; }   // (settable since round forty-six: the scene points it at the caustics' lit copy, so every painter that mixes toward "the water" mixes toward the lit water; the pristine picture stays with Caustics)
 
     /// <summary>The cherry branches and their blossom on a clear sheet (0xAARRGGBB): the scene lays them over the frame each frame, swaying in the wind (Core's Boughs).</summary>
     public required uint[] Branches { get; init; }

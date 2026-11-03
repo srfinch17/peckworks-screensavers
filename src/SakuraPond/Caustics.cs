@@ -63,6 +63,9 @@ internal sealed class Caustics
     private double _clock;                            // seconds, wrapped at the loop
     private float _driftX, _driftY;                   // the net's slow slide, tile pixels
 
+    /// <summary>The lit backdrop: what the animals' painters mix their murk toward from round forty-six, so the net falls on them (the photos: a koi in clear water is netted with light as the bottom is).</summary>
+    public uint[] Lit => _lit;
+
     /// <summary>How many screen pixels the net's light can land on at all (the "is it on screen" count for the start log).</summary>
     public int LitPixels { get; }
     /// <summary>The mean strength over those pixels, 0 to 255.</summary>
@@ -88,7 +91,7 @@ internal sealed class Caustics
             float z = pond.Near[i] > 0 ? Math.Clamp((260 - pond.Near[i]) / 250f, 0, 1) : pond.Depth[i] / 255f;
             float clear = 0.4f + 0.48f * (1 - z);                                  // PondPainter.BedClear's curve: how much of the bed shows through
             float reach = MathF.Exp(-1.6f * z);                                    // how much of the sun gets down to it
-            float s = pond.Sun[i] / 255f * clear * reach * MathF.Min(2f, knob) * 0.6f;   // (0.95 on the first render: a honeycomb over everything)
+            float s = pond.Sun[i] / 255f * clear * reach * MathF.Min(2f, knob) * 0.85f;   // (0.95 on the first render: a honeycomb over everything; 0.6 with wide lines; the thin lines of the photos take 0.75)
             int b = (int)(Math.Clamp(s, 0, 1) * 200);
             if (b == 0) continue;
             _strength[i] = (byte)b; sum += b; lit++;
@@ -105,22 +108,30 @@ internal sealed class Caustics
     /// </summary>
     private void Bake(Random rng, bool net)
     {
-        (float[] bx, float[] by, float[] rad, int[] nx, int[] ny, float[] phx, float[] phy) Deal(int n, float drift)
+        (float[] bx, float[] by, float[] rad, int[] nx, int[] ny, float[] phx, float[] phy, float[] bright) Deal(int n, float drift)
         {
-            var bx = new float[n]; var by = new float[n]; var rad = new float[n]; var nx = new int[n]; var ny = new int[n]; var phx = new float[n]; var phy = new float[n];
+            var bx = new float[n]; var by = new float[n]; var rad = new float[n]; var nx = new int[n]; var ny = new int[n]; var phx = new float[n]; var phy = new float[n]; var bright = new float[n];
             for (int k = 0; k < n; k++)
             {
+                bright[k] = 0.55f + 0.45f * (float)rng.NextDouble();                          // FROM THE PHOTOS: no two lines of the net are as bright as each other (0.35 to 1 was too faint)
                 bx[k] = (float)rng.NextDouble() * Tile; by[k] = (float)rng.NextDouble() * Tile;
                 rad[k] = drift * (0.6f + 0.8f * (float)rng.NextDouble());
                 nx[k] = 2 + rng.Next(3); ny[k] = 2 + rng.Next(3);                           // turns per loop: 2 to 4 (1 to 2 on the first dump moved 1.5 percent of the pixels in three frames: too slow to read as a ripple's net)
                 phx[k] = (float)(rng.NextDouble() * Math.Tau); phy[k] = (float)(rng.NextDouble() * Math.Tau);
             }
-            return (bx, by, rad, nx, ny, phx, phy);
+            return (bx, by, rad, nx, ny, phx, phy, bright);
         }
         const int Coarse = 18, Fine = 48;
         var c = Deal(Coarse, Tile * 0.08f);
         var f = Deal(Fine, Tile * 0.05f);
-        float wCoarse = Tile / MathF.Sqrt(Coarse) * 0.13f, wFine = Tile / MathF.Sqrt(Fine) * 0.14f;   // the line widths: about an eighth of a cell (a tenth was a wire net)
+        // FROM THE PHOTOS (2026-11-02, Google Images in his Chrome, "sunlight ripples pond bottom caustics" and "koi pond from
+        // above sunlight"): the lines are THIN and crisp, near white; the cells are STRETCHED along the ripples' direction,
+        // not round; and the brightness varies from line to line, some brilliant, some faint. So: the distance is measured
+        // squeezed across one direction (cells 1.7 times as long as wide along it), the line widths are a twelfth of a cell,
+        // and every point of the net carries its own brightness (the edge between two cells takes their mean).
+        float stretchAng = (float)(rng.NextDouble() * Math.PI);
+        _stretchC = MathF.Cos(stretchAng); _stretchS = MathF.Sin(stretchAng);
+        float wCoarse = Tile / MathF.Sqrt(Coarse) * 0.11f, wFine = Tile / MathF.Sqrt(Fine) * 0.12f;   // (0.085 and 0.1 with the 1.7 stretch read as fine scratches)
         var px = new float[Coarse]; var py = new float[Coarse]; var qx = new float[Fine]; var qy = new float[Fine];
         var raw = new float[Tile * Tile];
         // The shimmer's waves: wavelengths of a half to a sixth of the tile (whole numbers of waves across it, so they
@@ -161,8 +172,8 @@ internal sealed class Caustics
             for (int y = 0; y < Tile; y++)
                 for (int x = 0; x < Tile; x++)
                 {
-                    float m = 0.62f + 0.38f * MathF.Sin(x * (MathF.Tau / Tile) + t) * MathF.Sin(y * (MathF.Tau / Tile) * 2 - t + 1.1f);
-                    raw[y * Tile + x] = (Net(x, y, px, py, wCoarse) + 0.5f * Net(x, y, qx, qy, wFine)) * m;
+                    float m = 0.6f + 0.4f * MathF.Sin(x * (MathF.Tau / Tile) + t) * MathF.Sin(y * (MathF.Tau / Tile) * 2 - t + 1.1f);
+                    raw[y * Tile + x] = (Net(x, y, px, py, wCoarse, c.bright) + 0.5f * Net(x, y, qx, qy, wFine, f.bright)) * m;
                 }
             // A soft glow round every line (a box blur of radius 1 mixed in), then the page.
             for (int y = 0; y < Tile; y++)
@@ -172,27 +183,30 @@ internal sealed class Caustics
                     for (int dy = -1; dy <= 1; dy++)
                         for (int dx = -1; dx <= 1; dx++)
                             s += raw[((y + dy) & Mask) * Tile + ((x + dx) & Mask)];
-                    float v = raw[y * Tile + x] * 0.55f + s / 9f * 0.45f;
+                    float v = raw[y * Tile + x] * 0.7f + s / 9f * 0.3f;                      // (a crisper line than the first render's: the photos' lines are sharp)
                     page[y * Tile + x] = (byte)(Math.Clamp(v, 0, 1) * 255);
                 }
         }
     }
 
-    /// <summary>The net's brightness at a tile pixel: 1 on the edge between the two nearest points, falling to 0 a line width away (periodic in the tile).</summary>
-    private static float Net(int x, int y, float[] ptsX, float[] ptsY, float width)
+    private float _stretchC = 1, _stretchS = 0;                                      // the ripples' direction: cells are squeezed across it
+
+    /// <summary>The net's brightness at a tile pixel: on the edge between the two nearest points (their mean brightness), falling to 0 a line width away; the distance squeezed across the ripples' direction so the cells are stretched along it (periodic in the tile).</summary>
+    private float Net(int x, int y, float[] ptsX, float[] ptsY, float width, float[] bright)
     {
-        float f1 = float.MaxValue, f2 = float.MaxValue;
+        float f1 = float.MaxValue, f2 = float.MaxValue; int i1 = 0, i2 = 0;
         for (int k = 0; k < ptsX.Length; k++)
         {
-            float dx = MathF.Abs(x - ptsX[k]), dy = MathF.Abs(y - ptsY[k]);
-            if (dx > Tile * 0.5f) dx = Tile - dx;                                   // the tile wraps
-            if (dy > Tile * 0.5f) dy = Tile - dy;
-            float d = MathF.Sqrt(dx * dx + dy * dy);
-            if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) f2 = d;
+            float dx = x - ptsX[k], dy = y - ptsY[k];
+            if (dx > Tile * 0.5f) dx -= Tile; else if (dx < -Tile * 0.5f) dx += Tile;   // the tile wraps
+            if (dy > Tile * 0.5f) dy -= Tile; else if (dy < -Tile * 0.5f) dy += Tile;
+            float along = dx * _stretchC + dy * _stretchS, across = -dx * _stretchS + dy * _stretchC;
+            float d = MathF.Sqrt(along * along * 0.55f + across * across);          // 1.35 times as long along the ripples as across (1.7 made parallel scratches)
+            if (d < f1) { f2 = f1; i2 = i1; f1 = d; i1 = k; } else if (d < f2) { f2 = d; i2 = k; }
         }
         float v = 1 - (f2 - f1) / width;
         if (v <= 0) return 0;
-        return v * v * (1.2f - 0.2f * v);                                           // a bright core, soft shoulders
+        return v * MathF.Sqrt(v) * 0.5f * (bright[i1] + bright[i2]);                   // a bright core, soft shoulders, the two cells' own brightness
     }
 
     public void Update(float dt)
@@ -262,7 +276,7 @@ internal sealed class Caustics
                     if (f != 0)
                     {
                         int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
-                        r += (255 - r) * f >> 8; g += (250 - g) * f >> 8; b += (215 - b) * f >> 8;
+                        r += (255 - r) * f >> 8; g += (253 - g) * f >> 8; b += (238 - b) * f >> 8;   // near white (the photos' lines are white, not gold)
                         c = (uint)(r << 16 | g << 8 | b);
                     }
                 }
