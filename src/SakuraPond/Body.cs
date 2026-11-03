@@ -235,6 +235,22 @@ internal abstract class Body
                         int wr = (int)((wc >> 16) & 0xFF), wg = (int)((wc >> 8) & 0xFF), wb = (int)(wc & 0xFF);
                         r += (wr - r) * m256 >> 8; g += (wg - g) * m256 >> 8; bl += (wb - bl) * m256 >> 8;
                     }
+                    // THE NET'S LIGHT ON THE THING (round forty-six, his line: the lines that shine through the surface must hit a
+                    // fish or a crayfish as they hit the side of a rock): the caustic page at this pixel times the sun there, less by
+                    // three quarters of the thing's own veil (a deep thing is lit less, as the bed is), brightening toward the net's
+                    // white. Not on a shadow pass.
+                    if (Net != null && sh256 == 0)
+                    {
+                        int f = Net.LiftAt(x, y);
+                        if (f > 0)
+                        {
+                            f = f * (256 - (m256 * 3 >> 2)) >> 8;
+                            // Light CONCENTRATED by a lens is brighter than the sun's flat light, so the net multiplies the thing's own
+                            // colour (a line is a fifth brighter at full strength) and only a little toward white (a white koi has no
+                            // brighter to go; a pull toward white alone put eight levels on a dark bed and nothing an eye could find on a fish).
+                            r = Math.Min(255, r + (r * f >> 7) + ((255 - r) * f >> 9)); g = Math.Min(255, g + (g * f >> 7) + ((253 - g) * f >> 9)); bl = Math.Min(255, bl + (bl * f >> 7) + ((238 - bl) * f >> 9));
+                        }
+                    }
                     px[idx] = FrameBuffer.Blend256(bg, r, g, bl, a256);
                 }
             }
@@ -254,6 +270,9 @@ internal abstract class Body
     /// with four tenths of its saturation and six tenths of its brightness.
     /// Whole numbers only: this runs once per painted pixel.
     /// </summary>
+    /// <summary>The net of sunlight on the water, set by the scene once it exists: every painted pixel of every swimmer takes its light (round forty-six). Null in a saver without one.</summary>
+    internal static Caustics? Net;
+
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     internal static void Deepen(ref int r, ref int g, ref int b, int murk256)      // (internal since round forty-one: the submerged stones share the rule, PondPainter.WrapIsland)
     {

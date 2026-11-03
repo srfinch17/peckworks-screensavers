@@ -1837,8 +1837,13 @@ even bands on even frames, the odd on odd; the net and the shimmer move slowly e
 each row is more than the eye asks), in parallel, with no bounds checks in the hot loop (`Unsafe.Add` over the arrays'
 data; the indices all derive from the width and height), then copies the lit picture into the frame as the plain
 Restore did. Done whole every frame it was 6.4 ms against 1.5 on a loaded machine; the half-band way reads about 3.7
-loaded. The animals' painters still mix their murk toward the pristine backdrop (`Pond.Pixels`), so a koi over a bright
-line is not lit by it: a round of its own if he asks.
+loaded. THE NET ON THE ANIMALS (his line the same evening: "if something is underwater like a fish or a crayfish ... the
+lights and ripples that shine through the surface ... need to hit them as well ... like the side of the rock does"): the
+shared painter (`Body.Paint`) asks the net for its light at every painted pixel of every swimmer (`Caustics.LiftAt`: the
+page at the spot times the sun there, one tile lookup), scales it by the thing's own veil (three quarters of the murk
+off: a deep thing is lit less, as the bed is) and MULTIPLIES the colour by it (a line a fifth brighter at full strength)
+with a little pull toward white; a pull toward white alone put eight levels on a dark bed and nothing an eye could find
+on a koi. Not on a shadow pass. The painters also mix their murk toward the lit water (`Pond.Pixels` is the lit copy).
 
 THE GLITTER (`Sunlight.cs`). 170 sites per screen's worth of sunlit water (380 until this round: confetti everywhere),
 placed where the sun's reflection falls: a patch up and left of the middle (the sun is up and left, `Light.ShadowX`

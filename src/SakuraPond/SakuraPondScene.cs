@@ -107,7 +107,8 @@ internal sealed class SakuraPondScene : IScreensaverScene
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
         _sun.PlaceGlints(_waterInView);
         _caustics = new Caustics(_pond, _waterInView, settings.SunlightPercent / 100f);
-        _pond.Pixels = _caustics.Lit;             // from here on "the water" every painter mixes toward is the lit water: the net falls on the animals (round forty-six, the photos)
+        _pond.Pixels = _caustics.Lit;
+        Body.Net = _caustics;                   // and every swimmer's painter takes the net's light pixel by pixel (round forty-six, his line)             // from here on "the water" every painter mixes toward is the lit water: the net falls on the animals (round forty-six, the photos)
         Lap($"caustics lit {_caustics.LitPixels} px, mean strength {_caustics.MeanStrength:F1}");
         Lap($"sunlight glint sites {_sun.GlintSites}");
         _ripples = new Ripples(_pond, _waterInView);

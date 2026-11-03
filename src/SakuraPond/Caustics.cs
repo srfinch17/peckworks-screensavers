@@ -61,6 +61,9 @@ internal sealed class Caustics
     private readonly float _shimmerPx;                // the shimmer's full swing in screen pixels
     private readonly Action<int> _restoreBand;
     private double _clock;                            // seconds, wrapped at the loop
+    private readonly byte[] _onThings;                // per screen pixel: how much of the net's light falls on a thing swimming there (the sun map times the knob; the depth is the painter's business)
+    private byte[] _curPage;                          // this frame's page and drift, fixed in Update so every painter of the frame reads one net
+    private int _curDx, _curDy;
     private float _driftX, _driftY;                   // the net's slow slide, tile pixels
 
     /// <summary>The lit backdrop: what the animals' painters mix their murk toward from round forty-six, so the net falls on them (the photos: a koi in clear water is netted with light as the bottom is).</summary>
@@ -81,11 +84,13 @@ internal sealed class Caustics
         _scaleFix = (int)(256f * Tile / (u * 0.24f));                               // the tile covers 0.24u of screen
         _shimmerPx = u * 0.0022f;                                                   // about 2.4 px at 1080 lines, either way
         _strength = new byte[_w * _h];
+        _onThings = new byte[_w * _h];
         long sum = 0; int lit = 0;
         for (int i = 0; i < _strength.Length; i++)
         {
             if (!inView[i] || !pond.Water[i] || pond.Near[i] == 255) { _strength[i] = NotWater; continue; }   // (a stone's dry cap is nearest of all, Near 255: no light net and no shimmer on it)
             if (knob <= 0) continue;
+            _onThings[i] = (byte)Math.Clamp((int)(pond.Sun[i] * MathF.Min(2f, knob) * 0.9f), 0, 255);
             // The drawn bed's depth here: Pond.Near holds it (260 less 250 z) where the sunk bed was drawn, else the
             // flat pour's depth.
             float z = pond.Near[i] > 0 ? Math.Clamp((260 - pond.Near[i]) / 250f, 0, 1) : pond.Depth[i] / 255f;
@@ -98,6 +103,7 @@ internal sealed class Caustics
         }
         LitPixels = lit; MeanStrength = lit > 0 ? sum / (float)lit : 0;
         _pages = new byte[Pages][]; _shimX = new sbyte[Pages][]; _shimY = new sbyte[Pages][];
+        _curPage = new byte[Tile * Tile];
         Bake(new Random(_w * 7919 + _h * 104729 + 46), knob > 0);
     }
 
@@ -219,6 +225,7 @@ internal sealed class Caustics
         // which nothing else touches until Restore waits for it. Measured in the frame itself it was 1.3 to 1.6 ms over the
         // plain copy and pushed the average to 15.4 at 1080p, within a hair of the pump's hold-at-thirty line.
         _frame++;
+        _curPage = _pages[(int)(_clock * PageRate) % Pages]; _curDx = (int)(_driftX * 256); _curDy = (int)(_driftY * 256);
         _pending = Task.Run(_work);
     }
 
@@ -235,6 +242,20 @@ internal sealed class Caustics
         if (_pending != null) { _pending.Wait(); _pending = null; }
         else { _frame++; Parallel.For(0, ((_h + BandRows - 1) / BandRows + 1) / 2, _restoreBand); }   // (a Render with no Update before it: the preview, a snapshot's first frame)
         fb.Restore(_lit);
+    }
+
+    /// <summary>
+    /// How much of the net's light lands on a thing swimming at this screen pixel, 0 to 255 (his line, round forty-six: "if
+    /// something is underwater like a fish or a crayfish ... the lights and ripples that shine through the surface ... need to
+    /// hit them as well"): the net's page at the spot times the sun there. The painter scales it by the thing's own veil (a
+    /// deep thing gets less, as the bed does) and brightens the pixel toward the net's white. One tile lookup a pixel.
+    /// </summary>
+    public int LiftAt(int x, int y)
+    {
+        int s = _onThings[y * _w + x];
+        if (s == 0) return 0;
+        int ti = ((((y * _scaleFix) + _curDy) >> 8) & Mask) * Tile + ((((x * _scaleFix) + _curDx) >> 8) & Mask);
+        return _curPage[ti] * s >> 8;
     }
 
     private void RestoreBand(int half)
