@@ -392,8 +392,9 @@ and drifts in a lull, so no two fall the same way.
   cells that slides and merges all the time, sharp in the shallows, faint on the deep bed, gone in the boughs' shade,
   under everything that swims. A SHIMMER: everything under the surface is seen through the ripples, so the bed, the
   stones and the log sway by a pixel or two at a ripple's pace, which is what says there is water between you and the
-  bottom. GLITTER where the sun's reflection falls: a patch of blinking dashes up and left of the middle, not a sprinkle
-  everywhere. And every swimmer that breaks the surface (a turtle paddling with its shell awash, the snake, a koi with
+  bottom. SPARKLES on the net itself: where the lines of the net cross, the surface flashes white for a moment, and
+  the flashes come and go as the net slides, which is what the little flashes on a real pond are (the sun caught on
+  one small wave, in the one spot your eye happened to be). Nothing drifts and nothing piles up. And every swimmer that breaks the surface (a turtle paddling with its shell awash, the snake, a koi with
   its back out) leaves a V-shaped bow wake, the cross waves held inside the wedge behind it. Light is solid to nothing.
   (The beams and the bed pools of 2026-10-30 were taken out on 2026-11-02: seen from above the water they moved the
   picture by under two grey levels, and what read as "light rays" was the bed's own slope lighting.)

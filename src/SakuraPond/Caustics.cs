@@ -39,8 +39,8 @@ namespace SakuraPond;
 /// to a koi of 0.08u), drifting slowly with the breeze so the loop is never seen.
 ///
 /// What this does NOT do: light or wobble the animals (they are drawn after, and their painters mix their murk toward the
-/// pristine backdrop, Pond.Pixels), or the glitter on the surface, which is Sunlight.cs's and is cut to where the sun's
-/// reflection falls.
+/// pristine backdrop, Pond.Pixels). The sparkles on the surface ARE its (DrawSparkles, below): they flash where its net's
+/// knots pass under their sites.
 /// </summary>
 internal sealed class Caustics
 {
@@ -64,6 +64,21 @@ internal sealed class Caustics
     private readonly byte[] _onThings;                // per screen pixel: how much of the net's light falls on a thing swimming there (the sun map times the knob; the depth is the painter's business)
     private byte[] _curPage;                          // this frame's page and drift, fixed in Update so every painter of the frame reads one net
     private int _curDx, _curDy;
+    private Sparkle[] _sparkles = [];                 // the sites that may flash
+    private readonly float _knob;
+    private readonly StreamWriter? _sparkleLog;
+    private int _sparkleFrame;
+    private int _node = 255, _nodeTop = 255;           // the page value a node must reach to flash (the top 1.5 percent of a page) and the value a flash is white at (the top 0.2 percent)
+
+    /// <summary>
+    /// A SPARKLE SITE (round forty-six, his idea: "add some sparkles to the parts of that webbing ... those concentrations of
+    /// light are what ends up looking like little flashes of light on the surface ... a light reflecting off the tiny wave
+    /// looks like a little shimmer/flash in that one spot just because your eye happened to be looking there"). A site is a
+    /// fixed spot on sunlit water with a clock of its own; it flashes, briefly, when its clock is at the top AND a bright
+    /// line of the net is passing under it, so the flashes live on the web and twinkle as the web moves. This replaced the
+    /// glitter of Sunlight.cs (a sprinkle of dashes drifting right and down for ever, which piled up at the lower right).
+    /// </summary>
+    private struct Sparkle { public int X, Y; public float Phase, Rate, Strength; }
     private float _driftX, _driftY;                   // the net's slow slide, tile pixels
 
     /// <summary>The lit backdrop: what the animals' painters mix their murk toward from round forty-six, so the net falls on them (the photos: a koi in clear water is netted with light as the bottom is).</summary>
@@ -76,6 +91,9 @@ internal sealed class Caustics
 
     public Caustics(Pond pond, bool[] inView, float knob)
     {
+        _knob = knob;
+        string? file = Environment.GetEnvironmentVariable("PECKWORKS_SUNLOG");
+        if (!string.IsNullOrEmpty(file)) { _sparkleLog = new StreamWriter(file, append: false); _sparkleLog.WriteLine("# t,sparklesOn,meanAlpha"); }
         _restoreBand = RestoreBand;                                                 // made once: a lambda per frame is an allocation per frame
         _work = () => Parallel.For(0, ((_h + BandRows - 1) / BandRows + 1) / 2, _restoreBand);
         _w = pond.Width; _h = pond.Height; _backdrop = pond.Pixels;
@@ -213,6 +231,95 @@ internal sealed class Caustics
         float v = 1 - (f2 - f1) / width;
         if (v <= 0) return 0;
         return v * MathF.Sqrt(v) * 0.5f * (bright[i1] + bright[i2]);                   // a bright core, soft shoulders, the two cells' own brightness
+    }
+
+    /// <summary>
+    /// Scatters the sparkle sites over the water in view: 8000 per 16:9 screen's worth at 100 percent, more where the sun's
+    /// patch is (the reflection of the sun is where a real surface flashes most) and more toward the far side (seen at more of
+    /// a slant). Its own dice. (900 sites on the sun's patch alone, gated by a blink, lit two or three at a time: invisible.)
+    /// </summary>
+    public void PlaceSparkles(Pond pond, bool[] inView, Random rng)
+    {
+        if (_knob <= 0) return;
+        int want = (int)(8000 * MathF.Min(2f, _knob) * (_w * (float)_h) / (pond.U * pond.U * 16f / 9f));
+        var list = new List<Sparkle>(want);
+        for (int tries = 0; tries < want * 30 && list.Count < want; tries++)
+        {
+            int x = rng.Next(_w), y = rng.Next(_h), i = y * _w + x;
+            if (!inView[i] || pond.Near[i] == 255) continue;
+            float far = 0.5f + 0.5f * (1 - y / (float)_h);
+            float sunny = 0.35f + 0.65f * pond.Sun[i] / 255f;
+            if (rng.NextDouble() > far * sunny) continue;
+            list.Add(new Sparkle { X = x, Y = y, Phase = (float)(rng.NextDouble() * Math.Tau), Rate = 1.5f + 3f * (float)rng.NextDouble(), Strength = 0.6f + 0.4f * (float)rng.NextDouble() });
+        }
+        _sparkles = list.ToArray();
+        // THE NODE THRESHOLD IS READ OFF THE NET, not guessed: the brightest 1.5 percent of a page's pixels are its nodes
+        // (a fixed 185 passed 0.4 percent of the page and lit two sites of 2400). The flash reaches white at the page's top.
+        var hist = new int[256];
+        foreach (byte v in _pages[0]) hist[v]++;
+        int above = 0; _node = 255; _nodeTop = 255;
+        for (int v = 255; v > 0; v--)
+        {
+            above += hist[v];
+            if (above >= Tile * Tile * 0.002f && _nodeTop == 255) _nodeTop = v;      // white at the brightest 0.2 percent (at the page's single brightest pixel the mean flash was a third)
+            if (above >= Tile * Tile * 0.015f) { _node = v; break; }
+        }
+        _sparkleLog?.WriteLine(FormattableString.Invariant($"# sites {_sparkles.Length}, node threshold {_node}, white at {_nodeTop}"));
+    }
+
+    /// <summary>How many sparkle sites there are, for the start log.</summary>
+    public int SparkleSites => _sparkles.Length;
+
+    /// <summary>
+    /// The flashes: over the water and the pads, under the floating petals. A site flashes when the net under it is at a BRIGHT
+    /// NODE (where lines of the web cross, the page is brightest), as bright as the node is past the threshold, squared, so a
+    /// flash lives on the web and comes and goes as the web moves; the site's own slow clock only varies how bright it may get,
+    /// so two sites on one line do not flash alike. A small white star, one bright pixel with four softer arms. A few thousand
+    /// lookups a frame.
+    /// </summary>
+    public void DrawSparkles(FrameBuffer fb, bool[] onlyWhere)
+    {
+        if (_sparkles.Length == 0) return;
+        int on = 0; float sum = 0;
+        uint[] px = fb.Pixels; int w = _w, h = _h;
+        float t = (float)_clock;
+        int node = _node; float span = MathF.Max(1, _nodeTop - _node);
+        for (int k = 0; k < _sparkles.Length; k++)
+        {
+            ref Sparkle sp = ref _sparkles[k];
+            int ti = ((((sp.Y * _scaleFix) + _curDy) >> 8) & Mask) * Tile + ((((sp.X * _scaleFix) + _curDx) >> 8) & Mask);
+            int v = _curPage[ti];
+            if (v <= node) continue;                                                 // no node under it: no flash
+            float f = MathF.Min(1f, (v - node) / span);
+            float a = MathF.Sqrt(f) * sp.Strength * (0.75f + 0.25f * MathF.Sin(sp.Phase + t * sp.Rate));   // (linear in f and scaled by the sun, the mean alpha was 0.2 to 0.3 and a one-pixel star at that is nothing: a real glint is blown-out white)
+            if (a < 0.2f) continue;
+            int i = sp.Y * w + sp.X;
+            if (!onlyWhere[i] || sp.X < 2 || sp.X >= w - 2 || sp.Y < 2 || sp.Y >= h - 2) continue;
+            int a256 = (int)(MathF.Min(1f, a) * 256), arm = a256 * 5 >> 3, tip = a256 >> 2;
+            // A small star: a white core, four softer neighbours, four faint corners, and for a bright flash a tip two out on each arm.
+            px[i] = FrameBuffer.Blend256(px[i], 255, 255, 250, a256);
+            if (onlyWhere[i - 1]) px[i - 1] = FrameBuffer.Blend256(px[i - 1], 250, 252, 255, arm);
+            if (onlyWhere[i + 1]) px[i + 1] = FrameBuffer.Blend256(px[i + 1], 250, 252, 255, arm);
+            if (onlyWhere[i - w]) px[i - w] = FrameBuffer.Blend256(px[i - w], 250, 252, 255, arm);
+            if (onlyWhere[i + w]) px[i + w] = FrameBuffer.Blend256(px[i + w], 250, 252, 255, arm);
+            if (onlyWhere[i - w - 1]) px[i - w - 1] = FrameBuffer.Blend256(px[i - w - 1], 250, 252, 255, tip);
+            if (onlyWhere[i - w + 1]) px[i - w + 1] = FrameBuffer.Blend256(px[i - w + 1], 250, 252, 255, tip);
+            if (onlyWhere[i + w - 1]) px[i + w - 1] = FrameBuffer.Blend256(px[i + w - 1], 250, 252, 255, tip);
+            if (onlyWhere[i + w + 1]) px[i + w + 1] = FrameBuffer.Blend256(px[i + w + 1], 250, 252, 255, tip);
+            if (a256 > 128)
+            {
+                if (onlyWhere[i - 2]) px[i - 2] = FrameBuffer.Blend256(px[i - 2], 250, 252, 255, tip);
+                if (onlyWhere[i + 2]) px[i + 2] = FrameBuffer.Blend256(px[i + 2], 250, 252, 255, tip);
+                if (onlyWhere[i - 2 * w]) px[i - 2 * w] = FrameBuffer.Blend256(px[i - 2 * w], 250, 252, 255, tip);
+                if (onlyWhere[i + 2 * w]) px[i + 2 * w] = FrameBuffer.Blend256(px[i + 2 * w], 250, 252, 255, tip);
+            }
+            on++; sum += a;
+        }
+        if (_sparkleLog != null && ++_sparkleFrame % 30 == 0)
+        {
+            _sparkleLog.WriteLine(FormattableString.Invariant($"{t:F2},{on},{(on > 0 ? sum / on : 0):F3}"));
+            _sparkleLog.Flush();
+        }
     }
 
     public void Update(float dt)

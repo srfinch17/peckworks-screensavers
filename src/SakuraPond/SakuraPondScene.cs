@@ -60,7 +60,6 @@ internal sealed class SakuraPondScene : IScreensaverScene
     private readonly Ducks _ducks;
     private readonly Dragonflies _dragonflies;
     private readonly Swallows _swallows;
-    private readonly Sunlight _sun;
     private readonly Caustics _caustics;         // the caustic net on the bed and the shimmer under the surface, folded into the backdrop copy (round forty-six)               // the glitter on the surface (2026-10-30; its beams and pools went 2026-11-02)
     private readonly Pads _pads;                  // the lily pads, live: stamped on the water, shoved by what swims into them, held by their roots (round forty)
     private readonly List<Body> _surface = new();   // what else is solid in the water this frame (the snake, while it swims), refilled per frame, never reallocated
@@ -96,8 +95,6 @@ internal sealed class SakuraPondScene : IScreensaverScene
         int salt = unchecked(_pond.Pads.Count * 7919 + (_pond.Pads.Count > 0 ? (int)_pond.Pads[0].Center.X * 31 + (int)_pond.Pads[0].Center.Y : 0) + width);
         // The sunlight's beams are baked into the backdrop here, BEFORE the boughs bake their still parts over it (a bough
         // is over the water, a beam is in it).
-        _sun = new Sunlight(_pond, settings.SunlightPercent / 100f, new Random(unchecked(salt + 606)));
-        Lap("sunlight");
         _wind = new Wind(0.26f, u, Light.View);                   // to the right and a little toward us
         // The cherry boughs sway in that wind: full sway 0.7u out from a trunk, the tips swinging 0.018u at a full lean.
         _boughs = new Boughs(width, height, _pond.Branches, _pond.TreeRoots, u * 0.7f, u * 0.018f, _wind, Light.View, _pond.Pixels);   // the still parts go into the backdrop here
@@ -105,12 +102,11 @@ internal sealed class SakuraPondScene : IScreensaverScene
         Lap($"boughs (live pixels {_boughs.LivePixels}, tile pixels {_boughs.TilePixels})");
         _waterInView = new bool[_pond.Water.Length];
         for (int i = 0; i < _waterInView.Length; i++) _waterInView[i] = _pond.Water[i] && _pond.Open[i];
-        _sun.PlaceGlints(_waterInView);
         _caustics = new Caustics(_pond, _waterInView, settings.SunlightPercent / 100f);
         _pond.Pixels = _caustics.Lit;
         Body.Net = _caustics;                   // and every swimmer's painter takes the net's light pixel by pixel (round forty-six, his line)             // from here on "the water" every painter mixes toward is the lit water: the net falls on the animals (round forty-six, the photos)
-        Lap($"caustics lit {_caustics.LitPixels} px, mean strength {_caustics.MeanStrength:F1}");
-        Lap($"sunlight glint sites {_sun.GlintSites}");
+        _caustics.PlaceSparkles(_pond, _waterInView, new Random(unchecked(salt + 606)));   // the sparkle sites on the net: their own dice (the glitter's, which they replace)
+        Lap($"caustics lit {_caustics.LitPixels} px, mean strength {_caustics.MeanStrength:F1}, sparkle sites {_caustics.SparkleSites}");
         _ripples = new Ripples(_pond, _waterInView);
         _pads = new Pads(_pond, _pond.Open);                       // (no dice of its own: nothing else moves; the pads at rest are laid over the backdrop once, here)
         _lawn = new Lawn(width, height, _pond.Carpet, _pond.Grassy, u, _wind, Light.View, _rng, _pond.Open, _pond.Sun);   // never over a branch; shaded by its shadow
@@ -287,7 +283,6 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _deep.Update(dt, deepThreats);
         _eel.Update(dt, deepThreats);                                                    // the eel in the log fears what the deep dwellers fear (round forty-six)   // the deep dwellers too, and from the diving snake's head
         _pads.Update(dt, _surface, _koi.Bodies, _turtles.All);                              // last: the pads are shoved by where everything at the surface IS this frame
-        _sun.Update(dt);
         Sections.Mark("update: crayfish to ripples");
     }
 
@@ -356,7 +351,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _ripples.Draw(fb);
         Sections.Mark("ripples");
         _pads.Draw(fb, _pond.Open);               // the lily pads float on the water: over the ripples and everything under the surface, under the petals that settle on them (round forty)
-        _sun.DrawGlints(fb, _waterInView);        // the glitter on the surface: over the water and the pads (none under a pad), under the floating petals
+        _caustics.DrawSparkles(fb, _waterInView); // the sparkles on the net's bright lines: over the water and the pads, under the floating petals (round forty-six, his idea)
         _petals.DrawFloating(fb);
         Sections.Mark("petals afloat");
         _snake.Draw(fb);

@@ -1803,8 +1803,8 @@ wet stone deepening with the depth instead of shallow water over sand (as water 
 The bed round a rock is silt whatever its depth (`DressBed`: the shallows' sand within 2.2 cap radii of a cap goes to
 silt), and the rubble at a rock's foot starts at the rock's own edge.
 
-*The surface: the caustic net, the shimmer, the glitter and the wakes (round forty-six, 2026-11-02, `Caustics.cs`,
-`Sunlight.cs`, `Ripples.cs`).* His lines: "the shimmering light just ends up looking dumb. we need to rethink it and
+*The surface: the caustic net, the shimmer, the sparkles and the wakes (round forty-six, 2026-11-02, `Caustics.cs`,
+`Ripples.cs`).* His lines: "the shimmering light just ends up looking dumb. we need to rethink it and
 you need to learn how to look at light rays in pond water photos", and "the surface of our water is hard to divulge,
 need some visual cue. a shimmer. a ripple", and "when things swim through water and break the surface for more than a
 second, they leave v shaped bow wakes". What every photo of a sunlit pond seen from above shows is neither rays nor
@@ -1845,11 +1845,22 @@ off: a deep thing is lit less, as the bed is) and MULTIPLIES the colour by it (a
 with a little pull toward white; a pull toward white alone put eight levels on a dark bed and nothing an eye could find
 on a koi. Not on a shadow pass. The painters also mix their murk toward the lit water (`Pond.Pixels` is the lit copy).
 
-THE GLITTER (`Sunlight.cs`). 170 sites per screen's worth of sunlit water (380 until this round: confetti everywhere),
-placed where the sun's reflection falls: a patch up and left of the middle (the sun is up and left, `Light.ShadowX`
-and `ShadowY`), dense in its middle and gone a little way off it, each a short horizontal dash in the sky's colour on
-its own short clock, drifting with the breeze field. None in the shade, none under a pad. The beams and the bed pools
-of 2026-10-30 went: with the knob at 0 against 100 they moved under 1.5 percent of the pixels by more than six levels.
+THE SPARKLES (`Caustics.PlaceSparkles`, `DrawSparkles`). His idea, the same evening: "turn off those sparkles down at
+the lower right ... all you have to do is add some sparkles to the parts of that webbing ... those concentrations of
+light are what ends up looking like little flashes of light on the surface". The glitter of `Sunlight.cs` (170 dashes
+in the sun's patch, drifting with the breeze for ever) is gone; it had piled up at the lower right. In its place 8000
+SITES per 16:9 screen's worth of water in view (more toward the far side and the sun's patch, its own dice), each a
+fixed spot that looks at the net's page under it every frame and flashes when a NODE of the net is passing (where
+lines cross the page is brightest): a small white star, one pixel and four softer arms, corners and tips on the bright
+ones, over the water and the pads and under the floating petals. The threshold is READ OFF THE NET, not guessed: a node
+is the brightest 1.5 percent of a page (146 of 255 on this net) and a flash is white at the brightest 0.2 percent
+(191); the site's own slow clock only varies how bright it may get. The way there, by the count in `PECKWORKS_SUNLOG`
+(flashes on, mean alpha, every 30 frames): 900 sites on the sun's patch, each gated by a blink AND a fixed page value
+of 150, lit two or three at a time (two small chances multiplied); 2400 sites at a fixed 185 lit one to three (that
+value is 0.4 percent of the page); the threshold read off the page lit thirty but at a mean alpha of 0.2, a one-pixel
+star nobody sees; white at the page's single brightest pixel 0.3; white at its top 0.2 percent 0.44 and about 100 on,
+and a strip of four frames shows them come and go on the knots. The beams and the bed pools of 2026-10-30 went
+earlier the same day: with the knob at 0 against 100 they moved under 1.5 percent of the pixels by more than six levels.
 
 THE WAKES (`Ripples.Wake`, `Span`). A swimmer with its back at the surface leaves a wavelet of its bow wave every
 0.012u of travel, each a ring spreading at 0.022u a second for 2.6 s (1.5 s until this round: gone before the arms
