@@ -826,7 +826,7 @@ internal sealed class EelBody : Body
             AxisPos(gq, gl, out float gx, out float gy);
             bool refused = StepLeader(dt, N - 1, gx, gy, _fast ? _len * 0.5f : _len * 0.2f);
             NoteRefusal(refused, dt);
-            if (tq < _mouthQ + 0.12f * _len && MathF.Abs(lat) < 0.45f * _wg) { _sliding = true; _fast = _fast; }
+            if (tq < _mouthQ + 0.12f * _len && MathF.Abs(lat) < 0.45f * _wg) { _sliding = true; }
             if (_refFor > 1.5f || _mind.Over) { LogEvent("jam", "back"); Decide(); }
             return;
         }
