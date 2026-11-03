@@ -55,6 +55,8 @@ internal sealed class Caustics
     private readonly uint[] _backdrop;                // the pristine picture (Pond.Pixels)
     private readonly uint[] _lit;                     // the backdrop with the shimmer and the net on it, half its bands refreshed each frame
     private int _frame;                               // which half of the bands is refreshed this frame
+    private Task? _pending;                           // the half-band refresh of this frame, running while the animals think (Update); Restore waits for it
+    private readonly Action _work;
     private readonly int _w, _h, _scaleFix;           // the tile sampled at scaleFix/256 tile pixels per screen pixel
     private readonly float _shimmerPx;                // the shimmer's full swing in screen pixels
     private readonly Action<int> _restoreBand;
@@ -69,6 +71,7 @@ internal sealed class Caustics
     public Caustics(Pond pond, bool[] inView, float knob)
     {
         _restoreBand = RestoreBand;                                                 // made once: a lambda per frame is an allocation per frame
+        _work = () => Parallel.For(0, ((_h + BandRows - 1) / BandRows + 1) / 2, _restoreBand);
         _w = pond.Width; _h = pond.Height; _backdrop = pond.Pixels;
         _lit = (uint[])pond.Pixels.Clone();
         float u = pond.U;
@@ -197,6 +200,12 @@ internal sealed class Caustics
         _clock += dt;
         if (_clock >= Pages / PageRate) _clock -= Pages / PageRate;              // the loop, kept short so the double never grows
         _driftX = (_driftX + 5.5f * dt) % Tile; _driftY = (_driftY + 2.2f * dt) % Tile;
+        // The refresh of this frame's half of the bands starts NOW, on the pool, and runs while the animals think (the rest
+        // of the scene's Update, about two milliseconds on one core): it reads the pristine backdrop and writes the lit copy,
+        // which nothing else touches until Restore waits for it. Measured in the frame itself it was 1.3 to 1.6 ms over the
+        // plain copy and pushed the average to 15.4 at 1080p, within a hair of the pump's hold-at-thirty line.
+        _frame++;
+        _pending = Task.Run(_work);
     }
 
     /// <summary>
@@ -209,9 +218,8 @@ internal sealed class Caustics
     /// </summary>
     public void Restore(FrameBuffer fb)
     {
-        _frame++;
-        int bands = (_h + BandRows - 1) / BandRows;
-        Parallel.For(0, (bands + 1) / 2, _restoreBand);
+        if (_pending != null) { _pending.Wait(); _pending = null; }
+        else { _frame++; Parallel.For(0, ((_h + BandRows - 1) / BandRows + 1) / 2, _restoreBand); }   // (a Render with no Update before it: the preview, a snapshot's first frame)
         fb.Restore(_lit);
     }
 

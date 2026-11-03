@@ -223,6 +223,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         float dt = (float)Math.Min(elapsedSeconds, 0.1);
         Sections.Lap();                   // the laps of Update, named "update: ..." in the section table (free unless PECKWORKS_SECTIONS is set)
         _wind.Update(dt);                 // first: everything below reads it
+        _caustics.Update(dt);             // second: it starts this frame's refresh of the lit backdrop on the pool, which runs while the animals below think (round forty-six)
         _boughs.Update(dt);
         _pond.Shore.Update(dt, _ripples); // the water's edge moves (and a ring reaching the sand washes up it): the drinkers below ask it where the water is
         Sections.Mark("update: wind");
@@ -285,7 +286,6 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _eel.Update(dt, deepThreats);                                                    // the eel in the log fears what the deep dwellers fear (round forty-six)   // the deep dwellers too, and from the diving snake's head
         _pads.Update(dt, _surface, _koi.Bodies, _turtles.All);                              // last: the pads are shoved by where everything at the surface IS this frame
         _sun.Update(dt);
-        _caustics.Update(dt);
         Sections.Mark("update: crayfish to ripples");
     }
 

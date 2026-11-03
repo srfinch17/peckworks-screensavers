@@ -1722,6 +1722,33 @@ edge. The half cylinder's own slope still shades it (the terrain's rule), `Body.
 share is the catfish's 0.8 of the murk. Everything is dealt from the log's angle and place, no dice. The hollow's mouth (`Den`) is handed to the deep dwellers: the first dweller's home is
 swapped for it after the homes are dealt, so no roll moves (`DeepDwellers`, `DenHomed` in the start log).
 
+*The eel in the log (round forty-six, `Eel.cs`; built by a Sonnet helper from the kit's eel brief, finished by the main
+model).* His ask: "let animals go inside [the log]. maybe some new type of fish or crab or some other freshwater thing I
+can't think of right now but is super interesting lives in there?" A Japanese freshwater eel (unagi) is real pond fauna
+that lives in exactly such hollows, and its body is the snake's body kit. THE BODY: a rope of 22 points that either end
+can lead, the head going forward and the TAIL when backing in (pulling the rope by the head alone folded the body when
+the head moved back along it); the S-wave is laid on at draw time only; it lies ON the bed (the floor less 0.025, its own
+radius; the koi's depth cap sits shallower than the log's top, so an eel at the cap drew over the log). THE HOLLOW is a
+doorway along the log's axis from the mouth (`SunkenLog.Den`) inward; the log is a wall to free steps except in the lane
+straight out from the mouth; the bed's walls are the catfish's one fixed floor (0.6) with no climbing, and a refused step
+has the committed escape of round forty-five. INSIDE, the painter's own hide-behind test (`Pond.Near`, per spine point)
+hides what is under the wood with no stencil of its own; the depth the test is given for an inside point is 0.1 deeper
+than the body's, because the log's rounded end is low and at the body's own depth 255 to 400 frames a run drew points
+through the wood just behind the cut face. THE MIND (`Mind<Doing>`, dials BOLD and HUNGRY dealt at birth from its own
+Random): Hide (head at the mouth, breathing), Peek (further out, a look about), Emerge (out head first, the S starting as
+it clears the mouth), Forage (an S along the deep bed, goals within half a u of the mouth; `Snatch` watches for a prawn
+through the deep dwellers' ISnackField and a dipped minnow through `Minnows.Take`), Snap (a sideways flick of the head),
+Approach and Back (to the mouth, turn the tail to the hole, slide in tail first), Withdraw (a quick slide in from a threat
+at the door) and Flee (a fast tight S for the hollow from the open). Only the parts OUT of the log count as seen by a
+threat (a koi crossing the far end kept the first eel in for good). Its first build never left the hollow in three
+natural runs of 180 s (a hide of one to three minutes, a peek, and dice that mostly sent it back): the hide is 35 to 105 s
+now, the first a fraction of that, and a peek goes out more often than not. THE HOLLOW INTERPLAY (the dweller homed at the
+mouth retreating inside while the eel is out, one body inside by a claim) is NOT built: the crayfish at the mouth and the
+eel's head can overlap there, a known pass. Instruments: `PECKWORKS_EELLOG` (the koi log's layout, event lines for every
+emerge, back-in, withdrawal and snap), `PECKWORKS_EELRATE` (a stress dial on the hide timer), the helper's `eelstats.py`
+in the kit (seconds out per minute, doing shares, confined spells, refused runs, joints over 40 degrees, nose-first at the
+neck, spine points over the log or below the bed, the straightness of a back-in).
+
 *The surface: the caustic net, the shimmer, the glitter and the wakes (round forty-six, 2026-11-02, `Caustics.cs`,
 `Sunlight.cs`, `Ripples.cs`).* His lines: "the shimmering light just ends up looking dumb. we need to rethink it and
 you need to learn how to look at light rays in pond water photos", and "the surface of our water is hard to divulge,

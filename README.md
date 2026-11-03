@@ -377,6 +377,13 @@ and drifts in a lull, so no two fall the same way.
   the near end the sawn face with its growth rings round the black hollow. It is part of the bed itself (the fish
   rise over it, the shadows fall on it, a stone in front hides it), and the hollow is the first deep dweller's den,
   so a crayfish is usually found at its mouth.
+- **An eel in the log** (the "Eel" knob, 1 by default, 0 for none): a Japanese freshwater eel lives inside the hollow,
+  lying with its head at the mouth, its gills working, withdrawing when a koi or the turtle passes over the door. Now
+  and then it peeks further out, looks about, and slides out head first to forage in an S along the deep bed with its
+  nose in the silt; a prawn or a minnow of a dipped school within a head's length gets a sideways snap. Then it swims
+  back to the mouth, turns its tail to the hole and backs in, the body sliding into the dark until only the head shows.
+  Alarmed in the open it flees for the hollow in a fast tight S. It is drawn inside the log by the pond's own depth
+  test: what is under the wood is hidden, what reaches past the cut face shows.
   Each stone's foot runs out a little unevenly, so no two read alike.
 - **Sunlight and the surface** (the "Sunlight" knob, 100 percent by default, 0 for none): what a sunlit pond shows from
   above. A CAUSTIC NET on the bed: the ripples are lenses, and they focus the sun into bright branching lines, a net of

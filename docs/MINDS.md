@@ -137,6 +137,14 @@ These are in the code comments too; here they are in one place.
   school's depth loop) and the step passes again; the following stays on the surface floor for the land,
   the caps and the edge.
   The koi's stack keeps the shoulders as walls; the snake still steers on its own flat plane (step 5).
+- **A resident of a hole is hidden by the painter's depth test, not by a stencil; and what a threat can SEE is only
+  what is out of the hole (round forty-six, the eel).** The eel inside the log is drawn at the bed's depth under
+  the wood, and `Pond.Near` hides it; the depth the test is given is a tenth deeper than the body's, because the
+  log's rounded end is low and the body's own depth showed through just behind the cut face. Its fright reads
+  the koi over its head, middle and tail, but a part still inside the wood cannot be seen by a fish: a koi
+  crossing the log's far end kept the first eel in for the whole run. And a shy animal's timers are measured
+  by SECONDS OUT PER MINUTE in a natural run before any strip: three 180 s runs that never showed it were
+  three runs wasted on the strips of a thing he would never see.
 - **A probe that answers afresh every frame can answer two ways, and the escape must be COMMITTED (round
   forty-five).** The koi's refused-step probe tries headings a side at a time and answers the nearest clear
   one; re-run every refused frame, a marginal probe (a right angle to the left, clear or blocked by a pixel of
