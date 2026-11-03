@@ -385,8 +385,8 @@ and drifts in a lull, so no two fall the same way.
   back to the mouth, turns its tail to the hole and backs in, the body sliding into the dark until only the head shows.
   Alarmed in the open it flees for the hollow in a fast tight S. It is drawn inside the log by the pond's own depth
   test: what is under the wood is hidden, what reaches past the cut face shows.
-  A rock in the water is a rock: the water meets its edge, and below it its own dark underwater side shows through
-  the water. A petal that floats up to a lily pad is held at its rim, and one that lands on a pad stays.
+  A rock in the water is a rock: the water meets its edge, and below it a short shaded foot of its own side shows
+  through the water, the light net playing on it. A petal that floats up to a lily pad is held at its rim, and one that lands on a pad stays.
 - **Sunlight and the surface** (the "Sunlight" knob, 100 percent by default, 0 for none): what a sunlit pond shows from
   above. A CAUSTIC NET on the bed: the ripples are lenses, and they focus the sun into bright branching lines, a net of
   cells that slides and merges all the time, sharp in the shallows, faint on the deep bed, gone in the boughs' shade,

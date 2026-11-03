@@ -36,9 +36,13 @@ internal static class Light
     /// 0.82), and this was the one number that said otherwise. 0.2 is a view
     /// about fifteen degrees off vertical, 0.12u at the deepest bed. Everything
     /// reads it from here (SinkPx, the band above the screen, HoldDepth), so a
-    /// change here moves every swimmer and the bed together.
+    /// change here moves every swimmer and the bed together. 0.1 since his
+    /// second rock verdict of round forty-six ("screwed up the rocks again"):
+    /// at 0.2 the ring of steep ground round a standing rock was stretched
+    /// 0.12u down the screen, a pillar under every rock whatever colour it was
+    /// painted; at 0.1 it is a foot, 0.06u.
     /// </summary>
-    public const float Sink = 0.2f;
+    public const float Sink = 0.1f;
 
     /// <summary>
     /// How high the eye is above the water, in u. Things under the water are

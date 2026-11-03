@@ -1797,10 +1797,17 @@ hair past it (`MoundU` 0.012u; 0.08u and 0.05u on the way drew as a pale shelf o
 where the deep bed, drawn down from behind it, took over), and the bank rocks' foot pass (`LowerRocks`, a 0.08u slope
 from every rock's rim) skips a rock standing in the water (told by a rim all in the pond: with the mound gone, that foot
 was the shelf, found by the depth map's profile out from the cap, 0 to full depth over 0.9 of a cap radius in every
-direction). What the eye then sees below the rock is its own underwater side, drawn sunk by the slant, and a CLIFF IS
-ROCK: where the smoothed terrain falls more than about a pixel of depth per pixel of ground, `SinkBed` colours it dark
-wet stone deepening with the depth instead of shallow water over sand (as water it was a pale tongue below every rock).
-The bed round a rock is silt whatever its depth (`DressBed`: the shallows' sand within 2.2 cap radii of a cap goes to
+direction). What the eye then sees below the rock is its own underwater side, drawn sunk by the slant. HIS SECOND ROCK
+VERDICT, the same night ("seems like you might have screwed up the rocks again"): that side, coloured dark wet stone
+after the water colour, was a BLACK PILLAR under every rock, because the sunk fill stretches the ring of steep ground
+round a standing rock down the screen by the slant (0.12u at `Light.Sink` 0.2, as tall as the rock was wide). Two
+things settled it, each measured in a crop pair against the published build: `Light.Sink` is 0.1 (the ring is a foot,
+0.06u, not a pillar; the swimmers and the bed moved with it), and the ring is the rock's side by GEOMETRY, not by slope
+(`stoneGround`, every ground pixel `Lower` touches for a standing stone: where the slope eased near the rim, sand through
+shallow water drew a pale ring round every rock), coloured as stone grey GROUND under the water colour (so it is grey at
+the rim and murk at the foot, like any ground), the grey set by the numbers: 132 drew the foot 10 levels paler than the
+bed beside it (a lit plinth), 108 and 88 a pale ring at the rim (the net is at full strength on the side of a rock, a
+lift of 25 levels), 60 lands the foot at the bed's own tone (53,77,70 against 48,79,71). The bed round a rock is silt whatever its depth (`DressBed`: the shallows' sand within 2.2 cap radii of a cap goes to
 silt), and the rubble at a rock's foot starts at the rock's own edge.
 
 *The surface: the caustic net, the shimmer, the sparkles and the wakes (round forty-six, 2026-11-02, `Caustics.cs`,
@@ -1891,7 +1898,7 @@ painters put on the water (a bank rock's wet rim, an afloat log) is copied back 
 do not move (the same calls in the same order). The slant this reveals (the mounds round the stones as
 tall hills at `Pond.DepthU` 0.6u and `Light.Sink` 0.55) was the owner's choice, the review's step 4, and he gave
 his verdict on 2026-11-02 (round forty-five: "the bottom terrain generation makes it look all weird, like the
-perspective is off or something"). `Light.Sink` is 0.2 now: the deepest bed is drawn 0.12u down the screen from the
+perspective is off or something"). `Light.Sink` was 0.2 from then (0.1 since his second rock verdict of round forty-six, see the rocks below): the deepest bed was drawn 0.12u down the screen from the
 water above it, not 0.33u. At 0.55 a boulder standing on the deep bed had its foot drawn 356 px below its cap at 1080
 lines, so every stone was a tombstone and every mound an egg with the cap near its top, the cobbles on the near
 flank were stretched into vertical ovals and the far flank was squeezed into a bright crescent; the slope lighting
