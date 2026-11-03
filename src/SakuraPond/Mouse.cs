@@ -22,6 +22,11 @@ internal sealed class Mice
     private readonly Ripples _ripples;
     private readonly float _often;
     private readonly float[] _wait;                // per slot: seconds until a new mouse (0: the slot's mouse is alive)
+    /// <summary>The instrument log (PECKWORKS_MOUSELOG names a file, set up once in Update, flushed at exit): one line per visible mouse per frame. Null in the real pond.</summary>
+    public static Action<string>? MotionLog;
+    private static bool _logTried;
+    private double _t;
+    private long _frame;
     public int Respawns;
     // The same trick as Lizards.Noses: one array of each possible size made once,
     // so asking "who is out?" every frame makes no garbage for the collector.
@@ -58,6 +63,18 @@ internal sealed class Mice
     /// <param name="lizardNoses">The nose of every lizard that is out (screen pixels).</param>
     public void Update(float dt, PointF? snakeHead, PointF[] lizardNoses)
     {
+        if (!_logTried)
+        {
+            _logTried = true;
+            string? file = Environment.GetEnvironmentVariable("PECKWORKS_MOUSELOG");
+            if (!string.IsNullOrEmpty(file) && MotionLog == null)
+            {
+                var writer = new StreamWriter(file) { AutoFlush = false };
+                writer.WriteLine("# F,t,idx,doing,aim,gx,gy,noseX,noseY,heading,speed,step(-1 none,0 forward,1 along,2 refused),dashes,leaving,stranded,mindLeft");
+                MotionLog = line => writer.WriteLine(line);
+                AppDomain.CurrentDomain.ProcessExit += (_, _) => writer.Flush();
+            }
+        }
         for (int i = 0; i < _all.Length; i++)
         {
             if (_all[i].Dead)
@@ -73,7 +90,9 @@ internal sealed class Mice
                 }
             }
             else _all[i].Update(dt, snakeHead, lizardNoses);
+            if (MotionLog != null && _all[i].Visible) _all[i].Log(_frame, _t, i, MotionLog);
         }
+        _t += dt; _frame++;
     }
 
     /// <summary>How many slots there are (the settings' count), and the mouse in each as something the snake may eat.</summary>
@@ -197,6 +216,7 @@ internal sealed class Mouse : Body, IPrey
     private Aim _aim;
     private bool _leaving, _shadowPass, _burrow;
     private bool _stranded;                           // its scurry to leave was stopped by water at once: go somewhere reachable first
+    private int _logStep = -1;                        // the step rule's answer this frame, for the log only (-1: no step taken)
     private bool _dead;                               // eaten: gone for good (the Mice wrapper brings a new one later)
     private bool _snakeSeen, _sitOnSnake;             // it has noticed the snake (once per approach), and chose to sit up and watch rather than run
     private float _heldT, _jumpT, _jumpH, _jumpDX, _jumpDY;   // seconds in the jaws; the jump's clock, its height now (pixels) and its sideways direction (ground, unit)
@@ -468,6 +488,7 @@ internal sealed class Mouse : Body, IPrey
             // is STRANDED (on a stone out in the water) and the next must go somewhere it can
             // walk to. (The lizard learned this the hard way; the mouse inherits it.)
             Ground.Stepped took = Ground.Step(_landGround, ref _x, ref _y, ref _heading, step, moving ? turnErr : 0);
+            _logStep = (int)took;
             if (took != Ground.Stepped.Refused) _stranded = false;
             else if (moving) { _mind.End(); _stranded = _leaving; }
             _trail.RememberIfMoved(new PointF(_x, _y), _len / 30);
@@ -519,6 +540,14 @@ internal sealed class Mouse : Body, IPrey
     }
 
     /// <summary>Comes out at the screen's edge on the land (the bottom or the side), facing in. False if no spot was found.</summary>
+    /// <summary>One log line (the instruments only): where it is, what it is doing and what the step rule answered.</summary>
+    public void Log(long frame, double t, int idx, Action<string> log)
+    {
+        PointF n = Spine[0];
+        log(FormattableString.Invariant($"F,{t:F3},{idx},{_doing},{_aim},{_x:F1},{_y:F1},{n.X:F1},{n.Y:F1},{_heading:F3},{_speed:F1},{_logStep},0,{(_leaving ? 1 : 0)},{(_stranded ? 1 : 0)},{(_mind.Left > 1e6f ? -1 : _mind.Left):F2}"));
+        _logStep = -1;
+    }
+
     private bool Appear()
     {
         for (int tries = 0; tries < 80; tries++)

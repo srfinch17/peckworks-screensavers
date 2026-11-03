@@ -1220,6 +1220,7 @@ internal sealed class Snake : Body
     private bool NeckClear(PointF head, float by)
     {
         float run = 0; PointF prev = head;
+        bool headOnLand = HeadOnLand();
         for (int i = 0; i < _trailCount && run < NeckShare * _len; i++)
         {
             int at = (_trailHead - i + _trail.Length) % _trail.Length;
@@ -1236,6 +1237,16 @@ internal sealed class Snake : Body
             // the margin was "inside") and the drawn body kept a corner of 105 degrees sliding down it for four
             // seconds (seed 5, 195 s, the first three runs: the raw path's corner was 43 degrees, the DRAWN one 105).
             if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height) continue;
+            // The land is a wall to the neck only while the HEAD is in the water (a swimmer's neck must not swing up the bank).
+            // With the head ON the land (a prowl, a stalk, a crossing over the corner) every neck point is on land too, so the
+            // test refused every bend and each turn on the spot was laid into the body as a corner that then slid down it
+            // (round forty-seven, his line: "a snake (in land) make a 90 degree turn"; seed 3 at 547 s, a 150 degree joint).
+            // And on the land the bank things' circles (a rock's, an iris clump's: the HEAD's keep-out margins) are no wall to the
+            // neck either: in a crease between two of them every bend sweeps into one circle, so the neck could never bend
+            // there and the head's turn out of the crease (WayUp) was laid as the corner (seed 3 at 547 s, 177 degrees, still
+            // there with the land alone allowed). A snake's neck draped over a bank stone or through the irises is what a
+            // snake on a bank does; its body already lies over them whenever it crawls there.
+            if (headOnLand) continue;
             if (_pond.Land[iy * _pond.Width + ix] || Clear(rx, ry, edges: false) < 0) return false;   // (the bed is not a wall to the bend: LaySpine caps every point to the bed under it; refused over a stone's mound the corner stayed)
         }
         return true;

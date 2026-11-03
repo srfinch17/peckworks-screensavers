@@ -628,7 +628,10 @@ internal static class PondPainter
             // go with the flashes on the water. the flashes seem brighter than the ambient sunlight would allow"): the open sun
             // lifts the painting by 8 percent (276 of 256), the deepest shade stays where it was (40 percent under the OLD
             // full sun, 154), so the day is sunnier and the shade reads as shade against it.
-            int keep = 276 - shade[i] * 122 / 255;
+            // AND THE AMBIENT LIGHT A LITTLE BRIGHTER (round forty-seven, his line at the pop-open: "make the ambient light a
+            // little bit brighter"): the whole day up 7 percent, sun and shade alike (296 of 256 in the open, the deepest
+            // shade 174), so the shade keeps its depth against the sun.
+            int keep = 296 - shade[i] * 122 / 255;
             sun[i] = (byte)Math.Min(255, keep);
             uint c = px[i];
             px[i] = (uint)(Math.Min(255, (int)((c >> 16) & 0xFF) * keep >> 8) << 16 | Math.Min(255, (int)((c >> 8) & 0xFF) * keep >> 8) << 8 | Math.Min(255, (int)(c & 0xFF) * keep >> 8));
