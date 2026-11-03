@@ -240,13 +240,29 @@ internal sealed class Petals
             float slow = MathF.Exp(-dt * 3f);
             f.Vx *= slow; f.Vy *= slow;
             int ix = (int)nx, iy = (int)ny;
-            // It drifts only while there is water ahead; against the bank (or a pad) it stays, the way petals pile up at the edges.
-            if (ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Water[iy * _pond.Width + ix])
+            // It drifts only while there is water ahead; against the bank it stays, the way petals pile up at the edges. And
+            // against a LILY PAD's rim (round forty-six, "sakura petals should not be able to float across the top of a lily
+            // pad"): the pads are a live layer, not in the water map, so the rim is tested here against the live centres; a
+            // petal that landed ON a pad stays where it landed (it rides the pad), one drifting up to a pad is held at the rim.
+            if (ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Water[iy * _pond.Width + ix] && !OnPad(f.X, f.Y) && !OnPad(nx, ny))
             {
                 f.X = nx; f.Y = ny;
             }
             _floating[i] = f;
         }
+    }
+
+    /// <summary>Is this screen point on a lily pad (the live pads, their ellipse as the painters test it)?</summary>
+    private bool OnPad(float x, float y)
+    {
+        IReadOnlyList<LilyPad> pads = _pond.Pads;
+        for (int p = 0; p < pads.Count; p++)
+        {
+            LilyPad pad = pads[p];
+            float dx = x - pad.Center.X, dy = (y - pad.Center.Y) / 0.82f;
+            if (dx * dx + dy * dy <= pad.Radius * pad.Radius * 1.05f) return true;
+        }
+        return false;
     }
 
     /// <summary>A falling petal reaches its spot: on open water it floats (with a little ring); anywhere else it is gone.</summary>

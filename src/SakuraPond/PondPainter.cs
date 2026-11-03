@@ -534,11 +534,17 @@ internal static class PondPainter
         // Each stone's mound runs out by direction (MoundShape, dealt from where the stone stands): a whale-back, a
         // bar of silt on one side, three lobes; swept round in a circle every stone was a dome with a cap ("boobs").
         var stoneShoal = new bool[w * h];
-        if (island is Island mound) Lower(terrain, stoneShoal, inPond, mound.Cap, mound.CapRadius, mound.CapRadius * 0.5f, mound.Radius, MoundShape.Of(mound.Centre, w), w, h, band, u);
+        // THE ROCK IS THE ROCK (round forty-six, "right now you have the water line stopping in a perfect circle around the rocks"):
+        // the slope under the water starts at the rock's own edge (a hair past the cap), not at the old painted footprint, which
+        // held a plateau of shallow water that drew as a perfect pale disc; from the edge it runs out unevenly (MoundShape) to the bed.
+        // Measured (kit pond46, the depth map across the island): the drawn rock reaches about 0.8 of CapRadius, so the water's
+        // depth must start falling THERE; at the cap radius with a collar it held a ring of zero-depth water round the rock,
+        // drawn pale, the "perfect circle". The shape's cap is 0.78 of the drawn one, no collar, the shoulder by 0.95.
+        if (island is Island mound) Lower(terrain, stoneShoal, inPond, mound.Cap, mound.CapRadius * 0.7f, mound.CapRadius * 0.02f, mound.CapRadius * 0.9f, MoundShape.Of(mound.Centre, w), w, h, band, u);
         if (formation is Formation fm)
-            for (int k = 0; k < fm.Caps.Length; k++) Lower(terrain, stoneShoal, inPond, fm.Caps[k], fm.CapRadii[k], fm.CapRadii[0] * 0.4f, fm.Stone.Radius, MoundShape.Of(fm.Stone.Centre, w), w, h, band, u);
+            for (int k = 0; k < fm.Caps.Length; k++) Lower(terrain, stoneShoal, inPond, fm.Caps[k], fm.CapRadii[k] * 0.7f, fm.CapRadii[k] * 0.02f, fm.CapRadii[k] * 0.9f, MoundShape.Of(fm.Stone.Centre, w), w, h, band, u);
         if (formation2 is Formation fm2)
-            for (int k = 0; k < fm2.Caps.Length; k++) Lower(terrain, stoneShoal, inPond, fm2.Caps[k], fm2.CapRadii[k], fm2.CapRadii[0] * 0.4f, fm2.Stone.Radius, MoundShape.Of(fm2.Stone.Centre, w), w, h, band, u);
+            for (int k = 0; k < fm2.Caps.Length; k++) Lower(terrain, stoneShoal, inPond, fm2.Caps[k], fm2.CapRadii[k] * 0.7f, fm2.CapRadii[k] * 0.02f, fm2.CapRadii[k] * 0.9f, MoundShape.Of(fm2.Stone.Centre, w), w, h, band, u);
         // The old log on the deep bed (SunkenLog, 2026-10-30), placed once the mounds are in the terrain (it keeps off
         // them) and lowered into it: from here on it is bed. Its own dice, dealt from the screen and the island's place.
         var logRng = new Random(unchecked(w * 31 + h * 17 + 4242 + (island is Island il ? (int)il.Centre.X * 7 + (int)il.Centre.Y : 0)));
@@ -553,6 +559,7 @@ internal static class PondPainter
         var stoneCol = new uint[w * h];
         var stoneA = new byte[w * h];
         var isStone = new bool[w * h];
+        var hollow = new bool[w * h];                       // the sunken log's hollow and its throat to the tip (ground pixels): nothing in it is nearer than the hollow's floor, so a resident's head in the hole is drawn (round forty-six)
         if (island is Island isle)
         {
             bool[] stone = ShorePainter.IslandStone(g, isle, w, h, u, rng);
@@ -586,7 +593,7 @@ internal static class PondPainter
         // drawn slanted"). The bank rocks' feet go into the terrain last (the rocks are all placed now), then ONE fill
         // draws every ground pixel of the bed and of the stones' flanks down the screen by its depth, the way every
         // swimmer is drawn (Light.SinkPx), and fills Pond.Near with the bed's drawn depth too.
-        if (sunken is SunkenLog wood) LogColour(wood, terrain, band, stoneCol, stoneA, isStone, w, h, u);   // into the flank arrays: SinkBed draws it sunk like a stone's flank
+        if (sunken is SunkenLog wood) LogColour(wood, terrain, band, stoneCol, stoneA, isStone, hollow, w, h, u);   // into the flank arrays: SinkBed draws it sunk like a stone's flank
         LowerRocks(terrain, rocks, inPond, w, h, band, u);
         // The bed's litter (round forty-four): cobbles, rubble at the boulders' feet, leaves, twigs and algae, into the
         // bed's ground picture now that every stone is in the terrain, so SinkBed tints and sinks it with the bed.
@@ -595,7 +602,7 @@ internal static class PondPainter
         if (formation is Formation b1) boulders.Add(b1.Stone);
         if (formation2 is Formation b2) boulders.Add(b2.Stone);
         DressBed(bedPx, inPond, terrain, band, boulders, w, h, u);
-        SinkBed(bmp, flat, beforeStones, surface, terrain, band, bedPx, stoneCol, stoneA, isStone, inPond, Read(blockers), near, w, h, u);
+        SinkBed(bmp, flat, beforeStones, surface, terrain, band, bedPx, stoneCol, stoneA, isStone, hollow, inPond, Read(blockers), near, w, h, u);
         // The one map, as the byte array everything in the scene reads (Pond.Depth and Pond.Floor are this same array).
         var depth = new byte[w * h];
         for (int y = 0; y < h; y++)
@@ -879,8 +886,12 @@ internal static class PondPainter
     {
         var rng = new Random(w * 7919 + h * 104729 + 44);
         float Z(int x, int y) => terrain[(Math.Clamp(y, 0, h - 1) + band) * w + Math.Clamp(x, 0, w - 1)];
-        bool Open(int x, int y) => x >= 0 && y >= 0 && x < w && y < h && inPond[y * w + x] && Z(x, y) > 0.3f;   // the open bed, off the shallows' slope (which keep their sand and pale pebbles)
-        bool Dress(int x, int y) => x >= 0 && y >= 0 && x < w && y < h && inPond[y * w + x] && Z(x, y) > PondPainter.ShoulderZ + 0.01f;   // anywhere under the water that is bed, not boulder
+        // Steep ground takes no litter (round forty-six, "the textures ... stretch weird when they're on the slope of the rocks"):
+        // a cobble or a leaf laid on a flank is drawn sunk down the slope, a vertical oval; the flank keeps the stone's own
+        // colour. Gentle is a depth change under 0.045 over six ground pixels either way.
+        bool Gentle(int x, int y) => MathF.Abs(Z(x + 3, y) - Z(x - 3, y)) + MathF.Abs(Z(x, y + 3) - Z(x, y - 3)) < 0.045f;
+        bool Open(int x, int y) => x >= 0 && y >= 0 && x < w && y < h && inPond[y * w + x] && Z(x, y) > 0.3f && Gentle(x, y);   // the open bed, off the shallows' slope (which keep their sand and pale pebbles) and off the flanks
+        bool Dress(int x, int y) => x >= 0 && y >= 0 && x < w && y < h && inPond[y * w + x] && Z(x, y) > PondPainter.ShoulderZ + 0.01f && Gentle(x, y);   // anywhere under the water that is bed, not boulder, not a flank
         float area = w * (float)h / (u * u);                                                        // screen area in u squared (1.78 at 16:9)
 
         // ---- 1. the silt itself. The sand colour (Bed) is the shallows'; the open bed is darker olive silt with a fine
@@ -891,6 +902,13 @@ internal static class PondPainter
                 int i = y * w + x;
                 if (!inPond[i]) continue;
                 float t = Math.Clamp((Z(x, y) - 0.2f) / 0.5f, 0, 1);
+                // Round a rock the bed is silt whatever its depth (round forty-six, "odd circles around the top of the rocks"): the slope
+                // rising to a boulder is shallow, and shallow bed kept the shore's SAND colour, so every rock sat on a pale dome.
+                foreach (Island st in stones)
+                {
+                    float sdx = x - st.Cap.X, sdy = y - st.Cap.Y, near = st.CapRadius * 2.2f;
+                    if (sdx * sdx + sdy * sdy < near * near) { t = MathF.Max(t, Math.Clamp(1f - (MathF.Sqrt(sdx * sdx + sdy * sdy) - st.CapRadius * 1.3f) / (st.CapRadius * 0.9f), 0f, 1f)); }
+                }
                 if (t <= 0) continue;
                 t = t * t * (3 - 2 * t) * 0.85f;
                 uint hsh = (uint)(x * 73856093 ^ y * 19349663); hsh = hsh * 1664525u + 1013904223u;
@@ -943,10 +961,10 @@ internal static class PondPainter
         foreach (Island st in stones)
         {
             float reach = u * 0.16f;
-            int count = (int)(2 * MathF.PI * (st.Radius + reach * 0.5f) * reach / (u * 0.014f * u * 0.014f) * 0.28f);   // (0.8 on the first render: a dome of bubble wrap)
+            int count = (int)(2 * MathF.PI * (st.CapRadius * 1.1f + reach * 0.5f) * reach / (u * 0.014f * u * 0.014f) * 0.28f);   // (0.8 on the first render: a dome of bubble wrap)
             for (int k = 0; k < count; k++)
             {
-                float a = (float)(rng.NextDouble() * Math.Tau), d = st.Radius * 0.9f + reach * MathF.Pow((float)rng.NextDouble(), 2.2f);
+                float a = (float)(rng.NextDouble() * Math.Tau), d = st.CapRadius * 1.1f + reach * MathF.Pow((float)rng.NextDouble(), 2.2f);   // (from the rock's own edge since round forty-six)
                 float cx = st.Centre.X + MathF.Cos(a) * d, cy = st.Centre.Y + MathF.Sin(a) * d;
                 float r = u * (0.004f + 0.009f * MathF.Pow((float)rng.NextDouble(), 1.3f));
                 Cobble(bedPx, w, h, cx, cy, r, rng, 0.3f + 0.45f * (float)rng.NextDouble(), Dress);
@@ -1635,7 +1653,7 @@ internal static class PondPainter
     /// <summary>The shoulder of a stone: how deep the boulder's side has fallen by its painted edge, in Z (0.12 of the pond's depth: about forty-five degrees over the ring from the collar to the edge).</summary>
     public const float ShoulderZ = 0.12f;
     /// <summary>How far past its painted edge a stone's mound slopes down to the bed, in u. 0.08u since round forty-five: a boulder's own skirt of rubble, now that Light.Sink is 0.2 (at 0.55 a tight mound drew as a column, so it was widened to a hill: 0.35u, then 0.28u in round forty-one, 0.24u in round forty-four, and the hill read as an egg ten times the cap). A steeper mound is a wall to more koi steps: measured by causes43 against the old build each time it moves.</summary>
-    public const float MoundU = 0.08f;
+    public const float MoundU = 0.012f;   // (0.08u and then 0.05u earlier in round forty-six: any slope wide enough to see drew as a pale shelf of shallow water round the rock with a hard far edge where the deep bed, drawn down from behind it, took over, "circle areas that surround the top of the rocks and has a hard boundary that the water stops at". A hair of slope: the rock rises out of the deep bed, and the water goes up to it.)
 
     /// <summary>
     /// THE ONE SHAPE OF A STONE (round forty-one): how deep the stone's surface is, in Z, at a ground distance r
@@ -1777,7 +1795,7 @@ internal static class PondPainter
     /// and the bed are (the half cylinder's own slope shades it round), then deepened by the murk at its depth as every
     /// fish is (Body.Deepen). Everything is dealt from the log's own angle and position (no dice).
     /// </summary>
-    private static void LogColour(in SunkenLog log, float[] terrain, int band, uint[] stoneCol, byte[] stoneA, bool[] isStone, int w, int h, float u)
+    private static void LogColour(in SunkenLog log, float[] terrain, int band, uint[] stoneCol, byte[] stoneA, bool[] isStone, bool[] hollowMask, int w, int h, float u)
     {
         float hw = log.Width * 0.5f, reach = log.Length * 0.5f + hw + 2;
         float ca = MathF.Cos(log.Angle), sa = MathF.Sin(log.Angle), halfLen = log.Length * 0.5f - hw;
@@ -1802,14 +1820,18 @@ internal static class PondPainter
             for (int x = x0; x <= x1; x++)
             {
                 float dx = x + 0.5f - log.Centre.X, dy = y + 0.5f - log.Centre.Y;
-                float along = Math.Clamp(dx * ca + dy * sa, -halfLen, halfLen);
+                float alongRaw = dx * ca + dy * sa, along = Math.Clamp(alongRaw, -halfLen, halfLen);
                 float ex = dx - along * ca, ey = dy - along * sa, d = MathF.Sqrt(ex * ex + ey * ey);
                 float hwHere = log.HalfWidthAt(along);
                 if (d >= hwHere) continue;
                 float across = (-dx * sa + dy * ca) / hw;                                               // signed, -1 to 1 across the trunk
+                // THE THROAT (round forty-six): from the sawn face's hole out to the capsule's rounded tip the hollow is open, a
+                // dark channel 0.6 of the half width wide, so a resident's head in the hole is not under the tip's wood.
+                bool throat = alongRaw * endSign > halfLen - 0.02f * hw && MathF.Abs(across) < 0.6f;
                 // The half cylinder's shading from the terrain's slope (the bed's rule).
                 float gx = (Z(x + 2, y) - Z(x - 2, y)) * zPx / 4f, gy = (Z(x, y + 2) - Z(x, y - 2)) * zPx / 4f;
                 float lit = 1 - Math.Clamp(gx * 0.6f + gy * 0.8f, -0.4f, 0.4f);
+                lit *= 0.74f + 0.3f * MathF.Sqrt(MathF.Max(0f, 1f - across * across));                 // round in section: lit along the top, darker down the sides (the terrain's slope alone was too soft to say "cylinder")
                 // THE BARK. Ridges run along the trunk: a wave across it (about eleven ridges over the width), its phase
                 // wandering slowly along the length so no ridge is a ruled line, and broken now and then by a cross crack.
                 // The wave is sharpened: most of the surface is ridge (lit), the fissure between is narrow and dark.
@@ -1843,16 +1865,35 @@ internal static class PondPainter
                 // THE CUT FACE at the near end: inside the end's disc the bark gives way to sawn wood, pale, with the
                 // growth rings as a slow ripple from the middle out (darker every few rings), and the hollow in the
                 // middle, black, where the heart has rotted away (the den). The disc is the log's width across.
-                float ddx = x + 0.5f - mx, ddy = y + 0.5f - my, dEnd = MathF.Sqrt(ddx * ddx + ddy * ddy) / hw;
+                // The end, seen from above, is a foreshortened ELLIPSE: the log lies flat, so its sawn face is squashed along the axis to
+                // 0.42 of its width (drawn as a full disc it read as a pipe pointed at the eye, "the 3d look is off").
+                float ddx = x + 0.5f - mx, ddy = y + 0.5f - my;
+                float eAlong = (ddx * ca + ddy * sa) / 0.42f, eAcross = -ddx * sa + ddy * ca;
+                float dEnd = MathF.Sqrt(eAlong * eAlong + eAcross * eAcross) / hw;
                 if (dEnd < 0.95f)
                 {
                     float face = Math.Clamp((0.95f - dEnd) / 0.12f, 0, 1);                                // a soft edge where the bark meets the face
                     float rings = 1 + 0.14f * MathF.Sin(dEnd * 26f + phase) - 0.08f * Math.Clamp(MathF.Sin(dEnd * 9f), 0, 1);
-                    float hollow = Math.Clamp((0.62f - dEnd) / 0.14f, 0, 1);                               // 1 in the hole, 0 on the wood
+                    float hollow = MathF.Max(throat ? 1f : 0f, Math.Clamp((0.62f - dEnd) / 0.14f, 0, 1));   // 1 in the hole (and its throat), 0 on the wood
+                    if (hollow > 0.5f) hollowMask[y * w + x] = true;
                     float fr = faceR * rings, fg = faceG * rings, fb = faceB * rings;
-                    fr *= 1 - 0.92f * hollow; fg *= 1 - 0.92f * hollow; fb *= 1 - 0.9f * hollow;
+                    // LIGHT IN THE HOLE: the sun comes from up and left (Light.ShadowX, ShadowY run down and right), so of the hole's
+                    // inner wall the part on the down-right side of the opening is what the sun reaches, pale wood in half light
+                    // near the rim, falling to black toward the middle and the up-left rim, where the wall is in its own shadow.
+                    float ux = ddx / (0.62f * hw * 0.42f), uy = ddy / (0.62f * hw);
+                    float toward = Math.Clamp(ux * 0.6f + uy * 0.8f, 0f, 1f), rimness = Math.Clamp(MathF.Sqrt(ux * ux + uy * uy), 0f, 1f);
+                    float wall = toward * toward * rimness * rimness * 0.7f;
+                    fr = fr * (1 - 0.95f * hollow) + faceR * 0.55f * wall * hollow; fg = fg * (1 - 0.95f * hollow) + faceG * 0.5f * wall * hollow; fb = fb * (1 - 0.93f * hollow) + faceB * 0.45f * wall * hollow;
                     r += (fr - r) * face; g += (fg - g) * face; b += (fb - b) * face;
                     shade += (1f - shade) * face;
+                }
+                if (throat && dEnd >= 0.95f)
+                {
+                    // The throat beyond the face: the hole's shadow spilling out to the tip, deepest at the face and gone by the tip
+                    // (a flat black slot read as a notch cut in the end).
+                    float spill = Math.Clamp(1f - (alongRaw * endSign - halfLen) / hw, 0f, 1f);
+                    float keep = 0.12f + 0.88f * (1f - spill) * (1f - spill);
+                    r *= keep; g *= keep; b *= keep * 1.05f; shade = 1f - 0.5f * spill; hollowMask[y * w + x] = true;
                 }
                 lit *= shade;
                 int ir = (int)(r * lit), ig = (int)(g * lit), ib = (int)(b * lit);
@@ -1868,14 +1909,25 @@ internal static class PondPainter
     /// <summary>
     /// The bank rocks' feet, lowered into the terrain: a rock is painted as a disc at the surface, but under the water
     /// it widens out like the foot of a hill, so the bed comes up to meet its rim over a short slope (0.08u), from the
-    /// terrain's depth that far out to nothing at the rim. The in-water caps are in the list too; their stone's own
-    /// profile (Lower) is lower everywhere a foot would be, so this changes nothing there.
+    /// terrain's depth that far out to nothing at the rim. The in-water caps are in the list too, and THEIR foot is a hair
+    /// (round forty-six, "circle areas that surround the top of the rocks and has a hard boundary that the water stops at":
+    /// with the stone's own mound cut to nothing, this 0.08u foot was the pale shelf of shallow water round every rock, found
+    /// by the depth map's profile out from the cap, 0 to full depth over 0.9 of a cap radius in every direction). A cap is
+    /// told from a bank rock by the water round it: a rim all in the pond is a rock standing in the water.
     /// </summary>
     private static void LowerRocks(float[] terrain, List<BankRock> rocks, bool[] inPond, int w, int h, int band, float u)
     {
-        float flank = u * 0.08f;
         foreach (BankRock rock in rocks)
         {
+            bool standing = true;
+            for (int k = 0; k < 12 && standing; k++)
+            {
+                float a = k * MathF.Tau / 12;
+                int sx = Math.Clamp((int)(rock.Centre.X + MathF.Cos(a) * rock.Radius * 1.15f), 0, w - 1), sy = Math.Clamp((int)(rock.Centre.Y + MathF.Sin(a) * rock.Radius * 1.15f), 0, h - 1);
+                standing = inPond[sy * w + sx];
+            }
+            if (standing) continue;                                                     // (a hair of foot still forced zero depth out to the cap's full circle: a pale rim round the irregular drawn rock)
+            float flank = u * 0.08f;
             int x0 = Math.Max(0, (int)(rock.Centre.X - rock.Radius - flank)), x1 = Math.Min(w - 1, (int)(rock.Centre.X + rock.Radius + flank));
             int y0 = Math.Max(0, (int)(rock.Centre.Y - rock.Radius - flank)), y1 = Math.Min(h - 1, (int)(rock.Centre.Y + rock.Radius + flank));
             for (int y = y0; y <= y1; y++)
@@ -1925,61 +1977,20 @@ internal static class PondPainter
     private static void StoneColour(Bitmap bmp, uint[] before, bool[] stone, bool[] cap, Island isle, float[] terrain, int band, float collar, uint[] stoneCol, byte[] stoneA, bool[] isStone, byte[] near, int w, int h, float u)
     {
         uint[] px = Read(bmp);                                                          // the stone and its cap, painted whole, each at its place on the ground
-        float edge = isle.Radius * 0.2f * 10, bandPx = u * 0.012f * 10;
+        float bandPx = u * 0.012f * 10;
         float reach = isle.Radius + u * 0.1f;
         int x0 = Math.Max(0, (int)(isle.Centre.X - reach)), x1 = Math.Min(w - 1, (int)(isle.Centre.X + reach));
         int y0 = Math.Max(0, (int)(isle.Centre.Y - reach)), y1 = Math.Min(h - 1, (int)(isle.Centre.Y + reach));
-        // The three distance maps, inside the box only (every edge a boxed pixel measures to is in the box).
-        int[] inStone = DistanceToEdge(stone, w, h, false, x0, y0, x1, y1);          // tenths of a pixel in from the stone's own edge
-        int[] inCap = DistanceToEdge(cap, w, h, false, x0, y0, x1, y1);              // the same for the cap
-        bool[] notCap = new bool[w * h];
-        for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) notCap[y * w + x] = !cap[y * w + x];
-        int[] outCap = DistanceToEdge(notCap, w, h, false, x0, y0, x1, y1);          // for pixels outside the cap: how far from its rim
-        float Z(int x, int y) => terrain[(Math.Clamp(y, 0, h - 1) + band) * w + Math.Clamp(x, 0, w - 1)];
-        // The mound's base colour: the painting's average (it carries the shaded faces, so it is darker than the lit
-        // top) brought to a mid grey, 110 of 255. (155, a pale stone, was a white column once the flank stopped fading
-        // out; the average as it was, a black pillar.)
-        long sumR = 0, sumG = 0, sumB = 0, count = 0;
+        int[] inCap = DistanceToEdge(cap, w, h, false, x0, y0, x1, y1);              // tenths of a pixel in from the cap's rim, for the wet band
+        // NO PAINTED FLANK (round forty-six, his line: "i have no idea what you're trying to achieve with this rock thing ... just make
+        // it a rock and have the water go up to it instead of having a bunch of complicated stuff surrounding those rock caps"):
+        // the dry rock is the rock, the water meets it at its wet rim, and what is under the water is the bed rising to it, drawn
+        // by SinkBed like any slope (steep, so it takes no litter), the net over it. The smooth grey mound this function painted
+        // from round forty to forty-five (the painting's average brought to mid grey, lit like a cylinder, dissolving at its foot)
+        // was the "plateau" between the water and the rock. The dry top is nearest the eye of all (Pond.Near 255).
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++)
-            {
-                int i = y * w + x;
-                if (!stone[i] || cap[i]) continue;
-                uint c = px[i];
-                sumR += (c >> 16) & 0xFF; sumG += (c >> 8) & 0xFF; sumB += c & 0xFF; count++;
-            }
-        float baseR = count > 0 ? sumR / (float)count : 110, baseG = count > 0 ? sumG / (float)count : 112, baseB = count > 0 ? sumB / (float)count : 100;
-        float lum0 = (baseR * 77 + baseG * 150 + baseB * 29) / 256f, lift = lum0 > 1 ? 110f / lum0 : 1;
-        baseR = MathF.Min(255, baseR * lift); baseG = MathF.Min(255, baseG * lift); baseB = MathF.Min(255, baseB * lift);
-        // Filmed with algae (round forty-four, from the photos: a stone that has sat in a pond a season is green, not
-        // grey): a third of the way from the stone's own grey to an olive green.
-        baseR += (84 - baseR) * 0.35f; baseG += (104 - baseG) * 0.35f; baseB += (60 - baseB) * 0.35f;
-        float zPx = Pond.DepthU * u;                                                   // pixels of depth per unit of Z, for the slope
-        for (int y = y0; y <= y1; y++)
-            for (int x = x0; x <= x1; x++)
-            {
-                int i = y * w + x;
-                if (cap[i]) { near[i] = 255; continue; }                              // the dry top is nearest the eye of all
-                if (!stone[i]) continue;
-                float depth = Z(x, y);
-                // The terrain's slope here (depth per pixel), and how much it faces the sun (up and left, the bed's rule).
-                float gx = (Z(x + 3, y) - Z(x - 3, y)) * zPx / 6f;
-                float gy = (Z(x, y + 3) - Z(x, y - 3)) * zPx / 6f;
-                float lit = 1 - Math.Clamp(gx * 0.6f + gy * 0.8f, -0.3f, 0.3f);
-                // The roundness: a boulder's flank turns away from the eye toward its silhouette, so it darkens there the
-                // way a cylinder does, from the painted edge in over three tenths of the radius.
-                float round = MathF.Sqrt(Math.Clamp(inStone[i] / (edge * 1.5f), 0, 1));
-                lit *= 0.55f + 0.45f * round;
-                int r = (int)(baseR * lit), g = (int)(baseG * lit), b = (int)(baseB * lit);
-                float murk = Light.Murk(depth);
-                Body.Deepen(ref r, ref g, ref b, (int)(murk * 256));
-                float kEdge = 1 - Math.Clamp(inStone[i] / (edge * 1.75f), 0, 1);           // the mound's foot dissolves over 0.35 of the radius from its painted edge
-                float line = Math.Clamp(1 - outCap[i] / bandPx, 0, 1) * 0.2f;               // the dark line where the surface meets the stone
-                r = (int)(r * 0.9f * (1 - line)); g = (int)(g * (1 - line)); b = (int)(b * (1 - line));   // (the green cast of the water, lightly)
-                stoneCol[i] = (uint)(Math.Clamp(r, 0, 255) << 16 | Math.Clamp(g, 0, 255) << 8 | Math.Clamp(b, 0, 255));
-                stoneA[i] = (byte)(Math.Clamp((1 - murk) * (1 - kEdge * kEdge), 0, 1) * 255);
-                isStone[i] = true;
-            }
+                if (cap[y * w + x]) near[y * w + x] = 255;
         // The cap, in place: its wet band, written straight into the picture (the cap is a blocker, so SinkBed leaves it).
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++)
@@ -2026,7 +2037,7 @@ internal static class PondPainter
     /// the land painters put on the water (a bank rock's wet rim, an afloat log) at its own place: every pixel where the
     /// picture before the stones differed from the flat pour.
     /// </summary>
-    private static void SinkBed(Bitmap bmp, uint[] flat, uint[] beforeStones, uint[] surface, float[] terrain, int band, uint[] bedPx, uint[] stoneCol, byte[] stoneA, bool[] isStone, bool[] inPond, uint[] blocked, byte[] near, int w, int h, float u)
+    private static void SinkBed(Bitmap bmp, uint[] flat, uint[] beforeStones, uint[] surface, float[] terrain, int band, uint[] bedPx, uint[] stoneCol, byte[] stoneA, bool[] isStone, bool[] hollow, bool[] inPond, uint[] blocked, byte[] near, int w, int h, float u)
     {
         int H = h + band;
         float sinkMax = Light.SinkPx(1, u);                                            // how far down the screen the deepest bed is drawn
@@ -2056,19 +2067,32 @@ internal static class PondPainter
                 // faces the sun (up and left: its depth FALLS going that way) is brightened, the flank facing away is
                 // dimmed, by up to a third, over a stencil a hundredth of u wide. The bank's own slope keeps its painted
                 // pale look: the light comes in from a quarter of the depth to full at seven tenths, the open pond.
-                float open = Math.Clamp((z - 0.25f) / 0.45f, 0f, 1f);
-                if (open > 0)
                 {
-                    open = open * open * (3 - 2 * open);
                     int xl = Math.Max(0, x - s), xr = Math.Min(w - 1, x + s);
                     float gx = (smooth[ky * w + xr] - smooth[ky * w + xl]) * zPx / (xr - xl);   // how fast the bed deepens going right (u per u)
                     float gyy = (smooth[yd * w + x] - smooth[yu * w + x]) * zPx / (yd - yu);    // and going down the screen
-                    float tilt = -Math.Clamp(gx * 0.6f + gyy * 0.8f, -0.12f, 0.12f);   // (a third until round forty-four, a quarter until round forty-five: lit that hard, with the slant stretching the flanks, the slopes were pale diagonal streaks he read as light rays)
-                    int light = 256 + (int)(256 * tilt * open);
-                    if (light != 256)
+                    float open = Math.Clamp((z - 0.25f) / 0.45f, 0f, 1f);
+                    if (open > 0)
                     {
-                        int r = Math.Min(255, (int)((c >> 16) & 0xFF) * light >> 8), g = Math.Min(255, (int)((c >> 8) & 0xFF) * light >> 8), b = Math.Min(255, (int)(c & 0xFF) * light >> 8);
-                        c = (uint)(r << 16 | g << 8 | b);
+                        open = open * open * (3 - 2 * open);
+                        float tilt = -Math.Clamp(gx * 0.6f + gyy * 0.8f, -0.12f, 0.12f);   // (a third until round forty-four, a quarter until round forty-five: lit that hard, with the slant stretching the flanks, the slopes were pale diagonal streaks he read as light rays)
+                        int light = 256 + (int)(256 * tilt * open);
+                        if (light != 256)
+                        {
+                            int r = Math.Min(255, (int)((c >> 16) & 0xFF) * light >> 8), g = Math.Min(255, (int)((c >> 8) & 0xFF) * light >> 8), b = Math.Min(255, (int)(c & 0xFF) * light >> 8);
+                            c = (uint)(r << 16 | g << 8 | b);
+                        }
+                    }
+                    // A CLIFF IS ROCK (round forty-six): where the bed falls more than about a pixel of depth per pixel of ground it is
+                    // a rock's underwater side, dark wet stone, not shallow water over sand. Drawn sunk down the screen, the rock's
+                    // near face coloured as shallow water was a pale tongue below every rock. The dark deepens with the depth.
+                    float steep = Math.Clamp((MathF.Abs(gx) + MathF.Abs(gyy)) / 14f - 0.5f, 0f, 1f);
+                    if (steep > 0)
+                    {
+                        int r = (int)((c >> 16) & 0xFF), g = (int)((c >> 8) & 0xFF), b = (int)(c & 0xFF);
+                        float dim = 0.55f - 0.25f * z;
+                        r += (int)((52 * dim * 1.15f - r) * steep); g += (int)((62 * dim * 1.15f - g) * steep); b += (int)((54 * dim * 1.15f - b) * steep);
+                        c = (uint)(Math.Clamp(r, 0, 255) << 16 | Math.Clamp(g, 0, 255) << 8 | Math.Clamp(b, 0, 255));
                     }
                 }
                 col[k] = c;
@@ -2091,8 +2115,12 @@ internal static class PondPainter
                     if (!isStone[i]) continue;
                     int k = (y + band) * w + x, kz = (y - sy0) * bw + (x - sx0);
                     float a = stoneA[i] / 255f;
-                    uint sc = stoneCol[i];
-                    int r = (int)(wR[kz] + (((sc >> 16) & 0xFF) - wR[kz]) * a), g = (int)(wG[kz] + (((sc >> 8) & 0xFF) - wG[kz]) * a), b = (int)(wB[kz] + ((sc & 0xFF) - wB[kz]) * a);
+                    uint sc = stoneCol[i], sharp = col[k];
+                    // The water the flank is mixed toward: the SHARP bed where the flank is thin (its dissolving foot, so the litter
+                    // runs on under it: mixed toward the blurred water there, the cobbles stopped dead at a line, "cut off early"),
+                    // the blurred water where it is solid (there the blur keeps the pebbles from showing through the stone).
+                    float wr = ((sharp >> 16) & 0xFF) + (wR[kz] - ((sharp >> 16) & 0xFF)) * a, wg = ((sharp >> 8) & 0xFF) + (wG[kz] - ((sharp >> 8) & 0xFF)) * a, wb = (sharp & 0xFF) + (wB[kz] - (sharp & 0xFF)) * a;
+                    int r = (int)(wr + (((sc >> 16) & 0xFF) - wr) * a), g = (int)(wg + (((sc >> 8) & 0xFF) - wg) * a), b = (int)(wb + ((sc & 0xFF) - wb) * a);
                     col[k] = (uint)(Math.Clamp(r, 0, 255) << 16 | Math.Clamp(g, 0, 255) << 8 | Math.Clamp(b, 0, 255));
                 }
         }
@@ -2128,7 +2156,7 @@ internal static class PondPainter
                     float f = sN != s0 ? (sy - s0) / (float)(sN - s0) : 0;
                     float depth = z + (zn - z) * f;
                     if (depth >= zbuf[j]) continue;
-                    zbuf[j] = depth;
+                    zbuf[j] = gy >= 0 && hollow[gy * w + x] ? depth + 0.35f : depth;              // the log's hollow is a HOLE: nothing in it is nearer than its floor, so a head in it is drawn (round forty-six)
                     uint a = col[k], b = col[kn];
                     int rr = (int)(((a >> 16) & 0xFF) + ((int)((b >> 16) & 0xFF) - (int)((a >> 16) & 0xFF)) * f);
                     int gg = (int)(((a >> 8) & 0xFF) + ((int)((b >> 8) & 0xFF) - (int)((a >> 8) & 0xFF)) * f);

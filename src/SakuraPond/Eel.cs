@@ -178,7 +178,7 @@ internal sealed class EelBody : Body
         string? rate = Environment.GetEnvironmentVariable("PECKWORKS_EELRATE");
         if (!string.IsNullOrEmpty(rate) && float.TryParse(rate, NumberStyles.Float, CultureInfo.InvariantCulture, out float r) && r > 0) Rate = r;
         // It starts lying in its hollow, the head at the mouth, partway through a hide of its own length.
-        _hideQ = 0.3f * _wg;
+        _hideQ = -0.42f * _wg;
         _dq = _hideQ;
         LayStraight(_dq);
         _mind.Begin(Doing.Hide, HideTime() * (0.1f + 0.4f * (float)rng.NextDouble()));
@@ -211,7 +211,10 @@ internal sealed class EelBody : Body
         float nsx = -ay, nsy = ax, k = MathF.Sqrt(nsx * nsx * 1f + nsy * Ripples.Squash * nsy * Ripples.Squash);
         float wg = log.Width / MathF.Max(0.3f, k);
         float mouthQ = (dx - tx) * ax + (dy - ty) * ay;
-        float zIn = bed.ZAt(dx, dy) - LieZ;
+        // The inside's depth is the HOLLOW'S height, a little over half the log's height above the bed it lies on (the bed's own
+        // depth until the main model's pass: drawn sunk by that depth the head sat a log's height below the hole, "poking out from
+        // under the log, not where the hole in the log is").
+        float zIn = bed.ZAt(dx, dy) - log.HeightZ * 0.55f;
         return new EelBody(pond, view, minnows, deep, log, rng, tx, ty, ax, ay, lg, wg, mouthQ, zIn);
     }
 
@@ -401,7 +404,7 @@ internal sealed class EelBody : Body
 
     private void BeginPeek()
     {
-        _peekQ = 0.3f * _wg + (0.45f + 0.25f * _bold) * _wg;
+        _peekQ = (0.1f + 0.3f * _bold) * _wg;                  // (from 0.3 of a width out until the main model's pass: the head hid a width beyond the end, "poking out from under the log, not where the hole in the log is"; its snout sits in the hole now)
         _lookAmp = 0.3f * _wg * (0.6f + 0.4f * _bold);
         Begin(Doing.Peek, 10f + 10f * (float)_rng.NextDouble());
     }
@@ -457,7 +460,7 @@ internal sealed class EelBody : Body
             {
                 Span<float> w = [0.55f + 0.35f * _bold, 0.45f - 0.2f * _bold];   // out, or back to lying in the mouth (0.3 and 0.5 on the helper's build)
                 if (Dice.Pick(_rng, w) == 0 && !ThreatNear(0.6f)) BeginEmerge();
-                else { _hideQ = 0.3f * _wg; Begin(Doing.Hide, (15f + 30f * (float)_rng.NextDouble()) / Rate); }
+                else { _hideQ = -0.42f * _wg; Begin(Doing.Hide, (15f + 30f * (float)_rng.NextDouble()) / Rate); }
                 break;
             }
             case Doing.Forage:
@@ -856,7 +859,7 @@ internal sealed class EelBody : Body
             _fails = 0;
             bool shy = _doing == Doing.Withdraw;
             BeginHide(shy ? (10f + 20f * (float)_rng.NextDouble()) / Rate : HideTime(), _hideQ);
-            if (_doing == Doing.Hide && !shy) _hideQ = 0.3f * _wg;
+            if (_doing == Doing.Hide && !shy) _hideQ = -0.42f * _wg;
         }
     }
 

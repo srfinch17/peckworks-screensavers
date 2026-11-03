@@ -1719,7 +1719,18 @@ where a slow sine peaks; two bare ovals where the bark has fallen off, pale tan 
 oval with a pale ring); and at the near end the CUT FACE, pale sawn wood with growth rings as a ripple from the
 middle out, the hollow black in its middle (0.62 of the half width), the bark giving way to the face over a soft
 edge. The half cylinder's own slope still shades it (the terrain's rule), `Body.Deepen` deepens it, and its haze
-share is the catfish's 0.8 of the murk. Everything is dealt from the log's angle and place, no dice. The hollow's mouth (`Den`) is handed to the deep dwellers: the first dweller's home is
+share is the catfish's 0.8 of the murk. Everything is dealt from the log's angle and place, no dice. HIS LOOK THE SAME
+DAY ("the log is a little better, but the 3d look is off"; "the eel is poking out from under the log, not where the hole
+in the log is"; "the hole in the log ... its just one uniform colored hole really. you must take into account how the
+light would hit that opening"): the sawn face is a FORESHORTENED ellipse now (a log lying flat shows its end squashed
+along the axis to 0.42 of its width; a full disc read as a pipe pointed at the eye), the trunk is shaded round in section
+(lit along the top, darker down the sides), the hole has a THROAT from the face centre out to the capsule's tip (the face
+centre lies half a width inside the tip, so a resident's head in the hole was under the tip's wood and showed only
+beyond it, detached; the throat is the hole's shadow spilling to the tip, deepest at the face), the hollow's ground
+pixels get a nearness of their own in `SinkBed` (`hollow`, 0.35 deeper than the log's top: a hole is a hole, nothing
+in it is nearer than its floor, so a head in it is drawn), and THE HOLE IS LIT: the sun comes from up and left, so of
+the inner wall the part on the down-right side of the opening is what it reaches, pale wood in half light near the rim,
+falling to black toward the middle and the up-left rim. The full haze again (0.8 of it read as pasted on). The hollow's mouth (`Den`) is handed to the deep dwellers: the first dweller's home is
 swapped for it after the homes are dealt, so no roll moves (`DeepDwellers`, `DenHomed` in the start log).
 
 *The eel in the log (round forty-six, `Eel.cs`; built by a Sonnet helper from the kit's eel brief, finished by the main
@@ -1742,12 +1753,47 @@ Approach and Back (to the mouth, turn the tail to the hole, slide in tail first)
 at the door) and Flee (a fast tight S for the hollow from the open). Only the parts OUT of the log count as seen by a
 threat (a koi crossing the far end kept the first eel in for good). Its first build never left the hollow in three
 natural runs of 180 s (a hide of one to three minutes, a peek, and dice that mostly sent it back): the hide is 35 to 105 s
-now, the first a fraction of that, and a peek goes out more often than not. THE HOLLOW INTERPLAY (the dweller homed at the
+now, the first a fraction of that, a peek goes out more often than not, and in its hole it minds only a threat within half
+its reach (at the full reach every koi that cruised past the door reset its hide, 19 times in five minutes on seed 1). Its
+inside depth is the HOLLOW'S height, a little over half the log's height above the bed (at the bed's own depth the head was
+drawn a log's height below the hole), it hides with its snout at the hole (the face centre, half a width inside the
+capsule's tip) and peeks a tenth to four tenths of a width past the tip. THE HOLLOW INTERPLAY (the dweller homed at the
 mouth retreating inside while the eel is out, one body inside by a claim) is NOT built: the crayfish at the mouth and the
 eel's head can overlap there, a known pass. Instruments: `PECKWORKS_EELLOG` (the koi log's layout, event lines for every
 emerge, back-in, withdrawal and snap), `PECKWORKS_EELRATE` (a stress dial on the hide timer), the helper's `eelstats.py`
 in the kit (seconds out per minute, doing shares, confined spells, refused runs, joints over 40 degrees, nose-first at the
 neck, spine points over the log or below the bed, the straightness of a back-in).
+
+*His look at round forty-six (2026-11-02): petals on pads, litter on the flanks, the dome under the cap.* "sakura
+petals should not be able to float across the top of a lily pad ... the textures you're using for the bottom of the pond
+stretch weird when they're on the slope of the rocks in the water. plus they seem to cut off early." Three mechanisms,
+each located in a crop before a constant moved. THE PETALS: a floating petal's drift tested the WATER MAP for the way
+ahead, and the pads are a live layer since round forty, so a pad was open water to it and it drifted straight across;
+the drift now tests the live pads' ellipses (`Petals.OnPad`, the glints' own test): a petal that lands on a pad stays
+where it landed, one drifting up to a rim is held there, as at the bank. THE LITTER: a cobble or a leaf laid on a
+mound's flank is drawn sunk down the slope into a vertical oval, and under the stone's dissolving foot it was mixed
+toward the BLURRED water (the blur that keeps pebbles from showing through the solid flank), so the litter stopped dead
+at a line where the foot began; now steep ground takes no litter (`DressBed`'s `Gentle`: a depth change under 0.045
+over six ground pixels either way) and the foot mixes toward the sharp bed where it is thin and the blurred water where
+it is solid, so what litter there is runs on under the foot. THE DOME: an island's dry cap was a third of its painted
+footprint (`Shore.PlaceIsland`), a pebble on a grey dome 2.7 times its radius with the net and the litter running up the
+dome. His second line settled it: "i have no idea what you're trying to achieve with this rock thing ... just make it a
+rock and have the water go up to it instead of having a bunch of complicated stuff surrounding those rock caps", and his
+third, after the first pass: "right now you have the water line stopping in a perfect circle around the rocks". THE ROCK
+IS THE ROCK NOW. The dry rock is 0.82 to 0.9 of the painted stone (a formation's rocks 0.44 to 0.5 of theirs, a cluster
+of two or three); nothing of the stone under the water is painted (the flank painter of rounds forty to forty-five,
+the painting's average brought to mid grey, lit like a cylinder, dissolving at its foot, is gone: it was the plateau);
+the water meets the rock at its wet rim; and under the water the rock rises STRAIGHT out of the deep bed: the stone's
+profile starts falling at 0.7 of the drawn rock's radius with no collar, reaches its shoulder by 0.9 and the full depth a
+hair past it (`MoundU` 0.012u; 0.08u and 0.05u on the way drew as a pale shelf of shallow water with a hard far edge
+where the deep bed, drawn down from behind it, took over), and the bank rocks' foot pass (`LowerRocks`, a 0.08u slope
+from every rock's rim) skips a rock standing in the water (told by a rim all in the pond: with the mound gone, that foot
+was the shelf, found by the depth map's profile out from the cap, 0 to full depth over 0.9 of a cap radius in every
+direction). What the eye then sees below the rock is its own underwater side, drawn sunk by the slant, and a CLIFF IS
+ROCK: where the smoothed terrain falls more than about a pixel of depth per pixel of ground, `SinkBed` colours it dark
+wet stone deepening with the depth instead of shallow water over sand (as water it was a pale tongue below every rock).
+The bed round a rock is silt whatever its depth (`DressBed`: the shallows' sand within 2.2 cap radii of a cap goes to
+silt), and the rubble at a rock's foot starts at the rock's own edge.
 
 *The surface: the caustic net, the shimmer, the glitter and the wakes (round forty-six, 2026-11-02, `Caustics.cs`,
 `Sunlight.cs`, `Ripples.cs`).* His lines: "the shimmering light just ends up looking dumb. we need to rethink it and

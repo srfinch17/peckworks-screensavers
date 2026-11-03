@@ -300,7 +300,11 @@ internal static class ShorePainter
     public static Island? PlaceIsland(bool[] inPond, int[] dist, byte[] shade, Log? log, int w, int h, float u, Random rng)
     {
         float r = u * (0.09f + 0.03f * (float)rng.NextDouble());
-        float capR = r * (0.32f + 0.08f * (float)rng.NextDouble());
+        // THE ROCK IS THE ROCK (round forty-six, his line: "just make it a rock and have the water go up to it instead of having a
+        // bunch of complicated stuff surrounding those rock caps"): the dry top is nearly the whole painted stone, the water meets
+        // it at a wet rim, and what is under the water is the bed rising to it, nothing painted. (A third of the footprint until
+        // round forty-six: a pebble on a bald grey dome, then a plateau, then the rock.)
+        float capR = r * (0.82f + 0.08f * (float)rng.NextDouble());
         for (int tries = 0; tries < 600; tries++)
         {
             float x = w * (0.12f + 0.76f * (float)rng.NextDouble()), y = h * (0.4f + 0.4f * (float)rng.NextDouble());
@@ -378,7 +382,7 @@ internal static class ShorePainter
                 float a = a0 + k * MathF.Tau / n + 0.3f * ((float)rng.NextDouble() - 0.5f);
                 float d = r * (0.35f + 0.1f * (float)rng.NextDouble());
                 caps[k] = new PointF(x + MathF.Cos(a) * d, y + MathF.Sin(a) * d - r * 0.1f);
-                capR[k] = r * (0.22f + 0.08f * (float)rng.NextDouble());
+                capR[k] = r * (0.44f + 0.06f * (float)rng.NextDouble());            // a cluster of two or three rocks, each its own rock (0.22 to 0.3 until round forty-six, the island's reason)
             }
             return new Formation(new Island(new PointF(x, y), r, caps[0], capR[0]), caps, capR);
         }
