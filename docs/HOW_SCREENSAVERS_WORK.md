@@ -1775,8 +1775,10 @@ petals should not be able to float across the top of a lily pad ... the textures
 stretch weird when they're on the slope of the rocks in the water. plus they seem to cut off early." Three mechanisms,
 each located in a crop before a constant moved. THE PETALS: a floating petal's drift tested the WATER MAP for the way
 ahead, and the pads are a live layer since round forty, so a pad was open water to it and it drifted straight across;
-the drift now tests the live pads' ellipses (`Petals.OnPad`, the glints' own test): a petal that lands on a pad stays
-where it landed, one drifting up to a rim is held there, as at the bank. THE LITTER: a cobble or a leaf laid on a
+the first fix held a petal still at a pad's rim, and he saw petals over the pads still, because the pads DRIFT and a pad
+that drifted under a resting petal carried the picture of a petal sliding across it; now A PAD PUSHES A PETAL OFF ITSELF
+every frame (`Petals.PushOffPads`: wherever a petal finds itself inside a pad's ellipse, by its own drift or the pad's,
+it is moved out to the rim plus its own half size), and a petal that falls on a pad slides off onto the water beside it. THE LITTER: a cobble or a leaf laid on a
 mound's flank is drawn sunk down the slope into a vertical oval, and under the stone's dissolving foot it was mixed
 toward the BLURRED water (the blur that keeps pebbles from showing through the solid flank), so the litter stopped dead
 at a line where the foot began; now steep ground takes no litter (`DressBed`'s `Gentle`: a depth change under 0.045

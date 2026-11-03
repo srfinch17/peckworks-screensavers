@@ -244,25 +244,34 @@ internal sealed class Petals
             // against a LILY PAD's rim (round forty-six, "sakura petals should not be able to float across the top of a lily
             // pad"): the pads are a live layer, not in the water map, so the rim is tested here against the live centres; a
             // petal that landed ON a pad stays where it landed (it rides the pad), one drifting up to a pad is held at the rim.
-            if (ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Water[iy * _pond.Width + ix] && !OnPad(f.X, f.Y) && !OnPad(nx, ny))
+            if (ix >= 0 && iy >= 0 && ix < _pond.Width && iy < _pond.Height && _pond.Water[iy * _pond.Width + ix])
             {
                 f.X = nx; f.Y = ny;
             }
+            // A PAD PUSHES A PETAL OFF ITSELF, every frame (his second line: "the petals are still floating over the top of the
+            // lily pads"): holding a petal still at a pad's rim was not enough, because the pads DRIFT, and a pad that drifted
+            // under a resting petal carried the picture of a petal sliding across it. Wherever a petal finds itself inside a
+            // pad's ellipse, by its own drift or the pad's, it is moved out to the rim, as a body pushes a petal aside.
+            PushOffPads(ref f.X, ref f.Y, f.R);                                        // out to the rim plus the petal's own half size: centred on the rim, half of it still lay on the pad
             _floating[i] = f;
         }
     }
 
-    /// <summary>Is this screen point on a lily pad (the live pads, their ellipse as the painters test it)?</summary>
-    private bool OnPad(float x, float y)
+    /// <summary>Moves a screen point that lies inside any lily pad (the live pads, their ellipse as the painters test it) out to that pad's rim.</summary>
+    private void PushOffPads(ref float x, ref float y, float margin)
     {
         IReadOnlyList<LilyPad> pads = _pond.Pads;
         for (int p = 0; p < pads.Count; p++)
         {
             LilyPad pad = pads[p];
             float dx = x - pad.Center.X, dy = (y - pad.Center.Y) / 0.82f;
-            if (dx * dx + dy * dy <= pad.Radius * pad.Radius * 1.05f) return true;
+            float r2 = dx * dx + dy * dy, rim = pad.Radius * 1.04f + margin;
+            if (r2 >= rim * rim) continue;
+            float r = MathF.Sqrt(r2);
+            if (r < 1e-3f) { dx = 1; dy = 0; r = 1; }                                  // dead centre: any way out
+            float k = (rim + 0.5f) / r;
+            x = pad.Center.X + dx * k; y = pad.Center.Y + dy * k * 0.82f;
         }
-        return false;
     }
 
     /// <summary>A falling petal reaches its spot: on open water it floats (with a little ring); anywhere else it is gone.</summary>
@@ -271,7 +280,8 @@ internal sealed class Petals
         int ix = (int)p.X, iy = (int)p.Y;
         if (ix < 0 || iy < 0 || ix >= _pond.Width || iy >= _pond.Height || !_pond.Water[iy * _pond.Width + ix]) return;
         _ripples.Add(p.X, p.Y, 0.35f);
-        if (_floating.Count >= _floatingMost)
+        float lx = p.X, ly = p.Y;
+        PushOffPads(ref lx, ref ly, p.Size * 0.5f);                                   // a petal that falls on a pad slides off it onto the water beside it
         {
             // Full: the oldest petal starts sinking to make room.
             int oldest = 0;
@@ -280,8 +290,8 @@ internal sealed class Petals
             o.Life = MathF.Min(o.Life, o.Age + 6);
             _floating[oldest] = o;
         }
-        _floating.Add(NewFloating(p.X, p.Y, 0, p.Size, p.Angle, p.Pink));
-        Landed?.Invoke(p.X, p.Y);
+        _floating.Add(NewFloating(lx, ly, 0, p.Size, p.Angle, p.Pink));
+        Landed?.Invoke(lx, ly);
     }
 
     /// <summary>Called with the screen spot where a falling petal has just settled on the water (the hungry koi come to see).</summary>
