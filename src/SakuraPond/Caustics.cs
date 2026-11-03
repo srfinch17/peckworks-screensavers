@@ -271,7 +271,7 @@ internal sealed class Caustics
     public int SparkleSites => _sparkles.Length;
 
     /// <summary>
-    /// The flashes: over the water and the pads, under the floating petals. A site flashes when the net under it is at a BRIGHT
+    /// The flashes: over the open water only, never on a thing painted over it. A site flashes when the net under it is at a BRIGHT
     /// NODE (where lines of the web cross, the page is brightest), as bright as the node is past the threshold, squared, so a
     /// flash lives on the web and comes and goes as the web moves; the site's own slow clock only varies how bright it may get,
     /// so two sites on one line do not flash alike. A small white star, one bright pixel with four softer arms. A few thousand
@@ -284,6 +284,8 @@ internal sealed class Caustics
         uint[] px = fb.Pixels; int w = _w, h = _h;
         float t = (float)_clock;
         int node = _node; float span = MathF.Max(1, _nodeTop - _node);
+        uint[] lit = _lit;
+        void Star(int j, int alpha) { if (onlyWhere[j] && px[j] == lit[j]) px[j] = FrameBuffer.Blend256(px[j], 250, 252, 255, alpha); }
         for (int k = 0; k < _sparkles.Length; k++)
         {
             ref Sparkle sp = ref _sparkles[k];
@@ -295,24 +297,17 @@ internal sealed class Caustics
             if (a < 0.2f) continue;
             int i = sp.Y * w + sp.X;
             if (!onlyWhere[i] || sp.X < 2 || sp.X >= w - 2 || sp.Y < 2 || sp.Y >= h - 2) continue;
+            // NOT ON A FISH (his line: "fish have bright spots flashing under or in them"): a site is a fixed point on the water,
+            // and a koi passing under it got a white star on its back. Where the frame no longer holds the lit backdrop,
+            // something has been painted there this frame (a swimmer, a pad, a ripple ring, a frog) and the flash is skipped,
+            // pixel by pixel, so a star never lands on a thing. One compare per pixel of the star.
+            if (px[i] != lit[i]) continue;
             int a256 = (int)(MathF.Min(1f, a) * 256), arm = a256 * 5 >> 3, tip = a256 >> 2;
             // A small star: a white core, four softer neighbours, four faint corners, and for a bright flash a tip two out on each arm.
             px[i] = FrameBuffer.Blend256(px[i], 255, 255, 250, a256);
-            if (onlyWhere[i - 1]) px[i - 1] = FrameBuffer.Blend256(px[i - 1], 250, 252, 255, arm);
-            if (onlyWhere[i + 1]) px[i + 1] = FrameBuffer.Blend256(px[i + 1], 250, 252, 255, arm);
-            if (onlyWhere[i - w]) px[i - w] = FrameBuffer.Blend256(px[i - w], 250, 252, 255, arm);
-            if (onlyWhere[i + w]) px[i + w] = FrameBuffer.Blend256(px[i + w], 250, 252, 255, arm);
-            if (onlyWhere[i - w - 1]) px[i - w - 1] = FrameBuffer.Blend256(px[i - w - 1], 250, 252, 255, tip);
-            if (onlyWhere[i - w + 1]) px[i - w + 1] = FrameBuffer.Blend256(px[i - w + 1], 250, 252, 255, tip);
-            if (onlyWhere[i + w - 1]) px[i + w - 1] = FrameBuffer.Blend256(px[i + w - 1], 250, 252, 255, tip);
-            if (onlyWhere[i + w + 1]) px[i + w + 1] = FrameBuffer.Blend256(px[i + w + 1], 250, 252, 255, tip);
-            if (a256 > 128)
-            {
-                if (onlyWhere[i - 2]) px[i - 2] = FrameBuffer.Blend256(px[i - 2], 250, 252, 255, tip);
-                if (onlyWhere[i + 2]) px[i + 2] = FrameBuffer.Blend256(px[i + 2], 250, 252, 255, tip);
-                if (onlyWhere[i - 2 * w]) px[i - 2 * w] = FrameBuffer.Blend256(px[i - 2 * w], 250, 252, 255, tip);
-                if (onlyWhere[i + 2 * w]) px[i + 2 * w] = FrameBuffer.Blend256(px[i + 2 * w], 250, 252, 255, tip);
-            }
+            Star(i - 1, arm); Star(i + 1, arm); Star(i - w, arm); Star(i + w, arm);
+            Star(i - w - 1, tip); Star(i - w + 1, tip); Star(i + w - 1, tip); Star(i + w + 1, tip);
+            if (a256 > 128) { Star(i - 2, tip); Star(i + 2, tip); Star(i - 2 * w, tip); Star(i + 2 * w, tip); }
             on++; sum += a;
         }
         if (_sparkleLog != null && ++_sparkleFrame % 30 == 0)

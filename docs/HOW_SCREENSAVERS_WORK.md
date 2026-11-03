@@ -1859,7 +1859,9 @@ in the sun's patch, drifting with the breeze for ever) is gone; it had piled up 
 SITES per 16:9 screen's worth of water in view (more toward the far side and the sun's patch, its own dice), each a
 fixed spot that looks at the net's page under it every frame and flashes when a NODE of the net is passing (where
 lines cross the page is brightest): a small white star, one pixel and four softer arms, corners and tips on the bright
-ones, over the water and the pads and under the floating petals. The threshold is READ OFF THE NET, not guessed: a node
+ones, over the open water and NEVER ON A THING: a star pixel is drawn only where the frame still holds the lit backdrop (one
+compare), so a koi passing under a site does not get a flash on its back (his line, the same night: "fish have bright
+spots flashing under or in them"; a site is a fixed point and the fish swam under it). The threshold is READ OFF THE NET, not guessed: a node
 is the brightest 1.5 percent of a page (146 of 255 on this net) and a flash is white at the brightest 0.2 percent
 (191); the site's own slow clock only varies how bright it may get. The way there, by the count in `PECKWORKS_SUNLOG`
 (flashes on, mean alpha, every 30 frames): 900 sites on the sun's patch, each gated by a blink AND a fixed page value

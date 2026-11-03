@@ -351,7 +351,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         _ripples.Draw(fb);
         Sections.Mark("ripples");
         _pads.Draw(fb, _pond.Open);               // the lily pads float on the water: over the ripples and everything under the surface, under the petals that settle on them (round forty)
-        _caustics.DrawSparkles(fb, _waterInView); // the sparkles on the net's bright lines: over the water and the pads, under the floating petals (round forty-six, his idea)
+        _caustics.DrawSparkles(fb, _waterInView); // the sparkles on the net's bright lines: over the open water, skipped wherever a thing has been painted over it this frame (round forty-six, his idea)
         _petals.DrawFloating(fb);
         Sections.Mark("petals afloat");
         _snake.Draw(fb);
