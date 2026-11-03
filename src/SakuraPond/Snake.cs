@@ -275,6 +275,7 @@ internal sealed class Snake : Body
     private readonly Cooldown _calm = new();               // no startle again until this has run out
     private bool _live, _blocked;                          // _blocked: last frame's step was refused
     private float _blockedT;                               // how long in a row the step has been refused
+    private float _logHere, _logNext, _logScore, _logBest, _logGl;   // the step rule's own inputs, for the log only (round forty-seven): room here and at the next step, the feeler search's best score and turn, the walk-out's gradient
     private float _spin;                                   // how far round the heading has turned lately, radians, signed (an orbit shows here as a whole circle; see the orbit breaker in Update)
     private float _detour;                                 // seconds left of swimming on with no pull toward the goal, after an orbit was broken
 
@@ -1256,6 +1257,26 @@ internal sealed class Snake : Body
     }
 
     /// <summary>
+    /// The way out of a crease: the heading, of 24 round the circle, along which the room grows most over the next step
+    /// and over four steps (both must grow: the step rule allows a step toward more room, and a heading that gains for a
+    /// pixel and loses after it is no way out). NaN when no heading gains room at all (then the head is boxed in and the
+    /// callers leave the heading alone). Asks the step's own question (Clear at the point the step would land), which is
+    /// the rule for every probe: the feelers look along a line, the step tests a point, and the two disagree at a rim.
+    /// </summary>
+    private float WayUp(float step)
+    {
+        float here = Clear(_x, _y), best = float.NaN, bestRoom = here;
+        float d1 = MathF.Max(step, 2f), d2 = d1 * 4;
+        for (int k = 0; k < 24; k++)
+        {
+            float a = _heading + k * (MathF.Tau / 24), ca = MathF.Cos(a), sa = MathF.Sin(a);
+            float room = MathF.Min(Clear(_x + ca * d1, _y + sa * d1), Clear(_x + ca * d2, _y + sa * d2));   // (both must gain: out of a crease between two round things the gain is tiny at first, so any gain counts)
+            if (room > bestRoom) { bestRoom = room; best = a; }
+        }
+        return best;
+    }
+
+    /// <summary>
     /// How much room there is at a point: the distance to the edge of the
     /// nearest obstacle, in pixels (negative inside one). The log counts as
     /// a thick line: the distance to its centre line, less half its width.
@@ -1422,7 +1443,7 @@ internal sealed class Snake : Body
         if (MotionLog != null)
         {
             float sharp = SharpestJoint(out int at);
-            MotionLog(FormattableString.Invariant($"F,{_clock:F3},{_doing},{_phase},{_x:F1},{_y:F1},{_zHead:F3},{_zTarget:F2},{_speed:F1},{HuntNote},{(_blocked ? 1 : 0)},{bedZ:F3},{_heading:F3},{_drawnLen / _len:F3},{_capped},{sharp:F1},{at}"));   // (round forty added the heading, the drawn body's length over its own, and how many points the bed lifted last frame: the stretch and the swim-through, in numbers; forty-one the sharpest joint of the DRAWN spine in degrees and its index: the head's own path is not the body's once the neck bends, so a corner is measured on the picture)
+            MotionLog(FormattableString.Invariant($"F,{_clock:F3},{_doing},{_phase},{_x:F1},{_y:F1},{_zHead:F3},{_zTarget:F2},{_speed:F1},{HuntNote},{(_blocked ? 1 : 0)},{bedZ:F3},{_heading:F3},{_drawnLen / _len:F3},{_capped},{sharp:F1},{at},{_logHere:F1},{_logNext:F1},{_logScore:F1},{_logBest:F2},{_logGl:F2}"));   // (round forty-seven: the step rule's own inputs, columns 17 to 21: room here, room at the next step, the feeler search's best score and turn, the walk-out's gradient length)   // (round forty added the heading, the drawn body's length over its own, and how many points the bed lifted last frame: the stretch and the swim-through, in numbers; forty-one the sharpest joint of the DRAWN spine in degrees and its index: the head's own path is not the body's once the neck bends, so a corner is measured on the picture)
         }
 
         // ---- A touch from another animal: startle ----
@@ -1550,10 +1571,18 @@ internal sealed class Snake : Body
                     }
                 if (bestScore <= 0)
                 {
-                    float gx = Clear(_x + 2, _y) - Clear(_x - 2, _y), gy = Clear(_x, _y + 2) - Clear(_x, _y - 2);
-                    if (MathF.Abs(gx) + MathF.Abs(gy) > 1e-4f) best = MathF.Atan2(gy, gx);
+                    // THE CREASE (round forty-seven, "a snake get hung up and just stop ... near a rock on the bottom right of the
+                    // shore"): the head at the rim of two bank things at once (an iris clump and a rock at the land corner), room
+                    // here 0.0. From a rim no heading can score above zero (the first feeler sample is a pixel away, no more room
+                    // than here, and the turn penalty is bigger than that), and midway between two things the four-pixel gradient
+                    // is ZERO by symmetry (both ways along the line between them lose the same room, both ways across it gain the
+                    // same), so the old fallback left the heading where it was and the head stood 78 s (seed 2), 113 s (seed 5).
+                    // The ring probe asks the step's own question of every heading and finds the way out between the two.
+                    float up = WayUp(_speed * dt);
+                    if (!float.IsNaN(up)) best = up;
                 }
             }
+            _logScore = bestScore; _logBest = Wrap(best - _heading);
             float urgency = Math.Clamp(1 - clearAhead / margin, 0, 1);
             turn += Wrap(best - _heading) * (1.5f + 3f * urgency);
             most = MathF.Max(most, 2.2f);
@@ -1597,6 +1626,7 @@ internal sealed class Snake : Body
         float nx = _x + MathF.Cos(_heading) * step, ny = _y + MathF.Sin(_heading) * step;
         float clearNext = Clear(nx, ny);
         float clearHere = Clear(_x, _y);
+        _logHere = clearHere; _logNext = clearNext; _logGl = 0;
         _blocked = !(clearNext > 0 || clearNext >= clearHere)    // never stuck: a step toward more room is always allowed
                    || (_zHead > 0.9f * FloorZ(nx, ny) && FloorZ(nx, ny) < FloorZ(_x, _y));   // and never into a bed too shallow for its depth (a dive turns at a hill; a step toward deeper water is always allowed)
         if (clearHere < 0 && !(_doing is Doing.Strike or Doing.Swallow or Doing.Stalk or Doing.Miss) && !(_doing == Doing.Bask && _phase >= 1))
@@ -1605,17 +1635,19 @@ internal sealed class Snake : Body
             // out, uphill on its own clearance, the goal's pull set aside until it is clear. With the pull still turning the head
             // back toward the rock every frame it jittered two pixels in a pocket between two stones for nineteen minutes.
             float gx = Clear(_x + 2, _y) - Clear(_x - 2, _y), gy = Clear(_x, _y + 2) - Clear(_x, _y - 2), gl = MathF.Sqrt(gx * gx + gy * gy);
-            if (gl > 1e-4f)
+            _logGl = gl;
+            // Midway inside two things the gradient is flat (see the crease above): then the ring probe names the way out.
+            float outA = gl > 1e-4f ? MathF.Atan2(gy, gx) : WayUp(step);
+            if (!float.IsNaN(outA))
             {
                 // The heading TURNS toward the way out, at most 4 radians a second, instead of being set to it: inside two
                 // things at once (the picture's edge wall and a bank rock) the way out flips between "up" and "right" from
                 // one frame to the next, as whichever is deeper wins, and a heading set outright shook the head 10 pixels a
                 // frame for 21 seconds. Eased, it settles between the two, which clears both.
-                float outA = MathF.Atan2(gy, gx);
                 _heading = Wrap(_heading + Math.Clamp(Wrap(outA - _heading), -4f * dt, 4f * dt));
                 float ex = _x + MathF.Cos(_heading) * step, ey = _y + MathF.Sin(_heading) * step;
                 if (Clear(ex, ey) >= clearHere) { nx = ex; ny = ey; }
-                else { nx = _x + gx / gl * step; ny = _y + gy / gl * step; }
+                else { nx = _x + MathF.Cos(outA) * step; ny = _y + MathF.Sin(outA) * step; }
                 _blocked = false;
             }
         }
