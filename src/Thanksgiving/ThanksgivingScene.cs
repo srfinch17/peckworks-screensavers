@@ -48,6 +48,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly Sprite[] _goose;              // one per wing position, facing right (mirror stamps the left-facing one)
     private readonly float _gs;                    // the goose's size unit (its body length), in pixels
     private readonly int _geese;
+    private readonly TurkeyFlock _flock;           // the wild turkeys that live in the field
     private readonly int _geeseDir;                // +1 the V flies right, -1 left
     private readonly float[] _flapPhase;           // each goose's own place in the flap, so they are not all in step
     private readonly Sprite[] _smoke;              // four puff sizes, small to big
@@ -109,6 +110,9 @@ internal sealed class ThanksgivingScene : IScreensaverScene
 
         // ---- The happenings: hand the director the cast list and how often to deal ----
         _happenings = new HappeningDirector(ThanksgivingHappenings.Cast(_scenery), _rng, settings.SurprisePercent / 100f);
+
+        // ---- The flock: wild turkeys living in the field (after the director, so its dice are untouched) ----
+        _flock = new TurkeyFlock(_scenery, settings.TurkeyCount, _rng);
     }
 
     // ==================================================================
@@ -253,6 +257,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         float dt = (float)elapsedSeconds;
         _time += dt;
         _leaves.Update(dt);
+        _flock.Update(dt);
         _happenings.Update(elapsedSeconds);
     }
 
@@ -274,6 +279,11 @@ internal sealed class ThanksgivingScene : IScreensaverScene
 
         // 4. The geese, behind everything that is not sky (in practice, the corner branches).
         DrawGeese(fb, leadX, leadY);
+
+        // 4b. The turkeys in the field, through the field stencil: behind the
+        //     scarecrow, the fence and the near ground, in front of the hills
+        //     and anything on the far lane (the tractor is a layer 0 happening).
+        _flock.Draw(fb);
 
         // 5. The windows: lamplight that wanders a little, never off. Two
         //    waves of different speeds added together make the brightness

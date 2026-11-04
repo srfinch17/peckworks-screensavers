@@ -198,20 +198,30 @@ internal sealed class Turkey : Happening
     /// how far the head is thrown, and "shake" a tremble on the fan in degrees.
     /// </summary>
     private Sprite Page(bool mirror, float phase, float walk, float fan, float gobble, float shake) =>
-        Sprite.Paint(_w, _h, g =>
+        PaintPage(_k, _w, _h, _ox, _by, mirror, phase, walk, fan, gobble, shake, 0f);
+
+    /// <summary>
+    /// Paints one page of a turkey onto a sheet "w" by "h" pixels, with the
+    /// middle of the body at "ox" across and the ground line "by" down, "k"
+    /// pixels to the turkey-length unit. Shared with the flock that lives in
+    /// the field (TurkeyFlock.cs), which adds "peck": 0 head up, 1 beak on
+    /// the ground.
+    /// </summary>
+    internal static Sprite PaintPage(float k, int w, int h, int ox, int by, bool mirror, float phase, float walk, float fan, float gobble, float shake, float peck) =>
+        Sprite.Paint(w, h, g =>
         {
             // Everything below is drawn in turkey-length units: x runs along the
             // turkey (0 = the middle of the body, beak at about +0.5), y runs UP
             // from the ground. These lines turn those into pixels.
-            if (mirror) { g.TranslateTransform(_w, 0); g.ScaleTransform(-1, 1); }
-            g.TranslateTransform(_ox, _by);
-            g.ScaleTransform(_k, -_k);
-            Turkey_(g, phase, walk, fan, gobble, shake);
+            if (mirror) { g.TranslateTransform(w, 0); g.ScaleTransform(-1, 1); }
+            g.TranslateTransform(ox, by);
+            g.ScaleTransform(k, -k);
+            Turkey_(g, phase, walk, fan, gobble, shake, peck);
         });
 
     private static PointF P(float x, float y) => new(x, y);
 
-    private static void Turkey_(Graphics g, float phase, float walk, float fan, float gobble, float shake)
+    private static void Turkey_(Graphics g, float phase, float walk, float fan, float gobble, float shake, float peck)
     {
         void Blob(PointF[] pts, Color c, float tension = 0.5f)
         {
@@ -320,7 +330,8 @@ internal sealed class Turkey : Happening
         // forward and down.
         float bobX = 0.045f * MathF.Sin(2 * phase) * walk;
         PointF neckBase = P(0.26f, 0.50f + bob);
-        PointF head = P(0.40f + bobX - 0.10f * fan + 0.16f * gobble, 0.76f - 0.02f * fan - 0.10f * gobble);
+        // Pecking: the head swings down and forward until the beak is at the ground.
+        PointF head = P(0.40f + bobX - 0.10f * fan + 0.16f * gobble + 0.12f * peck, 0.76f - 0.02f * fan - 0.10f * gobble - 0.62f * peck);
         PointF neckMid = P(neckBase.X + (head.X - neckBase.X) * 0.4f - 0.04f * fan, neckBase.Y + (head.Y - neckBase.Y) * 0.55f);
         using (var neck = new Pen(HeadBlue, 0.075f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
             g.DrawLines(neck, [neckBase, neckMid, head]);

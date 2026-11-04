@@ -173,6 +173,7 @@ a fed koi was as hungry as before and went straight back for the next.
     ThanksgivingScene.cs           backdrop + the geese + the smoke + the window lamplight + the scarf + the shared engine dropping leaves
     ThanksgivingPainter.cs         paints the harvest dusk, the moon, the farmhouse and barn, the field, the fence, the scarecrow, the cornucopia, the pumpkins, the maples
     ThanksgivingSettings.cs        declares its knobs
+    TurkeyFlock.cs                 the wild turkeys that live in the field: four doings and a timer each, the Turkey happening's pictures
     Happenings/                    twenty small random events (a turkey, a tractor, a raccoon), one class per file
 
   CabinByStream/                   a cottage in a flowery meadow at dusk, aiming at a photograph's look

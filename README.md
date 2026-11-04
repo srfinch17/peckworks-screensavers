@@ -581,6 +581,8 @@ pumpkin patch, maples in full colour, and oak branches with the year's last leav
 
 - A V of Canada geese crosses the sky, each goose on its own wingbeat, passing behind the corner
   branches.
+- A flock of wild turkeys lives in the field behind the fence: they peck at the stubble, wander a
+  few steps, stand and look about, and the tom fans his tail now and then.
 - Smoke drifts from the chimney, the windows' lamplight wanders, and the scarecrow's red scarf streams
   in the breeze.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the maples and the
@@ -595,8 +597,8 @@ pumpkin patch, maples in full colour, and oak branches with the year's last leav
   | The near ground | A wild turkey struts through, stops, fans its tail, gobbles and struts on. A squirrel bounds along the fence rail and sits up with an acorn. A crow lands on the scarecrow and caws. A raccoon raids the cornucopia and makes off with an apple. A pheasant bursts out of the corn shock. The scarecrow blinks and winks. |
   | The props | An apple rolls out of the cornucopia. Acorns patter down from the oak branch. A cardinal lands on a twig and sings. |
 
-Settings: number of leaves, fall speed, breeze, leaf size, number of geese, and how often a
-surprise happens (0 turns them off).
+Settings: number of leaves, fall speed, breeze, leaf size, number of geese, number of turkeys in
+the field, and how often a surprise happens (0 turns them off).
 
 Halloween, Christmas and Thanksgiving are built from the same shared pieces as the Sakura pair (the
 falling engine, the ground, trees, hills and branches), plus one new one: sprites, small pictures
