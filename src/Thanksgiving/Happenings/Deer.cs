@@ -132,8 +132,8 @@ internal sealed class Deer : Happening
             g.FillPolygon(brush, [P(0.14f, 0.52f), P(0.34f, 0.60f), P(NeckX + 0.05f, NeckY + 0.04f), P(0.16f, 0.72f)]);
 
             // Four legs: far hind, far fore, near hind, near fore (a lateral walk: each a quarter cycle after the last).
-            (float hip, float offset, float knee)[] legs = [(-0.25f, 0.50f, -0.04f), (0.25f, 0.75f, 0.03f), (-0.25f, 0f, -0.04f), (0.25f, 0.25f, 0.03f)];
-            float legW = MathF.Max(0.058f, 1.9f / h);
+            (float hip, float offset, float knee)[] legs = [(-0.25f, 0.50f, -0.06f), (0.25f, 0.75f, 0.045f), (-0.25f, 0f, -0.06f), (0.25f, 0.25f, 0.045f)];   // the hock back, the knee forward, a little more than before so the joints read
+            float legW = MathF.Max(0.085f, 2.6f / h);                                   // a deer leg is slim but not a wire: 0.058 read as stilts
             foreach (var (hipX, offset, knee) in legs)
             {
                 float ph = (pose / (float)Walk + offset) % 1f;
