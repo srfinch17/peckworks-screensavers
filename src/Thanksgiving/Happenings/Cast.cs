@@ -22,7 +22,6 @@ internal static class ThanksgivingHappenings
         (nameof(Fireworks), () => new Fireworks(s)),
         (nameof(LeafGust), () => new LeafGust(s)),
         (nameof(Hawk), () => new Hawk(s)),
-        (nameof(ParadeBalloon), () => new ParadeBalloon(s)),
         // ---- the farm and the field ----
         (nameof(PorchLight), () => new PorchLight(s)),
         (nameof(WindowSilhouettes), () => new WindowSilhouettes(s)),

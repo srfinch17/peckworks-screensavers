@@ -175,7 +175,7 @@ a fed koi was as hungry as before and went straight back for the next.
     ThanksgivingSettings.cs        declares its knobs
     TurkeyFlock.cs                 the wild turkeys that live in the field: four doings and a timer each, the Turkey happening's pictures
     DeerHerd.cs                    the doe and fawn at the far side of the field: a body flip-book and a head flip-book stamped together, mirrored to face left
-    Happenings/                    twenty small random events (a turkey, a tractor, a raccoon), one class per file
+    Happenings/                    nineteen small random events (a turkey, a tractor, a raccoon), one class per file
 
   CabinByStream/                   a cottage in a flowery meadow at dusk, aiming at a photograph's look
     Program.cs                     Main(), plus the definition
@@ -444,7 +444,7 @@ well above the pines, so in practice it is only the corner branches that cover h
 ghost rising from a grave, a spider spinning a web, a snowman building itself. Think of a cuckoo clock: each happening is one bird behind
 a little door, and a **director** (`Core/Happenings.cs`) is the clockwork that opens one door
 every few seconds. The director shuffles the happenings like a deck of cards and deals from it,
-so you see them all before any repeats. Christmas, Thanksgiving, Sakura and Sakura Dusk each have their own deck of twenty, none repeated.
+so you see them all before any repeats. Christmas, Sakura and Sakura Dusk each have their own deck of twenty, Thanksgiving nineteen, none repeated.
 Thanksgiving is the third saver in this mould (built 2026-11-04), and the quickest: the engine, the recipe and the two
 sister sets already existed, so the work was the backdrop, the facts, five live actors and the cast.
 

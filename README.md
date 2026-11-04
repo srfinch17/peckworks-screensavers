@@ -589,11 +589,11 @@ pumpkin patch, maples in full colour, and oak branches with the year's last leav
   in the breeze.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the maples and the
   corner branches.
-- Twenty small **happenings** come and go at random, as in Halloween and Christmas:
+- Nineteen small **happenings** come and go at random, as in Halloween and Christmas:
 
   | Where | What happens |
   |-------|--------------|
-  | The sky | A shooting star. Stars join up into a turkey, a cornucopia, a maple leaf, a slice of pie or an acorn. Harvest fireworks. A gust whirls a swirl of leaves across. A hawk soars in slow circles. A giant parade balloon turkey drifts by. |
+  | The sky | A shooting star. Stars join up into a turkey, a cornucopia, a maple leaf, a slice of pie or an acorn. Harvest fireworks. A gust whirls a swirl of leaves across. A hawk soars in slow circles. |
   | The farm | The porch light comes on and moths gather. Silhouettes pass the farmhouse windows, one carrying the bird to the table. A barn owl flies out of the loft. |
   | The field | An old tractor with a lit headlamp pulls a hay wagon along the lane. A doe and her fawn come up over the far ridge. |
   | The near ground | A wild turkey struts through, stops, fans its tail, gobbles and struts on. A squirrel bounds along the fence rail and sits up with an acorn. A crow lands on the scarecrow and caws. A raccoon raids the cornucopia and makes off with an apple. A pheasant bursts out of the corn shock. The scarecrow blinks and winks. |
