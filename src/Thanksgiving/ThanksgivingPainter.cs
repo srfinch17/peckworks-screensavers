@@ -10,6 +10,7 @@ internal sealed class ThanksgivingScenery
 {
     public required uint[] Pixels { get; init; }                     // the painted picture, same layout as a FrameBuffer
     public required List<PointF> LeafSpots { get; init; }            // places in the maples and the corner branches that leaves can drop from
+    public required List<PointF> Stars { get; init; }                // the brighter stars, for the scene to twinkle
 
     // ---- Facts for the happenings (src/Thanksgiving/Happenings): where things are, so a turkey
     //      can walk on the real ground and a crow can land on the real scarecrow. ----
@@ -126,7 +127,7 @@ internal static class ThanksgivingPainter
         float u = Math.Min(h, w * 9f / 16f);
 
         // ---- The paint order, back to front. Keep this list explicit. ----
-        PaintSky(g, w, h, horizon, u, rng);
+        List<PointF> stars = PaintSky(g, w, h, horizon, u, rng);
         var moon = (At: new PointF(w * 0.74f, h * 0.26f), R: u * 0.075f);
         PaintMoon(g, moon.At.X, moon.At.Y, moon.R);
         PaintClouds(g, w, h, u, rng);
@@ -205,7 +206,7 @@ internal static class ThanksgivingPainter
         float barnW = u * 0.13f, barnH = u * 0.06f, barnTop = barnFoot.Y - barnH;
         return new ThanksgivingScenery
         {
-            Pixels = pixels, LeafSpots = leafSpots,
+            Pixels = pixels, LeafSpots = leafSpots, Stars = stars,
             Width = w, Height = h, U = u, Horizon = horizon, Moon = moon,
             OpenSky = Brushwork.Unchanged(skyOnly, pixels),
             OpenFromFarm = Brushwork.Unchanged(upToFarm, pixels),
@@ -242,8 +243,9 @@ internal static class ThanksgivingPainter
     /// band of gold right at the horizon where the sun has just gone down.
     /// A few faint stars are out in the darker top third.
     /// </summary>
-    private static void PaintSky(Graphics g, int w, int h, float horizon, float u, Random rng)
+    private static List<PointF> PaintSky(Graphics g, int w, int h, float horizon, float u, Random rng)
     {
+        var stars = new List<PointF>();
         using (var sky = new LinearGradientBrush(new PointF(0, 0), new PointF(0, horizon + 1), Color.Black, Color.Black)
         {
             InterpolationColors = new ColorBlend
@@ -260,7 +262,9 @@ internal static class ThanksgivingPainter
             float r = Math.Max(0.6f, u * (0.0008f + 0.0012f * (float)rng.NextDouble()));
             using var star = new SolidBrush(Color.FromArgb(50 + rng.Next(120), 255, 240, 220));
             g.FillEllipse(star, x - r, y - r, r * 2, r * 2);
+            if (i % 2 == 0) stars.Add(new PointF(x, y));                 // every other star twinkles (the scene stamps a glow on it)
         }
+        return stars;
     }
 
     /// <summary>

@@ -54,6 +54,8 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly float[] _flapPhase;           // each goose's own place in the flap, so they are not all in step
     private readonly Sprite[] _smoke;              // four puff sizes, small to big
     private readonly Sprite _windowGlow, _loftGlow;
+    private readonly Sprite _starGlow;             // the twinkle stamped on the brighter stars
+    private readonly float[] _starPhase, _starSpeed;
     private readonly float[] _windowPhase;
     private readonly Sprite[] _scarf;
     private readonly HappeningDirector _happenings;
@@ -102,6 +104,15 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _windowGlow = Sprite.Glow(Math.Max(3, (int)(_u * 0.022f)), Color.FromArgb(255, 190, 90));
         _loftGlow = Sprite.Glow(Math.Max(3, (int)(_u * 0.020f)), Color.FromArgb(255, 180, 80));
         _windowPhase = new float[_scenery.FarmWindows.Length + 1];
+        // ---- The stars: a small warm glow each, on its own slow rhythm, like the Christmas bulbs ----
+        _starGlow = Sprite.Glow(Math.Max(2, (int)(_u * 0.0065f)), Color.FromArgb(255, 244, 220));
+        _starPhase = new float[_scenery.Stars.Count];
+        _starSpeed = new float[_scenery.Stars.Count];
+        for (int i = 0; i < _starPhase.Length; i++)
+        {
+            _starPhase[i] = (float)(_rng.NextDouble() * Math.PI * 2);
+            _starSpeed[i] = 0.6f + 1.8f * (float)_rng.NextDouble();
+        }
         for (int i = 0; i < _windowPhase.Length; i++) _windowPhase[i] = (float)(_rng.NextDouble() * 20);
 
         // ---- The scarf: 24 pages of a ribbon streaming in the breeze ----
@@ -289,6 +300,17 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         //     The deer first: they stand nearer the lane than the turkeys wander.
         _herd.Draw(fb);
         _flock.Draw(fb);
+
+        // 4c. The stars twinkle: sin() swings between -1 and 1; the arithmetic
+        //     turns that into "between nothing and full", so a star fades right
+        //     out and back on its own rhythm, through the sky stencil so a
+        //     star behind a branch's leaf never shines through it.
+        for (int i = 0; i < _starPhase.Length; i++)
+        {
+            float bright = 0.5f + 0.5f * (float)Math.Sin(_time * _starSpeed[i] + _starPhase[i]);
+            PointF at = _scenery.Stars[i];
+            _starGlow.DrawCentered(fb, at.X, at.Y, bright * bright * 0.9f, _scenery.OpenSky);
+        }
 
         // 5. The windows: lamplight that wanders a little, never off. Two
         //    waves of different speeds added together make the brightness
