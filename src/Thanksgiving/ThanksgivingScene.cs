@@ -121,69 +121,91 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     /// length in pixels; everything below is in fractions of s, with (0, 0)
     /// at the middle of the body, x along the goose and y DOWN the screen.
     ///
-    /// The far wing goes down first, then the body, neck and head, then the
-    /// near wing on top. A wing is two bones: the upper arm from the shoulder
-    /// to the wrist, and the hand from the wrist to the tip, which lags a
-    /// little behind the upper arm the way a real wing bends on the
-    /// downstroke. Each bone is a thick line with a feathered trailing edge
-    /// (a filled shape behind the bone line).
+    /// The shapes are smooth closed curves, not ovals and sticks (the first
+    /// version read as a frying pan with a black handle): a body that is deep
+    /// at the breast and tapers to a pointed tail, a long black neck held
+    /// straight out, the black head with the white chinstrap, and two broad
+    /// wings. A wing is one closed curve: shoulder, wrist, tip, then back
+    /// along the trailing edge with four fingered primaries at the tip. It
+    /// swings about the shoulder with the beat; the hand lags the upper arm a
+    /// little, as a real wing bends on the downstroke, and the wing's visible
+    /// width is widest at the top and bottom of the beat and narrowest when
+    /// level, which is how a side view of a flapping wing foreshortens.
     /// </summary>
     private static Sprite PaintGoose(float s, float phase)
     {
-        int w = (int)(s * 1.5f) + 4, h = (int)(s * 1.9f) + 4;
-        float cx = w * 0.46f, cy = h * 0.5f;
+        int w = (int)(s * 1.7f) + 4, h = (int)(s * 2.5f) + 4;
+        float cx = w * 0.45f, cy = h * 0.5f;
         return Sprite.Paint(w, h, g =>
         {
             PointF P(float ax, float ay) => new(cx + s * ax, cy + s * ay);
-            Color body = Color.FromArgb(96, 84, 70), belly = Color.FromArgb(190, 178, 160), black = Color.FromArgb(28, 24, 24);
-            Color wingFar = Color.FromArgb(70, 60, 50), wingNear = Color.FromArgb(104, 90, 74);
+            Color body = Color.FromArgb(118, 102, 84), belly = Color.FromArgb(222, 212, 194), black = Color.FromArgb(26, 22, 22);
+            Color wingFar = Color.FromArgb(84, 72, 60), wingNear = Color.FromArgb(126, 110, 90), primaries = Color.FromArgb(52, 44, 38);
 
-            // The flap: the upper arm swings about the shoulder; the hand lags a quarter beat behind it.
-            float up = 0.95f * MathF.Sin(phase);                       // +1 wings up, -1 wings down (y is down the screen, so a NEGATIVE y is up)
-            float hand = 0.95f * MathF.Sin(phase - 0.7f);
+            float up = MathF.Sin(phase);                                   // +1 wings up, -1 wings down
+            float hand = MathF.Sin(phase - 0.6f);                          // the hand lags the arm
 
-            void Wing(Color c, float shoulderY)
+            void Wing(Color c, float sx, float sy, float scale)
             {
-                // The leading edge: shoulder to wrist (the upper arm), wrist to
-                // tip (the hand). The trailing edge runs back from the tip to the
-                // body, set off from the leading edge by an amount that grows
-                // with how far the wing is from level: seen from the side a
-                // level wing is edge-on and thin, a raised or lowered one shows
-                // its whole surface.
-                PointF shoulder = P(0.05f, shoulderY);
-                PointF wrist = P(0.0f, shoulderY - 0.40f * up);
-                PointF tip = P(-0.12f, shoulderY - 0.40f * up - 0.38f * hand);
-                PointF trailTip = new(tip.X - s * 0.08f, tip.Y + s * 0.10f * hand);
-                PointF trailWrist = new(wrist.X - s * 0.22f, wrist.Y + s * 0.18f * up);
-                PointF root = P(-0.30f, shoulderY + 0.03f);
+                PointF shoulder = P(sx, sy);
+                PointF wrist = P(sx - 0.10f, sy - 0.50f * up * scale);
+                PointF tip = P(sx - 0.30f, sy - 0.50f * up * scale - 0.60f * hand * scale);
+                // The trailing edge is set back from the leading edge by the wing's chord, which
+                // shows most when the wing is raised or lowered and least when it is level.
+                float chord = 0.16f + 0.22f * MathF.Abs(up);
+                PointF trailTip = new(tip.X - s * 0.10f, tip.Y + s * chord * 0.5f * MathF.Sign(up + 0.001f));
+                PointF trailWrist = new(wrist.X - s * 0.30f, wrist.Y + s * chord * MathF.Sign(up + 0.001f));
+                PointF root = P(sx - 0.42f, sy + 0.06f);
                 using var feather = new SolidBrush(c);
                 using var path = new GraphicsPath();
-                path.AddLines([shoulder, wrist, tip, trailTip, trailWrist, root]);
-                path.CloseFigure();
+                path.AddClosedCurve([shoulder, wrist, tip, trailTip, trailWrist, root], 0.35f);
                 g.FillPath(feather, path);
-                using var edge = new Pen(c, Math.Max(1f, s * 0.06f)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-                g.DrawLines(edge, [shoulder, wrist, tip]);
+                // Four primaries fanning from the wrist past the tip: the fingers of the wing.
+                using var quill = new Pen(primaries, Math.Max(1f, s * 0.05f)) { EndCap = LineCap.Round };
+                for (int i = 0; i < 4; i++)
+                {
+                    float k = i / 3f;
+                    PointF from = new(wrist.X + (trailWrist.X - wrist.X) * k * 0.5f, wrist.Y + (trailWrist.Y - wrist.Y) * k * 0.5f);
+                    PointF to = new(tip.X + (trailTip.X - tip.X) * k - s * 0.04f * k, tip.Y + (trailTip.Y - tip.Y) * k);
+                    g.DrawLine(quill, from, to);
+                }
             }
 
-            Wing(wingFar, -0.02f);                                        // the far wing, behind the body
+            Wing(wingFar, 0.14f, -0.02f, 0.92f);                            // the far wing, a little behind and smaller
+            // The body: deep at the breast, tapering to the tail point.
             using (var b = new SolidBrush(body))
-                g.FillEllipse(b, P(-0.45f, -0.14f).X, P(-0.45f, -0.14f).Y, s * 0.90f, s * 0.28f);
+            using (var path = new GraphicsPath())
+            {
+                path.AddClosedCurve([P(0.40f, -0.02f), P(0.22f, -0.15f), P(-0.10f, -0.16f), P(-0.40f, -0.10f), P(-0.72f, -0.02f),
+                                     P(-0.40f, 0.08f), P(-0.08f, 0.16f), P(0.24f, 0.14f)], 0.4f);
+                g.FillPath(b, path);
+            }
             using (var pale = new SolidBrush(belly))
-                g.FillEllipse(pale, P(-0.40f, -0.02f).X, P(-0.40f, -0.02f).Y, s * 0.76f, s * 0.16f);
+            using (var path = new GraphicsPath())
+            {
+                path.AddClosedCurve([P(0.34f, 0.02f), P(0.10f, 0.02f), P(-0.20f, 0.00f), P(-0.40f, 0.03f), P(-0.20f, 0.12f), P(0.10f, 0.15f), P(0.30f, 0.10f)], 0.4f);
+                g.FillPath(pale, path);
+            }
             using (var tail = new SolidBrush(black))
-                g.FillPolygon(tail, [P(-0.44f, -0.06f), P(-0.62f, -0.10f), P(-0.62f, 0.04f), P(-0.44f, 0.08f)]);
-            using (var rump = new SolidBrush(Color.FromArgb(236, 232, 224)))
-                g.FillEllipse(rump, P(-0.52f, -0.06f).X, P(-0.52f, -0.06f).Y, s * 0.12f, s * 0.10f);
-            // The neck: stretched straight out in front, as geese fly, with the head at the end.
-            using (var neck = new Pen(black, Math.Max(1.5f, s * 0.10f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                g.DrawLine(neck, P(0.38f, -0.02f), P(0.72f, -0.06f));
+                g.FillPolygon(tail, [P(-0.50f, -0.08f), P(-0.74f, -0.03f), P(-0.50f, 0.06f)]);
+            using (var rump = new SolidBrush(Color.FromArgb(240, 236, 228)))
+                g.FillEllipse(rump, P(-0.56f, -0.07f).X, P(-0.56f, -0.07f).Y, s * 0.12f, s * 0.11f);   // the white crescent above the tail
+            // The neck: a long black curve held out in front, the head at its end.
+            using (var neck = new Pen(black, Math.Max(1.5f, s * 0.11f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                g.DrawBezier(neck, P(0.32f, -0.04f), P(0.50f, -0.12f), P(0.60f, -0.16f), P(0.74f, -0.18f));
             using (var head = new SolidBrush(black))
-                g.FillEllipse(head, P(0.66f, -0.13f).X, P(0.66f, -0.13f).Y, s * 0.18f, s * 0.14f);
-            using (var chin = new SolidBrush(Color.FromArgb(240, 238, 232)))                // the white chin strap
-                g.FillEllipse(chin, P(0.70f, -0.09f).X, P(0.70f, -0.09f).Y, s * 0.09f, s * 0.07f);
+                g.FillEllipse(head, P(0.64f, -0.27f).X, P(0.64f, -0.27f).Y, s * 0.24f, s * 0.18f);
+            using (var chin = new SolidBrush(Color.FromArgb(244, 242, 236)))                     // the white chinstrap, under the eye round the throat
+            using (var path = new GraphicsPath())
+            {
+                path.AddClosedCurve([P(0.70f, -0.22f), P(0.80f, -0.19f), P(0.80f, -0.12f), P(0.72f, -0.10f), P(0.66f, -0.14f)], 0.4f);
+                g.FillPath(chin, path);
+            }
             using (var bill = new SolidBrush(black))
-                g.FillPolygon(bill, [P(0.82f, -0.08f), P(0.94f, -0.05f), P(0.82f, -0.03f)]);
-            Wing(wingNear, -0.06f);                                       // the near wing, over the body
+                g.FillPolygon(bill, [P(0.86f, -0.22f), P(1.00f, -0.17f), P(0.86f, -0.13f)]);
+            using (var eye = new SolidBrush(Color.FromArgb(150, 150, 140)))
+                g.FillEllipse(eye, P(0.76f, -0.22f).X - s * 0.02f, P(0.76f, -0.22f).Y - s * 0.02f, s * 0.04f, s * 0.04f);
+            Wing(wingNear, 0.10f, -0.06f, 1f);                              // the near wing, over the body
         });
     }
 

@@ -103,48 +103,60 @@ internal sealed class Constellation : Happening
 
     // ---- The five pictures (x to the right, y DOWN, roughly -1 to +1) ----
 
-    /// <summary>A turkey facing right: a zigzag fan of five feathers rising behind, a round body, a neck, head and beak, two legs.</summary>
+    /// <summary>
+    /// A turkey facing right, the classic cut-out: a wheel of seven separate
+    /// feathers fanned behind a round body (each feather a thin wedge from a
+    /// base near the body out to a starred tip), a small round head on a neck,
+    /// a beak, a wattle hanging under it, and two legs with toes. The first
+    /// version was one zigzag of tips and read as a starburst, not a bird.
+    /// </summary>
     private static Pic BuildTurkey()
     {
         var p = new Pic();
-        // The body is an oval centred at (0, 0.5). The fan goes from its left side up and round to its top.
-        int bl = p.Add(-0.5f, 0.5f, true);
-        int bt = p.Add(0.26f, 0.12f, true);
-        var fan = new List<int> { bl };
-        float fx = -0.12f, fy = 0.3f;
-        float[] tipAng = [-196f, -164f, -132f, -100f, -68f];
-        for (int i = 0; i < tipAng.Length; i++)
+        float rx = 0f, ry = 0.55f;                                          // where the feathers grow from, inside the body
+        const int feathers = 7;
+        for (int i = 0; i < feathers; i++)
         {
-            if (i > 0)
-            {
-                float mid = (tipAng[i - 1] + tipAng[i]) / 2 * MathF.PI / 180f;
-                fan.Add(p.Add(fx + MathF.Cos(mid) * 0.64f, fy + MathF.Sin(mid) * 0.64f, false));
-            }
-            float a = tipAng[i] * MathF.PI / 180f;
-            fan.Add(p.Add(fx + MathF.Cos(a) * 1.0f, fy + MathF.Sin(a) * 1.0f, true));
+            // Angles run from pointing left-down round over the top to right-down (y is down, so up is -90).
+            float a = (-172f + 164f * i / (feathers - 1)) * MathF.PI / 180f;
+            float half = 9f * MathF.PI / 180f;                              // half the feather's spread at its tip
+            int baseL = p.Add(rx + MathF.Cos(a - half) * 0.50f, ry + MathF.Sin(a - half) * 0.50f, false);
+            int tipL = p.Add(rx + MathF.Cos(a - half) * 1.0f, ry + MathF.Sin(a - half) * 1.0f, false);
+            int tip = p.Add(rx + MathF.Cos(a) * 1.06f, ry + MathF.Sin(a) * 1.06f, true);
+            int tipR = p.Add(rx + MathF.Cos(a + half) * 1.0f, ry + MathF.Sin(a + half) * 1.0f, false);
+            int baseR = p.Add(rx + MathF.Cos(a + half) * 0.50f, ry + MathF.Sin(a + half) * 0.50f, false);
+            p.Chain([baseL, tipL, tip, tipR, baseR], true);
         }
-        fan.Add(bt);
-        p.Chain(fan.ToArray(), false);
-        // The body: the lower right of the oval, from the fan's top foot round the bottom to its left foot.
-        int prev = bt;
-        for (int i = 1; i <= 6; i++)
+        // The body: a round oval in front of the fan's roots, every third point a star.
+        var body = new int[10];
+        for (int i = 0; i < body.Length; i++)
         {
-            float a = -1.0f + (MathF.PI + 1.0f + 0.35f) * i / 7f;         // from up-right, clockwise round the bottom
-            int id = p.Add(MathF.Cos(a) * 0.52f, 0.5f + MathF.Sin(a) * 0.46f, true);
-            p.Join(prev, id); prev = id;
+            float a = MathF.Tau * i / body.Length;
+            body[i] = p.Add(0.08f + MathF.Cos(a) * 0.42f, 0.62f + MathF.Sin(a) * 0.36f, i % 3 == 0);
         }
-        p.Join(prev, bl);
-        // Neck and head (a star), beak (a star) and a wattle.
-        int neckLow = p.Add(0.46f, 0.44f, false);
-        int head = p.Add(0.74f, 0.1f, true);
-        int beak = p.Add(0.96f, 0.18f, true);
-        int wattle = p.Add(0.80f, 0.3f, true);
-        p.Join(bt, head); p.Join(neckLow, head); p.Join(head, beak); p.Join(beak, wattle);
-        // Two legs.
-        foreach (float lx in new[] { -0.14f, 0.16f })
+        p.Chain(body, true);
+        // The neck rises from the body's upper right to a small round head.
+        int neckA = p.Add(0.30f, 0.30f, false), neckB = p.Add(0.42f, 0.34f, false);
+        var head = new int[6];
+        for (int i = 0; i < head.Length; i++)
         {
-            int top = p.Add(lx, 0.94f, false), foot = p.Add(lx + 0.05f, 1.22f, true);
-            p.Join(top, foot);
+            float a = MathF.Tau * i / head.Length;
+            head[i] = p.Add(0.52f + MathF.Cos(a) * 0.13f, 0.08f + MathF.Sin(a) * 0.13f, i % 2 == 0);
+        }
+        p.Chain(head, true);
+        p.Join(neckA, head[4]); p.Join(neckB, head[5]);                     // two neck lines up to the head's underside
+        // The beak, pointing right, and the wattle hanging under it.
+        int beakTop = p.Add(0.65f, 0.04f, false), beakTip = p.Add(0.80f, 0.10f, true), beakLow = p.Add(0.65f, 0.14f, false);
+        p.Join(beakTop, beakTip); p.Join(beakTip, beakLow);
+        int wattle = p.Add(0.62f, 0.30f, true);
+        p.Join(beakLow, wattle);
+        // Two legs down from the body, each with two toes.
+        foreach (float lx in new[] { -0.04f, 0.22f })
+        {
+            int hip = p.Add(lx, 0.96f, false), foot = p.Add(lx + 0.02f, 1.22f, true);
+            p.Join(hip, foot);
+            p.Join(foot, p.Add(lx + 0.14f, 1.24f, false));
+            p.Join(foot, p.Add(lx - 0.08f, 1.26f, false));
         }
         return p;
     }

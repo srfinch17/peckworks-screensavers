@@ -584,137 +584,176 @@ internal static class ThanksgivingPainter
 
     /// <summary>
     /// A cornucopia lying on the ground with its mouth to the right, spilling
-    /// its harvest: a woven horn (a curved brown shape with lighter weave
-    /// lines across it, tapering to a curled tip at the left), then apples,
-    /// a pear, a bunch of grapes, an ear of corn and a small pumpkin tumbling
+    /// its harvest. The horn is a chain of rings: an ellipse every step along
+    /// a curved spine from the curled tip at the upper left to the wide mouth,
+    /// each ring a little bigger than the last and alternating two tones, so
+    /// the overlap reads as a woven, ridged horn (the first version was one
+    /// filled blob with a grid on it, which read as a sack). Then apples, a
+    /// pear, a bunch of grapes, an ear of corn and a small pumpkin tumbling
     /// out of the mouth onto the grass.
     /// </summary>
     private static void PaintCornucopia(Graphics g, float mouthX, float mouthY, float len, float u)
     {
-        float r = len * 0.22f;   // the mouth's radius
-        // The horn: a smooth closed curve from the mouth back to a curled tip.
-        PointF[] horn = [
-            new PointF(mouthX, mouthY - r * 2), new PointF(mouthX - len * 0.35f, mouthY - r * 2.1f), new PointF(mouthX - len * 0.70f, mouthY - r * 1.6f),
-            new PointF(mouthX - len * 0.95f, mouthY - r * 1.9f), new PointF(mouthX - len * 1.02f, mouthY - r * 1.3f), new PointF(mouthX - len * 0.90f, mouthY - r * 1.1f),
-            new PointF(mouthX - len * 0.60f, mouthY - r * 0.2f), new PointF(mouthX - len * 0.30f, mouthY + r * 0.05f), new PointF(mouthX, mouthY)];
-        using (var path = new GraphicsPath())
+        float r = len * 0.26f;   // the mouth's radius
+        // A soft shadow under the horn.
+        using (var shadow = new SolidBrush(Color.FromArgb(60, 60, 30, 10)))
+            g.FillEllipse(shadow, mouthX - len * 1.0f, mouthY - r * 0.3f, len * 1.2f, r * 0.7f);
+
+        // The spine: t = 0 at the mouth, 1 at the tip. The horn runs left and curls up at the end.
+        PointF Spine(float t) => new(mouthX - len * 1.05f * t, mouthY - r * 1.0f - r * 0.3f * t - r * 1.9f * t * t * t);
+        float Radius(float t) => r * (1f - 0.82f * t);
+        Color deep = Color.FromArgb(118, 78, 42), lit = Color.FromArgb(176, 128, 72), rim = Color.FromArgb(206, 160, 98);
+        int rings = 22;
+        for (int i = rings; i >= 0; i--)                                     // tip first, so the mouth end lies on top
         {
-            path.AddClosedCurve(horn, 0.5f);
-            using var weave = new LinearGradientBrush(new PointF(0, mouthY - r * 2.2f), new PointF(0, mouthY), Color.FromArgb(176, 128, 72), Color.FromArgb(104, 70, 38));
-            g.FillPath(weave, path);
-            // The weave: thin pale lines following the horn's curve, clipped to it.
-            GraphicsState before = g.Save();
-            g.SetClip(path, CombineMode.Intersect);
-            using var strand = new Pen(Color.FromArgb(90, 224, 184, 120), Math.Max(1f, u * 0.0012f));
-            for (int i = 0; i < 9; i++)
-            {
-                float k = i / 8f;
-                float x = mouthX - len * 0.08f - len * 0.95f * k;
-                g.DrawBezier(strand, x, mouthY - r * 2.4f, x - len * 0.05f, mouthY - r * 1.5f, x + len * 0.03f, mouthY - r * 0.6f, x - len * 0.02f, mouthY + r * 0.2f);
-            }
-            for (int i = 0; i < 5; i++)
-            {
-                float k = i / 4f;
-                g.DrawBezier(strand, mouthX, mouthY - r * 2 * k, mouthX - len * 0.4f, mouthY - r * 2.1f * k - r * 0.1f, mouthX - len * 0.7f, mouthY - r * 1.8f * k, mouthX - len * 1.0f, mouthY - r * 1.6f * k - r * 0.3f);
-            }
-            g.Restore(before);
+            float t = i / (float)rings;
+            PointF c = Spine(t);
+            float rr = Radius(t);
+            using var fill = new SolidBrush(i % 2 == 0 ? lit : deep);
+            g.FillEllipse(fill, c.X - rr * 0.62f, c.Y - rr, rr * 1.24f, rr * 2);
+            using var edge = new Pen(rim, Math.Max(1f, u * 0.0012f));
+            g.DrawArc(edge, c.X - rr * 0.62f, c.Y - rr, rr * 1.24f, rr * 2, 250, 160);   // a lit rim on the upper left of each ring
         }
-        // The mouth's dark inside: an ellipse at the open end.
-        using (var inside = new SolidBrush(Color.FromArgb(58, 36, 22)))
-            g.FillEllipse(inside, mouthX - r * 0.6f, mouthY - r * 2, r * 1.2f, r * 2);
+        // The mouth: the dark inside with a lit lip.
+        PointF m = Spine(0);
+        using (var inside = new SolidBrush(Color.FromArgb(54, 32, 20)))
+            g.FillEllipse(inside, m.X - r * 0.55f, m.Y - r * 0.92f, r * 1.1f, r * 1.84f);
+        using (var lip = new Pen(rim, Math.Max(1.5f, u * 0.0025f)))
+            g.DrawEllipse(lip, m.X - r * 0.62f, m.Y - r, r * 1.24f, r * 2);
 
         // The spill. Every fruit is a circle or two with a highlight, scattered in front of and to the right of the mouth.
         void Fruit(float cx, float cy, float fr, Color c, Color hi)
         {
+            using var sh = new SolidBrush(Color.FromArgb(50, 60, 30, 10));
+            g.FillEllipse(sh, cx - fr, cy + fr * 0.6f, fr * 2.2f, fr * 0.6f);
             using var b = new SolidBrush(c);
             g.FillEllipse(b, cx - fr, cy - fr, fr * 2, fr * 2);
             using var h = new SolidBrush(hi);
             g.FillEllipse(h, cx - fr * 0.55f, cy - fr * 0.6f, fr * 0.5f, fr * 0.4f);
         }
         Color apple = Color.FromArgb(196, 40, 36), appleHi = Color.FromArgb(120, 255, 170, 150);
-        Fruit(mouthX + r * 0.3f, mouthY - r * 0.55f, r * 0.55f, apple, appleHi);
-        Fruit(mouthX + r * 1.3f, mouthY - r * 0.45f, r * 0.5f, Color.FromArgb(214, 150, 40), Color.FromArgb(120, 255, 230, 160));   // a golden apple
-        Fruit(mouthX + r * 2.3f, mouthY - r * 0.4f, r * 0.45f, apple, appleHi);
+        Fruit(mouthX + r * 0.3f, mouthY - r * 0.5f, r * 0.5f, apple, appleHi);
+        Fruit(mouthX + r * 1.2f, mouthY - r * 0.42f, r * 0.46f, Color.FromArgb(214, 150, 40), Color.FromArgb(120, 255, 230, 160));   // a golden apple
+        Fruit(mouthX + r * 2.1f, mouthY - r * 0.38f, r * 0.42f, apple, appleHi);
         // A pear: a small circle on a bigger one.
-        Fruit(mouthX + r * 0.9f, mouthY - r * 1.3f, r * 0.42f, Color.FromArgb(190, 180, 70), Color.FromArgb(110, 255, 250, 180));
-        Fruit(mouthX + r * 0.95f, mouthY - r * 1.75f, r * 0.28f, Color.FromArgb(190, 180, 70), Color.FromArgb(0, 0, 0, 0));
+        Fruit(mouthX + r * 0.85f, mouthY - r * 1.2f, r * 0.40f, Color.FromArgb(190, 180, 70), Color.FromArgb(110, 255, 250, 180));
+        Fruit(mouthX + r * 0.9f, mouthY - r * 1.62f, r * 0.26f, Color.FromArgb(190, 180, 70), Color.FromArgb(0, 0, 0, 0));
         // Grapes: a cluster of small purple circles.
         using (var grape = new SolidBrush(Color.FromArgb(92, 44, 110)))
             for (int row = 0; row < 3; row++)
                 for (int i = 0; i <= 2 - row; i++)
                 {
-                    float gx = mouthX + r * 1.9f + (i - (2 - row) / 2f) * r * 0.34f, gy = mouthY - r * 1.5f + row * r * 0.3f;
-                    g.FillEllipse(grape, gx - r * 0.18f, gy - r * 0.18f, r * 0.36f, r * 0.36f);
+                    float gx = mouthX + r * 1.75f + (i - (2 - row) / 2f) * r * 0.32f, gy = mouthY - r * 1.4f + row * r * 0.28f;
+                    g.FillEllipse(grape, gx - r * 0.17f, gy - r * 0.17f, r * 0.34f, r * 0.34f);
                 }
-        // An ear of corn: a yellow oval with a dark line of kernels and a husk leaf.
+        // An ear of corn: a yellow oval with a line of kernels and a husk leaf.
         using (var husk = new SolidBrush(Color.FromArgb(150, 160, 70)))
-            g.FillEllipse(husk, mouthX + r * 2.6f, mouthY - r * 1.0f, r * 1.6f, r * 0.5f);
+            g.FillEllipse(husk, mouthX + r * 2.4f, mouthY - r * 0.95f, r * 1.5f, r * 0.48f);
         using (var corn = new SolidBrush(Color.FromArgb(240, 200, 70)))
-            g.FillEllipse(corn, mouthX + r * 2.4f, mouthY - r * 0.95f, r * 1.4f, r * 0.45f);
+            g.FillEllipse(corn, mouthX + r * 2.2f, mouthY - r * 0.9f, r * 1.3f, r * 0.42f);
         using (var kernel = new Pen(Color.FromArgb(120, 190, 140, 30), Math.Max(1f, u * 0.001f)))
-            g.DrawLine(kernel, mouthX + r * 2.5f, mouthY - r * 0.72f, mouthX + r * 3.7f, mouthY - r * 0.72f);
+            g.DrawLine(kernel, mouthX + r * 2.3f, mouthY - r * 0.68f, mouthX + r * 3.4f, mouthY - r * 0.68f);
         // A small pumpkin at the end of the spill.
-        PaintPumpkin(g, mouthX + r * 3.4f, mouthY + r * 0.1f, r * 0.55f);
+        PaintPumpkin(g, mouthX + r * 3.1f, mouthY + r * 0.1f, r * 0.5f);
     }
 
     /// <summary>
-    /// A scarecrow on a pole, arms out on a crossbar, in a patched shirt, with
-    /// straw sticking out at the wrists, the ankles and the collar, a burlap
-    /// sack for a head with stitched eyes and a stitched smile, and a straw
-    /// hat with a crow-pecked brim. The scarf is NOT painted here: it blows
-    /// in the breeze, so the scene stamps it every frame at ScarecrowNeck.
+    /// A scarecrow on a pole, arms out on a crossbar: a slouching plaid shirt
+    /// stuffed round at the belly, sleeves that droop a little at the cuffs,
+    /// denim overalls with two straps and a chest pocket, trouser legs that
+    /// flare where they are tied, straw bursting out at the cuffs, the collar
+    /// and the ankles, a burlap sack for a head with stitched eyes and a
+    /// stitched smile, and a straw hat with a sagging brim. The scarf is NOT
+    /// painted here: it blows in the breeze, so the scene stamps it every
+    /// frame at ScarecrowNeck.
     ///
     /// Every point is (across, up) from the pole's foot as a fraction of the
-    /// scarecrow's height ("tall"), so 0.8 up is the middle of the head.
+    /// scarecrow's height ("tall"), so 0.8 up is the middle of the head. The
+    /// head, its face and the hat are measured exactly as ScarecrowWink
+    /// repaints them: change them together or the wink shows a seam.
     /// </summary>
     private static void PaintScarecrow(Graphics g, float x, float footY, float tall, float u)
     {
         PointF P(float across, float up) => new(x + tall * across, footY - tall * up);
-        Color shirt = Color.FromArgb(150, 96, 56), patch = Color.FromArgb(72, 92, 120), straw = Color.FromArgb(224, 190, 100);
+        Color shirt = Color.FromArgb(158, 98, 54), shirtDark = Color.FromArgb(118, 70, 40), plaidLine = Color.FromArgb(110, 70, 36, 22);
+        Color denim = Color.FromArgb(58, 66, 98), denimDark = Color.FromArgb(44, 50, 78), straw = Color.FromArgb(228, 194, 104), strawDark = Color.FromArgb(190, 150, 70);
         using var pole = new Pen(Wood, Math.Max(2f, tall * 0.035f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
         using var strawPen = new Pen(straw, Math.Max(1f, tall * 0.014f)) { EndCap = LineCap.Round };
+        using var strawPen2 = new Pen(strawDark, Math.Max(1f, tall * 0.012f)) { EndCap = LineCap.Round };
         using var stitch = new Pen(Color.FromArgb(60, 40, 30), Math.Max(1f, tall * 0.012f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+
+        void Blob(PointF[] pts, Color c, float tension = 0.5f)
+        {
+            using var path = new GraphicsPath();
+            path.AddClosedCurve(pts, tension);
+            using var b = new SolidBrush(c);
+            g.FillPath(b, path);
+        }
+        // A spray of straw from a point: "n" strands fanned round the "dir" angle (radians, 0 = right, up positive).
+        void Spray(PointF from, float dir, float spread, float length, int n)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                float a = dir + spread * ((i / (n - 1f)) - 0.5f), l = length * (0.75f + 0.25f * ((i * 7) % 3) / 2f);
+                g.DrawLine(i % 2 == 0 ? strawPen : strawPen2, from, new PointF(from.X + tall * l * MathF.Cos(a), from.Y - tall * l * MathF.Sin(a)));
+            }
+        }
 
         // The pole and the crossbar, behind everything.
         g.DrawLine(pole, P(0, 0), P(0, 0.72f));
         g.DrawLine(pole, P(-0.30f, 0.62f), P(0.30f, 0.62f));
 
-        // Straw at the ankles (the trouser legs are tied off with straw poking out) and the wrists.
-        foreach (float side in (float[])[-1, 1])
-        {
-            for (int i = -2; i <= 2; i++) g.DrawLine(strawPen, P(side * 0.07f, 0.22f), P(side * 0.07f + i * 0.025f, 0.12f + MathF.Abs(i) * 0.01f));
-            for (int i = -2; i <= 2; i++) g.DrawLine(strawPen, P(side * 0.30f, 0.62f), P(side * 0.36f + i * 0.012f, 0.58f + i * 0.025f));
-        }
+        // Straw out of the trouser cuffs, then the legs over it; straw out of the sleeves, then the sleeves.
+        Spray(P(-0.08f, 0.20f), -MathF.PI / 2 - 0.25f, 1.1f, 0.12f, 6);
+        Spray(P(0.08f, 0.20f), -MathF.PI / 2 + 0.25f, 1.1f, 0.12f, 6);
+        Spray(P(-0.27f, 0.60f), MathF.PI + 0.1f, 1.3f, 0.10f, 7);
+        Spray(P(0.27f, 0.60f), -0.1f, 1.3f, 0.10f, 7);
 
-        // Trousers: two dark blue legs from the hips to the ankles.
-        using (var trouser = new SolidBrush(Color.FromArgb(54, 60, 90)))
+        // Trouser legs: two rounded tubes from the hips, flaring at the tied cuffs.
+        Blob([P(-0.13f, 0.50f), P(-0.02f, 0.50f), P(-0.03f, 0.22f), P(-0.06f, 0.19f), P(-0.14f, 0.19f), P(-0.15f, 0.30f)], denim, 0.35f);
+        Blob([P(0.02f, 0.50f), P(0.13f, 0.50f), P(0.15f, 0.30f), P(0.14f, 0.19f), P(0.06f, 0.19f), P(0.03f, 0.22f)], denim, 0.35f);
+        // The shirt: a stuffed, rounded body, and two sleeves drooping along the crossbar.
+        Blob([P(-0.16f, 0.72f), P(0.16f, 0.72f), P(0.19f, 0.60f), P(0.18f, 0.48f), P(0.10f, 0.44f), P(-0.10f, 0.44f), P(-0.18f, 0.48f), P(-0.19f, 0.60f)], shirt);
+        Blob([P(-0.14f, 0.71f), P(-0.30f, 0.67f), P(-0.31f, 0.56f), P(-0.26f, 0.53f), P(-0.13f, 0.53f)], shirt, 0.4f);
+        Blob([P(0.14f, 0.71f), P(0.30f, 0.67f), P(0.31f, 0.56f), P(0.26f, 0.53f), P(0.13f, 0.53f)], shirt, 0.4f);
+        // Plaid: lines both ways, clipped to the shirt and sleeves by drawing only across their extent.
+        using (var plaid = new Pen(plaidLine, Math.Max(1f, tall * 0.008f)))
         {
-            g.FillPolygon(trouser, [P(-0.11f, 0.48f), P(-0.01f, 0.48f), P(-0.04f, 0.20f), P(-0.11f, 0.20f)]);
-            g.FillPolygon(trouser, [P(0.01f, 0.48f), P(0.11f, 0.48f), P(0.11f, 0.20f), P(0.04f, 0.20f)]);
-        }
-        // The shirt: a body and two sleeves along the crossbar, with a lighter patch on each.
-        using (var cloth = new SolidBrush(shirt))
-        {
-            g.FillPolygon(cloth, [P(-0.13f, 0.72f), P(0.13f, 0.72f), P(0.12f, 0.46f), P(-0.12f, 0.46f)]);
-            g.FillPolygon(cloth, [P(-0.12f, 0.70f), P(-0.30f, 0.66f), P(-0.30f, 0.57f), P(-0.11f, 0.55f)]);
-            g.FillPolygon(cloth, [P(0.12f, 0.70f), P(0.30f, 0.66f), P(0.30f, 0.57f), P(0.11f, 0.55f)]);
-        }
-        using (var p = new SolidBrush(patch))
-        {
-            g.FillRectangle(p, P(0.02f, 0.60f).X, P(0.02f, 0.60f).Y, tall * 0.07f, tall * 0.07f);
-            g.FillRectangle(p, P(-0.26f, 0.64f).X, P(-0.26f, 0.64f).Y, tall * 0.06f, tall * 0.05f);
-        }
-        // Plaid: a few thin lines across the shirt.
-        using (var plaid = new Pen(Color.FromArgb(90, 60, 30, 20), Math.Max(1f, tall * 0.008f)))
-            for (int i = 0; i < 4; i++)
+            GraphicsState before = g.Save();
+            using var clip = new GraphicsPath();
+            clip.AddClosedCurve([P(-0.16f, 0.72f), P(0.16f, 0.72f), P(0.19f, 0.60f), P(0.18f, 0.48f), P(0.10f, 0.44f), P(-0.10f, 0.44f), P(-0.18f, 0.48f), P(-0.19f, 0.60f)], 0.5f);
+            clip.AddClosedCurve([P(-0.14f, 0.71f), P(-0.30f, 0.67f), P(-0.31f, 0.56f), P(-0.26f, 0.53f), P(-0.13f, 0.53f)], 0.4f);
+            clip.AddClosedCurve([P(0.14f, 0.71f), P(0.30f, 0.67f), P(0.31f, 0.56f), P(0.26f, 0.53f), P(0.13f, 0.53f)], 0.4f);
+            g.SetClip(clip, CombineMode.Intersect);
+            for (int i = 0; i < 6; i++)
             {
-                g.DrawLine(plaid, P(-0.13f, 0.50f + i * 0.06f), P(0.13f, 0.50f + i * 0.06f));
-                g.DrawLine(plaid, P(-0.09f + i * 0.06f, 0.46f), P(-0.09f + i * 0.06f, 0.72f));
+                g.DrawLine(plaid, P(-0.32f, 0.44f + i * 0.058f), P(0.32f, 0.44f + i * 0.058f));
+                g.DrawLine(plaid, P(-0.30f + i * 0.12f, 0.42f), P(-0.30f + i * 0.12f, 0.74f));
             }
-        // Straw at the collar.
-        for (int i = -3; i <= 3; i++) g.DrawLine(strawPen, P(0, 0.71f), P(i * 0.03f, 0.75f + MathF.Abs(i) * 0.005f));
+            using var shade = new SolidBrush(Color.FromArgb(70, 60, 30, 20));
+            g.FillRectangle(shade, P(0.06f, 0.74f).X, P(0.06f, 0.74f).Y, tall * 0.30f, tall * 0.32f);   // the side away from the dusk light
+            g.Restore(before);
+        }
+        // Overalls: a bib over the shirt with two straps and a pocket, and a patch on one knee.
+        Blob([P(-0.11f, 0.64f), P(0.11f, 0.64f), P(0.12f, 0.48f), P(-0.12f, 0.48f)], denim, 0.2f);
+        using (var strap = new Pen(denimDark, Math.Max(1.5f, tall * 0.03f)))
+        {
+            g.DrawLine(strap, P(-0.08f, 0.64f), P(-0.05f, 0.72f));
+            g.DrawLine(strap, P(0.08f, 0.64f), P(0.05f, 0.72f));
+        }
+        using (var pocket = new Pen(denimDark, Math.Max(1f, tall * 0.01f)))
+            g.DrawRectangle(pocket, P(-0.05f, 0.61f).X, P(-0.05f, 0.61f).Y, tall * 0.10f, tall * 0.07f);
+        using (var button = new SolidBrush(Color.FromArgb(190, 160, 90)))
+            foreach (float bx in (float[])[-0.08f, 0.08f])
+                g.FillEllipse(button, P(bx, 0.645f).X - tall * 0.014f, P(bx, 0.645f).Y - tall * 0.014f, tall * 0.028f, tall * 0.028f);
+        using (var patch = new SolidBrush(Color.FromArgb(150, 60, 48)))
+            g.FillRectangle(patch, P(0.045f, 0.34f).X, P(0.045f, 0.34f).Y, tall * 0.07f, tall * 0.06f);
+        using (var patch2 = new SolidBrush(Color.FromArgb(72, 92, 120)))
+            g.FillRectangle(patch2, P(-0.28f, 0.64f).X, P(-0.28f, 0.64f).Y, tall * 0.06f, tall * 0.05f);
+        // Straw at the collar, bursting up round the neck.
+        Spray(P(0, 0.71f), MathF.PI / 2, 2.2f, 0.07f, 9);
 
-        // The head: a burlap sack, tied at the neck, with a stitched face.
+        // The head: a burlap sack, tied at the neck, with a stitched face. (Kept to the pixel for ScarecrowWink.)
         using (var sack = new SolidBrush(Color.FromArgb(204, 168, 110)))
             g.FillEllipse(sack, x - tall * 0.11f, footY - tall * 0.91f, tall * 0.22f, tall * 0.23f);
         g.DrawLine(stitch, P(-0.04f, 0.83f), P(-0.02f, 0.80f)); g.DrawLine(stitch, P(-0.02f, 0.83f), P(-0.04f, 0.80f));   // an X for each eye
@@ -722,8 +761,8 @@ internal static class ThanksgivingPainter
         g.DrawBezier(stitch, P(-0.05f, 0.75f), P(-0.02f, 0.72f), P(0.02f, 0.72f), P(0.05f, 0.75f));                      // the smile
         foreach (float sx in (float[])[-0.03f, 0f, 0.03f]) g.DrawLine(stitch, P(sx, 0.725f), P(sx, 0.745f));           // its stitches
 
-        // The straw hat: a wide brim and a crown, a little askew.
-        GraphicsState before = g.Save();
+        // The straw hat: a wide brim and a crown, a little askew. (Kept for ScarecrowWink too.)
+        GraphicsState hatState = g.Save();
         g.TranslateTransform(P(0, 0.90f).X, P(0, 0.90f).Y);
         g.RotateTransform(-6);
         using (var hat = new SolidBrush(Color.FromArgb(214, 176, 92)))
@@ -733,7 +772,10 @@ internal static class ThanksgivingPainter
         }
         using (var band = new Pen(Color.FromArgb(110, 60, 40), Math.Max(1f, tall * 0.012f)))
             g.DrawLine(band, -tall * 0.095f, -tall * 0.02f, tall * 0.095f, -tall * 0.02f);
-        g.Restore(before);
+        using (var weave = new Pen(Color.FromArgb(70, 160, 120, 50), Math.Max(1f, tall * 0.006f)))
+            for (int i = 1; i < 4; i++)
+                g.DrawLine(weave, -tall * 0.085f, -tall * 0.10f + tall * 0.022f * i, tall * 0.085f, -tall * 0.10f + tall * 0.022f * i);
+        g.Restore(hatState);
     }
 
     /// <summary>
