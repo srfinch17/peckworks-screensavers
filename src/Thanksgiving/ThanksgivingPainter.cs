@@ -20,7 +20,7 @@ internal sealed class ThanksgivingScenery
     public required (PointF At, float R) Moon { get; init; }         // the harvest moon's center and radius
     public required bool[] OpenSky { get; init; }                    // stencil: true where nothing was painted over the sky, moon and clouds
     public required bool[] OpenFromFarm { get; init; }               // stencil: true where nothing was painted after the farmhouse and barn (so: nothing stands in front of them)
-    public required bool[] OpenField { get; init; }                  // stencil: true where nothing was painted after the harvested field (the tractor drives on the field, behind the fence and the near ground)
+    public required bool[] OpenField { get; init; }                  // stencil: true where nothing was painted after the harvested field and its bales (the tractor drives on the field, behind the scarecrow, the fence and the near ground)
     public required bool[] OpenOfBranches { get; init; }             // stencil: true where the corner branches did NOT paint (for things in front of everything but those branches)
     public required PointF[] FarRidge { get; init; }                 // the far hills' outline; ask Brushwork.RidgeYAt(FarRidge, x) for their height
     public required PointF[] NearRidge { get; init; }                // the nearer hills' outline, where the farm stands
@@ -156,14 +156,17 @@ internal static class ThanksgivingPainter
 
         Bank ground = MakeGround(w, h);
         List<(PointF At, float R)> bales = PaintBales(g, w, u, nearRidge, ground, rng);
+        g.Flush();
+        uint[] upToField = Brushwork.ToPixels(bmp);  // a third copy: for things that move on the field (the tractor), behind the scarecrow, the fence and the near ground
 
         // The scarecrow stands IN the field, behind the fence, where a scarecrow
-        // belongs: nearer than the tractor's lane but before the near ground.
+        // belongs: nearer than the tractor's lane but before the near ground. It
+        // is painted AFTER the field copy, so the OpenField stencil hides a
+        // tractor behind it (the first build took the copy after the scarecrow,
+        // and the tractor drove across its legs).
         float scarecrowX = w * 0.40f, scarecrowTall = u * 0.20f;
         float scarecrowFoot = Brushwork.RidgeYAt(nearRidge, scarecrowX) * 0.30f + ground.YAt(scarecrowX) * 0.70f;
         PaintScarecrow(g, scarecrowX, scarecrowFoot, scarecrowTall, u);
-        g.Flush();
-        uint[] upToField = Brushwork.ToPixels(bmp);  // a third copy: for things that move on the field (the tractor), behind the scarecrow, the fence and the near ground
 
         ground.Paint(g, Color.FromArgb(178, 124, 56), Color.FromArgb(100, 60, 30), Color.FromArgb(150, 214, 166, 84), Math.Max(1.5f, u * 0.004f));
         PaintGrass(g, w, u, ground, rng);

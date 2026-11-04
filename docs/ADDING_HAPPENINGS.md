@@ -1,7 +1,7 @@
 # Adding happenings to a screensaver
 
 A **happening** is one small thing that occurs now and then in a scene: a shooting star, a ghost
-rising from a grave, a firework. Halloween has nineteen; Christmas, Sakura and Sakura Dusk have
+rising from a grave, a firework. Halloween has nineteen; Christmas, Thanksgiving, Sakura and Sakura Dusk have
 twenty each. This page is the recipe for adding more, to any of them or to another screensaver in
 this repo.
 
@@ -17,7 +17,7 @@ clockwork that decides when each door opens.
 | `HappeningDirector` | same file | Shuffles the happenings like a deck of cards and deals one every few seconds. |
 | `FrameBuffer.Line` | `Core/FrameBuffer.cs` | Draws a thin line straight into the picture (spider silk, a star's tail). |
 | `Sprite` | `Core/Sprite.cs` | A small picture painted once and stamped each frame. `Sprite.Glow` makes a soft light. |
-| Scenery facts | the saver's painter: `HalloweenScenery` in `src/Halloween/HalloweenPainter.cs`, `ChristmasScenery` in `src/Christmas/ChristmasPainter.cs` | Where things are: the moon, each tombstone, the ground height, the stencils. |
+| Scenery facts | the saver's painter: `HalloweenScenery` in `src/Halloween/HalloweenPainter.cs`, `ChristmasScenery` in `src/Christmas/ChristmasPainter.cs`, `ThanksgivingScenery` in `src/Thanksgiving/ThanksgivingPainter.cs` | Where things are: the moon, each tombstone, the ground height, the stencils. |
 | The cast | `src/<Saver>/Happenings/Cast.cs` | The list of every happening, one line each. |
 | The happenings | `src/<Saver>/Happenings/*.cs` | One class per file. |
 | `scripts/happening.ps1` | | Renders one happening at chosen moments to PNG files, for looking at. |

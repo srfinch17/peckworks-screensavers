@@ -2,7 +2,7 @@
 
 Native Windows screensavers written in C# (.NET 10, Windows Forms), plus a small reusable engine
 for making more of them. So far: **Matrix Rain**, **Sakura**, **Sakura Dusk**, **Sakura Pond**,
-**Halloween**, **Christmas** and **Cabin by Stream**.
+**Halloween**, **Christmas**, **Thanksgiving** and **Cabin by Stream**.
 
 ## Matrix Rain
 
@@ -570,10 +570,38 @@ warm windows and a smoking chimney, snowy mountains, and a moon.
 Settings: amount of snow, fall speed, breeze, flake size, and how often a surprise happens
 (0 turns them off).
 
-Halloween and Christmas are built from the same shared pieces as the Sakura pair (the falling
-engine, the ground, trees, hills and branches), plus one new one: sprites, small pictures painted
-once and stamped each frame, which is how the bats, the sleigh and every moving light (candles,
-bulbs, Rudolph's nose) are drawn.
+## Thanksgiving
+
+Maple leaves drifting down over a farm at harvest dusk: a sky from plum to gold, a big peach harvest
+moon, a white farmhouse with lamplit windows and a smoking chimney, a red barn and silo, a reaped field
+with hay bales and a scarecrow, a split rail fence, a cornucopia spilling its fruit, a corn shock, a
+pumpkin patch, maples in full colour, and oak branches with the year's last leaves in the top corners.
+
+![Thanksgiving](docs/images/thanksgiving.png)
+
+- A V of Canada geese crosses the sky, each goose on its own wingbeat, passing behind the corner
+  branches.
+- Smoke drifts from the chimney, the windows' lamplight wanders, and the scarecrow's red scarf streams
+  in the breeze.
+- The leaves are the Sakura petal engine with a leaf outline, and they let go of the maples and the
+  corner branches.
+- Twenty small **happenings** come and go at random, as in Halloween and Christmas:
+
+  | Where | What happens |
+  |-------|--------------|
+  | The sky | A shooting star. Stars join up into a turkey, a cornucopia, a maple leaf, a slice of pie or an acorn. Harvest fireworks. A gust whirls a swirl of leaves across. A hawk soars in slow circles. A giant parade balloon turkey drifts by. |
+  | The farm | The porch light comes on and moths gather. Silhouettes pass the farmhouse windows, one carrying the bird to the table. A barn owl flies out of the loft. |
+  | The field | An old tractor with a lit headlamp pulls a hay wagon along the lane. A doe and her fawn come up over the far ridge. |
+  | The near ground | A wild turkey struts through, stops, fans its tail, gobbles and struts on. A squirrel bounds along the fence rail and sits up with an acorn. A crow lands on the scarecrow and caws. A raccoon raids the cornucopia and makes off with an apple. A pheasant bursts out of the corn shock. The scarecrow blinks and winks. |
+  | The props | An apple rolls out of the cornucopia. Acorns patter down from the oak branch. A cardinal lands on a twig and sings. |
+
+Settings: number of leaves, fall speed, breeze, leaf size, number of geese, and how often a
+surprise happens (0 turns them off).
+
+Halloween, Christmas and Thanksgiving are built from the same shared pieces as the Sakura pair (the
+falling engine, the ground, trees, hills and branches), plus one new one: sprites, small pictures
+painted once and stamped each frame, which is how the bats, the sleigh, the geese and every moving
+light (candles, bulbs, Rudolph's nose, the farmhouse windows) are drawn.
 
 ## Cabin by Stream
 
@@ -679,6 +707,7 @@ src/SakuraDusk/                    the Sakura Dusk screensaver
 src/SakuraPond/                    the Sakura Pond screensaver
 src/Halloween/                     the Halloween screensaver
 src/Christmas/                     the Christmas screensaver
+src/Thanksgiving/                  the Thanksgiving screensaver
 src/CabinByStream/                 the Cabin by Stream screensaver
 src/CotswoldBrook/                 retired: kept as a reference, not built (its RETIRED.md says why)
 scripts/                           publish / install / uninstall / verify / happening (render one happening)
@@ -690,10 +719,10 @@ docs/                              the how-it-works guide, the happenings recipe
 
 Time per frame (update + render):
 
-| Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Cabin by Stream |
-|------------|-------------|-------------|-------------|-------------|-------------|-----------------|
-| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  | about 2 ms      |
-| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms | about 9 ms      |
+| Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Thanksgiving | Cabin by Stream |
+|------------|-------------|-------------|-------------|-------------|-------------|--------------|-----------------|
+| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  | about 3 ms   | about 2 ms      |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms | about 10 ms  | about 9 ms      |
 
 Under about 16 ms means the full 60 frames per second. Each frame waits for the screen's next
 refresh before the next one is drawn, so frames reach the screen evenly, one per refresh (an

@@ -74,7 +74,7 @@ internal sealed class SakuraPondScene : IScreensaverScene
         string? startLog = Environment.GetEnvironmentVariable("PECKWORKS_STARTLOG");
         void Lap(string what) { if (!string.IsNullOrEmpty(startLog)) File.AppendAllText(startLog, $"{what} {startClock.Elapsed.TotalMilliseconds:F0} ms\r\n"); }
         _pond = PondPainter.Paint(width, height, _rng, settings.FallenLog);
-        Lap("painter");
+        Lap($"painter {width}x{height}");   // (the picture's size first, round forty-seven: a reader of the animal logs needs it to tell a point off the picture, and the body lengths at 1080p from 720p)
         // The masks the animals steer by, as pictures, when PECKWORKS_MASKDUMP names a folder (free otherwise):
         // an instrument. A minnow that circled for ever in a pocket between the formation's caps (2026-10-27)
         // was found by flood-filling the room grid from the open water and listing what the fill never reached.

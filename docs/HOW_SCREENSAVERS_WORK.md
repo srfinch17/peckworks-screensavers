@@ -33,7 +33,7 @@ Two extra notes exist only for development:
 | Note                                  | What it does                                                      |
 |---------------------------------------|-------------------------------------------------------------------|
 | `/window`                             | Plays in a normal resizable window that ignores the mouse. Esc closes it. |
-| `/snapshot out.png [w h seconds]`     | Renders with no window at all, saves a PNG, and writes the time per frame to `out.png.txt` (average, worst second, slowest frame, garbage collections); with `PECKWORKS_SECTIONS` set to a file, also what each part of the frame cost; with `PECKWORKS_STARTLOG` set to a file, Sakura Pond also writes how long each part of the scene took to BUILD (the painter, the boughs, the lawn's pages) |
+| `/snapshot out.png [w h seconds]`     | Renders with no window at all, saves a PNG, and writes the time per frame to `out.png.txt` (average, worst second, slowest frame, garbage collections); with `PECKWORKS_SECTIONS` set to a file, also what each part of the frame cost; with `PECKWORKS_STARTLOG` set to a file, Sakura Pond also writes how long each part of the scene took to BUILD (the painter, the boughs, the lawn's pages), with the picture's size on the first line |
 
 > **Gotcha found while building this:** if you launch a `.scr` by double-clicking it, or with
 > PowerShell's `Start-Process`, Windows' file association **replaces your arguments with `/S`**.
@@ -167,6 +167,13 @@ a fed koi was as hungry as before and went straight back for the next.
     ChristmasPainter.cs            paints the night sky, mountains, cabin, snowy pines, strings of lights
     ChristmasSettings.cs           declares its knobs
     Happenings/                    twenty small random events (a fox, a snowman, fireworks), one class per file
+
+  Thanksgiving/                    falling maple leaves, a V of geese, chimney smoke, a scarecrow's scarf
+    Program.cs                     Main(), plus the definition
+    ThanksgivingScene.cs           backdrop + the geese + the smoke + the window lamplight + the scarf + the shared engine dropping leaves
+    ThanksgivingPainter.cs         paints the harvest dusk, the moon, the farmhouse and barn, the field, the fence, the scarecrow, the cornucopia, the pumpkins, the maples
+    ThanksgivingSettings.cs        declares its knobs
+    Happenings/                    twenty small random events (a turkey, a tractor, a raccoon), one class per file
 
   CabinByStream/                   a cottage in a flowery meadow at dusk, aiming at a photograph's look
     Program.cs                     Main(), plus the definition
@@ -435,7 +442,9 @@ well above the pines, so in practice it is only the corner branches that cover h
 ghost rising from a grave, a spider spinning a web, a snowman building itself. Think of a cuckoo clock: each happening is one bird behind
 a little door, and a **director** (`Core/Happenings.cs`) is the clockwork that opens one door
 every few seconds. The director shuffles the happenings like a deck of cards and deals from it,
-so you see them all before any repeats. Christmas, Sakura and Sakura Dusk each have their own deck of twenty, none repeated.
+so you see them all before any repeats. Christmas, Thanksgiving, Sakura and Sakura Dusk each have their own deck of twenty, none repeated.
+Thanksgiving is the third saver in this mould (built 2026-11-04), and the quickest: the engine, the recipe and the two
+sister sets already existed, so the work was the backdrop, the facts, five live actors and the cast.
 
 Each happening is one small class with one rule: it is told `t`, the number of seconds since it
 began, and works out the whole picture from that number alone. It keeps no notes from one frame

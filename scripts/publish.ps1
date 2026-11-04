@@ -26,7 +26,7 @@
     holds a RETIRED.md: a retired saver is kept as a reference but not built.
 
 .PARAMETER Saver
-    Which screensaver(s) to build, by folder name (MatrixRain, Sakura, SakuraDusk, Halloween, Christmas, CabinByStream).
+    Which screensaver(s) to build, by folder name (MatrixRain, Sakura, SakuraDusk, Halloween, Christmas, Thanksgiving, CabinByStream).
     Leave it out to build all of them.
 
 .EXAMPLE
