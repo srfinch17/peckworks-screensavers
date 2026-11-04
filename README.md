@@ -583,6 +583,8 @@ pumpkin patch, maples in full colour, and oak branches with the year's last leav
   branches.
 - A flock of wild turkeys lives in the field behind the fence: they peck at the stubble, wander a
   few steps, stand and look about, and the tom fans his tail now and then.
+- A white-tailed doe and her fawn graze at the far side of the field, lift their heads to look
+  about, and move off a few steps at a time, the fawn trotting after her.
 - Smoke drifts from the chimney, the windows' lamplight wanders, and the scarecrow's red scarf streams
   in the breeze.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the maples and the
@@ -598,7 +600,8 @@ pumpkin patch, maples in full colour, and oak branches with the year's last leav
   | The props | An apple rolls out of the cornucopia. Acorns patter down from the oak branch. A cardinal lands on a twig and sings. |
 
 Settings: number of leaves, fall speed, breeze, leaf size, number of geese, number of turkeys in
-the field, and how often a surprise happens (0 turns them off).
+the field, number of deer (a doe, a doe and fawn, or two does and a fawn), and how often a surprise
+happens (0 turns them off).
 
 Halloween, Christmas and Thanksgiving are built from the same shared pieces as the Sakura pair (the
 falling engine, the ground, trees, hills and branches), plus one new one: sprites, small pictures

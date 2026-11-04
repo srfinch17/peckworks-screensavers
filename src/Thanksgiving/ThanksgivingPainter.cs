@@ -136,6 +136,7 @@ internal static class ThanksgivingPainter
         PointF[] farRidge = Brushwork.Ridge(w, horizon, u, 0.08f, 0.05f, 0.02f, 0.07f, rng);
         using (var far = new SolidBrush(Color.FromArgb(112, 62, 84)))
             g.FillPolygon(far, farRidge);
+        PaintTreeline(g, w, u, farRidge, rng);
         PointF[] nearRidge = Brushwork.Ridge(w, horizon, u, 0.025f, 0.03f, 0.012f, 0.035f, rng);
         using (var near = new SolidBrush(Color.FromArgb(126, 78, 54)))
         {
@@ -300,21 +301,47 @@ internal static class ThanksgivingPainter
         g.Restore(before);
     }
 
-    /// <summary>A few long, thin streaks of cloud lit from below by the sunset: rose gold, and see-through.</summary>
+    /// <summary>
+    /// A few long, thin streaks of cloud lit from below by the sunset: each one
+    /// two soft ellipses, a rose-gold underside with a paler top edge set a
+    /// little higher, so the streak has a lit side and a shaded side instead
+    /// of being one flat smear. Lower clouds are nearer the gold band, so they
+    /// are lit warmer and brighter.
+    /// </summary>
     private static void PaintClouds(Graphics g, int w, int h, float u, Random rng)
     {
         for (int i = 0; i < 8; i++)
         {
             float cx = w * (0.05f + 0.9f * (float)rng.NextDouble()), cy = h * (0.22f + 0.36f * (float)rng.NextDouble());
             float cw = u * (0.22f + 0.40f * (float)rng.NextDouble()), ch = u * (0.010f + 0.014f * (float)rng.NextDouble());
-            // Lower clouds are nearer the gold band, so they are lit warmer and brighter.
             float low = (cy - h * 0.22f) / (h * 0.36f);
-            using var cloud = new SolidBrush(Color.FromArgb(70 + (int)(50 * low), 255, (int)(170 + 50 * low), (int)(130 + 40 * low)));
-            g.FillEllipse(cloud, cx - cw / 2, cy - ch / 2, cw, ch);
+            using (var under = new SolidBrush(Color.FromArgb(70 + (int)(50 * low), 240, (int)(150 + 50 * low), (int)(120 + 40 * low))))
+                g.FillEllipse(under, cx - cw / 2, cy - ch / 2, cw, ch);
+            using (var lit = new SolidBrush(Color.FromArgb(60 + (int)(40 * low), 255, (int)(214 + 30 * low), (int)(180 + 40 * low))))
+                g.FillEllipse(lit, cx - cw * 0.42f, cy - ch * 0.85f, cw * 0.84f, ch * 0.75f);
         }
     }
 
-    // ================================================================ the farm
+    /// <summary>
+    /// A distant woodland along the far ridge: small rounded crowns in the
+    /// ridge's own dusk plum, a shade darker, in clumps with gaps, so the
+    /// skyline is a treeline and not one smooth curve. Painted right after
+    /// the far ridge, so everything nearer still covers it.
+    /// </summary>
+    private static void PaintTreeline(Graphics g, int w, float u, PointF[] farRidge, Random rng)
+    {
+        using var crown = new SolidBrush(Color.FromArgb(96, 50, 72));
+        float step = Math.Max(2f, u * 0.009f);
+        bool inClump = true;
+        for (float x = 0; x < w; x += step)
+        {
+            if (rng.NextDouble() < 0.06) inClump = !inClump;        // clumps of trees and open gaps
+            if (!inClump) continue;
+            float y = Brushwork.RidgeYAt(farRidge, x);
+            float r = u * (0.0035f + 0.005f * (float)rng.NextDouble());
+            g.FillEllipse(crown, x - r, y - r * 1.3f, r * 2, r * 2.2f);
+        }
+    }
 
     /// <summary>
     /// A white clapboard farmhouse on the hill, seen a little from the side: a
@@ -346,16 +373,28 @@ internal static class ThanksgivingPainter
         using (var gable = new SolidBrush(shade))
             g.FillPolygon(gable, [new PointF(x - wallW * 0.46f, top), new PointF(x, top - u * 0.040f), new PointF(x + wallW * 0.46f, top)]);
 
-        // Windows: glow, then pane, then the cross bar.
+        // Shingle lines across the roof, and a cap on the chimney.
+        using (var shingle = new Pen(Color.FromArgb(60, 120, 96, 90), Math.Max(1f, u * 0.001f)))
+            for (int i = 1; i < 6; i++)
+            {
+                float t = i / 6f, y = top - u * 0.050f + (u * 0.054f) * t;
+                g.DrawLine(shingle, x - wallW * 0.58f * t, y, x + wallW * 0.58f * t, y);
+            }
+        using (var cap = new SolidBrush(Color.FromArgb(90, 52, 42)))
+            g.FillRectangle(cap, x - wallW * 0.30f - u * 0.010f, top - u * 0.074f, u * 0.020f, u * 0.005f);
+
+        // Windows: glow, then pane, then a white frame and the cross bar.
         RectangleF[] windows = FarmWindows(x, footY, u);
         using var glass = new SolidBrush(WindowWarm);
-        using var bar = new Pen(Color.FromArgb(120, 100, 80), Math.Max(1f, u * 0.0015f));
+        using var frame = new Pen(Color.FromArgb(244, 238, 226), Math.Max(1f, u * 0.0015f));
+        using var bar = new Pen(Color.FromArgb(120, 100, 80), Math.Max(1f, u * 0.0012f));
         foreach (RectangleF win in windows)
         {
             PaintWindowGlow(g, win, u * 0.020f);
             g.FillRectangle(glass, win);
             g.DrawLine(bar, win.X + win.Width / 2, win.Y, win.X + win.Width / 2, win.Bottom);
             g.DrawLine(bar, win.X, win.Y + win.Height / 2, win.Right, win.Y + win.Height / 2);
+            g.DrawRectangle(frame, win.X, win.Y, win.Width, win.Height);
         }
 
         // The door, right of middle.
@@ -374,6 +413,17 @@ internal static class ThanksgivingPainter
             g.FillRectangle(porchRoof, x - wallW * 0.50f, porchTop - u * 0.006f, wallW, u * 0.006f);
         using (var step = new SolidBrush(shade))
             g.FillRectangle(step, x - wallW * 0.50f, footY - u * 0.004f, wallW, u * 0.004f);   // the porch floor
+        // The porch railing: a rail with balusters, either side of the door.
+        using (var rail = new Pen(white, Math.Max(1f, u * 0.0015f)))
+        {
+            float ry = footY - u * 0.016f;
+            foreach (var (ra, rb) in new[] { (x - wallW * 0.50f, x - u * 0.012f), (x + u * 0.030f, x + wallW * 0.50f) })
+            {
+                g.DrawLine(rail, ra, ry, rb, ry);
+                for (float bx = ra + u * 0.004f; bx < rb; bx += u * 0.005f)
+                    g.DrawLine(rail, bx, ry, bx, footY - u * 0.004f);
+            }
+        }
     }
 
     /// <summary>
@@ -409,47 +459,87 @@ internal static class ThanksgivingPainter
     }
 
     /// <summary>
-    /// A red barn with a gambrel roof (the barn roof with the bend in it),
-    /// a big door with a white X of trim, a loft window up in the gable, and
-    /// a silo beside it: a pale tube with a domed cap.
+    /// A red barn with a gambrel roof (the barn roof with the bend in it) and
+    /// its silo, built as ONE thing: the silo stands on the hill beside the
+    /// barn's right wall, touching it, with a domed cap, hoop bands down its
+    /// side, a hatch near the top and a shadow at its foot (the first version
+    /// was a grey tube pasted behind the corner, with nothing holding it to
+    /// the ground). The barn has board lines, white trim at the corners and
+    /// the eaves, the big door with its white X, a hayloft door above it, the
+    /// lit loft window up in the gable, and a weathervane on the ridge.
     /// </summary>
     private static void PaintBarn(Graphics g, float x, float footY, float u)
     {
         float barnW = u * 0.13f, barnH = u * 0.06f, top = footY - barnH;
-        Color red = Color.FromArgb(150, 44, 36), roof = Color.FromArgb(74, 40, 36), trim = Color.FromArgb(228, 214, 196);
+        Color red = Color.FromArgb(150, 44, 36), redDark = Color.FromArgb(118, 34, 30), roof = Color.FromArgb(74, 40, 36), roofLit = Color.FromArgb(96, 54, 48);
+        Color trim = Color.FromArgb(228, 214, 196);
 
-        // The silo, behind the barn's right side.
-        float sx = x + barnW * 0.62f, sw = u * 0.030f, sh = u * 0.11f;
-        using (var silo = new LinearGradientBrush(new PointF(sx - sw / 2, 0), new PointF(sx + sw / 2, 0), Color.FromArgb(206, 196, 180), Color.FromArgb(140, 128, 116)))
-            g.FillRectangle(silo, sx - sw / 2, footY - sh, sw, sh);
-        using (var cap = new SolidBrush(Color.FromArgb(112, 100, 92)))
-            g.FillEllipse(cap, sx - sw / 2, footY - sh - sw * 0.35f, sw, sw * 0.7f);
+        // ---- The silo, standing beside the right wall ----
+        float sw = u * 0.034f, sh = u * 0.118f, sx = x + barnW * 0.5f + sw * 0.52f;
+        using (var shadow = new SolidBrush(Color.FromArgb(70, 50, 24, 16)))
+            g.FillEllipse(shadow, sx - sw * 0.8f, footY - sw * 0.16f, sw * 1.8f, sw * 0.4f);
+        using (var silo = new LinearGradientBrush(new PointF(sx - sw / 2, 0), new PointF(sx + sw / 2, 0), Color.FromArgb(214, 204, 188), Color.FromArgb(132, 120, 108)))
+            g.FillRectangle(silo, sx - sw / 2, footY - sh, sw, sh + u * 0.004f);
+        using (var hoop = new Pen(Color.FromArgb(90, 70, 58, 50), Math.Max(1f, u * 0.0015f)))
+            for (int i = 1; i <= 5; i++)
+                g.DrawLine(hoop, sx - sw / 2, footY - sh * i / 6f, sx + sw / 2, footY - sh * i / 6f);
+        using (var dome = new LinearGradientBrush(new PointF(sx - sw / 2, 0), new PointF(sx + sw / 2, 0), Color.FromArgb(150, 136, 124), Color.FromArgb(96, 86, 80)))
+            g.FillPie(dome, sx - sw / 2, footY - sh - sw * 0.55f, sw, sw * 1.1f, 180, 180);        // the domed cap: the top half of an ellipse
+        using (var hatch = new SolidBrush(Color.FromArgb(70, 58, 52)))
+            g.FillRectangle(hatch, sx - sw * 0.14f, footY - sh + sw * 0.25f, sw * 0.28f, sw * 0.32f);
 
+        // ---- The barn ----
         using (var wall = new SolidBrush(red))
             g.FillRectangle(wall, x - barnW / 2, top, barnW, barnH + u * 0.004f);
-        // The gambrel roof: two slopes each side, steep at the eaves and shallow at the top.
+        using (var board = new Pen(Color.FromArgb(70, 80, 20, 18), Math.Max(1f, u * 0.0012f)))
+            for (float bx = x - barnW / 2 + u * 0.007f; bx < x + barnW / 2; bx += u * 0.007f)
+                g.DrawLine(board, bx, top, bx, footY);
+        // The gambrel roof: steep at the eaves, shallow at the top, with the top slopes a shade lighter (they face the sky).
+        PointF[] eaveL = [new(x - barnW * 0.58f, top + u * 0.004f), new(x - barnW * 0.43f, top - u * 0.030f)];
+        PointF[] eaveR = [new(x + barnW * 0.58f, top + u * 0.004f), new(x + barnW * 0.43f, top - u * 0.030f)];
+        PointF peakL = new(x - barnW * 0.17f, top - u * 0.047f), peakR = new(x + barnW * 0.17f, top - u * 0.047f);
         using (var r = new SolidBrush(roof))
-            g.FillPolygon(r, [
-                new PointF(x - barnW * 0.56f, top + u * 0.004f), new PointF(x - barnW * 0.42f, top - u * 0.028f),
-                new PointF(x - barnW * 0.18f, top - u * 0.045f), new PointF(x + barnW * 0.18f, top - u * 0.045f),
-                new PointF(x + barnW * 0.42f, top - u * 0.028f), new PointF(x + barnW * 0.56f, top + u * 0.004f)]);
-        using (var gable = new SolidBrush(Color.FromArgb(130, 38, 32)))
+            g.FillPolygon(r, [eaveL[0], eaveL[1], peakL, peakR, eaveR[1], eaveR[0]]);
+        using (var lit = new SolidBrush(roofLit))
+            g.FillPolygon(lit, [eaveL[1], peakL, peakR, eaveR[1], new(x + barnW * 0.40f, top - u * 0.026f), new(x - barnW * 0.40f, top - u * 0.026f)]);
+        // The gable end under the roof, in the wall's red, a shade darker: it faces away from the dusk.
+        using (var gable = new SolidBrush(redDark))
             g.FillPolygon(gable, [
-                new PointF(x - barnW * 0.46f, top), new PointF(x - barnW * 0.36f, top - u * 0.024f),
-                new PointF(x - barnW * 0.15f, top - u * 0.038f), new PointF(x + barnW * 0.15f, top - u * 0.038f),
-                new PointF(x + barnW * 0.36f, top - u * 0.024f), new PointF(x + barnW * 0.46f, top)]);
+                new PointF(x - barnW * 0.48f, top), new PointF(x - barnW * 0.38f, top - u * 0.024f),
+                new PointF(x - barnW * 0.15f, top - u * 0.039f), new PointF(x + barnW * 0.15f, top - u * 0.039f),
+                new PointF(x + barnW * 0.38f, top - u * 0.024f), new PointF(x + barnW * 0.48f, top)]);
+        // The weathervane on the ridge: a rod, an arrow and a tiny rooster.
+        using (var rod = new Pen(Color.FromArgb(50, 40, 40), Math.Max(1f, u * 0.0015f)))
+        {
+            g.DrawLine(rod, x, top - u * 0.047f, x, top - u * 0.062f);
+            g.DrawLine(rod, x - u * 0.008f, top - u * 0.057f, x + u * 0.008f, top - u * 0.057f);
+        }
+        using (var vane = new SolidBrush(Color.FromArgb(50, 40, 40)))
+        {
+            g.FillPolygon(vane, [new PointF(x + u * 0.008f, top - u * 0.059f), new PointF(x + u * 0.012f, top - u * 0.057f), new PointF(x + u * 0.008f, top - u * 0.055f)]);
+            g.FillEllipse(vane, x - u * 0.004f, top - u * 0.0645f, u * 0.006f, u * 0.005f);        // the rooster's body
+            g.FillPolygon(vane, [new PointF(x - u * 0.002f, top - u * 0.063f), new PointF(x - u * 0.004f, top - u * 0.067f), new PointF(x + u * 0.001f, top - u * 0.065f)]);   // its tail
+        }
 
-        // The big door with its white X, and white trim along the corners.
+        // The big door with its white X, the hayloft door above it, and white trim at the corners and the eaves.
         var door = new RectangleF(x - barnW * 0.16f, footY - barnH * 0.72f, barnW * 0.32f, barnH * 0.72f);
         using (var dark = new SolidBrush(Color.FromArgb(70, 30, 26)))
             g.FillRectangle(dark, door);
+        var loftDoor = new RectangleF(x - barnW * 0.09f, top - u * 0.004f, barnW * 0.18f, barnH * 0.22f);
+        using (var hay = new SolidBrush(Color.FromArgb(206, 166, 86)))
+            g.FillRectangle(hay, loftDoor);                                                     // hay stacked in the open loft door
+        using (var hayLine = new Pen(Color.FromArgb(120, 150, 110, 50), Math.Max(1f, u * 0.001f)))
+            for (int i = 1; i < 4; i++)
+                g.DrawLine(hayLine, loftDoor.X, loftDoor.Y + loftDoor.Height * i / 4f, loftDoor.Right, loftDoor.Y + loftDoor.Height * i / 4f);
         using (var white = new Pen(trim, Math.Max(1f, u * 0.0018f)))
         {
             g.DrawRectangle(white, door.X, door.Y, door.Width, door.Height);
             g.DrawLine(white, door.X, door.Y, door.Right, door.Bottom);
             g.DrawLine(white, door.Right, door.Y, door.X, door.Bottom);
+            g.DrawRectangle(white, loftDoor.X, loftDoor.Y, loftDoor.Width, loftDoor.Height);
             g.DrawLine(white, x - barnW / 2, top, x - barnW / 2, footY);
             g.DrawLine(white, x + barnW / 2, top, x + barnW / 2, footY);
+            g.DrawLines(white, [eaveL[0], eaveL[1], peakL, peakR, eaveR[1], eaveR[0]]);       // the eaves' trim
         }
 
         // The loft window, warm: hay is being put up by lantern light.
@@ -457,11 +547,11 @@ internal static class ThanksgivingPainter
         PaintWindowGlow(g, loft, u * 0.018f);
         using (var glass = new SolidBrush(WindowWarm))
             g.FillRectangle(glass, loft);
+        using (var frame = new Pen(trim, Math.Max(1f, u * 0.0012f)))
+            g.DrawRectangle(frame, loft.X, loft.Y, loft.Width, loft.Height);
         using var bar = new Pen(Color.FromArgb(90, 40, 34), Math.Max(1f, u * 0.0015f));
         g.DrawLine(bar, loft.X + loft.Width / 2, loft.Y, loft.X + loft.Width / 2, loft.Bottom);
     }
-
-    // ================================================================ the field and the ground
 
     /// <summary>
     /// The near ground: one bank running the full width of the screen, a

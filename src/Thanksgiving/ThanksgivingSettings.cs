@@ -10,7 +10,7 @@ namespace Thanksgiving;
 /// </summary>
 public sealed class ThanksgivingSettings : ScreensaverSettings
 {
-    private readonly IntSetting _density, _speed, _wind, _size, _geese, _turkeys, _surprises;
+    private readonly IntSetting _density, _speed, _wind, _size, _geese, _turkeys, _deer, _surprises;
 
     public ThanksgivingSettings() : base("Thanksgiving")
     {
@@ -20,6 +20,7 @@ public sealed class ThanksgivingSettings : ScreensaverSettings
         _size = Add(nameof(LeafSizePercent), "Leaf size", 50, 200, 100, "%");
         _geese = Add(nameof(GeeseCount), "Geese", 0, 15, 7);
         _turkeys = Add(nameof(TurkeyCount), "Turkeys", 0, 6, 3);
+        _deer = Add(nameof(DeerCount), "Deer", 0, 3, 2);
         _surprises = Add(nameof(SurprisePercent), "Surprises", 0, 300, 100, "%");
     }
 
@@ -40,6 +41,9 @@ public sealed class ThanksgivingSettings : ScreensaverSettings
 
     /// <summary>How many wild turkeys live in the field. 0 = none.</summary>
     public int TurkeyCount => _turkeys.Value;
+
+    /// <summary>How many deer live at the far side of the field: 1 a doe, 2 a doe and her fawn, 3 two does and a fawn. 0 = none.</summary>
+    public int DeerCount => _deer.Value;
 
     /// <summary>How often a happening (a turkey, a tractor, fireworks...) comes on. 100 = one every 5 to 12 seconds, 0 = never.</summary>
     public int SurprisePercent => _surprises.Value;

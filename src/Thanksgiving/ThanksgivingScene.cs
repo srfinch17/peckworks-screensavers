@@ -49,6 +49,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly float _gs;                    // the goose's size unit (its body length), in pixels
     private readonly int _geese;
     private readonly TurkeyFlock _flock;           // the wild turkeys that live in the field
+    private readonly DeerHerd _herd;               // the doe and her fawn at the far side of it
     private readonly int _geeseDir;                // +1 the V flies right, -1 left
     private readonly float[] _flapPhase;           // each goose's own place in the flap, so they are not all in step
     private readonly Sprite[] _smoke;              // four puff sizes, small to big
@@ -113,6 +114,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
 
         // ---- The flock: wild turkeys living in the field (after the director, so its dice are untouched) ----
         _flock = new TurkeyFlock(_scenery, settings.TurkeyCount, _rng);
+        _herd = new DeerHerd(_scenery, settings.DeerCount, _rng);
     }
 
     // ==================================================================
@@ -258,6 +260,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _time += dt;
         _leaves.Update(dt);
         _flock.Update(dt);
+        _herd.Update(dt);
         _happenings.Update(elapsedSeconds);
     }
 
@@ -283,6 +286,8 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         // 4b. The turkeys in the field, through the field stencil: behind the
         //     scarecrow, the fence and the near ground, in front of the hills
         //     and anything on the far lane (the tractor is a layer 0 happening).
+        //     The deer first: they stand nearer the lane than the turkeys wander.
+        _herd.Draw(fb);
         _flock.Draw(fb);
 
         // 5. The windows: lamplight that wanders a little, never off. Two
