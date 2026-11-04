@@ -8,5 +8,6 @@
     <Project Path="src/Sakura/Sakura.csproj" />
     <Project Path="src/SakuraDusk/SakuraDusk.csproj" />
     <Project Path="src/SakuraPond/SakuraPond.csproj" />
+    <Project Path="src/Thanksgiving/Thanksgiving.csproj" />
   </Folder>
 </Solution>

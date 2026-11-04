@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Thanksgiving: maple leaves drifting down over a farm at harvest dusk, a
+    V of geese crossing the sky, smoke from the farmhouse chimney, and a
+    scarecrow's scarf flapping in the breeze, with a turkey strutting through
+    now and then.
+
+    A Windows screensaver is just a normal .exe program whose file name
+    ends in .scr instead of .exe. So we build a normal WinExe here, and the
+    publish script (scripts/publish.ps1) renames Thanksgiving.exe to
+    Thanksgiving.scr at the end.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Thanksgiving</AssemblyName>
+    <RootNamespace>Thanksgiving</RootNamespace>
+
+    <!--
+      "Per monitor DPI aware": tells Windows "I will handle high-resolution
+      screens myself, do not blow my window up and blur it." Without this, on a
+      laptop set to 150% scaling Windows would render us small and stretch us.
+    -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+
+    <Product>Thanksgiving Screensaver</Product>
+    <Company>Peckworks</Company>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Peckworks.Screensavers.Core\Peckworks.Screensavers.Core.csproj" />
+  </ItemGroup>
+
+</Project>
