@@ -12,11 +12,16 @@ namespace Thanksgiving;
 /// FEYNMAN VERSION: each bird is a little clockwork with four states (walk,
 /// stand, peck, display) and a timer. When the timer runs out it rolls dice
 /// for the next state and a new timer. Walking moves it along the field at
-/// a fixed speed and turns it round at the ends; pecking swings the head
-/// down to the ground and up again on a short cycle; the display opens the
-/// fan over a second, holds it quivering, and folds it. The pictures are
-/// the Turkey happening's own flip-book (Turkey.PaintPage), painted here in
-/// two sizes: birds deeper in the field are a little smaller.
+/// a slow stroll (about two steps a second) and turns it round at the ends;
+/// a walk never stops in one frame: it eases down so the stride ends on the
+/// page where both feet are on the ground. Pecking is a run of STRIKES: the
+/// whole bird pitches forward in four frames, holds with the beak on the
+/// ground for a few, pulls back a little, strikes again two to four times,
+/// then lifts over ten frames (the first version swung the head down and up
+/// on a slow, even sine, which is not how a bird feeds). The display opens
+/// the fan over a second, holds it quivering, and folds it. The pictures
+/// are the Turkey happening's own flip-book (Turkey.PaintPage), painted
+/// here in two sizes: birds deeper in the field are a little smaller.
 ///
 /// They are stamped through the painter's OpenField stencil, so the fence,
 /// the near ground, the scarecrow and the maples hide them where they
@@ -37,11 +42,15 @@ internal sealed class TurkeyFlock
         public float Timer;             // seconds left in this doing
         public float Walked;            // distance walked, for the stride page
         public float Clock;             // seconds into this doing
+        public bool Stopping;           // the walk is easing down to the rest page
+        public float StopFrom, StopDist, StopT, StopFor;
+        public int Strikes;             // this peck's number of strikes
+        public float Hold;              // seconds the beak stays on the ground each strike
     }
 
-    private const int WalkPages = 24, PeckPages = 8, FanPages = 8, QuiverPages = 4;
-    private const float Speed = 0.045f;             // in U per second: a slow stroll
-    private const float PeckCycle = 0.7f;           // seconds for one peck, down and up
+    private const int WalkPages = 24, PeckPages = 12, FanPages = 8, QuiverPages = 4;
+    private const float Speed = 0.03f;              // in U per second: a slow stroll, about two steps a second
+    private const float StrikeFor = 4f / 60, PullFor = 2f / 60, LiftFor = 11f / 60;
     private const float FanOpen = 0.9f, FanHold = 3.2f;
 
     private readonly ThanksgivingScenery _s;
@@ -98,8 +107,8 @@ internal sealed class TurkeyFlock
                 Size = depth < 0.62f ? 0 : 1,
                 Dir = _rng.Next(2) == 0 ? 1 : -1,
                 Tom = i == 0 && count >= 2,                 // the first bird is the tom when there is anyone to show off to
-                Doing = Doing.Peck,
-                Timer = 1f + 4f * (float)_rng.NextDouble(),
+                Doing = Doing.Stand,
+                Timer = 1f + 3f * (float)_rng.NextDouble(),
             };
         }
     }
@@ -109,6 +118,8 @@ internal sealed class TurkeyFlock
 
     /// <summary>Where this bird's feet are on the field at x: between the lane and the near ground's crest, by its depth.</summary>
     private float FootY(in Bird b) => _s.FieldY(b.X) + (_s.Ground.YAt(Math.Clamp(b.X, 0, _s.Width - 1)) - _s.U * 0.006f - _s.FieldY(b.X)) * b.Depth;
+    private float Stride(in Bird b) => 4 * 0.11f * _k[b.Size];
+    private float PeckFor(in Bird b) => b.Strikes * (StrikeFor + b.Hold + PullFor) - PullFor + LiftFor;
 
     public void Update(float dt)
     {
@@ -120,13 +131,28 @@ internal sealed class TurkeyFlock
             b.Clock += dt;
             if (b.Doing == Doing.Walk)
             {
-                float step = Speed * u * dt;
-                b.X += b.Dir * step;
-                b.Walked += step;
+                if (b.Stopping)
+                {
+                    // Slowing evenly to a halt exactly on the rest page (both feet on the ground).
+                    b.StopT += dt;
+                    float k = Math.Min(1f, b.StopT / b.StopFor);
+                    float walked = b.StopFrom + b.StopDist * (2 * k - k * k);
+                    b.X += b.Dir * (walked - b.Walked);
+                    b.Walked = walked;
+                    if (k >= 1f) { b.Stopping = false; b.Doing = Doing.Stand; b.Walked = 0; b.Clock = 0; b.Timer = 0.8f + 2f * (float)_rng.NextDouble(); }
+                }
+                else
+                {
+                    float step = Speed * u * dt;
+                    b.X += b.Dir * step;
+                    b.Walked += step;
+                    if (b.Timer <= 0) BeginStop(ref b);
+                }
                 // Turn round at the edges of the field (a margin keeps the whole bird in the picture).
                 float margin = _k[b.Size] * 0.9f;
                 if (b.X < margin) { b.X = margin; b.Dir = 1; }
                 if (b.X > _s.Width - margin) { b.X = _s.Width - margin; b.Dir = -1; }
+                continue;
             }
             if (b.Timer > 0) continue;
 
@@ -135,10 +161,45 @@ internal sealed class TurkeyFlock
             b.Clock = 0;
             double roll = _rng.NextDouble();
             if (b.Tom && roll < 0.12) { b.Doing = Doing.Display; b.Timer = FanOpen + FanHold + FanOpen; }
-            else if (roll < 0.45) { b.Doing = Doing.Peck; b.Timer = PeckCycle * (2 + _rng.Next(5)); }
-            else if (roll < 0.70) { b.Doing = Doing.Stand; b.Timer = 1f + 2.5f * (float)_rng.NextDouble(); if (_rng.Next(3) == 0) b.Dir = -b.Dir; }
-            else { b.Doing = Doing.Walk; b.Timer = 2f + 6f * (float)_rng.NextDouble(); if (_rng.Next(4) == 0) b.Dir = -b.Dir; }
+            else if (roll < 0.50)
+            {
+                b.Doing = Doing.Peck;
+                b.Strikes = 2 + _rng.Next(3);
+                b.Hold = (3 + _rng.Next(4)) / 60f;
+                b.Timer = PeckFor(in b) + 0.3f + 0.6f * (float)_rng.NextDouble();
+            }
+            else if (roll < 0.72) { b.Doing = Doing.Stand; b.Timer = 1f + 2.5f * (float)_rng.NextDouble(); if (_rng.Next(3) == 0) b.Dir = -b.Dir; }
+            else { b.Doing = Doing.Walk; b.Walked = 0; b.Timer = 2f + 6f * (float)_rng.NextDouble(); if (_rng.Next(4) == 0) b.Dir = -b.Dir; }
         }
+    }
+
+    private void BeginStop(ref Bird b)
+    {
+        float stride = Stride(in b);
+        float into = b.Walked % stride;
+        float dist = stride - into;
+        if (dist < 0.25f * stride) dist += stride;
+        b.Stopping = true;
+        b.StopFrom = b.Walked; b.StopDist = dist; b.StopT = 0;
+        b.StopFor = 2 * dist / (Speed * _s.U);
+    }
+
+    /// <summary>How far the bird is pitched into its peck at "t" seconds into the doing: strikes, holds, pull-backs, then the lift.</summary>
+    private static float PeckAt(float t, int strikes, float hold)
+    {
+        for (int n = 0; n < strikes; n++)
+        {
+            float from = n == 0 ? 0f : 0.7f;
+            if (t < StrikeFor) return from + (1 - from) * (t / StrikeFor);           // the strike: down fast
+            t -= StrikeFor;
+            if (t < hold) return 1f;                                                 // the beak on the ground
+            t -= hold;
+            if (n == strikes - 1) break;
+            if (t < PullFor) return 1f - 0.3f * (t / PullFor);                       // a small pull back before the next strike
+            t -= PullFor;
+        }
+        if (t < LiftFor) return 1f - t / LiftFor;                                    // the lift, slower
+        return 0f;
     }
 
     /// <summary>Stamps the flock, farthest bird first, through the field stencil.</summary>
@@ -154,22 +215,19 @@ internal sealed class TurkeyFlock
             done[pick] = true;
             ref Bird b = ref _birds[pick];
             int z = b.Size, d = b.Dir > 0 ? 0 : 1;
-            float stride = 4 * 0.11f * _k[z];
             Sprite page;
             switch (b.Doing)
             {
                 case Doing.Walk:
                 {
-                    float cycle = b.Walked / stride;
-                    page = _walk[z][d][(int)MathF.Round((cycle - MathF.Floor(cycle)) * WalkPages) % WalkPages];
+                    float cycle = b.Walked / Stride(in b);
+                    page = _walk[z][d][(int)MathF.Floor((cycle - MathF.Floor(cycle)) * WalkPages) % WalkPages];
                     break;
                 }
                 case Doing.Peck:
                 {
-                    // Down and up on a sine: the head is on the ground at the middle of each cycle.
-                    float p = (b.Clock % PeckCycle) / PeckCycle;
-                    float down = MathF.Sin(p * MathF.PI);
-                    int idx = (int)MathF.Round(down * PeckPages) - 1;
+                    float p = PeckAt(b.Clock, b.Strikes, b.Hold);
+                    int idx = (int)MathF.Round(p * PeckPages) - 1;
                     page = idx < 0 ? _walk[z][d][0] : _peck[z][d][Math.Min(PeckPages - 1, idx)];
                     break;
                 }

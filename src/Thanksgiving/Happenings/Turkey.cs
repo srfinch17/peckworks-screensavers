@@ -40,7 +40,7 @@ internal sealed class Turkey : Happening
     // at a fixed SPEED (a fraction of U per second), so a wide screen takes
     // it longer to cross.
     private readonly float _total;
-    private const float Cruise = 0.10f;         // strutting speed, in U per second
+    private const float Cruise = 0.06f;         // strutting speed, in U per second: about three steps a second (0.10 was a patter of nearly five)
     private const float Ramp = 0.7f;            // seconds to slow to the stop, and again to get going
     private const float TransIn = 0.9f;         // the fan opens, the wings drop, the body puffs
     private const float Display = 3.6f;         // the full wheel, with a gobble in the middle of it
@@ -51,16 +51,19 @@ internal sealed class Turkey : Happening
     private const float Legs = 0.17f;           // each leg bone
     private const int Feathers = 13;            // in the tail
 
-    private static readonly Color Bronze = Color.FromArgb(84, 52, 32);
-    private static readonly Color BronzeLit = Color.FromArgb(118, 76, 42);
-    private static readonly Color Dark = Color.FromArgb(44, 28, 20);
+    private static readonly Color Bronze = Color.FromArgb(92, 58, 34);
+    private static readonly Color BronzeLit = Color.FromArgb(170, 118, 62);
+    private static readonly Color Dark = Color.FromArgb(58, 38, 24);
+    private static readonly Color WingDark = Color.FromArgb(74, 48, 30);
+    private static readonly Color WingBar = Color.FromArgb(210, 170, 110);
     private static readonly Color Buff = Color.FromArgb(222, 182, 118);
     private static readonly Color Black = Color.FromArgb(24, 16, 14);
-    private static readonly Color HeadBlue = Color.FromArgb(130, 140, 164);
+    private static readonly Color HeadBlue = Color.FromArgb(110, 140, 196);
+    private static readonly Color HeadPale = Color.FromArgb(132, 158, 206);
     private static readonly Color Wattle = Color.FromArgb(206, 40, 44);
     private static readonly Color Beak = Color.FromArgb(224, 204, 150);
-    private static readonly Color LegPink = Color.FromArgb(172, 136, 116);
-    private static readonly Color LegFar = Color.FromArgb(132, 100, 86);
+    private static readonly Color LegNear = Color.FromArgb(86, 56, 40);
+    private static readonly Color LegFar = Color.FromArgb(60, 40, 30);
 
     private readonly ThanksgivingScenery _s;
     private readonly float _k;                  // pixels in one "turkey length" unit; all the drawing below is in those units
@@ -204,8 +207,18 @@ internal sealed class Turkey : Happening
     /// Paints one page of a turkey onto a sheet "w" by "h" pixels, with the
     /// middle of the body at "ox" across and the ground line "by" down, "k"
     /// pixels to the turkey-length unit. Shared with the flock that lives in
-    /// the field (TurkeyFlock.cs), which adds "peck": 0 head up, 1 beak on
-    /// the ground.
+    /// the field (TurkeyFlock.cs), which adds "peck": 0 head up, 1 the whole
+    /// bird pitched forward with the beak on the ground.
+    ///
+    /// THE GAIT (after the animator's review): a bird's head bob is not a
+    /// swing on the body. The head is HELD STILL in the world for most of
+    /// each step while the body walks on under it, then THRUST forward to
+    /// catch up. So over each step (half a stride) the head's place on the
+    /// body slides back at exactly the body's speed for 0.6 of the step
+    /// (held still in the world), then shoots forward over the other 0.4.
+    /// The body dips just after each foot lands (two dips a stride, two
+    /// pixels at 1080p, not the fraction of a pixel it was) and rocks a
+    /// couple of degrees with each step.
     /// </summary>
     internal static Sprite PaintPage(float k, int w, int h, int ox, int by, bool mirror, float phase, float walk, float fan, float gobble, float shake, float peck) =>
         Sprite.Paint(w, h, g =>
@@ -245,9 +258,25 @@ internal sealed class Turkey : Happening
             g.DrawLine(pen, a, b);
         }
 
-        float bob = 0.012f * MathF.Sin(2 * phase + 1f) * walk;        // the body rises and dips twice a stride
+        float bob = -0.02f * MathF.Cos(2 * (phase - 0.3f)) * walk;     // the body dips just after each foot lands: two dips a stride
+        float rock = 2f * MathF.Sin(2 * phase) * walk;                 // and rocks a couple of degrees with the steps
         float puff = 1f + 0.10f * fan;                                 // the display fluffs every feather out
         float hip = 0.30f + bob;
+
+        // Pecking: the whole bird pitches forward about the hips (up to 28 degrees), the tail rising behind, the neck
+        // reaching down so the beak is on the ground. Everything but the legs and the neck is drawn inside this turn.
+        float pitch = -28f * peck + rock;
+        PointF hipPivot = P(0, hip);
+        PointF Pitched(PointF p)
+        {
+            float a = pitch * MathF.PI / 180f, ca = MathF.Cos(a), sa = MathF.Sin(a);
+            float dx = p.X - hipPivot.X, dy = p.Y - hipPivot.Y;
+            return P(hipPivot.X + dx * ca - dy * sa, hipPivot.Y + dx * sa + dy * ca);
+        }
+        GraphicsState bodyState = g.Save();
+        g.TranslateTransform(hipPivot.X, hipPivot.Y);
+        g.RotateTransform(pitch);
+        g.TranslateTransform(-hipPivot.X, -hipPivot.Y);
 
         // ---- the tail, behind everything ----
         // Folded: a narrow bundle pointing back and up. Fanned: a wheel behind
@@ -255,8 +284,8 @@ internal sealed class Turkey : Happening
         // a black band and a buff tip. Outer feathers first, so the middle
         // ones lie on top.
         {
-            PointF root = P(-0.22f, 0.44f + bob);
-            float center = (150f + (95f - 150f) * fan + shake) * MathF.PI / 180f;      // the middle feather's direction
+            PointF root = P(-0.24f, 0.46f + bob);
+            float center = (150f + (95f - 150f) * fan + shake + 12f * peck) * MathF.PI / 180f;      // the middle feather's direction (the tail lifts a little in a peck)
             float spread = (14f + (175f - 14f) * fan) * MathF.PI / 180f;               // the whole fan's angle
             float len = 0.42f + 0.16f * fan;
             int mid = Feathers / 2;
@@ -276,7 +305,11 @@ internal sealed class Turkey : Happening
                 }
         }
 
-        // ---- the far leg, then the body, then the near leg ----
+        // ---- the body (inside the pitch): a teardrop, deep at the breast and tapering to the tail root ----
+        // The dark back is a crescent that follows the top edge only a quarter of the way down (the first version was a
+        // dark lid on a pot); a few lighter scallops along the lower edge are the breast feathers' tips. In the display it swells.
+        g.Restore(bodyState);
+        // The far leg goes behind the body: legs are NOT pitched (they stand on the ground whatever the body does).
         void Leg(float hx, float phi, Color c)
         {
             // Foot path: slide back along the ground (half the stride), then swing forward through the air.
@@ -292,58 +325,73 @@ internal sealed class Turkey : Happening
             float alpha = MathF.Acos(Math.Clamp(d / (2 * Legs), -1, 1));
             float theta = MathF.Atan2(dy, dx) + alpha;
             PointF ankle = P(hipP.X + Legs * MathF.Cos(theta), hipP.Y + Legs * MathF.Sin(theta));
-            Limb(hipP, ankle, 0.045f, c);
-            Limb(ankle, foot, 0.035f, c);
+            Limb(hipP, ankle, 0.06f, c);
+            Limb(ankle, foot, 0.045f, c);
             // Three toes forward, fanned, and a short one back.
             foreach (float spread in (float[])[-0.05f, 0f, 0.05f])
-                Limb(foot, P(foot.X + 0.09f, foot.Y + spread + 0.01f), 0.022f, c);
-            Limb(foot, P(foot.X - 0.04f, foot.Y + 0.005f), 0.02f, c);
+                Limb(foot, P(foot.X + 0.10f, foot.Y + spread + 0.01f), 0.025f, c);
+            Limb(foot, P(foot.X - 0.045f, foot.Y + 0.005f), 0.022f, c);
         }
         Leg(0.02f, phase + MathF.PI, LegFar);
 
-        // The body: a plump oval, darker on top (the back) and bronze below,
-        // with the chest pushed out in front. In the display it swells.
-        Ellipse(0.0f, 0.42f + bob, 0.34f * puff, 0.20f * puff, Bronze, 8f);
-        Ellipse(0.06f, 0.36f + bob, 0.28f * puff, 0.14f * puff, BronzeLit, 6f);               // the lit breast
-        Ellipse(-0.04f, 0.52f + bob, 0.30f * puff, 0.10f * puff, Dark, 10f);                   // the dark back
+        bodyState = g.Save();                                                                   // a saved state is spent once it is restored: save again for the body's turn
+        g.TranslateTransform(hipPivot.X, hipPivot.Y);
+        g.RotateTransform(pitch);
+        g.TranslateTransform(-hipPivot.X, -hipPivot.Y);
+        float by0 = bob;
+        PointF B(float x, float y) => P(x * puff, by0 + 0.30f + (y - 0.30f) * puff);     // the body swells about the hips in the display
+        Blob([B(0.34f, 0.44f), B(0.27f, 0.56f), B(0.04f, 0.62f), B(-0.18f, 0.58f), B(-0.30f, 0.48f), B(-0.22f, 0.32f), B(0.02f, 0.25f), B(0.24f, 0.30f)], Bronze);
+        Blob([B(0.30f, 0.52f), B(0.04f, 0.62f), B(-0.20f, 0.58f), B(-0.30f, 0.48f), B(-0.20f, 0.52f), B(0.02f, 0.555f), B(0.26f, 0.49f)], Dark, 0.4f);   // the dark back, a crescent along the top
+        foreach ((float sx, float sy) in ((float, float)[])[(-0.15f, 0.315f), (-0.04f, 0.285f), (0.08f, 0.285f), (0.19f, 0.31f)])
+        {
+            PointF c = B(sx, sy);
+            Ellipse(c.X, c.Y, 0.05f * puff, 0.032f * puff, BronzeLit);                              // the breast feathers' tips
+        }
         // The beard: a tuft of black bristles hanging from the chest.
-        Limb(P(0.16f, 0.36f + bob), P(0.17f, 0.26f + bob), 0.03f, Black);
+        Limb(B(0.17f, 0.36f), B(0.18f, 0.25f), 0.03f, Black);
 
-        // ---- the wing, along the side; in the display it drops to the ground ----
+        // ---- the wing, a rounded wedge along the side with three pale bars that follow its curve; in the display it drops ----
         {
             float droop = 55f * fan;                                                             // degrees the wing swings down
             var st = g.Save();
-            g.TranslateTransform(0.14f, 0.50f + bob);
+            PointF sh = B(0.16f, 0.52f);
+            g.TranslateTransform(sh.X, sh.Y);
             g.RotateTransform(droop);                                                             // the wing points back (negative x); with y up, a positive turn swings that tip down
-            PointF[] wing = [P(0, 0.04f), P(-0.20f, 0.06f), P(-0.42f, -0.02f), P(-0.46f, -0.10f), P(-0.30f, -0.14f), P(-0.08f, -0.10f)];
-            Blob(wing, Dark, 0.4f);
-            using (var bar = new Pen(Color.FromArgb(214, 206, 190), 0.012f))                     // the white barring
-                for (int i = 1; i <= 4; i++)
-                    g.DrawLine(bar, P(-0.06f - 0.09f * i, 0.05f - 0.012f * i), P(-0.04f - 0.09f * i, -0.10f - 0.004f * i));
+            PointF[] wing = [P(0, 0.02f), P(-0.22f, 0.04f), P(-0.44f, -0.06f), P(-0.44f, -0.13f), P(-0.26f, -0.16f), P(-0.08f, -0.12f)];
+            Blob(wing, WingDark, 0.4f);
+            using (var bar = new Pen(WingBar, 0.016f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                for (int i = 1; i <= 3; i++)
+                {
+                    float bx = -0.10f - 0.10f * i;
+                    g.DrawBezier(bar, P(bx + 0.02f, -0.01f - 0.015f * i), P(bx + 0.005f, -0.06f), P(bx - 0.015f, -0.09f), P(bx - 0.03f, -0.13f - 0.004f * i));
+                }
             g.Restore(st);
         }
+        g.Restore(bodyState);
 
-        // ---- the neck and head ----
-        // Walking: the head thrusts forward and back once per step (twice a
-        // stride), which is the turkey's whole gait to the eye. Displaying:
-        // the head draws back over the puffed chest. Gobbling: it is thrown
-        // forward and down.
-        float bobX = 0.045f * MathF.Sin(2 * phase) * walk;
-        PointF neckBase = P(0.26f, 0.50f + bob);
-        // Pecking: the head swings down and forward until the beak is at the ground.
-        PointF head = P(0.40f + bobX - 0.10f * fan + 0.16f * gobble + 0.12f * peck, 0.76f - 0.02f * fan - 0.10f * gobble - 0.62f * peck);
-        PointF neckMid = P(neckBase.X + (head.X - neckBase.X) * 0.4f - 0.04f * fan, neckBase.Y + (head.Y - neckBase.Y) * 0.55f);
-        using (var neck = new Pen(HeadBlue, 0.075f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
-            g.DrawLines(neck, [neckBase, neckMid, head]);
-        // The red caruncles down the front of the neck.
-        Ellipse(neckMid.X + 0.03f, neckMid.Y - 0.02f, 0.035f, 0.05f, Wattle);
-        Ellipse(head.X, head.Y, 0.075f, 0.062f, HeadBlue, 10f);
-        Ellipse(head.X + 0.02f, head.Y - 0.06f, 0.028f, 0.04f, Wattle);                          // the wattle under the chin
+        // ---- the neck and head, drawn in the sprite's own frame (the neck base rides the pitched body) ----
+        // Walking: HELD in the world for 0.6 of each step (its place on the body slides back at the body's speed), then THRUST
+        // forward over 0.4. Displaying: the head draws back over the puffed chest. Gobbling: thrown forward and down. Pecking:
+        // down to the ground at the end of the reach.
+        float step = ((phase % MathF.PI) + MathF.PI) % MathF.PI / MathF.PI;                     // 0 to 1 across one step (half a stride)
+        float along = step < 0.4f ? Smooth(step / 0.4f) : 1f - (step - 0.4f) / 0.6f;            // 1 = thrust fully forward, 0 = at the back of its travel
+        float bobX = (-0.066f + 0.132f * along) * walk;                                          // 0.132 = the body's travel during the hold (0.6 of a step of 2 x Reach)
+        PointF neckBase = Pitched(B(0.28f, 0.52f));
+        PointF head = P(0.42f + bobX - 0.10f * fan + 0.16f * gobble + 0.10f * peck, 0.78f - 0.02f * fan - 0.10f * gobble - 0.70f * peck);
+        using (var neck = new Pen(HeadBlue, 0.05f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            g.DrawBezier(neck, neckBase, P(neckBase.X - 0.02f + 0.06f * peck, neckBase.Y + 0.12f - 0.10f * peck), P(head.X - 0.06f, head.Y - 0.10f + 0.06f * peck), head);   // a slight S
+        // The wattle: a red teardrop hanging from the front of the neck, and the caruncles above it.
+        PointF wat = P(neckBase.X + (head.X - neckBase.X) * 0.55f + 0.035f, neckBase.Y + (head.Y - neckBase.Y) * 0.5f);
+        Blob([P(wat.X - 0.025f, wat.Y + 0.03f), P(wat.X + 0.02f, wat.Y + 0.035f), P(wat.X + 0.025f, wat.Y - 0.02f), P(wat.X, wat.Y - 0.055f), P(wat.X - 0.025f, wat.Y - 0.02f)], Wattle, 0.5f);
+        Ellipse(head.X, head.Y, 0.08f, 0.066f, HeadBlue, 10f);
+        Ellipse(head.X - 0.015f, head.Y + 0.02f, 0.045f, 0.035f, HeadPale, 10f);                 // the crown, a shade paler
+        Ellipse(head.X + 0.02f, head.Y - 0.065f, 0.026f, 0.036f, Wattle);                        // the wattle under the chin
         using (var beak = new SolidBrush(Beak))
-            g.FillPolygon(beak, [P(head.X + 0.06f, head.Y + 0.02f), P(head.X + 0.15f, head.Y - 0.01f), P(head.X + 0.06f, head.Y - 0.025f)]);
-        Limb(P(head.X + 0.06f, head.Y + 0.025f), P(head.X + 0.10f, head.Y - 0.03f), 0.018f, Wattle);   // the snood, drooping over the beak
-        Ellipse(head.X + 0.025f, head.Y + 0.015f, 0.012f, 0.012f, Black);                         // the eye
+            g.FillPolygon(beak, [P(head.X + 0.065f, head.Y + 0.02f), P(head.X + 0.16f, head.Y - 0.01f), P(head.X + 0.065f, head.Y - 0.025f)]);
+        using (var snood = new Pen(Wattle, 0.018f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            g.DrawBezier(snood, P(head.X + 0.07f, head.Y + 0.03f), P(head.X + 0.12f, head.Y + 0.035f), P(head.X + 0.13f, head.Y - 0.01f), P(head.X + 0.11f, head.Y - 0.035f));   // the snood: a small curl over the beak
+        Ellipse(head.X + 0.028f, head.Y + 0.016f, 0.013f, 0.013f, Black);                        // the eye
 
-        Leg(-0.02f, phase, LegPink);
+        Leg(-0.02f, phase, LegNear);
     }
 }

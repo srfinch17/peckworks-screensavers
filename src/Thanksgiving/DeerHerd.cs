@@ -5,76 +5,117 @@ namespace Thanksgiving;
 
 /// <summary>
 /// A white-tailed doe, and her fawn, that LIVE at the far side of the field
-/// (his line: "add a deer ffs"). The doe grazes with her head down, lifts
-/// it to look about, flicks an ear, and walks a few steps; the fawn keeps
-/// close to her, grazing beside her and trotting after her when she moves
-/// off. Like the turkeys, they are always there.
+/// (his line: "add a deer ffs"). The doe grazes with her head down, biting
+/// and chewing, flicks an ear, lifts her head to look about (and flicks her
+/// tail), and walks a few steps; the fawn keeps close to her and trots after
+/// her when she moves off. Like the turkeys, they are always there.
 ///
 /// FEYNMAN VERSION: each deer is two flip-books stamped together. The BODY
-/// book has sixteen pages of a walk (page 0 is also standing): four legs
-/// each a quarter of a step behind the last, the foot sliding back along
-/// the ground and then swinging forward, with the knee worked out by a
-/// little two-bone sum (a deer's hind "knee" is its hock and points
-/// BACKWARD, the fore knee points forward). The HEAD book has six pages
-/// from alert (head up, ears pricked) to grazing (nose in the stubble),
-/// drawn on its own sheet whose middle is the neck's root, so it can be
-/// stamped on the body at the neck wherever the body page is. One picture
-/// of each, facing right; the engine's mirror stamp turns them to face
-/// left, so nothing is painted twice.
+/// book is a walk of 24 pages, plus four "settle" pages that take the legs
+/// from the walk's rest page to a square stance (and two more with the tail
+/// up, for the flick). The legs step in a deer's own order, the LATERAL
+/// sequence a hoofed animal uses: left hind, left fore, right hind, right
+/// fore, each a quarter of the stride after the last (the first version had
+/// them in the diagonal order a monkey uses, and the hooves skated: each one
+/// crept 11 pixels along the ground on every step because the stride did not
+/// match how long a foot stays down). Each foot is down for 0.62 of the
+/// stride and slides back at exactly the body's speed, so it stays planted.
+/// The body has WEIGHT: the withers dip as each forefoot lands and the rump
+/// dips as each hind foot lands, so the back rocks, and the neck's root dips
+/// with the forefeet, so the head nods as she walks. The knee is worked out
+/// by a little two-bone sum (a deer's hind "knee" is its hock and points
+/// BACKWARD, the fore knee points forward), and the legs taper from a
+/// muscled thigh to a thin cannon and a small dark hoof.
 ///
-/// They are stamped through the painter's OpenField stencil, so the
-/// scarecrow, the fence, the near ground and the maples hide them where
-/// they should. They stand near the field's far lane, so the turkeys (which
-/// wander nearer) are drawn after them, and the tractor on the lane (a
-/// layer 0 happening) passes behind them.
+/// The HEAD book is 24 pages of the neck from alert (head up, ears pricked)
+/// to grazing (nose in the stubble), under six degrees apart so a change of
+/// neck never pops; each page comes in three kinds: jaw closed, jaw open
+/// (chewing) and one ear flicked back. The head sheet's origin is the neck's
+/// root, which the body book records for every page, so the head rides the
+/// nod. The grazing bite is a quick tug up and back, a hold, and a slow ease
+/// down, in bursts with pauses, which is what a real deer's head does in
+/// grass. Walking never starts or stops in one frame: stopping eases the
+/// walk down so it ends on the rest page, then plays the settle pages; a
+/// start plays them backward and walks off.
+///
+/// One picture of each, facing right; the engine's mirror stamp turns them
+/// to face left. They are stamped through the painter's OpenField stencil,
+/// so the scarecrow, the fence, the near ground and the maples hide them
+/// where they should, and they keep between the maples so a head is never
+/// parked behind the leaves.
+///
+/// Test aid: PECKWORKS_DEER=walk keeps the doe walking (for the hoof
+/// measure); PECKWORKS_DEER=graze keeps her grazing.
 /// </summary>
 internal sealed class DeerHerd
 {
     private enum Doing { Graze, Look, Walk }
+    private enum Gait { Settled, Rising, Walking, Stopping, Settling }   // Rising: the settle pages backward (about to walk); Settling: forward (just stopped)
 
     private sealed class Animal
     {
         public float H;                                     // body height in pixels (the unit everything is drawn in)
         public int BodyW, BodyH, BodyOx, BodyOy, HeadS;
-        public Sprite[] Body = new Sprite[WalkPages + 1];           // the walk, then one standing page (feet square under the hips)
-        public Sprite[] Head = new Sprite[HeadPages];
+        public Sprite[] Walk = new Sprite[WalkPages];
+        public Sprite[] Settle = new Sprite[SettlePages];   // from the walk's rest page to the square stance
+        public Sprite[] Tail = new Sprite[TailPages];       // the square stance with the tail down, half up, up
+        public PointF[] NeckWalk = new PointF[WalkPages];   // where the neck's root is on each walk page (body heights from the middle, up from the ground)
+        public PointF[] NeckSettle = new PointF[SettlePages];
+        public Sprite[,] Head = new Sprite[HeadPages, HeadKinds];
         public bool Fawn;
         public float X, Depth;
         public int Dir;
         public Doing Doing;
+        public Gait Gait;
         public float Timer, Clock, Walked;
-        public float HeadF;                                 // where the head is now, 0 up to 1 grazing (eased toward its target)
+        public float GaitT;                                 // seconds into a Rising or Settling
+        public float StopFrom, StopDist, StopT, StopFor;    // a stop: where it began, how far to the rest page, how long it takes
+        public float NeckF;                                 // where the neck is now, 0 up to 1 grazing (eased toward its target)
+        public float BiteT = -1, NextBite, ChewT = -1, EarT = -1, NextEar, TailT = -1;
+        public int BitesLeft;
     }
 
-    private const int WalkPages = 16, HeadPages = 6;
+    private const int WalkPages = 48, SettlePages = 4, TailPages = 3, HeadPages = 24, HeadKinds = 3;   // 48 walk pages: a planted hoof shimmers by half the stride a page covers, about a pixel
     private const float Speed = 0.05f;                      // in U per second
     private const float StepReach = 0.17f;                  // how far a foot travels in front of and behind the hip, in body heights
-    private const float NeckX = 0.30f, NeckY = 0.72f;       // where the neck leaves the body (body heights from the middle, up from the ground)
+    private const float Duty = 0.62f;                       // the share of the stride a foot is on the ground
+    private const float NeckX = 0.30f, NeckY = 0.72f;       // where the neck leaves the body (body heights from the middle, up from the ground), standing
+    private const float NeckRate = 2.0f;                    // how fast the neck moves, whole books per second (a lift takes about half a second)
+    private const float SettleFor = 0.25f;
 
-    private static readonly Color Tan = Color.FromArgb(178, 128, 84);
-    private static readonly Color TanDark = Color.FromArgb(142, 98, 62);
-    private static readonly Color Cream = Color.FromArgb(236, 224, 200);
+    private static readonly Color Tan = Color.FromArgb(140, 92, 58);
+    private static readonly Color TanDark = Color.FromArgb(104, 66, 40);
+    private static readonly Color TanFawn = Color.FromArgb(176, 112, 64);
+    private static readonly Color TanFawnDark = Color.FromArgb(130, 80, 46);
+    private static readonly Color Cream = Color.FromArgb(232, 208, 170);
+    private static readonly Color White = Color.FromArgb(246, 236, 214);
     private static readonly Color Hoof = Color.FromArgb(40, 30, 26);
     private static readonly Color Nose = Color.FromArgb(32, 26, 26);
-    private static readonly Color EarPink = Color.FromArgb(214, 170, 150);
+    private static readonly Color EarIn = Color.FromArgb(190, 140, 120);
+    private static readonly Color EarEdge = Color.FromArgb(70, 44, 32);
 
     private readonly ThanksgivingScenery _s;
     private readonly Random _rng;
     private readonly Animal[] _deer;
+    private readonly string? _test = Environment.GetEnvironmentVariable("PECKWORKS_DEER");
 
     public DeerHerd(ThanksgivingScenery s, int count, Random sceneRng)
     {
         _s = s;
         _rng = new Random(sceneRng.Next());                 // its own dice, so the rest of the scene never reshuffles
         _deer = new Animal[count];
-        float x0 = s.Width * (0.10f + 0.75f * (float)_rng.NextDouble());
+        float x0 = s.Width * (0.24f + 0.50f * (float)_rng.NextDouble());   // between the maples, never behind their leaves
         int dir = _rng.Next(2) == 0 ? 1 : -1;
         for (int i = 0; i < count; i++)
         {
             bool fawn = i == 1;                             // the second deer is the fawn; a third is another doe
             var a = new Animal { Fawn = fawn, Dir = dir, Depth = 0.18f + 0.10f * (float)_rng.NextDouble() + (fawn ? 0.06f : 0f) };
             a.X = x0 - dir * (i == 0 ? 0 : (fawn ? s.U * 0.09f : s.U * 0.22f));
-            a.Doing = Doing.Graze; a.HeadF = 1f; a.Timer = 2f + 4f * (float)_rng.NextDouble();
+            a.Doing = _test == "walk" ? Doing.Walk : Doing.Graze;
+            a.Gait = _test == "walk" ? Gait.Walking : Gait.Settled;
+            a.NeckF = _test == "walk" ? 0.25f : 1f;
+            a.Timer = 2f + 4f * (float)_rng.NextDouble();
+            a.NextBite = 0.5f; a.NextEar = 1f + 3f * (float)_rng.NextDouble();
             Make(a, Math.Max(14, (int)(s.U * (fawn ? 0.048f : 0.078f))));
             _deer[i] = a;
         }
@@ -90,34 +131,93 @@ internal sealed class DeerHerd
         a.BodyH = (int)(0.95f * h) + 4;
         a.BodyOy = a.BodyH - 2;
         a.HeadS = (int)(1.05f * h) + 4;
-        for (int i = 0; i <= WalkPages; i++)
+        Sprite Body(Action<Graphics> paint) => Sprite.Paint(a.BodyW, a.BodyH, g =>
         {
-            int pose = i;                                                // WalkPages itself is the standing page
-            a.Body[i] = Sprite.Paint(a.BodyW, a.BodyH, g =>
-            {
-                g.TranslateTransform(a.BodyOx, a.BodyOy);
-                g.ScaleTransform(h, -h);                        // body heights, y UP
-                PaintBody(g, pose, a.Fawn, h);
-            });
+            g.TranslateTransform(a.BodyOx, a.BodyOy);
+            g.ScaleTransform(h, -h);                        // body heights, y UP
+            paint(g);
+        });
+        for (int i = 0; i < WalkPages; i++)
+        {
+            float p = i / (float)WalkPages;
+            a.NeckWalk[i] = NeckRoot(p);
+            a.Walk[i] = Body(g => PaintBody(g, WalkFeet(p), WithersDip(p), CroupDip(p), 0, a.Fawn, h));
+        }
+        // The settle pages: the feet go from the rest page's places to square under the hips, the body's dip easing out.
+        PointF[] rest = WalkFeet(0f), square = SquareFeet();
+        for (int i = 0; i < SettlePages; i++)
+        {
+            float k = (i + 1) / (float)SettlePages;
+            var feet = new PointF[4];
+            for (int j = 0; j < 4; j++) feet[j] = new PointF(rest[j].X + (square[j].X - rest[j].X) * k, rest[j].Y * (1 - k));
+            float dip = 0.008f * (1 - k);
+            a.NeckSettle[i] = new PointF(NeckX, NeckRoot(0f).Y + (NeckY - NeckRoot(0f).Y) * k);
+            a.Settle[i] = Body(g => PaintBody(g, feet, -dip, -dip, 0, a.Fawn, h));
+        }
+        for (int t = 0; t < TailPages; t++)
+        {
+            int tail = t;
+            a.Tail[t] = Body(g => PaintBody(g, square, 0, 0, tail, a.Fawn, h));
         }
         for (int j = 0; j < HeadPages; j++)
         {
             float f = j / (float)(HeadPages - 1);
-            a.Head[j] = Sprite.Paint(a.HeadS, a.HeadS, g =>
+            for (int kind = 0; kind < HeadKinds; kind++)
             {
-                g.TranslateTransform(a.HeadS / 2f, a.HeadS * 0.55f);
-                g.ScaleTransform(h, -h);
-                PaintHead(g, f, a.Fawn, h);
-            });
+                int kk = kind;
+                a.Head[j, kind] = Sprite.Paint(a.HeadS, a.HeadS, g =>
+                {
+                    g.TranslateTransform(a.HeadS / 2f, a.HeadS * 0.55f);
+                    g.ScaleTransform(h, -h);
+                    PaintHead(g, f, kk, a.Fawn, h);
+                });
+            }
         }
     }
 
     private static PointF P(float x, float y) => new(x, y);
 
-    /// <summary>The body and legs: x forward, y up, the origin at the middle of the body on the ground.</summary>
-    private static void PaintBody(Graphics g, int pose, bool fawn, int h)
+    // ---- the walk: where each foot is at phase p of the stride (0 to 1), in body heights from the hip; order near hind, near fore, far hind, far fore ----
+    //      The LATERAL sequence: left (near) hind lands at 0, left fore at 0.25, right (far) hind at 0.5, right fore at 0.75.
+    private static readonly float[] Offsets = [0f, 0.75f, 0.5f, 0.25f];
+    private static readonly float[] HipX = [-0.22f, 0.22f, -0.26f, 0.26f];
+
+    private static PointF[] WalkFeet(float p)
+    {
+        var feet = new PointF[4];
+        for (int j = 0; j < 4; j++)
+        {
+            float ph = (p + Offsets[j]) % 1f;
+            float dx, up = 0;
+            if (ph < Duty) dx = StepReach * (1 - 2 * ph / Duty);          // on the ground: the foot slides back at the body's speed
+            else
+            {
+                float q = (ph - Duty) / (1 - Duty);
+                dx = StepReach * (-1 + 2 * q);                            // in the air: it swings forward again
+                up = 0.07f * MathF.Sin(MathF.PI * q);
+            }
+            feet[j] = new PointF(dx, up);
+        }
+        return feet;
+    }
+
+    private static PointF[] SquareFeet() => [P(-0.03f, 0), P(0.03f, 0), P(-0.03f, 0), P(0.03f, 0)];
+
+    /// <summary>The withers dip as each forefoot lands (at 0.25 and 0.75 of the stride); positive is DOWN, in body heights.</summary>
+    private static float WithersDip(float p) => 0.012f * (0.5f + 0.5f * MathF.Cos(4 * MathF.PI * (p - 0.25f)));
+    private static float CroupDip(float p) => 0.012f * (0.5f + 0.5f * MathF.Cos(4 * MathF.PI * p));
+    /// <summary>The neck's root on a walk page: it rides the withers and dips a little more as each forefoot lands, which is the nod.</summary>
+    private static PointF NeckRoot(float p) => P(NeckX, NeckY - WithersDip(p) - 0.018f * (0.5f + 0.5f * MathF.Cos(4 * MathF.PI * (p - 0.25f))));
+
+    /// <summary>
+    /// The body and legs: x forward, y up, the origin at the middle of the body on the ground. "feet" are the four
+    /// feet's places from their hips (near hind, near fore, far hind, far fore); the dips lower the front and the
+    /// back of the body (body heights); "tail" 0 down, 1 half up, 2 up (the white flag).
+    /// </summary>
+    private static void PaintBody(Graphics g, PointF[] feet, float withersDip, float croupDip, int tail, bool fawn, int h)
     {
         float pw = MathF.Max(0.01f, 1.0f / h);                 // one pixel, in body heights
+        Color coat = fawn ? TanFawn : Tan, coatDark = fawn ? TanFawnDark : TanDark;
         void Blob(PointF[] pts, Color c, float tension = 0.5f)
         {
             using var path = new GraphicsPath();
@@ -125,66 +225,77 @@ internal sealed class DeerHerd
             using var b = new SolidBrush(c);
             g.FillPath(b, path);
         }
-        void Limb(PointF a, PointF b, float w, Color c)
+        // A limb bone as a tapered quad (wide end at "a"), with round ends.
+        void Bone(PointF a, PointF b, float wa, float wb, Color c)
         {
-            using var pen = new Pen(c, w) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            g.DrawLine(pen, a, b);
+            float dx = b.X - a.X, dy = b.Y - a.Y, l = MathF.Sqrt(dx * dx + dy * dy) + 1e-5f, nx = -dy / l, ny = dx / l;
+            using var br = new SolidBrush(c);
+            g.FillPolygon(br, [P(a.X + nx * wa / 2, a.Y + ny * wa / 2), P(b.X + nx * wb / 2, b.Y + ny * wb / 2), P(b.X - nx * wb / 2, b.Y - ny * wb / 2), P(a.X - nx * wa / 2, a.Y - ny * wa / 2)]);
+            g.FillEllipse(br, a.X - wa / 2, a.Y - wa / 2, wa, wa);
+            g.FillEllipse(br, b.X - wb / 2, b.Y - wb / 2, wb, wb);
         }
 
-        // Legs: a lateral walk, each leg a quarter of a cycle after the last. Far legs first (darker), the body, then the near legs.
-        void Leg(float hipX, float offset, bool hind, Color upper)
+        // Legs: far legs first (darker), the body, then the near legs. Two-bone IK: the joint goes where two bones of
+        // equal length reach from hip to foot; hocks point back, knees forward. The thigh is thick, the cannon thin.
+        void Leg(int j, bool hind, Color upper, Color lower)
         {
-            float ph = (pose / (float)WalkPages + offset) % 1f;
-            float dx, up = 0;
-            if (pose == WalkPages) dx = hipX < 0 ? -0.03f : 0.03f;        // standing: each foot square under its hip, the pairs a touch apart
-            else if (ph < 0.7f) dx = StepReach * (1 - 2 * ph / 0.7f);     // standing on it: the foot slides back along the ground
-            else
-            {
-                float q = (ph - 0.7f) / 0.3f;
-                dx = StepReach * (-1 + 2 * q);                            // in the air: it swings forward again
-                up = 0.07f * MathF.Sin(MathF.PI * q);
-            }
-            PointF hip = P(hipX, 0.52f), foot = P(hipX + dx, 0.02f + up);
-            // Two-bone IK: the joint goes where two bones of equal length reach from hip to foot; hocks point back, knees forward.
-            const float bone = 0.265f;                                  // two bones just longer than hip to ground: a standing leg is nearly straight, with only a slight bend at the joint (0.30 made a zigzag that read as an X)
+            float hipY = 0.52f - (hind ? croupDip : withersDip);
+            PointF hip = P(HipX[j], hipY), foot = P(HipX[j] + feet[j].X, 0.02f + feet[j].Y);
+            const float bone = 0.265f;                                  // two bones just longer than hip to ground: a standing leg is nearly straight
             float ddx = foot.X - hip.X, ddy = foot.Y - hip.Y;
             float d = MathF.Min(MathF.Sqrt(ddx * ddx + ddy * ddy), 2 * bone - 0.002f);
             float alpha = MathF.Acos(Math.Clamp(d / (2 * bone), -1, 1));
             float theta = MathF.Atan2(ddy, ddx) + (hind ? alpha : -alpha);
             PointF joint = P(hip.X + bone * MathF.Cos(theta), hip.Y + bone * MathF.Sin(theta));
-            Limb(hip, joint, MathF.Max(0.075f, 2.2f * pw), upper);
-            Limb(joint, foot, MathF.Max(0.05f, 1.6f * pw), TanDark);
-            Limb(P(foot.X - 0.015f, foot.Y), P(foot.X + 0.025f, foot.Y), MathF.Max(0.04f, 1.5f * pw), Hoof);
+            Bone(hip, joint, MathF.Max(0.085f, 2.6f * pw), MathF.Max(0.042f, 1.8f * pw), upper);
+            Bone(joint, foot, MathF.Max(0.040f, 1.8f * pw), MathF.Max(0.028f, 1.4f * pw), lower);
+            using var hoof = new SolidBrush(Hoof);
+            g.FillPolygon(hoof, [P(foot.X - 0.018f, foot.Y + 0.02f), P(foot.X + 0.024f, foot.Y + 0.02f), P(foot.X + 0.028f, foot.Y - 0.02f), P(foot.X - 0.02f, foot.Y - 0.02f)]);
         }
-        Leg(-0.26f, 0.50f, true, TanDark);
-        Leg(0.26f, 0.75f, false, TanDark);
+        Leg(2, true, coatDark, coatDark);
+        Leg(3, false, coatDark, coatDark);
 
-        // The torso: deep chest, a straight back, a rounded rump; the belly and throat cream.
-        Blob([P(0.42f, 0.60f), P(0.32f, 0.78f), P(0.0f, 0.82f), P(-0.34f, 0.78f), P(-0.47f, 0.62f), P(-0.36f, 0.46f), P(0.0f, 0.42f), P(0.34f, 0.46f)], Tan);
-        Blob([P(0.30f, 0.50f), P(0.0f, 0.44f), P(-0.32f, 0.48f), P(-0.30f, 0.56f), P(0.0f, 0.54f), P(0.30f, 0.56f)], Cream, 0.4f);
-        // The tail: a short tuft at the rump, white underneath (the white tail that names the deer).
-        Blob([P(-0.44f, 0.76f), P(-0.56f, 0.72f), P(-0.57f, 0.62f), P(-0.47f, 0.64f)], Tan, 0.4f);
-        Blob([P(-0.50f, 0.68f), P(-0.57f, 0.63f), P(-0.53f, 0.60f), P(-0.46f, 0.64f)], Cream, 0.4f);
+        // The torso: a deep chest, a straight back that dips with the weight, a rounded haunch; the dark topline; the
+        // cream underside that wraps up into the flank (one soft shape, not a pill); the shoulder and thigh as masses.
+        float wd = withersDip, cd = croupDip;
+        Blob([P(0.44f, 0.60f - wd), P(0.36f, 0.78f - wd), P(0.10f, 0.83f - wd * 0.5f - cd * 0.5f), P(-0.26f, 0.81f - cd), P(-0.46f, 0.66f - cd), P(-0.40f, 0.44f - cd), P(-0.10f, 0.40f), P(0.26f, 0.42f), P(0.44f, 0.50f - wd)], coat);
+        Blob([P(0.38f, 0.79f - wd), P(0.10f, 0.84f - wd * 0.5f - cd * 0.5f), P(-0.28f, 0.82f - cd), P(-0.42f, 0.70f - cd), P(-0.30f, 0.73f - cd), P(0.08f, 0.76f - wd * 0.5f - cd * 0.5f), P(0.34f, 0.72f - wd)], coatDark, 0.4f);   // the topline
+        Blob([P(0.38f, 0.48f - wd), P(0.20f, 0.41f), P(-0.10f, 0.40f), P(-0.36f, 0.45f - cd), P(-0.42f, 0.60f - cd), P(-0.26f, 0.50f - cd), P(0.00f, 0.46f), P(0.26f, 0.50f - wd), P(0.42f, 0.62f - wd)], Cream, 0.45f);   // the underside: a crescent, thin under the barrel and rising up into the chest and the haunch
+        using (var thigh = new SolidBrush(Color.FromArgb(70, coatDark)))
+        {
+            g.FillEllipse(thigh, -0.44f, 0.46f - cd, 0.30f, 0.30f);        // the haunch
+            g.FillEllipse(thigh, 0.14f, 0.48f - wd, 0.24f, 0.24f);         // the shoulder
+        }
         if (fawn)
         {
-            // A fawn's spots: two rows of cream dots along the back.
-            using var spot = new SolidBrush(Cream);
-            for (int i = 0; i < 6; i++)
-            {
-                float sx = -0.30f + 0.11f * i, r = 0.028f;
-                g.FillEllipse(spot, sx - r, 0.72f - r, r * 2, r * 2);
-                g.FillEllipse(spot, sx + 0.05f - r, 0.63f - r, r * 2, r * 2);
-            }
+            // A fawn's spots: scattered along the back and upper flank, in mixed sizes, never in rows.
+            using var spot = new SolidBrush(Color.FromArgb(236, 214, 176));
+            (float X, float Y, float R)[] spots = [(-0.36f, 0.70f, 0.020f), (-0.30f, 0.76f, 0.014f), (-0.24f, 0.66f, 0.024f), (-0.18f, 0.74f, 0.016f), (-0.12f, 0.68f, 0.020f),
+                (-0.06f, 0.77f, 0.014f), (0.00f, 0.71f, 0.026f), (0.06f, 0.64f, 0.016f), (0.10f, 0.76f, 0.018f), (0.16f, 0.69f, 0.022f), (0.22f, 0.74f, 0.014f),
+                (0.28f, 0.66f, 0.018f), (-0.34f, 0.60f, 0.014f), (-0.20f, 0.58f, 0.016f), (0.02f, 0.60f, 0.014f), (0.20f, 0.60f, 0.016f), (0.34f, 0.60f, 0.014f)];
+            foreach (var s in spots) g.FillEllipse(spot, s.X - s.R, s.Y - cd * 0.5f - wd * 0.5f - s.R, s.R * 2, s.R * 2);
         }
+        // The tail: a tuft at the rump that overlaps the body, white underneath (the flag), raised by "tail".
+        float lift = tail * 0.5f;
+        PointF root = P(-0.44f, 0.68f - cd);
+        float ang = 4.45f - 1.6f * lift;                                  // radians: hanging down against the rump; swung up when flagged
+        PointF tip = P(root.X + 0.14f * MathF.Cos(ang), root.Y + 0.14f * MathF.Sin(ang));
+        float tx = -(tip.Y - root.Y), ty = tip.X - root.X;                // across the tail
+        Blob([root, P(root.X + tx * 0.25f, root.Y + ty * 0.25f), P(tip.X + tx * 0.15f, tip.Y + ty * 0.15f), tip, P(tip.X - tx * 0.15f, tip.Y - ty * 0.15f), P(root.X - tx * 0.22f, root.Y - ty * 0.22f)], coat, 0.4f);
+        Blob([P(root.X - tx * 0.04f, root.Y - ty * 0.04f), P(tip.X + tx * 0.08f, tip.Y + ty * 0.08f), P(tip.X - tx * 0.17f, tip.Y - ty * 0.17f), P(root.X - tx * 0.24f, root.Y - ty * 0.24f)], White, 0.4f);
 
-        Leg(-0.22f, 0.0f, true, Tan);
-        Leg(0.22f, 0.25f, false, Tan);
+        Leg(0, true, coat, coatDark);
+        Leg(1, false, coat, coatDark);
     }
 
-    /// <summary>The neck and head on a sheet whose origin is the neck's root. f: 0 = head up and alert, 1 = nose down in the stubble.</summary>
-    private static void PaintHead(Graphics g, float f, bool fawn, int h)
+    /// <summary>
+    /// The neck and head on a sheet whose origin is the neck's root. f: 0 = head up and alert, 1 = nose down in the
+    /// stubble. kind: 0 jaw closed, 1 jaw open (chewing), 2 the near ear flicked back.
+    /// </summary>
+    private static void PaintHead(Graphics g, float f, int kind, bool fawn, int h)
     {
         float pw = MathF.Max(0.01f, 1.0f / h);
+        Color coat = fawn ? TanFawn : Tan, coatDark = fawn ? TanFawnDark : TanDark;
         float a = (24f + 136f * f) * MathF.PI / 180f;                      // the neck's angle from straight up, forward
         float ha = (84f + 90f * f) * MathF.PI / 180f;                      // the head's axis: forward when alert, down when grazing
         float len = 0.30f + 0.10f * f;                                     // the neck stretches a little to reach the ground
@@ -193,43 +304,61 @@ internal sealed class DeerHerd
         PointF Along(PointF from, float ang, float d) => P(from.X + d * MathF.Sin(ang), from.Y + d * MathF.Cos(ang));
         PointF headMid = Along(top, ha, 0.10f);
 
-        using (var neck = new Pen(Tan, MathF.Max(0.13f, 3.5f * pw)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-            g.DrawLine(neck, root, top);
-        using (var throat = new Pen(Cream, MathF.Max(0.05f, 1.5f * pw)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-            g.DrawLine(throat, Along(root, a, 0.06f), Along(Along(root, a, 0.06f), a, len * 0.6f));   // the pale stripe down the front of the neck
-
-        // Two big ears, back from the head, standing up whatever the head is doing; the far one first.
-        foreach (float spread in new[] { -0.30f, 0.34f })
+        // The neck: a tapered shape, thick at the shoulders and slimmer at the throat, with a soft cream patch at its base.
         {
-            float ea = ha - 1.95f + spread;
-            PointF mid = Along(top, ea, 0.10f);
+            float nx = MathF.Cos(a), ny = -MathF.Sin(a);                  // across the neck
+            float w0 = 0.19f, w1 = 0.12f;
+            using var b = new SolidBrush(coat);
+            using var path = new GraphicsPath();
+            path.AddClosedCurve([P(root.X + nx * w0 / 2, root.Y + ny * w0 / 2), P(top.X + nx * w1 / 2, top.Y + ny * w1 / 2), P(top.X - nx * w1 / 2, top.Y - ny * w1 / 2), P(root.X - nx * w0 / 2, root.Y - ny * w0 / 2)], 0.2f);
+            g.FillPath(b, path);
+            using var mane = new SolidBrush(Color.FromArgb(90, coatDark));
+            PointF m0 = P(root.X - nx * w0 * 0.28f, root.Y - ny * w0 * 0.28f), m1 = P(top.X - nx * w1 * 0.25f, top.Y - ny * w1 * 0.25f);
+            using var mp = new GraphicsPath();
+            mp.AddClosedCurve([m0, m1, P(m1.X - nx * 0.03f, m1.Y - ny * 0.03f), P(m0.X - nx * 0.05f, m0.Y - ny * 0.05f)], 0.2f);
+            g.FillPath(mane, mp);                                           // the darker back of the neck
+        }
+
+        // Two big ears, 0.14 long, angled outward from the back of the head, the dark inner edge showing; the far one first.
+        foreach ((float spread, bool near) in ((float, bool)[])[(-0.34f, false), (0.38f, true)])
+        {
+            float ea = ha - 1.95f + spread + (near && kind == 2 ? 0.9f : 0f);   // the flick: the near ear swung back
+            PointF mid = Along(top, ea, 0.11f);
             var es = g.Save();
             g.TranslateTransform(mid.X, mid.Y);
             g.RotateTransform(90f - ea * 180f / MathF.PI);
-            using (var ear = new SolidBrush(Tan)) g.FillEllipse(ear, -0.10f, -0.045f, 0.20f, 0.09f);
-            using (var inner = new SolidBrush(EarPink)) g.FillEllipse(inner, -0.06f, -0.025f, 0.13f, 0.05f);
+            using (var edge = new SolidBrush(EarEdge)) g.FillEllipse(edge, -0.085f, -0.045f, 0.17f, 0.09f);
+            using (var ear = new SolidBrush(coat)) g.FillEllipse(ear, -0.08f, -0.04f, 0.15f, 0.075f);
+            using (var inner = new SolidBrush(EarIn)) g.FillEllipse(inner, -0.05f, -0.02f, 0.10f, 0.038f);
             g.Restore(es);
         }
 
-        // The head: an oval along its axis with a slimmer muzzle, a cream muzzle ring, a black nose, an eye with a glint.
+        // The head: a longer wedge (a skull oval and a muzzle polygon), the cream muzzle ring, a big dark nose, the eye with a
+        // glint, and the jaw, dropped when chewing. In this turned frame +x is the way the nose points.
         var st = g.Save();
         g.TranslateTransform(headMid.X, headMid.Y);
-        g.RotateTransform(90f - ha * 180f / MathF.PI);                     // in this turned frame +x is the way the nose points
-        float ml = fawn ? 0.16f : 0.21f;                                   // a fawn's face is shorter
-        using (var skull = new SolidBrush(Tan)) g.FillEllipse(skull, -0.12f, -0.075f, 0.24f, 0.15f);
-        using (var muzzle = new SolidBrush(Tan))
-            g.FillPolygon(muzzle, [P(0.04f, 0.04f), P(ml, 0.035f), P(ml + 0.03f, -0.005f), P(ml, -0.045f), P(0.04f, -0.07f)]);
+        g.RotateTransform(90f - ha * 180f / MathF.PI);
+        float ml = fawn ? 0.19f : 0.25f;                                   // a fawn's face is shorter
+        using (var skull = new SolidBrush(coat)) g.FillEllipse(skull, -0.13f, -0.085f, 0.26f, 0.17f);
+        using (var muzzle = new SolidBrush(coat))
+            g.FillPolygon(muzzle, [P(0.02f, 0.06f), P(ml, 0.04f), P(ml + 0.035f, -0.005f), P(ml, -0.045f), P(0.02f, -0.075f)]);
+        if (kind == 1)
+        {
+            using var jaw = new SolidBrush(coatDark);
+            g.FillPolygon(jaw, [P(0.04f, -0.06f), P(ml - 0.02f, -0.075f), P(ml + 0.01f, -0.03f), P(ml - 0.04f, -0.035f)]);   // the lower jaw dropped a little
+        }
         using (var ring = new SolidBrush(Cream))
-            g.FillPolygon(ring, [P(ml - 0.06f, 0.03f), P(ml, 0.03f), P(ml + 0.03f, -0.005f), P(ml, -0.045f), P(ml - 0.06f, -0.06f)]);
-        using (var nose = new SolidBrush(Nose)) g.FillEllipse(nose, ml - 0.005f, -0.03f, 0.045f, 0.04f);
-        using (var eye = new SolidBrush(Nose)) g.FillEllipse(eye, 0.0f, 0.0f, MathF.Max(0.035f, 2f * pw), MathF.Max(0.035f, 2f * pw));
-        using (var glint = new SolidBrush(Color.White)) g.FillEllipse(glint, 0.018f, 0.018f, MathF.Max(0.012f, pw), MathF.Max(0.012f, pw));
+            g.FillPolygon(ring, [P(ml - 0.07f, 0.035f), P(ml, 0.035f), P(ml + 0.035f, -0.005f), P(ml, -0.045f), P(ml - 0.07f, -0.06f)]);
+        using (var nose = new SolidBrush(Nose)) g.FillEllipse(nose, ml - 0.015f, -0.035f, 0.06f, 0.05f);
+        using (var eye = new SolidBrush(Nose)) g.FillEllipse(eye, -0.01f, 0.0f, MathF.Max(0.04f, 2.2f * pw), MathF.Max(0.04f, 2.2f * pw));
+        using (var glint = new SolidBrush(Color.White)) g.FillEllipse(glint, 0.01f, 0.02f, MathF.Max(0.013f, pw), MathF.Max(0.013f, pw));
         g.Restore(st);
     }
 
     // ================================================================ living
 
     private float FootY(Animal a) => _s.FieldY(a.X) + (_s.Ground.YAt(Math.Clamp(a.X, 0, _s.Width - 1)) - _s.U * 0.006f - _s.FieldY(a.X)) * a.Depth;
+    private float Stride(Animal a) => 2 * StepReach * a.H / Duty;        // the foot slides 2R while it is down for Duty of the stride: planted
 
     public void Update(float dt)
     {
@@ -240,23 +369,65 @@ internal sealed class DeerHerd
             Animal a = _deer[i];
             a.Timer -= dt;
             a.Clock += dt;
-            // The head eases toward where the doing wants it: down for grazing (with small nibbles), up to look, half way to walk.
-            float want = a.Doing switch
-            {
-                Doing.Graze => 0.92f + 0.08f * MathF.Sin(a.Clock * 5f),
-                Doing.Look => 0f,
-                _ => 0.25f,
-            };
-            a.HeadF += (want - a.HeadF) * MathF.Min(1f, dt * 4f);
 
-            if (a.Doing == Doing.Walk)
+            // ---- the neck: eases toward where the doing wants it at a steady rate (a lift takes about half a second) ----
+            float want = a.Doing switch { Doing.Graze => 1f, Doing.Look => 0f, _ => 0.25f };
+            float step = NeckRate * dt;
+            a.NeckF += Math.Clamp(want - a.NeckF, -step, step);
+            // Bites while grazing with the nose down: bursts of a few, each a tug up, a hold and an ease down, then chewing.
+            if (a.BiteT >= 0) { a.BiteT += dt; if (a.BiteT > 0.27f) { a.BiteT = -1; a.ChewT = 0; } }
+            if (a.ChewT >= 0) { a.ChewT += dt; if (a.ChewT > 0.7f) a.ChewT = -1; }
+            if (a.Doing == Doing.Graze && a.NeckF > 0.95f && a.BiteT < 0)
             {
-                float step = Speed * u * dt;
-                a.X += a.Dir * step;
-                a.Walked += step;
-                float margin = a.H * 0.9f;
-                if (a.X < margin) { a.X = margin; a.Dir = 1; }
-                if (a.X > _s.Width - margin) { a.X = _s.Width - margin; a.Dir = -1; }
+                a.NextBite -= dt;
+                if (a.NextBite <= 0)
+                {
+                    a.BiteT = 0;
+                    if (a.BitesLeft <= 0) a.BitesLeft = 3 + _rng.Next(4);
+                    a.BitesLeft--;
+                    a.NextBite = a.BitesLeft > 0 ? 0.5f + 0.7f * (float)_rng.NextDouble() : 2f + 3f * (float)_rng.NextDouble();
+                }
+            }
+            // The ear flick: six frames, now and then.
+            if (a.EarT >= 0) { a.EarT += dt; if (a.EarT > 0.1f) a.EarT = -1; }
+            else { a.NextEar -= dt; if (a.NextEar <= 0) { a.EarT = 0; a.NextEar = 2f + 4f * (float)_rng.NextDouble(); } }
+            if (a.TailT >= 0) { a.TailT += dt; if (a.TailT > 0.27f) a.TailT = -1; }
+
+            // ---- the gait ----
+            switch (a.Gait)
+            {
+                case Gait.Rising:
+                    a.GaitT += dt;
+                    if (a.GaitT >= SettleFor) { a.Gait = Gait.Walking; a.Walked = 0; }
+                    break;
+                case Gait.Walking:
+                {
+                    float move = Speed * u * dt;
+                    a.X += a.Dir * move;
+                    a.Walked += move;
+                    break;
+                }
+                case Gait.Stopping:
+                {
+                    // Slowing evenly to a halt exactly on the rest page: a run-down from the full speed over the distance left.
+                    a.StopT += dt;
+                    float k = Math.Min(1f, a.StopT / a.StopFor);
+                    float walked = a.StopFrom + a.StopDist * (2 * k - k * k);            // distance under a speed that falls evenly to zero
+                    a.X += a.Dir * (walked - a.Walked);
+                    a.Walked = walked;
+                    if (k >= 1f) { a.Gait = Gait.Settling; a.GaitT = 0; a.Walked = 0; }
+                    break;
+                }
+                case Gait.Settling:
+                    a.GaitT += dt;
+                    if (a.GaitT >= SettleFor) a.Gait = Gait.Settled;
+                    break;
+            }
+            if (a.Gait == Gait.Walking || a.Gait == Gait.Stopping)
+            {
+                float lo = _s.Width * 0.20f, hi = _s.Width * 0.78f;        // keeps the herd between the maples' leaves
+                if (a.X < lo) { a.X = lo; a.Dir = 1; }
+                if (a.X > hi) { a.X = hi; a.Dir = -1; }
             }
 
             if (a.Fawn && doe != null)
@@ -264,23 +435,58 @@ internal sealed class DeerHerd
                 // The fawn keeps close: if the doe has moved off, trot after her; otherwise do as she does, a little behind.
                 float want_x = doe.X - doe.Dir * u * 0.09f;
                 float gap = want_x - a.X;
-                if (MathF.Abs(gap) > u * 0.05f)
+                if (MathF.Abs(gap) > u * 0.05f && a.Doing != Doing.Walk)
                 {
-                    if (a.Doing != Doing.Walk) { a.Doing = Doing.Walk; a.Clock = 0; }
-                    a.Dir = gap > 0 ? 1 : -1;
-                    a.Timer = 0.3f;
+                    StartWalk(a, gap > 0 ? 1 : -1);
+                    a.Timer = 99f;
                     continue;
                 }
-                if (a.Doing == Doing.Walk && MathF.Abs(gap) <= u * 0.02f) { a.Doing = Doing.Graze; a.Timer = 2f + 3f * (float)_rng.NextDouble(); a.Clock = 0; a.Dir = doe.Dir; }
+                if (a.Doing == Doing.Walk && a.Gait == Gait.Walking && MathF.Abs(gap) <= u * 0.02f) { StopWalk(a); a.Timer = 2f + 3f * (float)_rng.NextDouble(); a.Dir = doe.Dir; }
+                if (a.Doing == Doing.Walk) continue;
+            }
+            if (_test == "walk" && !a.Fawn) { a.Doing = Doing.Walk; a.Gait = a.Gait == Gait.Settled ? Gait.Walking : a.Gait; continue; }
+            if (_test == "graze" && !a.Fawn) { a.Doing = Doing.Graze; continue; }
+            if (_test == "cycle" && !a.Fawn)
+            {
+                // Walks for three seconds, stops, grazes for three, walks again: for watching the stop and the start.
+                float c = a.Clock % 6.5f;
+                if (c < 3f && a.Doing != Doing.Walk && a.Gait == Gait.Settled) StartWalk(a, a.Dir);
+                if (c >= 3f && a.Doing == Doing.Walk && a.Gait == Gait.Walking) StopWalk(a);
+                continue;
             }
             if (a.Timer > 0) continue;
+            if (a.Gait == Gait.Stopping || a.Gait == Gait.Settling || a.Gait == Gait.Rising) continue;   // finish the step first
 
             a.Clock = 0;
             double roll = _rng.NextDouble();
-            if (a.Doing == Doing.Walk || roll < 0.55) { a.Doing = Doing.Graze; a.Timer = 3f + 6f * (float)_rng.NextDouble(); }
-            else if (roll < 0.80) { a.Doing = Doing.Look; a.Timer = 1.5f + 2.5f * (float)_rng.NextDouble(); }
-            else if (!a.Fawn) { a.Doing = Doing.Walk; a.Timer = 2f + 5f * (float)_rng.NextDouble(); if (_rng.Next(3) == 0) a.Dir = -a.Dir; }
+            if (a.Doing == Doing.Walk) { StopWalk(a); a.Timer = 3f + 6f * (float)_rng.NextDouble(); }
+            else if (roll < 0.55) { a.Doing = Doing.Graze; a.Timer = 3f + 6f * (float)_rng.NextDouble(); }
+            else if (roll < 0.80) { a.Doing = Doing.Look; a.Timer = 1.5f + 2.5f * (float)_rng.NextDouble(); a.TailT = 0; }
+            else if (!a.Fawn) { StartWalk(a, _rng.Next(3) == 0 ? -a.Dir : a.Dir); a.Timer = 2f + 5f * (float)_rng.NextDouble(); }
         }
+    }
+
+    private void StartWalk(Animal a, int dir)
+    {
+        a.Dir = dir;
+        a.Doing = Doing.Walk;
+        a.Gait = Gait.Rising;
+        a.GaitT = 0;
+        a.Clock = 0;
+    }
+
+    /// <summary>Begins a stop: the walk eases down so that it ends exactly on the rest page, then the settle pages play.</summary>
+    private void StopWalk(Animal a)
+    {
+        a.Doing = Doing.Graze;
+        if (a.Gait != Gait.Walking) return;
+        float stride = Stride(a);
+        float into = a.Walked % stride;
+        float dist = stride - into;
+        if (dist < 0.25f * stride) dist += stride;                        // too close to the rest page to stop evenly: take one more
+        a.Gait = Gait.Stopping;
+        a.StopFrom = a.Walked; a.StopDist = dist; a.StopT = 0;
+        a.StopFor = 2 * dist / (Speed * _s.U);                            // slowing evenly from full speed to zero covers "dist" in twice the time it would at full speed
     }
 
     /// <summary>Stamps the herd through the field stencil: the doe, then the fawn (nearer), then any other doe.</summary>
@@ -290,22 +496,57 @@ internal sealed class DeerHerd
         {
             bool mirror = a.Dir < 0;
             float foot = FootY(a);
-            int page;
-            if (a.Doing == Doing.Walk)
+            Sprite body;
+            PointF neck;
+            float stride = Stride(a);
+            switch (a.Gait)
             {
-                float stride = 4 * StepReach * a.H;
-                float cycle = a.Walked / stride;
-                page = (int)MathF.Round((cycle - MathF.Floor(cycle)) * WalkPages) % WalkPages;
+                case Gait.Walking:
+                case Gait.Stopping:
+                {
+                    float cycle = a.Walked / stride;
+                    int page = (int)MathF.Floor((cycle - MathF.Floor(cycle)) * WalkPages) % WalkPages;
+                    body = a.Walk[page]; neck = a.NeckWalk[page];
+                    break;
+                }
+                case Gait.Settling:
+                case Gait.Rising:
+                {
+                    float k = Math.Clamp(a.GaitT / SettleFor, 0f, 0.999f);
+                    int page = (int)(k * SettlePages);
+                    if (a.Gait == Gait.Rising) page = SettlePages - 1 - page;
+                    body = a.Settle[page]; neck = a.NeckSettle[page];
+                    break;
+                }
+                default:
+                {
+                    // Standing: the tail flicks up and down twice when she lifts her head.
+                    int tp = 0;
+                    if (a.TailT >= 0) tp = new[] { 1, 2, 1, 0, 1, 2, 1, 0 }[Math.Min(7, (int)(a.TailT / 0.27f * 8))];
+                    body = a.Tail[tp]; neck = P(NeckX, NeckY);
+                    break;
+                }
             }
-            else page = WalkPages;                                        // the standing page
             int left = (int)MathF.Round(a.X) - a.BodyOx;
             int top = (int)MathF.Round(foot) - a.BodyOy;
-            a.Body[page].Draw(fb, left, top, 1f, _s.OpenField, mirror);
-            // The head sheet's origin is the neck's root: on the body at (NeckX, NeckY) body heights, mirrored with the body.
-            int hp = Math.Clamp((int)MathF.Round(a.HeadF * (HeadPages - 1)), 0, HeadPages - 1);
-            float neckX = a.X + (mirror ? -1 : 1) * NeckX * a.H, neckY = foot - NeckY * a.H;
+            body.Draw(fb, left, top, 1f, _s.OpenField, mirror);
+
+            // The head: the neck page, with the bite's tug (up and back, held, eased down) taken off it; chewing opens the
+            // jaw on alternate beats; the ear flick is its own kind of page.
+            float f = a.NeckF;
+            if (a.BiteT >= 0)
+            {
+                float t = a.BiteT;
+                float tug = t < 0.067f ? t / 0.067f : t < 0.1f ? 1f : 1f - Smooth((t - 0.1f) / 0.17f);
+                f -= 0.09f * tug;
+            }
+            int hp = Math.Clamp((int)MathF.Round(f * (HeadPages - 1)), 0, HeadPages - 1);
+            int kind = a.ChewT >= 0 ? ((int)(a.ChewT * 12) % 2) : a.EarT >= 0 ? 2 : 0;
+            float neckX = a.X + (mirror ? -1 : 1) * neck.X * a.H, neckY = foot - neck.Y * a.H;
             int hl = (int)MathF.Round(neckX) - a.HeadS / 2, ht = (int)MathF.Round(neckY) - (int)(a.HeadS * 0.55f);
-            a.Head[hp].Draw(fb, hl, ht, 1f, _s.OpenField, mirror);
+            a.Head[hp, kind].Draw(fb, hl, ht, 1f, _s.OpenField, mirror);
         }
     }
+
+    private static float Smooth(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3 - 2 * x); }
 }
