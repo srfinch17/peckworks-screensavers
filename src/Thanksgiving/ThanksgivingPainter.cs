@@ -169,22 +169,19 @@ internal static class ThanksgivingPainter
         PaintFarmhouse(g, farmFoot.X, farmFoot.Y, u);
         var barnFoot = new PointF(w * 0.60f, Brushwork.RidgeYAt(nearRidge, w * 0.60f) + u * 0.012f);
         PaintBarn(g, barnFoot.X, barnFoot.Y, u);
+        // The scarecrow stands in the garden beside the farmhouse, on the same hill, at the house's scale (his line:
+        // "put the scarecrow back by the house. not in the middle of a cut hay field"). Painted with the farm, before the
+        // field copy, so everything that moves on the field passes in front of it as it should for a thing behind the field.
+        float scarecrowX = farmFoot.X + u * 0.095f, scarecrowTall = u * 0.085f;
+        float scarecrowFoot = Brushwork.RidgeYAt(nearRidge, scarecrowX) + u * 0.010f;
+        PaintScarecrow(g, scarecrowX, scarecrowFoot, scarecrowTall, u);
         g.Flush();
-        uint[] upToFarm = Brushwork.ToPixels(bmp);   // a second copy: "unchanged since here" = nothing stands in front of the farm
+        uint[] upToFarm = Brushwork.ToPixels(bmp);   // a second copy: "unchanged since here" = nothing stands in front of the farm (the scarecrow is part of it)
 
         Bank ground = MakeGround(w, h);
         List<(PointF At, float R)> bales = PaintBales(g, w, u, nearRidge, ground, rng);
         g.Flush();
         uint[] upToField = Brushwork.ToPixels(bmp);  // a third copy: for things that move on the field (the tractor), behind the scarecrow, the fence and the near ground
-
-        // The scarecrow stands IN the field, behind the fence, where a scarecrow
-        // belongs: nearer than the tractor's lane but before the near ground. It
-        // is painted AFTER the field copy, so the OpenField stencil hides a
-        // tractor behind it (the first build took the copy after the scarecrow,
-        // and the tractor drove across its legs).
-        float scarecrowX = w * 0.40f, scarecrowTall = u * 0.20f;
-        float scarecrowFoot = Brushwork.RidgeYAt(nearRidge, scarecrowX) * 0.30f + ground.YAt(scarecrowX) * 0.70f;
-        PaintScarecrow(g, scarecrowX, scarecrowFoot, scarecrowTall, u);
 
         ground.Paint(g, Color.FromArgb(178, 124, 56), Color.FromArgb(100, 60, 30), Color.FromArgb(150, 214, 166, 84), Math.Max(1.5f, u * 0.004f));
         PaintGrass(g, w, u, ground, rng);

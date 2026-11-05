@@ -77,7 +77,7 @@ internal sealed class Crow : Happening
     public Crow(ThanksgivingScenery s)
     {
         _s = s;
-        _k = Math.Max(9f, s.U * 0.06f);
+        _k = Math.Max(6f, s.ScarecrowHeight * 0.30f);          // sized to the scarecrow it lands on (a far garden scarecrow gets a far crow)
         _w = (int)(2.9f * _k) + 8;
         _f0 = FeetOff(PerchPitch, 1f);
 
