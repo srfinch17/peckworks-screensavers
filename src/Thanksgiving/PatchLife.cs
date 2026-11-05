@@ -42,7 +42,9 @@ internal sealed class PatchLife
         public int Dir = 1;
         public float Timid, Busy;                   // the dials
         public Mind<Doing> Mind = new(Doing.Still);
-        public Cooldown Startled = new();
+        public Attention Senses = null!;            // what it makes of the noticeboard (Senses.cs)
+        public Pace Pace = null!;                   // its speed, eased (Mover.cs): a mouse gathers speed over a few steps, it does not switch on
+        public float NextPost;                      // a squirrel on the move tells the board every so often
         public PointF Goal;
         public float Travelled;                     // for the page
         public float Clock;
@@ -55,6 +57,7 @@ internal sealed class PatchLife
 
     private readonly ThanksgivingScenery _s;
     private readonly Random _rng;
+    private readonly Noticeboard _board;
     private readonly List<Critter> _all = new();
     private readonly float _k, _m, _b;
     private readonly Ground.Solid _ground;
@@ -64,28 +67,32 @@ internal sealed class PatchLife
     private Sheet[] _birdFlyKind = new Sheet[2];
     private volatile bool _ready;
 
-    public PatchLife(ThanksgivingScenery s, int count, Random sceneRng)
+    public PatchLife(ThanksgivingScenery s, int count, Random sceneRng, Noticeboard board)
     {
         _s = s;
+        _board = board;
         _rng = new Random(sceneRng.Next());         // its own dice
         _k = Math.Max(9f, s.U * 0.055f);
         _m = _k * 0.55f;
         _b = Math.Max(7f, s.U * 0.032f);
         _ground = CanStand;                         // made once: a new delegate every frame is garbage
         int mice = (count + 1) / 2, birds = count / 3, squirrels = Math.Max(0, count - mice - birds);
-        float[] timid = Traits.Deal(_rng, Math.Max(1, count)), busy = Traits.Deal(_rng, Math.Max(1, count));
+        float[] timid = Traits.Deal(_rng, Math.Max(1, count)), busy = Traits.Deal(_rng, Math.Max(1, count)), curious = Traits.Deal(_rng, Math.Max(1, count));
         int n = 0;
-        for (int i = 0; i < mice; i++) Add(Kind.Mouse, timid[n], busy[n++]);
-        for (int i = 0; i < birds; i++) Add(Kind.Bird, timid[n], busy[n++]);
-        for (int i = 0; i < squirrels; i++) Add(Kind.Squirrel, timid[n], busy[n++]);
+        for (int i = 0; i < mice; i++) { Add(Kind.Mouse, timid[n], busy[n], curious[n]); n++; }
+        for (int i = 0; i < birds; i++) { Add(Kind.Bird, timid[n], busy[n], curious[n]); n++; }
+        for (int i = 0; i < squirrels; i++) { Add(Kind.Squirrel, timid[n], busy[n], curious[n]); n++; }
         Task.Run(() => { try { Build(); } catch { _ready = false; return; } _ready = true; });
     }
 
-    private void Add(Kind kind, float timid, float busy)
+    private void Add(Kind kind, float timid, float busy, float curious)
     {
         var c = new Critter { Kind = kind, Timid = timid, Busy = busy, Look = _rng.Next(2), Dir = _rng.Next(2) == 0 ? 1 : -1 };
         PointF at = RandomSpot(0, _s.Width, 40);
         c.X = at.X; c.Y = at.Y;
+        // Small things in the grass feel less of the world (Keen under 1); a mouse is timid by nature, a squirrel bold.
+        c.Senses = new Attention(kind == Kind.Mouse ? 0.5f + 0.5f * timid : kind == Kind.Squirrel ? 0.5f * timid : timid, curious) { Keen = kind == Kind.Bird ? 1f : 0.8f };
+        c.Pace = new Pace(0.9f * _s.U);             // gathers speed over about a quarter of a second
         c.Mind.Begin(Doing.Still, 0.5f + 3f * (float)_rng.NextDouble());
         _all.Add(c);
     }
@@ -178,17 +185,21 @@ internal sealed class PatchLife
         foreach (Critter c in _all)
         {
             c.Mind.Tick(dt);
-            c.Startled.Tick(dt);
+            c.Senses.Tick(dt);
             c.Clock += dt;
-            // Startles: a mouse near a squirrel (the patch's or the story's) bolts; a bird near anything bigger flies up.
-            if (c.Startled.Ready && c.Kind != Kind.Squirrel && c.Mind.Doing != Doing.Bolt && c.Mind.Doing != Doing.Fly)
+            // A squirrel on the move is a thing the mice and birds notice: it tells the board every third of a second.
+            if (c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Go or Doing.Bolt && c.Clock >= c.NextPost)
             {
-                foreach (Critter o in _all)
-                {
-                    if (o == c || o.Kind != Kind.Squirrel || o.Mind.Doing != Doing.Go) continue;
-                    float dx = o.X - c.X, dy = o.Y - c.Y;
-                    if (dx * dx + dy * dy < (0.10f * _s.U) * (0.10f * _s.U) * (1 + c.Timid)) { Startle(c, new PointF(o.X, o.Y)); break; }
-                }
+                _board.Post(Sense.Movement, new PointF(c.X, c.Y), 0.14f * _s.U, 0.9f, c);
+                c.NextPost = c.Clock + 0.33f;
+            }
+            // The senses: a mouse bolts from a squirrel or a scuffle, freezes at a noise; a bird flies up; a squirrel sits up and looks.
+            if (c.Mind.Doing is not (Doing.Bolt or Doing.Fly))
+            {
+                Reaction r = c.Senses.Check(_board, new PointF(c.X, c.Y), c, out Notice cause);
+                if (r == Reaction.Flee) Startle(c, cause.At);
+                else if (r == Reaction.Freeze) { c.Pace.Halt(); c.Mind.Begin(c.Kind == Kind.Squirrel && c.Perched < 0 ? Doing.Still : Doing.Still, 1f + 1.5f * c.Timid); c.Clock = 0; }
+                else if (r == Reaction.Look && c.Mind.Doing is Doing.Still or Doing.Peck or Doing.Perch) { c.Clock = 1.1f; c.Mind.Left = Math.Max(c.Mind.Left, 0.8f); if (c.Kind != Kind.Bird) c.Dir = cause.At.X >= c.X ? 1 : -1; }
             }
             Act(c, dt);
             if (c.Mind.Over) Decide(c);
@@ -197,7 +208,6 @@ internal sealed class PatchLife
 
     private void Startle(Critter c, PointF from)
     {
-        c.Startled.Start(4f + 6f * c.Timid);
         if (c.Kind == Kind.Bird) { BeginFly(c, null); return; }
         PointF? run = Ground.FleeRun(_ground, new PointF(c.X, c.Y), from, _m * 0.5f, 0.25f * _s.U, 0.06f * _s.U);
         c.Goal = run ?? RandomSpot(c.X - 0.3f * _s.U, c.X + 0.3f * _s.U, 20);
@@ -312,18 +322,22 @@ internal sealed class PatchLife
                 if (dist < arrive)
                 {
                     // Arrived: a scurry ends in a sniff; a nibble and a hide stay put until the timer.
+                    c.Pace.Halt();
                     if (c.Mind.Doing is Doing.Go or Doing.Bolt) { c.Mind.Begin(Doing.Still, c.Kind == Kind.Bird ? 0.5f : 0.4f + 0.8f * (float)_rng.NextDouble()); c.Clock = 0; }
                     else if (c.Mind.Left > 4f) c.Mind.Left = 2f + 3f * (float)_rng.NextDouble();
                     return;
                 }
+                // The pace eases toward the doing's speed and slows into the goal (Mover.cs); the heading turns at a rate, easing as it settles.
                 float speed = c.Kind switch { Kind.Mouse => c.Mind.Doing == Doing.Bolt ? 0.30f : 0.19f, Kind.Bird => 0.12f, _ => c.Mind.Doing == Doing.Bolt ? 0.32f : 0.24f } * u;
+                c.Pace.Want = Math.Min(speed, MathF.Max(0.25f * speed, dist * 4f));
                 float want = MathF.Atan2(dy, dx);
+                c.Heading = Turn.Toward(c.Heading, want, 7f, dt);
                 float err = MathF.IEEERemainder(want - c.Heading, MathF.Tau);
-                c.Heading += Math.Clamp(err, -6f * dt, 6f * dt);          // it turns at a rate, not in a frame
-                float step = speed * dt;
+                float step = c.Pace.Tick(dt);
+                if (step <= 0f) return;
                 float x = c.X, y = c.Y, hd = c.Heading;
                 var stepped = Ground.Step(_ground, ref x, ref y, ref hd, step, err);
-                if (stepped == Ground.Stepped.Refused) { if (++c.Refused > 20) { c.Mind.Begin(Doing.Still, 0.5f); c.Refused = 0; } return; }
+                if (stepped == Ground.Stepped.Refused) { if (++c.Refused > 20) { c.Pace.Halt(); c.Mind.Begin(Doing.Still, 0.5f); c.Refused = 0; } return; }
                 c.Refused = 0;
                 c.X = x; c.Y = y; c.Heading = hd;
                 c.Travelled += step;

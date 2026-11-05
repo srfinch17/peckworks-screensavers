@@ -42,6 +42,12 @@ people watch for an hour without seeing the same thing twice.
 | `Cooldown` | "Not again for a while". `Start(seconds)`, `Tick(dt)`, `Ready`. | A koi that flinched at a shadow cannot flinch again for fifteen to forty seconds. |
 | `Trail` (Trail.cs) | The path the head has taken, and the walk back along it that lays a body: `Remember`, `RememberIfMoved`, `Straight`, `Shift` (move the whole body), `Sweep` (turn the whole body about the head: a pivot on the spot), `EaseDepths`, and `Begin(head, z, depthPx, heading)` giving a `Walk` whose `Advance(distance)` returns the point that far behind the head along the path. | The lizard lays its 16 spine points with one `Walk`; the koi's and the snake's hand-written walks are the same algorithm and are the next to move onto it. |
 | `Ground` (Ground.cs) | The three walking rules for anything on a surface with an edge: `Step` (forward, or slide along the edge toward the goal when the way ahead is refused), `LineClear` (is the whole line to a goal ground?), `FleeRun` (the longest clear run away from a point). The surface is a `Solid(x, y)` question the animal answers. | The lizard's steps, roam goals, exits and flights; the mouse is built on the same three. |
+| `Noticeboard`, `Notice`, `Sense` (Senses.cs) | The scene's board of what is going on: anything pins a notice (a kind: Loud, Movement, Threat, Food, Friend; a place; how far it carries; how strong; who caused it) and it falls off after a second. | Thanksgiving's director pins each happening as it begins (the tractor is loud across the field, the raccoon a threat by the horn); a story pins its scuffle; a squirrel on the move pins itself every third of a second. |
+| `Attention`, `Reaction` (Senses.cs) | An animal's senses: two dials (timid, curious), a hunger mood, how keen, and a cooldown. `Check(board, me, self, out cause)` reads the board and says what the animal felt: Look, Freeze, Flee, Approach or nothing, the strongest first; a reaction starts the cooldown, and only something worse gets through it. The animal turns the reaction into its own doings. | A turkey's freeze is the head up facing it; a deer's flight is a brisk walk away that pins a Friend notice so the herd looks up; a mouse's is a bolt behind a pumpkin. |
+| `Pace` (Mover.cs) | A speed that eases toward what the animal wants under an acceleration cap, a `Brake(dist)` that runs it down to nothing over exactly a chosen distance (so the walk ends on the rest page), `Halt`, and the odometer `Walked` with `Page(stride, pages)` and `ToRestPage(stride)` for paging planted feet by distance. `Tick(dt)` returns how far it moved. | The turkeys and the deer lean into every walk and run down onto the page with both feet planted; the patch's mice gather speed over a few steps and slow into a goal. |
+| `Turn.Toward(heading, target, rate, dt)` (Mover.cs) | A heading that turns at a rate and eases to a third of it within the last fifteen degrees, so it settles instead of ticking across the target. | The patch's critters. |
+| `Organic.Drift(t, seed)`, `Organic.Jitter(rng, mean)` (Mover.cs) | A slow wander between -1 and 1 made of three waves that never line up, and a timer with a natural spread (never under a third of the mean, sometimes well over). | A standing deer's head drifts a page or so; every doing's timer is jittered, so nothing happens on a metronome. |
+| `Herd.FollowX`, `FollowError`, `Spacing` (Herd.cs) | Where a follower belongs (a gap behind its leader, on the leader's own side), how wrong its gap is beyond a slack, and the push from neighbours standing too close. | The fawn keeps her place behind the doe and only trots when the gap is wrong by more than she can bear. |
 
 A MOOD is a dial that moves: the koi's hunger (0 fed to 1 famished) rises over minutes and drops
 when it eats, and loads the dice exactly as a dial does (the petal faces, the gulp timer, the
@@ -486,3 +492,39 @@ one a lizard bug first:
    nothing reaches `least` (then take the way out of the screen).
 Make the delegates once in the constructor (a new one every frame is garbage), one per unit the
 animal uses (the lizard asks the land in ground units for steps and in screen pixels for lines).
+
+## 10. Senses and movers: reacting, and moving like a living thing (Core/Minds/Senses.cs, Mover.cs, Herd.cs)
+
+Two things make a creature read as ALIVE to someone watching, beyond choosing what to do next:
+it reacts to what happens around it, and it moves with weight. Both are shared now, and both are
+deliberately small.
+
+**Senses.** The scene owns one `Noticeboard`. Anything that happens pins a `Notice` on it: a
+kind (`Loud`, `Movement`, `Threat`, `Food`, `Friend`), a place, how far it carries, how strong,
+and who caused it; a notice falls off after a second. Each animal owns an `Attention` with its
+dials (timid, curious; a hunger mood; how keen its senses are) and a cooldown, and asks it once a
+frame: `Check(board, me, self, out cause)`. The one rule inside turns the notices it can feel
+(closeness times strength, scaled by the dials) into a `Reaction`: `Look`, `Freeze`, `Flee`,
+`Approach`, the worst first; a reaction starts the cooldown, and while it runs only something
+WORSE gets through (a deer glancing at a squirrel still freezes when the tractor comes). The kit
+never moves anything: the animal turns the reaction into its own doings, and a reaction that
+should spread (a deer bolting) pins a `Friend` notice of its own, which is how an alarm runs
+through a herd without any herd code. Thanksgiving's director pins every happening as it begins
+(`HappeningDirector.Began`), a story pins its scuffle, and a squirrel on the move pins itself.
+
+**Movers.** `Pace` is a speed that eases toward what the animal wants under an acceleration cap
+(a deer leans into a walk over half a second), a `Brake(dist)` that runs it down to nothing over
+exactly a chosen distance (so a walk ends on the page where both feet are on the ground: ask
+`ToRestPage(stride)` for the distance), and the odometer `Walked` that a flip-book of planted
+feet is paged by (`Page(stride, pages)`): a foot stays planted only when the page follows the
+distance, never the clock. `Turn.Toward` turns a heading at a rate and eases into the target.
+`Organic.Drift` is three waves that never line up, for a standing head that is never quite
+still; `Organic.Jitter` spreads every timer so nothing happens on a metronome. `Herd` holds the
+two sums a group needs: where a follower belongs behind its leader, and the push from neighbours
+standing too close.
+
+**Instruments.** `PECKWORKS_MINDLOG=<file>` makes Thanksgiving's flock and herd write every
+frame's speed and every roll and reaction; the kit's `tg_mindlog.py` reads it back as the
+largest frame-to-frame speed step per animal (a toy's is its whole speed; a deer's is 2 px/s a
+frame at a 54 px/s walk) and the reactions in time order. `PECKWORKS_NOTICE=Kind;xf;yf;reachU;at`
+pins one notice at a chosen second, for watching the whole field react to it on a sheet.

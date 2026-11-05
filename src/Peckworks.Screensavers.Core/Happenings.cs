@@ -227,6 +227,7 @@ public sealed class HappeningDirector
         Happening h = Built(who);
         h.Begin(_rng);
         _running.Add((who, _time));
+        Began?.Invoke(h);
         _nextAt = testing ? _time + h.Seconds + 1
                 // A showing that found nothing to draw (no branch to hang a web
                 // on) says so with a tiny Seconds. Deal again in a second
@@ -261,6 +262,12 @@ public sealed class HappeningDirector
     /// its actors take the stage and clears it (null) when they leave.
     /// </summary>
     public string? SceneClaims { get; set; }
+
+    /// <summary>
+    /// Called with each happening the moment it begins (after its Begin). A scene uses it to tell its animals that
+    /// something is going on (a tractor, a raccoon: see Minds/Senses.cs), so the residents react to the surprises.
+    /// </summary>
+    public Action<Happening>? Began;
 
     /// <summary>Is any happening that claims one of these props on right now? The scene asks before its own actors step on.</summary>
     public bool Claimed(string claims)

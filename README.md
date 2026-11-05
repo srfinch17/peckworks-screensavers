@@ -574,7 +574,7 @@ Settings: amount of snow, fall speed, breeze, flake size, and how often a surpri
 
 Maple leaves drifting down over a farm at harvest dusk: a sky from plum to gold, a big peach harvest
 moon, a white farmhouse with lamplit windows and a smoking chimney, a red barn and silo, a reaped field
-with hay bales and a scarecrow, a split rail fence, a cornucopia spilling its fruit, a corn shock, a
+with hay bales, a scarecrow in the garden beside the house, a split rail fence, a cornucopia spilling its fruit, a corn shock, a
 pumpkin patch that covers the whole foreground (pumpkins of three tints, gourds and broad leaves joined
 by vine runners, one of them carved into a jack-o'-lantern with a candle guttering inside it, in homage
 to Halloween), maples in full colour, and oak branches with the year's last leaves in the top corners.
@@ -587,6 +587,15 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   few steps, stand and look about, and the tom fans his tail now and then.
 - A white-tailed doe and her fawn graze at the far side of the field, lift their heads to look
   about, and move off a few steps at a time, the fawn trotting after her.
+- **They have minds and senses.** The turkeys, the deer and the patch's small creatures run on the
+  same shared kit as the koi pond's animals (Core/Minds): personality dials dealt at birth, one
+  doing at a time, weighted dice for the next, and now SENSES. Whatever happens on the farm is
+  pinned on a noticeboard (the tractor is loud across the field, the raccoon a threat by the horn,
+  a scuffle a noise, a squirrel bounding past a movement) and every animal makes its own sense of
+  it by its nature: the bold look up, the timid freeze with the head high, the fawn turns and
+  trots off, a bolting deer sets the whole herd looking, a mouse dives behind a pumpkin. They move
+  with weight too: every walk leans in over a few steps and runs down so the last stride lands
+  with both feet planted, a standing head is never quite still, and no timer runs on a metronome.
 - **The acorn caper**, every minute or two on the near ground: a tawny squirrel peeks out of the hollow
   in the left maple's roots, hops out, picks an acorn from the pile under the oak branch, climbs its
   tree to the fence rail, bounds along the rail (behind the corn shock), drops down, digs a hole with

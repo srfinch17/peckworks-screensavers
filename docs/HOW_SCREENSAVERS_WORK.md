@@ -76,6 +76,9 @@ src/
     Sakura/Boat.cs                 the little boat that crosses the water in both sakura scenes
     Sakura/Plants.cs               one Wind for a whole scene; Mottle (smooth random blotches); plants as flip-books (tufts of six kinds including wildflowers, cattails, irises); a Lawn whose carpet slides in the gusts; Boughs (painted branches laid over the frame each frame, swaying on springs)
     Minds/Mind.cs                  the parts every animal mind is built from: dials, weighted dice, one doing at a time, cooldowns (see MINDS.md)
+    Minds/Senses.cs                the noticeboard the scene pins what happens on, and each animal's attention that turns it into a reaction (look, freeze, flee, approach)
+    Minds/Mover.cs                 moving like a living thing: a speed that eases and brakes onto the rest page (Pace), a heading that settles (Turn), slow drift and jittered timers (Organic)
+    Minds/Herd.cs                  keeping a gap behind a leader and room between neighbours
     Minds/Space.cs                 3D steering: Chain (a body's shape for touching), Feelers (room along a line, the smallest change of course) (see MINDS.md, section 8)
     ChimneySmoke.cs                puffs that rise, cool, spread and thin (Cabin by Stream)
     Photo/PhotoBackdrop.cs         a photo fitted to the screen, plus where its water is

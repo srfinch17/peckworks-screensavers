@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Minds;
 using Thanksgiving.Happenings;
 
 namespace Thanksgiving;
@@ -80,6 +81,14 @@ internal sealed class AcornCaper : Story
 
     public AcornCaper(Cast cast) { _c = cast; _s = cast.S; }
 
+    private bool _told;
+
+    /// <summary>The scuffle is a noise the whole near ground hears: the board is told once, as the dust bursts.</summary>
+    public override void Update(float t)
+    {
+        if (!_told && t >= _flingAt - 0.8f) { _told = true; _c.Board.Post(Sense.Loud, new PointF(_flingX, _s.WalkY(_flingX)), 0.7f * _s.U, 1f, this); }
+    }
+
     private float WalkY(float x) => _s.WalkY(x);
     private float RailAt(float x) => _c.RailAt(x);
     private static float Smooth(float x) => Cast.Smooth(x);
@@ -97,6 +106,7 @@ internal sealed class AcornCaper : Story
     {
         _script = new Script(_c, 4);
         _pops.Clear();
+        _told = false;
         float k = _c.K, u = _s.U, _m = _c.M;
         List<Seg> A = _script[0], B = _script[1], M = _script[2], C = _script[3];
         const float MouseSpeed = Cast.MouseSpeed, TurnFor = Cast.TurnFor;

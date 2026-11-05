@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Minds;
 using Peckworks.Screensavers.Core.Sakura;
 using Thanksgiving.Happenings;
 
@@ -56,6 +57,8 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly TurkeyFlock _flock;           // the wild turkeys that live in the field
     private readonly DeerHerd _herd;               // the doe and her fawn at the far side of it
     private readonly StoryDirector _stories;       // the little scenes (the acorn caper, hide and seek, the fawn's apple, the mouse parade), one every minute or two
+    private readonly Noticeboard _board;           // what is going on, for the residents' senses (Core/Minds/Senses.cs)
+    private (Sense Kind, float X, float Y, float Reach, float At)? _testNotice;
     private readonly PatchLife _life;              // the mice, birds and squirrel that live in the pumpkin patch
     private readonly int _geeseDir;                // +1 the V flies right, -1 left
     private readonly float[] _flapPhase;           // each goose's own place in the flap, so they are not all in step
@@ -133,11 +136,21 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         // ---- The happenings: hand the director the cast list and how often to deal ----
         _happenings = new HappeningDirector(ThanksgivingHappenings.Cast(_scenery), _rng, settings.SurprisePercent / 100f);
 
+        // ---- The noticeboard (Core/Minds/Senses.cs): whatever happens is pinned here, and every resident reads it ----
+        _board = new Noticeboard();
+        _happenings.Began = Tell;
+
         // ---- The flock: wild turkeys living in the field (after the director, so its dice are untouched) ----
-        _flock = new TurkeyFlock(_scenery, settings.TurkeyCount, _rng);
-        _herd = new DeerHerd(_scenery, settings.DeerCount, _rng);
-        _stories = new StoryDirector(_scenery, _happenings, _rng, c => [new AcornCaper(c), new HideAndSeek(c), new FawnApple(c, _herd), new MouseParade(c)]);
-        _life = new PatchLife(_scenery, settings.CritterCount, _rng);
+        _flock = new TurkeyFlock(_scenery, settings.TurkeyCount, _rng, _board);
+        _herd = new DeerHerd(_scenery, settings.DeerCount, _rng, _board);
+        _stories = new StoryDirector(_scenery, _happenings, _rng, _board, c => [new AcornCaper(c), new HideAndSeek(c), new FawnApple(c, _herd), new MouseParade(c)]);
+        _life = new PatchLife(_scenery, settings.CritterCount, _rng, _board);
+        string? notice = Environment.GetEnvironmentVariable("PECKWORKS_NOTICE");      // test aid: "Loud;0.5;0.72;0.8;3" posts that kind at (xf, yf) with reach in U at that second
+        if (!string.IsNullOrEmpty(notice))
+        {
+            string[] p = notice.Split(';');
+            _testNotice = (Enum.Parse<Sense>(p[0], true), float.Parse(p[1]), float.Parse(p[2]), float.Parse(p[3]), float.Parse(p[4]));
+        }
     }
 
     // ==================================================================
@@ -414,12 +427,40 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         double gust = 0.95 + 0.30 * Math.Sin(_time * 0.37) + 0.10 * Math.Sin(_time * 1.13);
         _scarfPhase = (_scarfPhase + dt * Math.PI * 2 * 2.1 * gust) % (Math.PI * 2);
         _leaves.Update(dt);
+        _board.Tick(dt);
+        if (_testNotice is { } tn && _time >= tn.At && _time - dt < tn.At)
+            _board.Post(tn.Kind, new PointF(tn.X * _scenery.Width, tn.Y * _scenery.Height), tn.Reach * _scenery.U, 1f, this);
         _flock.Update(dt);
         _stories.Update(dt);                       // before the herd (a story may drive the fawn) and the director (it holds the ground's claims while it plays)
         _life.Lull = _stories.Playing;             // the patch's critters keep out of a story's way
         _herd.Update(dt);
         _life.Update(dt);
         _happenings.Update(elapsedSeconds);
+    }
+
+    /// <summary>
+    /// Tells the residents a surprise has begun: each happening that something in the field or on the ground could
+    /// notice is pinned on the board as a kind, a place and a reach (a tractor is loud and carries across the whole
+    /// field; a raccoon on the ground is a threat to the small things near the horn; a crow at the scarecrow is a
+    /// movement the deer glance at). The animals' own senses decide what they make of it.
+    /// </summary>
+    private void Tell(Happening h)
+    {
+        var s = _scenery;
+        float u = s.U;
+        switch (h.GetType().Name)
+        {
+            case "Tractor": _board.Post(Sense.Loud, new PointF(s.Width * 0.5f, s.FieldY(s.Width * 0.5f)), 1.3f * u, 1f, h); break;
+            case "Fireworks": _board.Post(Sense.Loud, new PointF(s.Width * 0.5f, s.Height * 0.25f), 1.6f * u, 0.75f, h); break;
+            case "Raccoon": _board.Post(Sense.Threat, new PointF(s.CornucopiaMouth.X, s.CornucopiaMouth.Y), 0.5f * u, 1f, h); break;
+            case "BarnOwl": _board.Post(Sense.Threat, new PointF(s.BarnFoot.X, s.BarnFoot.Y - s.BarnWall.Height), 0.7f * u, 0.6f, h); break;
+            case "Crow": _board.Post(Sense.Movement, s.ScarecrowHead, 0.45f * u, 0.8f, h); break;
+            case "Pheasant": _board.Post(Sense.Movement, s.CornShockTop, 0.4f * u, 0.8f, h); break;
+            case "Turkey": _board.Post(Sense.Movement, new PointF(s.Width * 0.5f, s.WalkY(s.Width * 0.5f)), 0.35f * u, 0.5f, h); break;
+            case "Squirrel": _board.Post(Sense.Movement, s.LeftTrunk[0], 0.3f * u, 0.5f, h); break;
+            case "AppleRoll": _board.Post(Sense.Food, new PointF(s.CornucopiaMouth.X, s.CornucopiaMouth.Y), 0.4f * u, 0.8f, h); break;
+            case "AcornDrop": _board.Post(Sense.Food, new PointF(s.Hollow.At.X - 1.7f * Math.Max(9f, u * 0.055f), s.WalkY(s.Hollow.At.X)), 0.3f * u, 0.7f, h); break;
+        }
     }
 
     public void Render(FrameBuffer fb)

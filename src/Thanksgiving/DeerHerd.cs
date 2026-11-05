@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Minds;
 
 namespace Thanksgiving;
 
@@ -49,7 +50,7 @@ namespace Thanksgiving;
 /// </summary>
 internal sealed class DeerHerd
 {
-    private enum Doing { Graze, Look, Walk }
+    private enum Doing { Graze, Look, Walk, Alert, Retreat }   // Alert: head up, still, facing what it heard; Retreat: a brisk walk away from it
     private enum Gait { Settled, Rising, Walking, Stopping, Settling, Turning }   // Rising: the settle pages backward (about to walk); Settling: forward (just stopped); Turning: coming round on the spot
 
     private sealed class Animal
@@ -74,7 +75,10 @@ internal sealed class DeerHerd
         public Gait Gait;
         public float Timer, Clock, Walked;
         public float GaitT;                                 // seconds into a Rising or Settling
-        public float StopFrom, StopDist, StopT, StopFor;    // a stop: where it began, how far to the rest page, how long it takes
+        public Pace Pace = null!;                           // the walk's speed, eased (Mover.cs): leans in, runs down onto the rest page
+        public Attention Senses = null!;                    // what it makes of the noticeboard (Senses.cs): timid or bold, curious or dull
+        public float Timid;                                 // the dial, kept for the dice
+        public float Restless;                              // seed for the slow drift of a standing head
         public float NeckF;                                 // where the neck is now, 0 up to 1 grazing (eased toward its target)
         public float NeckV;                                 // and how fast it is moving (the spring's state)
         public float BiteT = -1, NextBite, ChewT = -1, EarT = -1, NextEar, TailT = -1;
@@ -130,6 +134,7 @@ internal sealed class DeerHerd
 
     private const int WalkPages = 48, SettlePages = 8, TailPages = 3, HeadPages = 24, HeadKinds = 3;   // 48 walk pages: a planted hoof shimmers by half the stride a page covers, about a pixel; 8 settle pages: two per foot
     private const float Speed = 0.05f;                      // in U per second
+    private const float RetreatSpeed = 0.085f;              // a startled deer's brisk walk away
     private const float StepReach = 0.17f;                  // how far a foot travels in front of and behind the hip, in body heights
     private const float Duty = 0.62f;                       // the share of the stride a foot is on the ground
     private const float NeckX = 0.30f, NeckY = 0.72f;       // where the neck leaves the body (body heights from the middle, up from the ground), standing
@@ -153,16 +158,22 @@ internal sealed class DeerHerd
 
     private readonly ThanksgivingScenery _s;
     private readonly Random _rng;
+    private readonly Noticeboard _board;
     private readonly Animal[] _deer;
     private readonly string? _test = Environment.GetEnvironmentVariable("PECKWORKS_DEER");
+    private readonly StreamWriter? _log;
+    private double _time;
 
-    public DeerHerd(ThanksgivingScenery s, int count, Random sceneRng)
+    public DeerHerd(ThanksgivingScenery s, int count, Random sceneRng, Noticeboard board)
     {
         _s = s;
+        _board = board;
         _rng = new Random(sceneRng.Next());                 // its own dice, so the rest of the scene never reshuffles
+        _log = MindLog.Open();
         _deer = new Animal[count];
         float x0 = s.Width * (0.24f + 0.50f * (float)_rng.NextDouble());   // between the maples, never behind their leaves
         int dir = _rng.Next(2) == 0 ? 1 : -1;
+        float[] timid = Traits.Deal(_rng, Math.Max(1, count)), curious = Traits.Deal(_rng, Math.Max(1, count));
         for (int i = 0; i < count; i++)
         {
             bool fawn = i == 1;                             // the second deer is the fawn; a third is another doe
@@ -173,6 +184,11 @@ internal sealed class DeerHerd
             a.NeckF = _test == "walk" ? 0.25f : 1f;
             a.Timer = 2f + 4f * (float)_rng.NextDouble();
             a.NextBite = 0.5f; a.NextEar = 1f + 3f * (float)_rng.NextDouble();
+            a.Timid = fawn ? 0.5f + 0.5f * timid[i] : timid[i];          // a fawn is never bold
+            a.Senses = new Attention(a.Timid, curious[i]) { Keen = 1.3f };   // big ears: it feels a notice from further off
+            a.Pace = new Pace(Speed * s.U * 2.5f);                           // leans into a walk over about half a second
+            if (_test == "walk") a.Pace.Want = Speed * s.U;
+            a.Restless = (float)_rng.NextDouble() * 10;
             Make(a, Math.Max(14, (int)(s.U * (fawn ? 0.048f : 0.078f))));
             _deer[i] = a;
         }
@@ -462,15 +478,18 @@ internal sealed class DeerHerd
     public void Update(float dt)
     {
         float u = _s.U;
+        _time += dt;
         Animal doe = _deer.Length > 0 ? _deer[0] : null!;
         for (int i = 0; i < _deer.Length; i++)
         {
             Animal a = _deer[i];
             a.Timer -= dt;
             a.Clock += dt;
+            a.Senses.Tick(dt);
+            _log?.WriteLine($"{_time,8:F3} deer{i} frame x {a.X:F1} v {a.Pace.Speed:F2} {a.Doing}/{a.Gait}");
 
             // ---- the neck: a damped spring toward where the doing wants it (slow off the mark, fastest in the middle, settling in about half a second) ----
-            float want = a.Lent ? a.LentNeck : a.Doing switch { Doing.Graze => 1f, Doing.Look => 0f, _ => 0.25f };
+            float want = a.Lent ? a.LentNeck : a.Doing switch { Doing.Graze => 1f, Doing.Look => 0f, Doing.Alert => 0f, Doing.Retreat => 0.15f, _ => 0.25f };
             a.NeckV += ((want - a.NeckF) * NeckSpring - a.NeckV * NeckDamp) * dt;
             a.NeckF = Math.Clamp(a.NeckF + a.NeckV * dt, 0f, 1f);
             // Bites while grazing with the nose down: bursts of a few, each a tug up, a hold and an ease down, then chewing.
@@ -493,29 +512,35 @@ internal sealed class DeerHerd
             if (a.TailT >= 0) { a.TailT += dt; if (a.TailT > 0.27f) a.TailT = -1; }
             if (a.Lent) continue;                                   // a story moves it
 
+            // ---- the senses: what happened, and what this deer makes of it (never while already retreating) ----
+            if (a.Doing != Doing.Retreat && _test == null)
+            {
+                Reaction r = a.Senses.Check(_board, new PointF(a.X, FootY(a)), a, out Notice cause);
+                if (r != Reaction.None) React(a, i, r, cause);
+            }
+
             // ---- the gait ----
             switch (a.Gait)
             {
                 case Gait.Rising:
                     a.GaitT += dt;
-                    if (a.GaitT >= SettleFor) { a.Gait = Gait.Walking; a.Walked = 0; }
+                    if (a.GaitT >= SettleFor) { a.Gait = Gait.Walking; a.Walked = 0; a.Pace.Walked = 0; a.Pace.Want = (a.Doing == Doing.Retreat ? RetreatSpeed : Speed) * u; }
                     break;
                 case Gait.Walking:
                 {
-                    float move = Speed * u * dt;
+                    // The speed eases toward the walk's pace (Mover.cs); the stride is paged by the distance walked.
+                    float move = a.Pace.Tick(dt);
                     a.X += a.Dir * move;
-                    a.Walked += move;
+                    a.Walked = a.Pace.Walked;
                     break;
                 }
                 case Gait.Stopping:
                 {
-                    // Slowing evenly to a halt exactly on the rest page: a run-down from the full speed over the distance left.
-                    a.StopT += dt;
-                    float k = Math.Min(1f, a.StopT / a.StopFor);
-                    float walked = a.StopFrom + a.StopDist * (2 * k - k * k);            // distance under a speed that falls evenly to zero
-                    a.X += a.Dir * (walked - a.Walked);
-                    a.Walked = walked;
-                    if (k >= 1f) { a.Gait = Gait.Settling; a.GaitT = 0; a.Walked = 0; }
+                    // The brake: the speed falls evenly to nothing over exactly the distance to the rest page.
+                    float move = a.Pace.Tick(dt);
+                    a.X += a.Dir * move;
+                    a.Walked = a.Pace.Walked;
+                    if (a.Pace.Still) { a.Gait = Gait.Settling; a.GaitT = 0; a.Walked = 0; a.Pace.Walked = 0; }
                     break;
                 }
                 case Gait.Settling:
@@ -544,18 +569,18 @@ internal sealed class DeerHerd
                 if (a.X > hi) { a.X = hi; StopWalk(a); a.Doing = Doing.Walk; a.TurnWhenSettled = -1; }
             }
 
-            if (a.Fawn && doe != null && !doe.Lent)
+            if (a.Fawn && doe != null && !doe.Lent && a.Doing != Doing.Retreat && a.Doing != Doing.Alert)
             {
-                // The fawn keeps close: if the doe has moved off, trot after her; otherwise do as she does, a little behind.
-                float want_x = doe.X - doe.Dir * u * 0.09f;
-                float gap = want_x - a.X;
-                if (MathF.Abs(gap) > u * 0.05f && a.Doing != Doing.Walk)
+                // The fawn keeps close (Herd.cs): her place is a gap behind her mother on the side she came from; if the gap is
+                // wrong by more than she can bear she trots to it, and stops once she is near it.
+                float gap = Herd.FollowError(a.X, doe.X, doe.Dir, u * 0.09f, u * 0.05f);
+                if (gap != 0f && a.Doing != Doing.Walk && a.Gait == Gait.Settled)
                 {
                     StartWalk(a, gap > 0 ? 1 : -1);
                     a.Timer = 99f;
                     continue;
                 }
-                if (a.Doing == Doing.Walk && a.Gait == Gait.Walking && MathF.Abs(gap) <= u * 0.02f) { StopWalk(a); a.Timer = 2f + 3f * (float)_rng.NextDouble(); if (doe.Dir != a.Dir) a.TurnWhenSettled = doe.Dir; }
+                if (a.Doing == Doing.Walk && a.Gait == Gait.Walking && MathF.Abs(Herd.FollowX(doe.X, doe.Dir, u * 0.09f) - a.X) <= u * 0.02f) { StopWalk(a); a.Timer = 2f + 3f * (float)_rng.NextDouble(); if (doe.Dir != a.Dir) a.TurnWhenSettled = doe.Dir; }
                 if (a.Doing == Doing.Walk) continue;
             }
             if (_test == "walk" && !a.Fawn) { a.Doing = Doing.Walk; a.Gait = a.Gait == Gait.Settled ? Gait.Walking : a.Gait; continue; }
@@ -572,12 +597,55 @@ internal sealed class DeerHerd
             if (a.Gait != Gait.Settled && a.Gait != Gait.Walking) continue;   // finish the step, the settle or the turn first
 
             a.Clock = 0;
-            double roll = _rng.NextDouble();
-            if (a.Doing == Doing.Walk) { StopWalk(a); a.Timer = 3f + 6f * (float)_rng.NextDouble(); }
-            else if (roll < 0.55) { a.Doing = Doing.Graze; a.Timer = 3f + 6f * (float)_rng.NextDouble(); }
-            else if (roll < 0.80) { a.Doing = Doing.Look; a.Timer = 1.5f + 2.5f * (float)_rng.NextDouble(); a.TailT = 0; }
-            else if (!a.Fawn) { StartWalk(a, _rng.Next(3) == 0 ? -a.Dir : a.Dir); a.Timer = 2f + 5f * (float)_rng.NextDouble(); }
+            if (a.Doing is Doing.Walk or Doing.Retreat) { StopWalk(a); a.Timer = Organic.Jitter(_rng, 5f); Log(a, i, "stop"); continue; }
+            if (a.Doing == Doing.Alert) { a.Doing = Doing.Look; a.Timer = Organic.Jitter(_rng, 1.5f); continue; }   // the alarm passes: a look, then whatever is next
+            // The dice: graze (the usual), look about (a timid deer more), walk off (a doe only; the fawn follows).
+            int face = Dice.Pick(_rng, [0.55f, 0.25f + 0.2f * a.Timid, a.Fawn ? 0f : 0.2f]);
+            switch (face)
+            {
+                case 0: a.Doing = Doing.Graze; a.Timer = Organic.Jitter(_rng, 5.5f); break;
+                case 1: a.Doing = Doing.Look; a.Timer = Organic.Jitter(_rng, 2.5f); a.TailT = 0; break;
+                default: StartWalk(a, _rng.Next(3) == 0 ? -a.Dir : a.Dir); a.Timer = Organic.Jitter(_rng, 4f); break;
+            }
+            Log(a, i, "roll");
         }
+    }
+
+    /// <summary>
+    /// What a reaction is for a deer: a look is the head up that way for a moment; a freeze is the head up, still,
+    /// ears forward, facing what it heard, for a few seconds (a walking deer stops square first); a flight is a brisk
+    /// walk away from it, which also tells the herd (a Friend notice), so the others look up at once.
+    /// </summary>
+    private void React(Animal a, int i, Reaction r, Notice cause)
+    {
+        float u = _s.U;
+        int toward = cause.At.X >= a.X ? 1 : -1;
+        switch (r)
+        {
+            case Reaction.Look:
+                if (a.Gait == Gait.Settled && a.Doing is Doing.Graze or Doing.Look) { a.Doing = Doing.Look; a.Timer = 1.2f + 1.5f * a.Senses.Curious; a.EarT = 0; if (toward != a.Dir) BeginTurn(a, toward); }
+                break;
+            case Reaction.Freeze:
+            case Reaction.Approach:
+                if (a.Gait == Gait.Walking) { StopWalk(a); a.TurnWhenSettled = toward != a.Dir ? toward : 0; }
+                else if (a.Gait == Gait.Settled && toward != a.Dir) BeginTurn(a, toward);
+                a.Doing = Doing.Alert; a.Timer = 2f + 3f * a.Timid; a.EarT = 0; a.TailT = 0;
+                break;
+            case Reaction.Flee:
+                a.Doing = Doing.Retreat;
+                a.Timer = 2f + 2.5f * a.Timid;
+                if (a.Gait == Gait.Walking) { a.Pace.Want = RetreatSpeed * u; if (a.Dir == toward) { StopWalk(a); a.Doing = Doing.Retreat; a.TurnWhenSettled = -toward; } }
+                else if (a.Gait == Gait.Settled) { StartWalk(a, -toward); a.Doing = Doing.Retreat; }
+                a.TailT = 0;                                                                     // the white flag goes up
+                _board.Post(Sense.Friend, new PointF(a.X, FootY(a)), 0.6f * u, 1f, a);        // the herd looks up
+                break;
+        }
+        Log(a, i, $"react {r} to {cause.Kind}");
+    }
+
+    private void Log(Animal a, int i, string what)
+    {
+        _log?.WriteLine($"{_time,8:F2} deer{i} x {a.X:F0} v {a.Pace.Speed:F1} {a.Doing}/{a.Gait} {what}");
     }
 
     private void StartWalk(Animal a, int dir)
@@ -594,18 +662,13 @@ internal sealed class DeerHerd
         a.Gait = Gait.Turning; a.TurnTo = dir; a.TurnT = 0;
     }
 
-    /// <summary>Begins a stop: the walk eases down so that it ends exactly on the rest page, then the settle pages play.</summary>
+    /// <summary>Begins a stop: the brake runs the walk down so that it ends exactly on the rest page, then the settle pages play.</summary>
     private void StopWalk(Animal a)
     {
         a.Doing = Doing.Graze;
         if (a.Gait != Gait.Walking) return;
-        float stride = Stride(a);
-        float into = a.Walked % stride;
-        float dist = stride - into;
-        if (dist < 0.25f * stride) dist += stride;                        // too close to the rest page to stop evenly: take one more
         a.Gait = Gait.Stopping;
-        a.StopFrom = a.Walked; a.StopDist = dist; a.StopT = 0;
-        a.StopFor = 2 * dist / (Speed * _s.U);                            // slowing evenly from full speed to zero covers "dist" in twice the time it would at full speed
+        a.Pace.Brake(a.Pace.ToRestPage(Stride(a)));                       // at least a quarter stride away: closer, it takes one more, so the stop is even
     }
 
     /// <summary>Stamps the herd through the field stencil: the doe, then the fawn (nearer), then any other doe.</summary>
@@ -662,6 +725,8 @@ internal sealed class DeerHerd
             // The head: the neck page, with the bite's tug (up and back, held, eased down) taken off it; chewing opens the
             // jaw on alternate beats; the ear flick is its own kind of page.
             float f = a.NeckF;
+            // A standing head is never quite still: a slow drift of a page or so (Organic.Drift), each deer on its own seed.
+            if (a.Gait == Gait.Settled && !a.Lent && a.Doing != Doing.Alert) f += 0.03f * Organic.Drift(_time * 0.6, a.Restless);
             if (a.BiteT >= 0)
             {
                 float t = a.BiteT;

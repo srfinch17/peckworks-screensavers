@@ -126,7 +126,7 @@ internal static class SquirrelArt
     }
 
     /// <summary>Where the hands rest in a sit without the nut: on the thighs, within the forelimb's reach.</summary>
-    private static readonly PointF SitHandNear = P(0.12f, 0.30f), SitHandFar = P(0.18f, 0.28f);
+    private static readonly PointF SitHandNear = P(0.08f, 0.36f), SitHandFar = P(0.14f, 0.34f);   // 0.40 from the shoulder: the elbow bends (at 0.46 the bones, 0.42 together, drew straight)
 
     /// <summary>Sitting up. "upright" 0 is a crouch on all fours, 1 fully up. tail: 0 calm, up to 3 lashed. look: head tipped up.</summary>
     public static Pose Sit(float upright = 1f, int tail = 0, bool look = false, bool paws = true)

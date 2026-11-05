@@ -39,6 +39,7 @@ internal sealed class FawnApple : Story
     private int _fawn = -1;
     private float _x0, _d0, _xStand, _appleX, _appleY, _rollFor, _inField, _trotAt, _arrive, _eatAt, _upAt, _turnAt, _back, _end;
     private int _dir, _chews;
+    private bool _told;
 
     public FawnApple(Cast cast, DeerHerd herd) { _c = cast; _s = cast.S; _herd = herd; }
 
@@ -71,6 +72,7 @@ internal sealed class FawnApple : Story
         _back = _turnAt + way / (0.05f * u);
         _end = _back + 0.6f;
         _chews = 0;
+        _told = false;
 
         string? log = Environment.GetEnvironmentVariable("PECKWORKS_CAPERLOG");
         if (!string.IsNullOrEmpty(log))
@@ -92,6 +94,7 @@ internal sealed class FawnApple : Story
         else if (t < _back) { float p = Cast.Smooth((t - _turnAt) / (_back - _turnAt)); x = _xStand + (_x0 - _xStand) * p; depth = AtFence + (_d0 - AtFence) * p; dir = -_dir; }
         else { x = _x0; depth = _d0; dir = -_dir; }
         _herd.Drive(_fawn, x, dir, neck, depth);
+        if (!_told && t >= _trotAt) { _told = true; _c.Board.Post(Peckworks.Screensavers.Core.Minds.Sense.Movement, new PointF(_x0, _appleY), 0.5f * _s.U, 0.7f, this); }   // the fawn trotting off: the turkeys look
         // Three bites, half a second apart, once her head is down.
         if (t >= _eatAt + _chews * 0.5f && _chews < 3) { _herd.Chew(_fawn); _chews++; }
     }

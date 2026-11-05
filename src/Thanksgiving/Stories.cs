@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Minds;
 using Thanksgiving.Happenings;
 
 namespace Thanksgiving;
@@ -29,6 +30,26 @@ namespace Thanksgiving;
 /// actor hide it and the rest stand behind it.
 /// </summary>
 internal enum Kind { Peek, Hop, Turn, Run, Rise, Climb, Mount, Sit, Chatter, Dazed, Dig, Mouse, MousePeek, Fracas, Bird, BirdFly, Still }
+
+/// <summary>
+/// The residents' shared test log (PECKWORKS_MINDLOG names a file): the flock, the herd and the patch write their
+/// frames, rolls and reactions to one handle (two writers on one file refused the second open and the saver died).
+/// </summary>
+internal static class MindLog
+{
+    private static StreamWriter? _writer;
+    private static bool _tried;
+
+    public static StreamWriter? Open()
+    {
+        if (_tried) return _writer;
+        _tried = true;
+        string? path = Environment.GetEnvironmentVariable("PECKWORKS_MINDLOG");
+        if (string.IsNullOrEmpty(path)) return null;
+        _writer = new StreamWriter(new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite)) { AutoFlush = true };
+        return _writer;
+    }
+}
 
 /// <summary>One piece of one actor's part: what it does between T0 and T1, and where.</summary>
 internal sealed class Seg
@@ -67,6 +88,7 @@ internal sealed class Cast
     public const float HopFor = 0.36f, TurnFor = 0.2f, RiseFor = 0.22f, MountFor = 0.12f;
 
     public readonly ThanksgivingScenery S;
+    public readonly Noticeboard Board;                 // where a story tells the residents what is going on (a scuffle, a squirrel bolting)
     public readonly float K, M, B;                     // the squirrel, mouse and bird units, in pixels
     public Sheet[] Run = new Sheet[2];                 // [acorn]
     public Sheet[] Hop = new Sheet[2];
@@ -89,9 +111,10 @@ internal sealed class Cast
     public Sprite Acorn = null!, Mound = null!, Hole = null!, Speck = null!, Tuft = null!, Star = null!;
     public volatile bool Ready;
 
-    public Cast(ThanksgivingScenery s)
+    public Cast(ThanksgivingScenery s, Noticeboard board)
     {
         S = s;
+        Board = board;
         K = Math.Max(9f, s.U * 0.055f);
         M = K * 0.55f;
         B = Math.Max(7f, s.U * 0.032f);
@@ -120,8 +143,20 @@ internal sealed class Cast
             Run[a] = Ground(RunPages, i => { var q = SquirrelArt.Bound(i / (float)RunPages, bound); q.Acorn = nut; return q; });
             Hop[a] = Ground(HopPages, i => { var q = SquirrelArt.Hop((i + 0.5f) / HopPages); q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; return q; });
             Up[a] = MakeSheet(RunPages, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3, i => { var q = SquirrelArt.Bound(i / (float)RunPages, bound, cling: true); q.Acorn = nut; q.Rotate = -90f; return SquirrelArt.Page(q, k, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3); });
-            Mount[a] = MakeSheet(MountPages, sq, sq, so, so, i => { var q = SquirrelArt.Bound(0.80f, bound); q.Acorn = nut; q.Rotate = -90f * (i + 1) / MountPages; return SquirrelArt.Page(q, k, sq, sq, so, so); });
-            MountDown[a] = MakeSheet(MountPages, sq, sq, so, so, i => { var q = SquirrelArt.Bound(0.80f, bound, cling: true); q.Acorn = nut; q.Rotate = 90f * (1f - (i + 1) / (float)MountPages); return SquirrelArt.Page(q, k, sq, sq, so, so); });
+            // The mount: the gathered crouch (the pose the rise pages begin from, so a sink runs straight into it) pitched up about
+            // the feet over three pages, and the clinging climb pose on the last. (Built from the mid-air leap it lifted the body a
+            // third of a length off the rail in one frame.) Played backward it is the dismount, ending in the same crouch.
+            Mount[a] = MakeSheet(MountPages, sq, sq, so, so, i =>
+            {
+                var q = i < MountPages - 1 ? SquirrelArt.Sit(0.2f, 0, false, nut == 1) : SquirrelArt.Bound(0f, bound, cling: true);
+                q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; q.Rotate = -90f * (i + 1) / MountPages; return SquirrelArt.Page(q, k, sq, sq, so, so);
+            });
+            // The end of a head-first descent: the clinging pose, then the crouch pitching from head-down to level (mirrored at the stamp).
+            MountDown[a] = MakeSheet(MountPages, sq, sq, so, so, i =>
+            {
+                var q = i == 0 ? SquirrelArt.Bound(0f, bound, cling: true) : SquirrelArt.Sit(0.2f, 0, false, nut == 1);
+                q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; q.Rotate = 90f * (1f - (i + 1) / (float)MountPages); return SquirrelArt.Page(q, k, sq, sq, so, so);
+            });
             Turn[a] = Ground(TurnPages, i => { var q = SquirrelArt.Turn(i * 0.25f, nut == 1); q.Acorn = nut == 1 ? 2 : 0; return q; });
             Rise[a] = Ground(RisePages, i => { var q = SquirrelArt.Sit(0.2f + 0.8f * i / (RisePages - 1), 0, false, nut == 1); q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; return q; });
             for (int tail = 0; tail < 4; tail++)
@@ -408,6 +443,14 @@ internal sealed class Cast
             }
             case Kind.Run:
             {
+                if (seg.From == seg.To)
+                {
+                    // A stand at the end of a run (the lunge's last frames under the dust): the gathered crouch, tail up inside
+                    // the cloud, fading out over the segment so nothing is ever uncovered (a frozen run page with the tail
+                    // streaming flat vanished in one frame outside the cloud).
+                    Stamp(fb, Rise[nut], Rise[nut].Pages[0], seg.From.X, seg.From.Y, mirror, null, 1f - u);
+                    break;
+                }
                 float dist = MathF.Abs(seg.To.X - seg.From.X) * u;
                 float x = seg.From.X + (seg.To.X - seg.From.X) * u;
                 float y = seg.Rail ? RailAt(x) - 1.5f : seg.From.Y + (seg.To.Y - seg.From.Y) * u;
@@ -781,12 +824,12 @@ internal sealed class StoryDirector
     /// <summary>True while a story is on (the patch's own life keeps out of its way).</summary>
     public bool Playing => _on != null;
 
-    public StoryDirector(ThanksgivingScenery s, HappeningDirector director, Random sceneRng, Func<Cast, Story[]> stories)
+    public StoryDirector(ThanksgivingScenery s, HappeningDirector director, Random sceneRng, Noticeboard board, Func<Cast, Story[]> stories)
     {
         _s = s;
         _director = director;
         _rng = new Random(sceneRng.Next());
-        _cast = new Cast(s);
+        _cast = new Cast(s, board);
         _stories = stories(_cast);
         // Test aids: PECKWORKS_STORY=1 starts at once with short rests (PECKWORKS_CAPER=1 too), 0 never; PECKWORKS_STORYPICK names the story to play, every time.
         string? ask = Environment.GetEnvironmentVariable("PECKWORKS_STORY") ?? Environment.GetEnvironmentVariable("PECKWORKS_CAPER");
