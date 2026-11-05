@@ -56,6 +56,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly TurkeyFlock _flock;           // the wild turkeys that live in the field
     private readonly DeerHerd _herd;               // the doe and her fawn at the far side of it
     private readonly AcornCaper _caper;            // the squirrels' story on the near ground, every minute or two
+    private readonly PatchLife _life;              // the mice, birds and squirrel that live in the pumpkin patch
     private readonly int _geeseDir;                // +1 the V flies right, -1 left
     private readonly float[] _flapPhase;           // each goose's own place in the flap, so they are not all in step
     private readonly Sprite[] _smoke;              // four puff sizes, small to big
@@ -136,6 +137,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _flock = new TurkeyFlock(_scenery, settings.TurkeyCount, _rng);
         _herd = new DeerHerd(_scenery, settings.DeerCount, _rng);
         _caper = new AcornCaper(_scenery, _happenings, _rng);
+        _life = new PatchLife(_scenery, settings.CritterCount, _rng);
     }
 
     // ==================================================================
@@ -415,6 +417,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _flock.Update(dt);
         _herd.Update(dt);
         _caper.Update(dt);                         // before the director: it holds the ground's claims while it plays
+        _life.Update(dt);
         _happenings.Update(elapsedSeconds);
     }
 
@@ -484,6 +487,9 @@ internal sealed class ThanksgivingScene : IScreensaverScene
             float flick = 0.30f + 0.08f * (float)Math.Sin(_time * 7.3) + 0.06f * (float)Math.Sin(_time * 13.1 + 1.0) + 0.05f * (float)Math.Sin(_time * 2.1);
             _candle.DrawCentered(fb, _scenery.Jack.At.X, _scenery.Jack.At.Y + _scenery.Jack.R * 0.1f, flick);
         }
+
+        // 6a2. The patch's own life: mice, birds and a squirrel among the pumpkins, each hidden by the pumpkins nearer than it.
+        _life.Draw(fb);
 
         // 6b. The acorn caper: the squirrels, the mouse and the dust on the
         //     near ground and the rail, in front of the fence (and behind the
