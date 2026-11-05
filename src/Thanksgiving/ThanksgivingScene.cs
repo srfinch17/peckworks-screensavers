@@ -169,29 +169,41 @@ internal sealed class ThanksgivingScene : IScreensaverScene
 
             float up = MathF.Sin(phase);                                   // +1 wings up, -1 wings down
             float hand = MathF.Sin(phase - 0.6f);                          // the hand lags the arm
+            float rising = MathF.Max(0f, MathF.Cos(phase));                // the upstroke: the hand folds back and the fingers close
 
             void Wing(Color c, float sx, float sy, float scale)
             {
+                // Seen from the side, a wing's CHORD (its width from leading edge to trailing edge) lies along the
+                // line of flight, so the trailing edge is the leading edge pushed BACK, never up or down; what the
+                // flap changes is how much of the wing's span we see: all of it with the wing raised or lowered, a
+                // sliver when it is level and pointing at us. (The first version pushed the trailing edge down, so a
+                // raised wing was a tall wedge: a plank.)
                 PointF shoulder = P(sx, sy);
-                PointF wrist = P(sx - 0.10f, sy - 0.50f * up * scale);
-                PointF tip = P(sx - 0.30f, sy - 0.50f * up * scale - 0.60f * hand * scale);
-                // The trailing edge is set back from the leading edge by the wing's chord, which
-                // shows most when the wing is raised or lowered and least when it is level.
-                float chord = 0.16f + 0.22f * MathF.Abs(up);
-                PointF trailTip = new(tip.X - s * 0.10f, tip.Y + s * chord * 0.5f * MathF.Sign(up + 0.001f));
-                PointF trailWrist = new(wrist.X - s * 0.30f, wrist.Y + s * chord * MathF.Sign(up + 0.001f));
-                PointF root = P(sx - 0.42f, sy + 0.06f);
+                PointF wrist = P(sx - 0.06f, sy - 0.48f * up * scale);
+                PointF tip = P(sx - 0.16f - 0.12f * rising, sy - 0.48f * up * scale - 0.58f * hand * scale * (1 - 0.25f * rising));
+                PointF trailTip = new(tip.X - s * 0.13f, tip.Y + s * 0.02f * up);
+                PointF trailWrist = new(wrist.X - s * 0.24f, wrist.Y + s * 0.03f * up);
+                PointF root = P(sx - 0.42f, sy + 0.05f);
+                // The leading edge bows forward a little between shoulder and wrist (an airfoil, not a straight stick).
+                PointF lead = new((shoulder.X + wrist.X) / 2 + s * 0.04f, (shoulder.Y + wrist.Y) / 2);
                 using var feather = new SolidBrush(c);
                 using var path = new GraphicsPath();
-                path.AddClosedCurve([shoulder, wrist, tip, trailTip, trailWrist, root], 0.35f);
+                path.AddClosedCurve([shoulder, lead, wrist, tip, trailTip, trailWrist, root], 0.4f);
                 g.FillPath(feather, path);
-                // Four primaries fanning from the wrist past the tip: the fingers of the wing.
-                using var quill = new Pen(primaries, Math.Max(1f, s * 0.05f)) { EndCap = LineCap.Round };
-                for (int i = 0; i < 4; i++)
+                // Five primaries fanning from the wrist past the tip, splayed a few degrees apart, lighter at the front and
+                // darker at the back; on the upstroke they close together.
+                float ax = tip.X - wrist.X, ay = tip.Y - wrist.Y, al = MathF.Sqrt(ax * ax + ay * ay) + 1e-5f;
+                for (int i = 0; i < 5; i++)
                 {
-                    float k = i / 3f;
-                    PointF from = new(wrist.X + (trailWrist.X - wrist.X) * k * 0.5f, wrist.Y + (trailWrist.Y - wrist.Y) * k * 0.5f);
-                    PointF to = new(tip.X + (trailTip.X - tip.X) * k - s * 0.04f * k, tip.Y + (trailTip.Y - tip.Y) * k);
+                    float k = i / 4f;
+                    float splay = (k - 0.5f) * (0.30f - 0.18f * rising);              // radians between the outermost fingers
+                    float ca = MathF.Cos(splay), sa = MathF.Sin(splay);
+                    float dx = (ax * ca - ay * sa) / al, dy = (ax * sa + ay * ca) / al;
+                    float len = al * (0.55f + 0.5f * (1 - MathF.Abs(k - 0.5f) * 1.2f)) * (1 - 0.2f * rising);
+                    PointF from = new(wrist.X + (trailWrist.X - wrist.X) * k * 0.35f, wrist.Y + (trailWrist.Y - wrist.Y) * k * 0.35f);
+                    PointF to = new(from.X + dx * len, from.Y + dy * len);
+                    Color fc = Color.FromArgb((int)(140 - 82 * k), (int)(120 - 72 * k), (int)(98 - 58 * k));
+                    using var quill = new Pen(fc, Math.Max(1f, s * (0.07f - 0.02f * k))) { EndCap = LineCap.Round, StartCap = LineCap.Round };
                     g.DrawLine(quill, from, to);
                 }
             }
@@ -212,12 +224,21 @@ internal sealed class ThanksgivingScene : IScreensaverScene
                 g.FillPath(pale, path);
             }
             using (var tail = new SolidBrush(black))
-                g.FillPolygon(tail, [P(-0.50f, -0.08f), P(-0.74f, -0.03f), P(-0.50f, 0.06f)]);
+                g.FillPolygon(tail, [P(-0.52f, -0.06f), P(-0.74f, -0.03f), P(-0.52f, 0.04f)]);
             using (var rump = new SolidBrush(Color.FromArgb(240, 236, 228)))
-                g.FillEllipse(rump, P(-0.56f, -0.07f).X, P(-0.56f, -0.07f).Y, s * 0.12f, s * 0.11f);   // the white crescent above the tail
-            // The neck: a long black curve held out in front, the head at its end.
-            using (var neck = new Pen(black, Math.Max(1.5f, s * 0.11f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                g.DrawBezier(neck, P(0.32f, -0.04f), P(0.50f, -0.12f), P(0.60f, -0.16f), P(0.74f, -0.18f));
+            using (var path = new GraphicsPath())
+            {
+                // The white above the tail: a thin crescent along the top of the tail root (a big white blob read as a second head).
+                path.AddClosedCurve([P(-0.44f, -0.09f), P(-0.52f, -0.075f), P(-0.60f, -0.045f), P(-0.54f, -0.05f), P(-0.46f, -0.07f)], 0.4f);
+                g.FillPath(rump, path);
+            }
+            // The neck: a long black shape held out in front, thick at the breast and slimmer at the head, with the head at its end.
+            using (var neck = new SolidBrush(black))
+            using (var path = new GraphicsPath())
+            {
+                path.AddClosedCurve([P(0.30f, -0.10f), P(0.48f, -0.16f), P(0.62f, -0.20f), P(0.74f, -0.21f), P(0.74f, -0.14f), P(0.60f, -0.11f), P(0.46f, -0.06f), P(0.30f, 0.02f)], 0.3f);
+                g.FillPath(neck, path);
+            }
             using (var head = new SolidBrush(black))
                 g.FillEllipse(head, P(0.64f, -0.27f).X, P(0.64f, -0.27f).Y, s * 0.24f, s * 0.18f);
             using (var chin = new SolidBrush(Color.FromArgb(244, 242, 236)))                     // the white chinstrap, under the eye round the throat
@@ -485,8 +506,13 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     /// The V: the leader in front, then the followers in two arms, each one
     /// a little farther back than the last; from the side one arm rises
     /// behind the leader and the other drops. Each goose beats its wings
-    /// about three times a second, on its own phase, so the V ripples
-    /// instead of flapping in step. Geese at the back are drawn first.
+    /// 2.7 times a second (the first version wrote 2.9 RADIANS a second,
+    /// one beat every two seconds, and the V paddled like something under
+    /// water), on its own phase, so the V ripples instead of flapping in
+    /// step. The beat is uneven, as a real one is: the downstroke, the
+    /// power stroke with the wing spread, takes 58 percent of the cycle;
+    /// the upstroke, with the hand folded back, 42. The body rides the
+    /// beat: pushed up through the downstroke. Geese at the back are drawn first.
     /// </summary>
     private void DrawGeese(FrameBuffer fb, float leadX, float leadY)
     {
@@ -496,11 +522,13 @@ internal sealed class ThanksgivingScene : IScreensaverScene
             float side = i == 0 ? 0 : (i % 2 == 0 ? 1 : -1);
             float x = leadX - _geeseDir * rank * _gs * 1.1f;
             float y = leadY + side * rank * _gs * 0.48f;
-            double beat = _time * 2.9 + _flapPhase[i];
-            int page = (int)((beat % (Math.PI * 2)) / (Math.PI * 2) * FlapPages) % FlapPages;
+            double beat = (_time * 2.7 + _flapPhase[i] / (Math.PI * 2)) % 1.0;   // 0 to 1 through one beat
+            // The pages run through the beat evenly in wing ANGLE; time is dealt unevenly: 0.58 of it to the
+            // downstroke (wings from up, a quarter in, to down, three quarters in) and 0.42 to the upstroke.
+            double phase = beat < 0.58 ? Math.PI / 2 + Math.PI * (beat / 0.58) : Math.PI * 1.5 + Math.PI * ((beat - 0.58) / 0.42);
+            int page = (int)(phase / (Math.PI * 2) * FlapPages) % FlapPages;
             Sprite sheet = _goose[page];
-            // A goose bobs against its own beat: wings down pushes the body up.
-            float bob = _gs * 0.05f * (float)Math.Sin(beat);
+            float bob = _gs * 0.04f * (float)Math.Sin(phase);           // wings up: the body hangs lowest; the downstroke lifts it
             sheet.DrawCentered(fb, x, y + bob, 1f, _scenery.OpenSky, mirror: _geeseDir < 0);
         }
     }

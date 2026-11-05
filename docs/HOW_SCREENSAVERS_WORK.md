@@ -176,6 +176,7 @@ a fed koi was as hungry as before and went straight back for the next.
     TurkeyFlock.cs                 the wild turkeys that live in the field: four doings and a timer each, the Turkey happening's pictures
     DeerHerd.cs                    the doe and fawn at the far side of the field: a body flip-book and a head flip-book stamped together, mirrored to face left
     AcornCaper.cs                  the squirrels' story on the near ground (bury a nut, a thief, a scuffle, a mouse): a script of timed segments per actor, written fresh each cycle
+    SquirrelArt.cs                 how a squirrel is drawn and the poses it can take (the bound, a hop with its crouch and settle, a turn through the front view, sitting, digging, chattering), shared with the fence squirrel
     Happenings/                    nineteen small random events (a turkey, a tractor, a raccoon), one class per file
 
   CabinByStream/                   a cottage in a flowery meadow at dusk, aiming at a photograph's look
