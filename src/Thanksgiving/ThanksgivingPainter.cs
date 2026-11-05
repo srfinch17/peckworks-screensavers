@@ -182,7 +182,9 @@ internal static class ThanksgivingPainter
         // The scarecrow stands in the garden beside the farmhouse, on the same hill, at the house's scale (his line:
         // "put the scarecrow back by the house. not in the middle of a cut hay field"). Painted with the farm, before the
         // field copy, so everything that moves on the field passes in front of it as it should for a thing behind the field.
-        float scarecrowX = farmFoot.X + u * 0.095f, scarecrowTall = u * 0.085f;
+        // The house is 0.108 U tall for about 7 m (0.0154 U a metre on its hill), so a 1.8 m scarecrow beside it is 0.028 U
+        // (at 0.085 U it was "as big as a house").
+        float scarecrowX = farmFoot.X + u * 0.095f, scarecrowTall = u * 0.028f;
         float scarecrowFoot = Brushwork.RidgeYAt(nearRidge, scarecrowX) + u * 0.010f;
         PaintScarecrow(g, scarecrowX, scarecrowFoot, scarecrowTall, u);
         // A windbreak of trees along the far edge of the field, where the hill meets it: nearer than the hills' treeline,
