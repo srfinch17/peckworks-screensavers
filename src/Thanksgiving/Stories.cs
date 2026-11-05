@@ -115,9 +115,9 @@ internal sealed class Cast
     {
         S = s;
         Board = board;
-        K = Math.Max(9f, s.U * 0.055f);
+        K = Math.Max(9f, s.U * 0.030f);   // the near ground's scale: a pumpkin of 0.4 m is about 0.05 U, so a squirrel of 0.25 m is 0.030 U (at 0.055 it was "too big"), a mouse 0.55 of that, a sparrow 0.020
         M = K * 0.55f;
-        B = Math.Max(7f, s.U * 0.032f);
+        B = Math.Max(7f, s.U * 0.020f);
         // The pictures take a moment to paint (a few hundred pages); done on a side thread so the scene starts at once.
         Task.Run(() => { try { Build(); } catch { Ready = false; return; } Ready = true; });
     }

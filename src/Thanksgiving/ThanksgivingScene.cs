@@ -464,7 +464,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
             case "Turkey": _board.Post(Sense.Movement, new PointF(s.Width * 0.5f, s.WalkY(s.Width * 0.5f)), 0.35f * u, 0.5f, h); break;
             case "Squirrel": _board.Post(Sense.Movement, s.LeftTrunk[0], 0.3f * u, 0.5f, h); break;
             case "AppleRoll": _board.Post(Sense.Food, s.StageLeft, 0.4f * u, 0.8f, h); break;
-            case "AcornDrop": _board.Post(Sense.Food, new PointF(s.Hollow.At.X - 1.7f * Math.Max(9f, u * 0.055f), s.WalkY(s.Hollow.At.X)), 0.3f * u, 0.7f, h); break;
+            case "AcornDrop": _board.Post(Sense.Food, new PointF(s.Hollow.At.X - 1.7f * Math.Max(9f, u * 0.030f), s.WalkY(s.Hollow.At.X)), 0.3f * u, 0.7f, h); break;
         }
     }
 

@@ -53,12 +53,15 @@ internal sealed class PatchLife
         public float FlyFrom, FlyTo, FlyY0, FlyY1, FlyFor;   // a flight's arc
         public int Refused;                         // frames in a row the ground refused
         public bool WasDown;                        // a squirrel: on all fours last frame (running, hiding, digging), or sitting up
+        public bool Turning;                        // a squirrel coming round to face the other way: stop, sit, turn through the front view, sink, and on (never a mirror flip)
+        public float TurnT;                         // seconds into that
         public float Blend;                         // seconds left of its blend through the crouch pages between the two
         public bool Sinking;                        // the blend's direction: sinking from the sit into the run, or rising out of it
     }
 
     private const float BlendFor = 0.15f;           // a squirrel drops into its run, or sits up out of it, over nine frames (it used to pop in one)
-    private const int RisePages = 6;
+    private const int RisePages = 6, TurnPages = 3;
+    private const float TurnRise = 0.12f, TurnFor = 0.30f;   // a turn: rise to the sit (0.12 s), the three narrowing pages, the flip, the three widening (0.30), sink (0.12)
 
     private struct Sheet { public Sprite[] Pages; public int W, H, Ox, By; }
 
@@ -70,7 +73,7 @@ internal sealed class PatchLife
     private readonly List<Critter> _all = new();
     private readonly float _k, _m, _b;
     private readonly Ground.Solid _ground;
-    private Sheet _mouseRun, _mouseStill, _sqRun, _sqLook, _sqDig, _sqRise;
+    private Sheet _mouseRun, _mouseStill, _sqRun, _sqLook, _sqDig, _sqRise, _sqTurn;
     private Sheet[] _sqSit = new Sheet[4];
     private Sheet[] _bird = new Sheet[2], _birdLook = new Sheet[2], _birdPeck = new Sheet[2], _birdHop = new Sheet[2];
     private Sheet[] _birdFlyKind = new Sheet[2];
@@ -82,9 +85,9 @@ internal sealed class PatchLife
         _board = board;
         _log = MindLog.Open();
         _rng = new Random(sceneRng.Next());         // its own dice
-        _k = Math.Max(9f, s.U * 0.055f);
+        _k = Math.Max(9f, s.U * 0.030f);   // the near ground's scale: a pumpkin of 0.4 m is about 0.05 U, so a squirrel of 0.25 m is 0.030 U (at 0.055 it was "too big"), a mouse 0.55 of that, a sparrow 0.020
         _m = _k * 0.55f;
-        _b = Math.Max(7f, s.U * 0.032f);
+        _b = Math.Max(7f, s.U * 0.020f);
         _ground = CanStand;                         // made once: a new delegate every frame is garbage
         int mice = (count + 1) / 2, birds = count / 3, squirrels = Math.Max(0, count - mice - birds);
         float[] timid = Traits.Deal(_rng, Math.Max(1, count)), busy = Traits.Deal(_rng, Math.Max(1, count)), curious = Traits.Deal(_rng, Math.Max(1, count));
@@ -126,14 +129,18 @@ internal sealed class PatchLife
         return true;
     }
 
-    private PointF RandomSpot(float x0, float x1, int tries)
+    /// <summary>A spot a critter can stand on, between x0 and x1; given a row (yNear, within yReach) it keeps to that row, and given minDx it is at least that far from the range's middle.</summary>
+    private PointF RandomSpot(float x0, float x1, int tries, float? yNear = null, float yReach = 0f, float minDx = 0f)
     {
-        float u = _s.U;
+        float u = _s.U, xm = (x0 + x1) / 2;
         for (int i = 0; i < tries; i++)
         {
             float x = x0 + (x1 - x0) * (float)_rng.NextDouble();
+            if (MathF.Abs(x - xm) < minDx) continue;
             float crest = _s.Ground.YAt(Math.Clamp(x, 0, _s.Width - 1));
-            float y = crest + 0.012f * u + (_s.Height + 0.04f * u - crest - 0.012f * u) * (float)_rng.NextDouble();
+            float y = yNear is float yc
+                ? Math.Clamp(yc + yReach * (float)(_rng.NextDouble() * 2 - 1), crest + 0.012f * u, _s.Height + 0.04f * u)
+                : crest + 0.012f * u + (_s.Height + 0.04f * u - crest - 0.012f * u) * (float)_rng.NextDouble();
             if (CanStand(x, y)) return new PointF(x, y);
         }
         return new PointF(_s.Width * 0.5f, _s.WalkY(_s.Width * 0.5f));
@@ -173,6 +180,7 @@ internal sealed class PatchLife
         _sqLook = Make(1, w, h, ox, by, _ => SquirrelArt.Page(SquirrelArt.Sit(1f, 0, true, false), k, w, h, ox, by));
         _sqDig = Make(8, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Dig(i / 8f), k, w, h, ox, by));
         _sqRise = Make(RisePages, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Sit(0.2f + 0.8f * i / (RisePages - 1), 0, false, false), k, w, h, ox, by));   // the crouch (page 0) up to the sit (the last)
+        _sqTurn = Make(TurnPages, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Turn(0.15f + 0.175f * i), k, w, h, ox, by));   // sitting, coming round: 0.15, 0.325, 0.5 (the front view); played back again mirrored
 
         float b = _b;
         int bw = (int)(1.6f * b) + 4, bh = (int)(1.3f * b) + 4, box = (int)(0.9f * b) + 2, bby = bh - 2;   // 1.3 tall: the bird stands on legs now, and a hop lifts it a tenth more
@@ -213,6 +221,16 @@ internal sealed class PatchLife
                 if (r == Reaction.Flee) Startle(c, cause.At);
                 else if (r == Reaction.Freeze) { c.Pace.Halt(); c.Mind.Begin(c.Kind == Kind.Squirrel && c.Perched < 0 ? Doing.Still : Doing.Still, 1f + 1.5f * c.Timid); c.Clock = 0; }
                 else if (r == Reaction.Look && c.Mind.Doing is Doing.Still or Doing.Peck or Doing.Perch) { c.Clock = 1.1f; c.Mind.Left = Math.Max(c.Mind.Left, 0.8f); if (c.Kind != Kind.Bird) c.Dir = cause.At.X >= c.X ? 1 : -1; }
+            }
+            if (c.Turning)
+            {
+                // The turn on the spot: the body rises to the sit, narrows through the front view, flips, widens, and sinks; the
+                // doing's own clock waits so nothing else moves meanwhile.
+                float was = c.TurnT; c.TurnT += dt; c.Mind.Left += dt;
+                float mid = TurnRise + TurnFor / 2;
+                if (was < mid && c.TurnT >= mid) c.Dir = -c.Dir;
+                if (c.TurnT >= TurnRise + TurnFor + TurnRise) { c.Turning = false; c.Blend = 0; }
+                continue;
             }
             Act(c, dt);
             if (c.Mind.Over) Decide(c);
@@ -265,7 +283,7 @@ internal sealed class PatchLife
             {
                 // Faces: scurry somewhere, sniff, nibble a pumpkin, hide behind one.
                 int face = Dice.Pick(_rng, [0.5f + 0.6f * c.Busy, 0.35f, 0.25f + 0.2f * (1 - c.Timid), 0.15f + 0.5f * c.Timid]);
-                if (face == 0) { c.Goal = RandomSpot(c.X - 0.3f * u, c.X + 0.3f * u, 30); c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0; }
+                if (face == 0) { c.Goal = RandomSpot(c.X - 0.3f * u, c.X + 0.3f * u, 30, c.Y, 0.06f * u, 3f * _m); c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0; }
                 else if (face == 1) c.Mind.Begin(Doing.Still, 0.4f + 1.2f * (float)_rng.NextDouble());
                 else if (face == 2) { PointF? g = BehindPumpkin(c.X, 0.3f * u); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = new PointF(g.Value.X, g.Value.Y + 0.5f * _m + 0.3f * _m); c.Mind.Begin(Doing.Nibble, 6f); c.Travelled = 0; }
                 else { PointF? g = BehindPumpkin(c.X, 0.35f * u); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Hide, 8f); c.Travelled = 0; }
@@ -289,7 +307,9 @@ internal sealed class PatchLife
             {
                 // Faces: bound somewhere, sit and look, scratch at the earth, dart behind a pumpkin.
                 int face = Dice.Pick(_rng, [0.5f + 0.5f * c.Busy, 0.4f, 0.25f, 0.1f + 0.4f * c.Timid]);
-                if (face == 0) { c.Goal = RandomSpot(c.X - 0.45f * u, c.X + 0.45f * u, 30); c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0; }
+                // A bound goes ALONG the patch: the goal stays within a little of its own row (a goal straight up or down the
+                // screen sent a side-view animal sliding on the spot, the "90 degree turns"), and at least a few lengths off.
+                if (face == 0) { c.Goal = RandomSpot(c.X - 0.45f * u, c.X + 0.45f * u, 30, c.Y, 0.05f * u, 4f * _k); c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0; }
                 else if (face == 1) c.Mind.Begin(Doing.Still, 1f + 3f * (float)_rng.NextDouble());
                 else if (face == 2) c.Mind.Begin(Doing.Dig, 1f + 1.5f * (float)_rng.NextDouble());
                 else { PointF? g = BehindPumpkin(c.X, 0.4f * u); if (g == null) { c.Mind.Begin(Doing.Still, 1f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Hide, 6f); c.Travelled = 0; }
@@ -393,7 +413,12 @@ internal sealed class PatchLife
                 c.Refused = 0;
                 c.X = x; c.Y = y; c.Heading = hd;
                 c.Travelled += step;
-                if (MathF.Abs(MathF.Cos(hd)) > 0.2f) c.Dir = MathF.Cos(hd) > 0 ? 1 : -1;
+                if (MathF.Abs(MathF.Cos(hd)) > 0.2f)
+                {
+                    int dir = MathF.Cos(hd) > 0 ? 1 : -1;
+                    if (dir != c.Dir && c.Kind == Kind.Squirrel) { c.Turning = true; c.TurnT = 0; c.Pace.Halt(); return; }   // a squirrel stops and comes round (Update); a mouse at 13 px just faces the other way
+                    c.Dir = dir;
+                }
                 if (c.Mind.Doing == Doing.Hide && c.Mind.Over) c.Mind.Begin(Doing.Still, 0.3f);
                 break;
             }
@@ -474,6 +499,19 @@ internal sealed class PatchLife
                 }
                 default:
                 {
+                    if (c.Turning)
+                    {
+                        float t = c.TurnT;
+                        if (t < TurnRise) Stamp(fb, _sqRise, _sqRise.Pages[Math.Min(RisePages - 1, (int)(t / TurnRise * RisePages))], c, c.Y);                // up to the sit
+                        else if (t < TurnRise + TurnFor)
+                        {
+                            float q = (t - TurnRise) / TurnFor;                                                                                       // narrowing facing the old way, widening facing the new
+                            int pg = q < 0.5f ? Math.Min(TurnPages - 1, (int)(q * 2 * TurnPages)) : Math.Min(TurnPages - 1, (int)((1 - q) * 2 * TurnPages));
+                            Stamp(fb, _sqTurn, _sqTurn.Pages[pg], c, c.Y);
+                        }
+                        else Stamp(fb, _sqRise, _sqRise.Pages[Math.Max(0, RisePages - 1 - (int)((t - TurnRise - TurnFor) / TurnRise * RisePages))], c, c.Y);   // down to the crouch
+                        break;
+                    }
                     if (c.Blend > 0)
                     {
                         float f = Math.Clamp(c.Blend / BlendFor, 0f, 1f);                    // 1 at the start of the blend, 0 at its end

@@ -55,7 +55,7 @@ internal sealed class Squirrel : Happening
     public Squirrel(ThanksgivingScenery s)
     {
         _s = s;
-        _k = Math.Max(9f, s.U * 0.055f);
+        _k = Math.Max(9f, s.U * 0.030f);   // one squirrel is one size: the stories' and the patch's too (Cast.K)
         _w = (int)(2.55f * _k) + 6;
         _h = (int)(1.9f * _k) + 6;
         _ox = (int)(1.75f * _k) + 3;
