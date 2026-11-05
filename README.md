@@ -575,7 +575,9 @@ Settings: amount of snow, fall speed, breeze, flake size, and how often a surpri
 Maple leaves drifting down over a farm at harvest dusk: a sky from plum to gold, a big peach harvest
 moon, a white farmhouse with lamplit windows and a smoking chimney, a red barn and silo, a reaped field
 with hay bales and a scarecrow, a split rail fence, a cornucopia spilling its fruit, a corn shock, a
-pumpkin patch, maples in full colour, and oak branches with the year's last leaves in the top corners.
+pumpkin patch that covers the whole foreground (pumpkins of three tints, gourds and broad leaves joined
+by vine runners, one of them carved into a jack-o'-lantern with a candle guttering inside it, in homage
+to Halloween), maples in full colour, and oak branches with the year's last leaves in the top corners.
 
 ![Thanksgiving](docs/images/thanksgiving.png)
 
@@ -595,6 +597,24 @@ pumpkin patch, maples in full colour, and oak branches with the year's last leav
   sticking out of it. The acorn is flung out of the scuffle, and while they are still rolling a mouse
   creeps out from the corn shock, sniffs it, takes it and scurries home. The dust settles; the two
   squirrels sit, look at where it was, look at each other, and each goes back up its own tree.
+- **Three more little scenes** take turns with the caper, one every minute or two, dealt so that every
+  one plays before any repeats. *Hide and seek*: the squirrel bursts out of its hollow after a mouse,
+  which bolts down through the patch and dives into the jack-o'-lantern's grin; the squirrel pulls up
+  beside it, sits up and looks about, sniffs along the pumpkin's foot and gives up, while the mouse's
+  head rises in one carved eye, watching, and ducks; once the squirrel has gone it looks out of the other
+  eye, creeps out of the mouth and scurries home. *The fawn and the apple*: an apple rolls out of the
+  cornucopia and its last bounce takes it under the fence rail into the field; the fawn trots down to
+  the fence, puts her head through the rail and eats it in three bites, then walks back to her mother.
+  *The mouse parade*: four mice file across the patch with acorns in their mouths until a sparrow drops
+  out of the maple and swoops low over the line; they scatter behind the nearest pumpkins, noses showing
+  past the edges, while the sparrow sits on a pumpkin and looks about, then fall back into line.
+- **The patch's own life**: field mice, juncos and sparrows and a squirrel live among the pumpkins,
+  each with a small mind of its own (the koi pond's shared kit). Mice scurry between the pumpkins,
+  sniff, nibble at one, hide behind one and peek; birds hop and peck, fly up to sit on a pumpkin's
+  shoulder and look about; the squirrel bounds through, sits up, scratches at the earth and darts
+  behind a pumpkin; a mouse a squirrel bounds past bolts. Everything on the ground is hidden by the
+  pumpkins nearer than it (a depth picture the painter makes), which is what puts them IN the patch.
+  Knob "Patch critters" (0 to 12, default 6); they keep out of the way while a scene plays.
 - Smoke drifts from the chimney, the windows' lamplight wanders, and the scarecrow's red scarf streams
   in the breeze.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the maples and the

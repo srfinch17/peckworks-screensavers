@@ -64,374 +64,60 @@ namespace Thanksgiving;
 /// through the OpenOfProps stencil, so it passes behind the corn shock and
 /// into the maples' leaves; on the ground it is in front of everything.
 /// </summary>
-internal sealed class AcornCaper
+internal sealed class AcornCaper : Story
 {
-    private enum Kind { Peek, Hop, Turn, Run, Rise, Climb, Mount, Sit, Chatter, Dazed, Dig, Mouse, Fracas }
-
-    /// <summary>One piece of one actor's part: what it does between T0 and T1, and where.</summary>
-    private sealed class Seg
-    {
-        public Kind Kind;
-        public float T0, T1;
-        public PointF From, To;             // the feet, in pixels (for Fracas: the cloud's centre on the ground)
-        public int Dir = 1;                 // +1 faces right, -1 left (for Turn: the direction it ends facing)
-        public bool Acorn, Look, Rail;      // carrying the nut; head up; on the rail or a trunk (the props stencil applies)
-        public bool Up;                     // a climb with the head up (false: head first down); a mount that goes up onto the bark (false: comes off it)
-        public float P0, P1;                // extras, by kind: Peek: how far out, from and to. Hop: arc height in squirrel units, P1 1 = starts from a run, 2 = ends in a run, 3 = both.
-                                            // Run: the bound length (pixels). Sit: 0 calm, 1 with the head wobbling (unused). Dig: scrabbles a second (0 = just sniffing), P1 = 1 with earth flying.
-                                            // Fracas: fade in and fade out seconds. Rise: P0 1 = rising to sit, -1 = sinking from a sit to the crouch. Chatter: P0 = which squirrel (0 or 1).
-        public float Dur => T1 - T0;
-    }
-
-    private struct Sheet
-    {
-        public Sprite[] Pages;
-        public int W, H, Ox, By;            // the sheet, and where the feet's origin is on it
-    }
-
     private struct Pop { public float T; public int Kind; public float Angle, Dur; }
 
-    private const int RunPages = 16, HopPages = 10, TurnPages = 3, RisePages = 5, DigPages = 8, MousePages = 8, CloudPages = 12, PeekPages = 4, AirPages = 8, MountPages = 4;
-    private const float Speed = 0.27f;                  // bounding, U per second (the fence squirrel's own pace)
-    private const float ClimbSpeed = 0.34f;             // up a trunk: faster than on the ground, in body lengths a second
-    private const float MouseSpeed = 0.19f;
-    private const float HopFor = 0.36f, TurnFor = 0.2f, RiseFor = 0.22f, MountFor = 0.12f;
-    private const string Claims = "ground,fence,cornshock";
+    public override string Name => "AcornCaper";
+    public override string Claims => "ground,fence,cornshock";
 
+    private readonly Cast _c;
     private readonly ThanksgivingScenery _s;
-    private readonly HappeningDirector _director;
-    private readonly Random _rng;
-    private readonly float _k, _m;                      // the squirrel unit and the mouse unit, in pixels
-    private Sheet[] _run = new Sheet[2];                // [acorn]
-    private Sheet[] _hop = new Sheet[2];
-    private Sheet[] _up = new Sheet[2];                 // climbing, head up: [acorn]
-    private Sheet _down;                                // climbing, head first down
-    private Sheet[] _mount = new Sheet[2];              // the body pitching up onto the bark: [acorn]
-    private Sheet _turn;
-    private Sheet[] _rise = new Sheet[2];
-    private Sheet[,] _sit = new Sheet[2, 4];            // [acorn, tail flick pose]
-    private Sheet[] _lookUp = new Sheet[2];
-    private Sheet[] _dig = new Sheet[2];
-    private Sheet[,] _chatter = new Sheet[4, 2];        // [tail snap, paw]
-    private Sheet _dazed;                               // 3 pages
-    private Sheet _peek, _mouse, _mouseNut, _mouseStill, _mouseStillNut, _cloud, _air;
-    private Sprite[] _limb = new Sprite[4];             // a paw, a hind foot, an ear, a tail tip, for the scuffle
-    private Sprite _acorn = null!, _mound = null!, _hole = null!, _speck = null!, _tuft = null!, _star = null!;
-    private volatile bool _ready;
-
-    private readonly List<Seg>[] _tracks = [new(), new(), new(), new()];   // 0 the first squirrel, 1 the thief, 2 the mouse, 3 the dust cloud
+    private Script _script = null!;
     private readonly List<Pop> _pops = new();
-    private bool _active;
-    private double _time, _next;
-    private float _t, _end;
+    private float _end;
     private float _pileX, _pileY, _pileTaken, _spotX, _buryAt, _digUpAt, _flingAt, _flingX, _landX, _grabAt;
 
-    public AcornCaper(ThanksgivingScenery s, HappeningDirector director, Random sceneRng)
-    {
-        _s = s;
-        _director = director;
-        _rng = new Random(sceneRng.Next());             // its own dice, so the rest of the scene never reshuffles
-        _k = Math.Max(9f, s.U * 0.055f);
-        _m = _k * 0.55f;                                // a mouse is small; a child still has to see it from the sofa
-        string? ask = Environment.GetEnvironmentVariable("PECKWORKS_CAPER");         // for test renders: "1" the first cycle at once and short rests, "0" never
-        _next = ask == "1" ? 1.0 : ask == "0" ? double.MaxValue : 8 + 14 * _rng.NextDouble();
-        // The pictures take a moment to paint (a couple of hundred pages); done on a side thread so the scene starts at once.
-        Task.Run(() => { try { Build(); } catch { _ready = false; return; } _ready = true; });
-    }
-
-    // ================================================================ painting (once)
-
-    private static Sheet MakeSheet(int n, int w, int h, int ox, int by, Func<int, Sprite> page)
-    {
-        var sh = new Sheet { Pages = new Sprite[n], W = w, H = h, Ox = ox, By = by };
-        for (int i = 0; i < n; i++) sh.Pages[i] = page(i);
-        return sh;
-    }
-
-    private void Build()
-    {
-        float k = _k;
-        int w = (int)(2.55f * k) + 6, h = (int)(1.9f * k) + 6, ox = (int)(1.75f * k) + 3, by = h - 4;
-        float bound = 2.2f;                              // the bound length in squirrel units: the pages' feet slide by it
-        Sheet Ground(int n, Func<int, SquirrelArt.Pose> pose) => MakeSheet(n, w, h, ox, by, i => SquirrelArt.Page(pose(i), k, w, h, ox, by));
-        int cw = (int)(1.9f * k) + 6, ch = (int)(2.55f * k) + 6;
-        int sq = (int)(4.0f * k) + 6, so = sq / 2;       // a square sheet with the origin at its centre: fits the body at any turn
-        for (int a = 0; a < 2; a++)
-        {
-            int nut = a;
-            _run[a] = Ground(RunPages, i => { var q = SquirrelArt.Bound(i / (float)RunPages, bound); q.Acorn = nut; return q; });
-            _hop[a] = Ground(HopPages, i => { var q = SquirrelArt.Hop((i + 0.5f) / HopPages); q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; return q; });
-            // Climbing with the head up: the bound turned a quarter turn about the feet, so forward is up the screen and the back is to the left of the feet; clinging.
-            _up[a] = MakeSheet(RunPages, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3, i => { var q = SquirrelArt.Bound(i / (float)RunPages, bound, cling: true); q.Acorn = nut; q.Rotate = -90f; return SquirrelArt.Page(q, k, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3); });
-            _mount[a] = MakeSheet(MountPages, sq, sq, so, so, i => { var q = SquirrelArt.Bound(0.80f, bound); q.Acorn = nut; q.Rotate = -90f * (i + 1) / MountPages; return SquirrelArt.Page(q, k, sq, sq, so, so); });
-            _rise[a] = Ground(RisePages, i => { var q = SquirrelArt.Sit(0.2f + 0.8f * i / (RisePages - 1), 0, false, nut == 1); q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; return q; });
-            for (int tail = 0; tail < 4; tail++)
-            {
-                int tl = tail;
-                _sit[a, tail] = Ground(1, _ => { var q = SquirrelArt.Sit(1f, tl, false, nut == 1); q.Acorn = nut == 1 ? 2 : 0; return q; });
-            }
-            _lookUp[a] = Ground(1, _ => { var q = SquirrelArt.Sit(1f, 0, true, nut == 1); q.Acorn = nut == 1 ? 2 : 0; return q; });
-            _dig[a] = Ground(DigPages, i => { var q = SquirrelArt.Dig(i / (float)DigPages); q.Acorn = nut; return q; });
-        }
-        _down = MakeSheet(RunPages, cw, ch, 3, (int)(1.75f * k) + 3, i => { var q = SquirrelArt.Bound(i / (float)RunPages, bound, cling: true); q.Rotate = 90f; return SquirrelArt.Page(q, k, cw, ch, 3, (int)(1.75f * k) + 3); });
-        _turn = Ground(TurnPages, i => SquirrelArt.Turn(i * 0.25f));
-        for (int snap = 0; snap < 4; snap++)
-            for (int paw = 0; paw < 2; paw++)
-            {
-                int sn = snap, pw = paw;
-                _chatter[snap, paw] = Ground(1, _ => SquirrelArt.Chatter(sn, pw));
-            }
-        _dazed = Ground(3, i => SquirrelArt.Dazed((i - 1) * 5f));
-        {
-            int pw2 = (int)(0.9f * k) + 4, ph = (int)(0.8f * k) + 4, pox = pw2 / 2, pby = (int)(0.72f * k) + 2;
-            _peek = MakeSheet(PeekPages + 1, pw2, ph, pox, pby, i => Squirrel.PaintPeek(k, pw2, ph, pox, pby, i < PeekPages ? (i + 1) / (float)PeekPages : 1f, i == PeekPages));
-        }
-
-        // The nuts on the ground are painted a touch bigger than the one in a mouth, so a child can see what the fuss is about.
-        _acorn = Squirrel.PaintAcorn(k * 1.6f, 90f);
-        _air = MakeSheet(AirPages, 1, 1, 0, 0, i => Squirrel.PaintAcorn(k * 1.6f, 360f * i / AirPages));
-
-        int mw = (int)(1.9f * _m) + 4, mh = (int)(0.95f * _m) + 4, mox = (int)(1.25f * _m) + 2, mby = mh - 2;
-        _mouse = MakeSheet(MousePages, mw, mh, mox, mby, i => PaintMouse(mw, mh, mox, mby, i / (float)MousePages, false, 0));
-        _mouseNut = MakeSheet(MousePages, mw, mh, mox, mby, i => PaintMouse(mw, mh, mox, mby, i / (float)MousePages, true, 0));
-        _mouseStill = MakeSheet(2, mw, mh, mox, mby, i => PaintMouse(mw, mh, mox, mby, 0f, false, i + 1));
-        _mouseStillNut = MakeSheet(2, mw, mh, mox, mby, i => PaintMouse(mw, mh, mox, mby, 0f, true, i + 1));
-
-        int fw = (int)(3.0f * k) + 4, fh = (int)(2.4f * k) + 4;
-        _cloud = MakeSheet(CloudPages, fw, fh, fw / 2, fh - 2, i => PaintCloud(fw, fh, i / (float)CloudPages));
-        int lw = (int)(0.9f * k) + 4;
-        for (int i = 0; i < 4; i++) { int kind = i; _limb[i] = Sprite.Paint(lw, lw, g => PaintLimb(g, lw, kind)); }
-        int tw = Math.Max(4, (int)(k * 0.12f));
-        _tuft = Sprite.Paint(tw, tw, g => { using var b = new SolidBrush(SquirrelArt.TailHair); g.FillEllipse(b, 0.5f, tw * 0.25f, tw - 1f, tw * 0.5f); });
-        int stw = Math.Max(6, (int)(k * 0.16f));
-        _star = Sprite.Paint(stw, stw, g =>
-        {
-            using var b = new SolidBrush(Color.FromArgb(250, 236, 180));
-            float c = stw / 2f, r = stw / 2f - 0.5f, r2 = r * 0.35f;
-            var pts = new PointF[8];
-            for (int i = 0; i < 8; i++) { float a = i * MathF.PI / 4 - MathF.PI / 2, rr = i % 2 == 0 ? r : r2; pts[i] = new PointF(c + rr * MathF.Cos(a), c + rr * MathF.Sin(a)); }
-            g.FillPolygon(b, pts);
-        });
-
-        int gw = (int)(0.7f * k) + 4, gh = (int)(0.3f * k) + 4;
-        _mound = Sprite.Paint(gw, gh, g =>
-        {
-            // A low heap of fresh earth, darker than the grass, a lighter crumb or two on top.
-            using var earth = new SolidBrush(Color.FromArgb(104, 66, 34));
-            g.FillEllipse(earth, 2, gh * 0.30f, gw - 4, gh * 0.75f);
-            using var crumb = new SolidBrush(Color.FromArgb(150, 104, 58));
-            g.FillEllipse(crumb, gw * 0.30f, gh * 0.30f, gw * 0.28f, gh * 0.28f);
-            g.FillEllipse(crumb, gw * 0.55f, gh * 0.42f, gw * 0.18f, gh * 0.22f);
-        });
-        _hole = Sprite.Paint(gw, gh, g =>
-        {
-            // The hole after the thief: a dark oval with the dug earth scattered round its rim.
-            using var rim = new SolidBrush(Color.FromArgb(118, 76, 40));
-            g.FillEllipse(rim, 1, gh * 0.25f, gw - 2, gh * 0.75f);
-            using var dark = new SolidBrush(Color.FromArgb(38, 22, 12));
-            g.FillEllipse(dark, gw * 0.22f, gh * 0.42f, gw * 0.56f, gh * 0.40f);
-        });
-        int sp = Math.Max(4, (int)(k * 0.09f));
-        _speck = Sprite.Paint(sp, sp, g => { using var b = new SolidBrush(Color.FromArgb(92, 56, 28)); g.FillEllipse(b, 0.5f, 0.5f, sp - 1f, sp - 1f); });
-    }
-
-    /// <summary>One page of the mouse (MouseArt) on the caper's mouse sheet: phase 0 to 1 of a stride, the nut in its mouth or not, twitch 1 or 2 for the standing sniff.</summary>
-    private Sprite PaintMouse(int w, int h, int ox, int by, float phase, bool nut, int twitch) =>
-        Sprite.Paint(w, h, g =>
-        {
-            g.TranslateTransform(ox, by);
-            g.ScaleTransform(_m, -_m);                  // mouse units (its body length), y UP from the ground
-            MouseArt.Paint(g, phase, nut, twitch);
-        });
-
-    /// <summary>
-    /// The scuffle at one moment (t 0 to 1 of a third of a second, which is one hop of the whole cloud): a dozen
-    /// puffs of dust in a pale, cooler tone than the ground, each pulsing at its own rate and jittering, the whole
-    /// ball hopping and squashing as it lands, with two bushy tails sticking out of it and a few bits of grass
-    /// flying off. Twelve pages played at 36 a second boil instead of ticking round.
-    /// </summary>
-    private Sprite PaintCloud(int w, int h, float t) =>
-        Sprite.Paint(w, h, g =>
-        {
-            float k = _k;
-            float hop = 0.14f * MathF.Abs(MathF.Sin(MathF.PI * t));                       // the ball in the air
-            float squash = 1f + 0.10f * MathF.Max(0f, 1f - MathF.Abs(MathF.Sin(MathF.PI * t)) * 6f);   // flattened just at the landing
-            g.TranslateTransform(w / 2f, h - 2 - (0.62f + hop) * k);
-            PointF Polar(float deg, float r) { float a = deg * MathF.PI / 180f; return new PointF(r * k * MathF.Cos(a) * squash, r * k * MathF.Sin(a) / squash); }
-            // The tails first, behind the dust: bushy flames with scalloped edges, rotating with the roll.
-            foreach (float deg in (float[])[25f + 360f * t, 205f + 360f * t])
-            {
-                PointF a = Polar(deg, 0.30f), b = Polar(deg + 12f, 0.72f), c = Polar(deg - 18f, 1.0f);
-                using var hair = new Pen(SquirrelArt.TailHair, k * 0.20f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-                using var core = new Pen(SquirrelArt.TailCore, k * 0.11f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-                g.DrawBezier(hair, a, b, Polar(deg - 5f, 0.9f), c);
-                g.DrawBezier(core, a, b, Polar(deg - 5f, 0.9f), c);
-                for (int i = 0; i < 5; i++)
-                {
-                    PointF p = Polar(deg + 12f - 30f * (i / 4f), 0.5f + 0.5f * (i / 4f));
-                    using var tuft = new SolidBrush(i % 2 == 0 ? SquirrelArt.TailHair : SquirrelArt.TailCore);
-                    g.FillEllipse(tuft, p.X - k * 0.07f, p.Y - k * 0.07f, k * 0.14f, k * 0.14f);
-                }
-            }
-            // The dust: a dozen puffs, each with its own pulse (six or nine beats a second, so the loop closes) and jitter.
-            (float Deg, float R, float S, float F, float Ph)[] puffs =
-            [
-                (0, 0, 0.46f, 6, 0.0f), (30, 0.34f, 0.30f, 9, 0.2f), (75, 0.40f, 0.26f, 6, 0.5f), (120, 0.36f, 0.30f, 9, 0.8f), (165, 0.42f, 0.26f, 6, 0.1f),
-                (210, 0.36f, 0.32f, 9, 0.4f), (250, 0.40f, 0.26f, 6, 0.7f), (290, 0.34f, 0.30f, 9, 0.9f), (330, 0.40f, 0.28f, 6, 0.3f),
-                (55, 0.62f, 0.18f, 9, 0.6f), (185, 0.62f, 0.18f, 6, 0.25f), (300, 0.60f, 0.17f, 9, 0.85f),
-            ];
-            foreach (var p in puffs)
-            {
-                float pulse = 1f + 0.2f * MathF.Sin(MathF.Tau * (p.F / 3f * t + p.Ph));
-                float jx = 0.08f * MathF.Sin(MathF.Tau * (2 * t + p.Ph * 3)), jy = 0.06f * MathF.Cos(MathF.Tau * (2 * t + p.Ph * 5));
-                PointF c = Polar(p.Deg, p.R);
-                c = new PointF(c.X + jx * k, c.Y + jy * k);
-                float s = p.S * pulse * k;
-                using var lo = new SolidBrush(Color.FromArgb(236, 214, 188, 150));
-                g.FillEllipse(lo, c.X - s, c.Y - s * 0.9f, s * 2, s * 1.9f);
-                using var hi = new SolidBrush(Color.FromArgb(220, 240, 224, 196));
-                g.FillEllipse(hi, c.X - s * 0.8f, c.Y - s * 1.0f, s * 1.6f, s * 1.3f);
-            }
-            // Bits of grass flung out, further round than the dust, turning the other way.
-            using (var grass = new Pen(Color.FromArgb(214, 166, 84), Math.Max(1f, k * 0.025f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                foreach (float deg in (float[])[65f, 160f, 275f, 330f])
-                {
-                    PointF a = Polar(deg - 200f * t, 1.0f), b = Polar(deg - 200f * t + 8f, 1.2f);
-                    g.DrawLine(grass, a, b);
-                }
-        });
-
-    /// <summary>A bit of squirrel that pops out of the dust: 0 a paw with spread fingers, 1 a long hind foot, 2 an ear, 3 a tail tip. Painted pointing right from the sheet's centre.</summary>
-    private void PaintLimb(Graphics g, int size, int kind)
-    {
-        float k = _k;
-        g.TranslateTransform(size / 2f, size / 2f);
-        g.ScaleTransform(k, -k);
-        using var limb = new SolidBrush(SquirrelArt.LimbNear);
-        using var fur = new SolidBrush(SquirrelArt.Fur);
-        switch (kind)
-        {
-            case 0:
-                g.FillEllipse(limb, 0f, -0.04f, 0.26f, 0.08f);
-                g.FillEllipse(limb, 0.22f, -0.06f, 0.10f, 0.12f);
-                using (var finger = new Pen(SquirrelArt.LimbNear, 0.03f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                    foreach (float a in (float[])[-0.5f, -0.17f, 0.17f, 0.5f]) g.DrawLine(finger, 0.30f, 0f, 0.30f + 0.10f * MathF.Cos(a), 0.10f * MathF.Sin(a));
-                break;
-            case 1:
-                g.FillEllipse(limb, 0f, -0.045f, 0.24f, 0.09f);
-                g.FillEllipse(limb, 0.20f, -0.035f, 0.22f, 0.07f);
-                break;
-            case 2:
-                g.FillEllipse(fur, 0.02f, -0.07f, 0.16f, 0.14f);
-                using (var inner = new SolidBrush(Color.FromArgb(190, 140, 120))) g.FillEllipse(inner, 0.07f, -0.04f, 0.09f, 0.08f);
-                using (var tuft = new SolidBrush(SquirrelArt.Under)) g.FillEllipse(tuft, 0.16f, -0.03f, 0.06f, 0.06f);
-                break;
-            default:
-                using (var hair = new Pen(SquirrelArt.TailHair, 0.16f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                    g.DrawBezier(hair, new PointF(0, 0), new PointF(0.15f, 0.05f), new PointF(0.3f, 0.12f), new PointF(0.42f, 0.06f));
-                using (var core = new Pen(SquirrelArt.TailCore, 0.08f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                    g.DrawBezier(core, new PointF(0, 0), new PointF(0.15f, 0.05f), new PointF(0.3f, 0.12f), new PointF(0.42f, 0.06f));
-                break;
-        }
-    }
-
-    // ================================================================ the script
+    public AcornCaper(Cast cast) { _c = cast; _s = cast.S; }
 
     private float WalkY(float x) => _s.WalkY(x);
-    private float RailAt(float x) => Squirrel.RailAt(_s, x);
-
-    private static Seg Add(List<Seg> track, Kind kind, float t0, float dur, PointF from, PointF to, int dir, bool acorn = false, bool rail = false, float p0 = 0f, float p1 = 0f, bool look = false, bool up = false)
-    {
-        var seg = new Seg { Kind = kind, T0 = t0, T1 = t0 + dur, From = from, To = to, Dir = dir, Acorn = acorn, Rail = rail, P0 = p0, P1 = p1, Look = look, Up = up };
-        track.Add(seg);
-        return seg;
-    }
-
-    private static float Dist(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
-
-    /// <summary>A bounding run from "from" to "to" (the feet), the bound length squeezed so a whole number of bounds fit. Returns when it ends.</summary>
-    private float Run(List<Seg> track, float t0, PointF from, PointF to, bool acorn, bool rail)
-    {
-        float dist = MathF.Abs(to.X - from.X);
-        int bounds = Math.Max(1, (int)MathF.Round(dist / (2.2f * _k)));
-        float dur = dist / (Speed * _s.U);
-        Add(track, Kind.Run, t0, dur, from, to, to.X >= from.X ? 1 : -1, acorn, rail, dist / bounds);
-        return t0 + dur;
-    }
-
-    private float Hop(List<Seg> track, float t0, PointF from, PointF to, int dir, bool acorn, float height = 0.55f)
-    {
-        Add(track, Kind.Hop, t0, HopFor, from, to, dir, acorn, p0: height);
-        return t0 + HopFor;
-    }
-
-    private static float Turn(List<Seg> track, float t0, PointF at, int toDir, bool acorn)
-    {
-        Add(track, Kind.Turn, t0, TurnFor, at, at, toDir, acorn);
-        return t0 + TurnFor;
-    }
-
-    /// <summary>Rising from the run's crouch to sitting up (P0 1), or sinking back down (P0 -1).</summary>
-    private static float Rise(List<Seg> track, float t0, PointF at, int dir, bool acorn, int way = 1)
-    {
-        Add(track, Kind.Rise, t0, RiseFor, at, at, dir, acorn, p0: way);
-        return t0 + RiseFor;
-    }
-
-    private float Climb(List<Seg> track, float t0, PointF from, PointF to, bool up, bool acorn)
-    {
-        float dur = Dist(from, to) / (ClimbSpeed * _s.U);
-        Add(track, Kind.Climb, t0, dur, from, to, 1, acorn, rail: true, up: up);
-        return t0 + dur;
-    }
-
-    /// <summary>Pitching the body up onto the bark (up true) at the foot of a climb, or coming off it onto the rail (up false).</summary>
-    private static float Mount(List<Seg> track, float t0, PointF at, int dir, bool acorn, bool up)
-    {
-        Add(track, Kind.Mount, t0, MountFor, at, at, dir, acorn, rail: false, up: up);
-        return t0 + MountFor;
-    }
-
-    private static float Sit(List<Seg> track, float t0, float dur, PointF at, int dir, bool acorn, bool look = false)
-    {
-        Add(track, Kind.Sit, t0, dur, at, at, dir, acorn, look: look);
-        return t0 + dur;
-    }
-
-    private static float Chatter(List<Seg> track, float t0, float dur, PointF at, int dir, bool acorn, int who)
-    {
-        Add(track, Kind.Chatter, t0, dur, at, at, dir, acorn, p0: who);
-        return t0 + dur;
-    }
-
-    private static float Dig(List<Seg> track, float t0, float dur, PointF at, int dir, float rate, bool earth, bool acorn = false, bool rail = false)
-    {
-        Add(track, Kind.Dig, t0, dur, at, at, dir, acorn, rail, p0: rate, p1: earth ? 1f : 0f);
-        return t0 + dur;
-    }
+    private float RailAt(float x) => _c.RailAt(x);
+    private static float Smooth(float x) => Cast.Smooth(x);
 
     /// <summary>The point on a trunk's line (foot to fork) at height y, set just outside the bark: where a squirrel's feet go.</summary>
-    private PointF OnTrunk(PointF[] trunk, float y)
+    internal static PointF OnTrunk(ThanksgivingScenery s, PointF[] trunk, float y)
     {
         float f = Math.Clamp((trunk[0].Y - y) / (trunk[0].Y - trunk[1].Y), 0f, 1f);
-        return new PointF(trunk[0].X + (trunk[1].X - trunk[0].X) * f - _s.U * 0.0065f, y);
+        return new PointF(trunk[0].X + (trunk[1].X - trunk[0].X) * f - s.U * 0.0065f, y);
     }
+    private PointF OnTrunk(PointF[] trunk, float y) => OnTrunk(_s, trunk, y);
 
     /// <summary>Rolls this cycle's dice and writes out everybody's part.</summary>
-    private void Begin()
+    public override float Begin(Random _rng)
     {
-        foreach (var track in _tracks) track.Clear();
+        _script = new Script(_c, 4);
         _pops.Clear();
-        float k = _k, u = _s.U;
-        List<Seg> A = _tracks[0], B = _tracks[1], M = _tracks[2], C = _tracks[3];
+        float k = _c.K, u = _s.U, _m = _c.M;
+        List<Seg> A = _script[0], B = _script[1], M = _script[2], C = _script[3];
+        const float MouseSpeed = Cast.MouseSpeed, TurnFor = Cast.TurnFor;
+        float Run(List<Seg> tr, float t0, PointF from, PointF to, bool acorn, bool rail) => _script.Run(tr, t0, from, to, acorn, rail);
+        float Climb(List<Seg> tr, float t0, PointF from, PointF to, bool up, bool acorn) => _script.Climb(tr, t0, from, to, up, acorn);
+        static float Hop(List<Seg> tr, float t0, PointF from, PointF to, int dir, bool acorn, float height = 0.55f) => Script.Hop(tr, t0, from, to, dir, acorn, height);
+        static float Turn(List<Seg> tr, float t0, PointF at, int toDir, bool acorn) => Script.Turn(tr, t0, at, toDir, acorn);
+        static float Rise(List<Seg> tr, float t0, PointF at, int dir, bool acorn, int way = 1) => Script.Rise(tr, t0, at, dir, acorn, way);
+        static float Mount(List<Seg> tr, float t0, PointF at, int dir, bool acorn, bool up) => Script.Mount(tr, t0, at, dir, acorn, up);
+        static float Sit(List<Seg> tr, float t0, float dur, PointF at, int dir, bool acorn, bool look = false) => Script.Sit(tr, t0, dur, at, dir, acorn, look);
+        static float Chatter(List<Seg> tr, float t0, float dur, PointF at, int dir, bool acorn, int who) => Script.Chatter(tr, t0, dur, at, dir, acorn, who);
+        static float Dig(List<Seg> tr, float t0, float dur, PointF at, int dir, float rate, bool earth, bool acorn = false, bool rail = false) => Script.Dig(tr, t0, dur, at, dir, rate, earth, acorn, rail);
+        static Seg Add(List<Seg> tr, Kind kind, float t0, float dur, PointF from, PointF to, int dir, bool acorn = false, bool rail = false, float p0 = 0f, float p1 = 0f, bool look = false, bool up = false) => Script.Add(tr, kind, t0, dur, from, to, dir, acorn, rail, p0, p1, look, up);
         PointF[] lt = _s.LeftTrunk, rt = _s.RightTrunk;
         float hx = _s.Hollow.At.X;
         float lRail = RailAt(lt[0].X), rRail = RailAt(rt[0].X);
         PointF lTrunkAtRail = OnTrunk(lt, lRail - 1.5f), rTrunkAtRail = OnTrunk(rt, rRail - 1.5f);
         PointF lFork = new(lt[1].X - u * 0.0065f, lt[1].Y), rFork = new(rt[1].X - u * 0.0065f, rt[1].Y);
         PointF lTop = new(lt[2].X - u * 0.0065f, lt[2].Y), rTop = new(rt[2].X - u * 0.0065f, rt[2].Y);
-        PointF OnRail(float x) => new(x, RailAt(x) - 1.5f);
-        PointF OnGround(float x) => new(x, WalkY(x));
+        PointF OnRail(float x) => _script.OnRail(x);
+        PointF OnGround(float x) => _script.OnGround(x);
 
         // The burying spot: in the open stretch between the cornucopia and the corn shock, clear of both.
         float shockEdge = _s.CornShockFoot.X - _s.CornShockHalfWidth - 2.4f * k;
@@ -592,90 +278,40 @@ internal sealed class AcornCaper
         tb = Climb(B, tb, rTrunkAtRail, rFork, true, false);
         tb = Climb(B, tb, rFork, rTop, true, false);
         _end = Math.Max(ta, tb) + 0.8f;
+        _script.FixHops();
 
-        // Hops that follow a run start from the push (no crouch); hops that lead into a run end at the landing (no settle).
-        foreach (var track in _tracks)
-            for (int i = 0; i < track.Count; i++)
-            {
-                if (track[i].Kind != Kind.Hop) continue;
-                bool fromRun = i > 0 && track[i - 1].Kind is Kind.Run or Kind.Mount;
-                bool toRun = i + 1 < track.Count && track[i + 1].Kind is Kind.Run or Kind.Mount;
-                track[i].P1 = (fromRun ? 1 : 0) + (toRun ? 2 : 0);
-            }
-
-        _t = 0f;
-        _active = true;
-        _director.SceneClaims = Claims;
 
         // The script, written out for checking: PECKWORKS_CAPERLOG names a file and every segment of every part goes in it.
         string? log = Environment.GetEnvironmentVariable("PECKWORKS_CAPERLOG");
         if (!string.IsNullOrEmpty(log))
         {
             using var sw = new StreamWriter(log, append: true);
-            sw.WriteLine($"cycle at {_time:F1}s: spot {_spotX:F0} pile {_pileX:F0} bury {_buryAt:F2} dugUp {_digUpAt:F2} fling {_flingAt:F2} land {_landX:F0} grab {_grabAt:F2} end {_end:F2}");
-            string[] names = ["A", "B", "mouse", "cloud"];
-            for (int i = 0; i < _tracks.Length; i++)
-                foreach (Seg s in _tracks[i])
-                    sw.WriteLine($"  {names[i],-5} {s.Kind,-7} {s.T0,6:F2} to {s.T1,6:F2}  ({s.From.X:F0},{s.From.Y:F0}) to ({s.To.X:F0},{s.To.Y:F0}) dir {s.Dir} acorn {s.Acorn} rail {s.Rail} p0 {s.P0:F2} p1 {s.P1:F2}");
+            sw.WriteLine($"cycle: spot {_spotX:F0} pile {_pileX:F0} bury {_buryAt:F2} dugUp {_digUpAt:F2} fling {_flingAt:F2} land {_landX:F0} grab {_grabAt:F2} end {_end:F2}");
+            _script.Log(sw, ["A", "B", "mouse", "cloud"]);
         }
+        return _end;
     }
 
-    // ================================================================ living
-
-    public void Update(float dt)
+    public override void Draw(FrameBuffer fb, float t)
     {
-        _time += dt;
-        if (_active)
-        {
-            _t += dt;
-            if (_t >= _end)
-            {
-                _active = false;
-                _director.SceneClaims = null;
-                bool quick = Environment.GetEnvironmentVariable("PECKWORKS_CAPER") == "1";
-                _next = _time + (quick ? 3 : 35 + 50 * _rng.NextDouble());
-            }
-            return;
-        }
-        if (_ready && _time >= _next && !_director.Claimed(Claims)) Begin();
-    }
-
-    // ================================================================ drawing
-
-    private static float Smooth(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3 - 2 * x); }
-
-    /// <summary>
-    /// Stamps a page with its feet at (feetX, feetY). Through the stencil if one is given (the rail and the trunks),
-    /// and always against the near ground's depth picture: a pumpkin whose foot is lower on the screen than these
-    /// feet is nearer, and hides the actor where they overlap.
-    /// </summary>
-    private void Stamp(FrameBuffer fb, in Sheet sh, Sprite page, float feetX, float feetY, bool mirror, bool[]? stencil, float opacity = 1f)
-    {
-        int left = (int)MathF.Round(feetX) - (mirror ? sh.W - sh.Ox : sh.Ox);
-        page.Draw(fb, left, (int)MathF.Round(feetY) - sh.By, opacity, stencil, mirror, _s.NearDepth, _s.Nearness(feetY));
-    }
-
-    public void Draw(FrameBuffer fb)
-    {
-        if (!_active || !_ready) return;
-        float t = _t, k = _k;
+        float k = _c.K;
         float over = Smooth((_end - t) / 0.6f);                   // everything the caper left on the ground fades at the very end
 
         // ---- the props: the nut pile, the mound or the hole, the nut that got away ----
         float pileIn = Smooth(t / 0.5f);
         byte[] nd = _s.NearDepth;
         byte pileNear = _s.Nearness(_pileY), spotNear = _s.Nearness(WalkY(_spotX));
-        _acorn.DrawCentered(fb, _pileX - 0.16f * k, _pileY - 0.07f * k, pileIn * over, null, false, nd, pileNear);
-        _acorn.DrawCentered(fb, _pileX + 0.14f * k, _pileY - 0.07f * k, pileIn * over, null, false, nd, pileNear);
-        if (t < _pileTaken) _acorn.DrawCentered(fb, _pileX - 0.01f * k, _pileY - 0.18f * k, pileIn, null, false, nd, pileNear);   // the one on top is the one it takes
-        if (t >= _buryAt + 0.3f && t < _digUpAt) _mound.DrawCentered(fb, _spotX, WalkY(_spotX) - 0.05f * k, Smooth((t - _buryAt - 0.3f) / 0.4f), null, false, nd, spotNear);
-        if (t >= _digUpAt) _hole.DrawCentered(fb, _spotX, WalkY(_spotX) - 0.05f * k, over, null, false, nd, spotNear);
+        _c.Acorn.DrawCentered(fb, _pileX - 0.16f * k, _pileY - 0.07f * k, pileIn * over, null, false, nd, pileNear);
+        _c.Acorn.DrawCentered(fb, _pileX + 0.14f * k, _pileY - 0.07f * k, pileIn * over, null, false, nd, pileNear);
+        if (t < _pileTaken) _c.Acorn.DrawCentered(fb, _pileX - 0.01f * k, _pileY - 0.18f * k, pileIn, null, false, nd, pileNear);   // the one on top is the one it takes
+        if (t >= _buryAt + 0.3f && t < _digUpAt) _c.Mound.DrawCentered(fb, _spotX, WalkY(_spotX) - 0.05f * k, Smooth((t - _buryAt - 0.3f) / 0.4f), null, false, nd, spotNear);
+        if (t >= _digUpAt) _c.Hole.DrawCentered(fb, _spotX, WalkY(_spotX) - 0.05f * k, over, null, false, nd, spotNear);
         if (t >= _buryAt && t < _buryAt + 0.5f)
         {
             // The nut leaves the mouth (at the nose, down by the paws) and is tipped into the hole.
             float p = (t - _buryAt) / 0.5f;
             float x = _spotX + 0.155f * k * (1 - p), y = WalkY(_spotX) - 0.03f * k - 0.12f * k * 4 * p * (1 - p);
-            _air.Pages[(int)(p * 0.5f * AirPages) % AirPages].DrawCentered(fb, x, y, 1 - Smooth((p - 0.75f) / 0.25f));
+            _c.Air.Pages[(int)(p * 0.5f * Cast.AirPages) % Cast.AirPages].DrawCentered(fb, x, y, 1 - Smooth((p - 0.75f) / 0.25f));
         }
         if (t >= _flingAt && t < _grabAt)
         {
@@ -687,191 +323,47 @@ internal sealed class AcornCaper
             else if (p < 1.1f) { float q = (p - 0.9f) / 0.2f; x = _landX - 0.15f * k + 0.15f * k * q; y = ground - 0.08f * k * 4 * q * (1 - q); }
             else { x = _landX; y = ground; }
             float turn = p < 1.1f ? p * 3.2f : 1.1f * 3.2f;
-            _air.Pages[(int)(turn * AirPages) % AirPages].DrawCentered(fb, x, y);
+            _c.Air.Pages[(int)(turn * Cast.AirPages) % Cast.AirPages].DrawCentered(fb, x, y);
         }
 
         // ---- the actors: the thief, the first squirrel, the mouse, the dust ----
-        DrawTrack(fb, _tracks[1], t);
-        DrawTrack(fb, _tracks[0], t);
-        DrawTrack(fb, _tracks[2], t);
-        DrawTrack(fb, _tracks[3], t);
+        DrawTrack(fb, _script[1], t);
+        DrawTrack(fb, _script[0], t);
+        DrawTrack(fb, _script[2], t);
+        DrawTrack(fb, _script[3], t);
     }
 
     private void DrawTrack(FrameBuffer fb, List<Seg> track, float t)
     {
         Seg? seg = null;
-        foreach (Seg s in track)
-            if (t >= s.T0 && t < s.T1) { seg = s; break; }
+        foreach (Seg sg in track)
+            if (t >= sg.T0 && t < sg.T1) { seg = sg; break; }
         if (seg == null) return;
-        float k = _k, u = (t - seg.T0) / Math.Max(0.001f, seg.Dur);
-        bool mirror = seg.Dir < 0;
-        int nut = seg.Acorn ? 1 : 0;
-        bool[]? props = _s.OpenOfProps;
-
-        switch (seg.Kind)
+        _c.DrawSeg(fb, seg, t);
+        if (seg.Kind != Kind.Fracas) return;
+        // The scuffle's own extras over the shared cloud: bits of squirrel popping out, tufts of fur and stars flying off on arcs.
+        float k = _c.K, s = t - seg.T0;
+        float opacity = Smooth(s / seg.P0) * Smooth((seg.Dur - s) / seg.P1);
+        float x = seg.From.X + 0.3f * k * MathF.Sin(s * 6.1f), y = seg.From.Y;
+        // Bits of squirrel popping out, and tufts of fur and stars flying off on arcs.
+        float cx = x, cy = y - 0.62f * k;
+        foreach (Pop pop in _pops)
         {
-            case Kind.Peek:
-            {
-                float outBy = seg.P0 + (seg.P1 - seg.P0) * Smooth(u);
-                bool blink = seg.P0 >= 1f && (t - seg.T0) % 1.3f < 0.12f;        // a blink once a second or so, while it is looking about
-                int page = blink ? PeekPages : Math.Clamp((int)MathF.Ceiling(outBy * PeekPages) - 1, 0, PeekPages - 1);
-                Stamp(fb, _peek, _peek.Pages[page], seg.From.X, seg.From.Y, mirror, null);
-                break;
-            }
-            case Kind.Hop:
-            {
-                float x = seg.From.X + (seg.To.X - seg.From.X) * u;
-                float y = seg.From.Y + (seg.To.Y - seg.From.Y) * u - seg.P0 * k * 4 * u * (1 - u);
-                // The hop book: crouch, push, flight, landing, settle. After a run it starts at the push; before a run it ends at the landing.
-                int flags = (int)seg.P1;
-                float k0 = (flags & 1) != 0 ? 4 / 22f : 0f, k1 = (flags & 2) != 0 ? 18 / 22f : 1f;
-                float kk = k0 + (k1 - k0) * u;
-                int page = Math.Clamp((int)(kk * HopPages), 0, HopPages - 1);
-                Stamp(fb, _hop[nut], _hop[nut].Pages[page], x, y, mirror, null);
-                break;
-            }
-            case Kind.Turn:
-            {
-                // Round through the front view: the first half faces the way it was, the second half (mirrored pages) the way it will.
-                int toDir = seg.Dir, fromDir = -seg.Dir;
-                int page = u < 0.5f ? Math.Min(TurnPages - 1, (int)(u * 2 * TurnPages)) : Math.Min(TurnPages - 1, (int)((1 - u) * 2 * TurnPages));
-                bool m = u < 0.5f ? fromDir < 0 : toDir < 0;
-                Stamp(fb, _turn, _turn.Pages[page], seg.From.X, seg.From.Y, m, null);
-                break;
-            }
-            case Kind.Rise:
-            {
-                float kk = seg.P0 > 0 ? u : 1 - u;
-                int page = Math.Clamp((int)(kk * RisePages), 0, RisePages - 1);
-                Stamp(fb, _rise[nut], _rise[nut].Pages[page], seg.From.X, seg.From.Y, mirror, null);
-                break;
-            }
-            case Kind.Run:
-            {
-                float dist = MathF.Abs(seg.To.X - seg.From.X) * u;
-                float x = seg.From.X + (seg.To.X - seg.From.X) * u;
-                float y = seg.Rail ? RailAt(x) - 1.5f : WalkY(x);
-                float cyc = dist / Math.Max(1f, seg.P0);
-                int page = (int)((cyc - MathF.Floor(cyc)) * RunPages) % RunPages;
-                Stamp(fb, _run[nut], _run[nut].Pages[page], x, y, mirror, seg.Rail ? props : null);
-                break;
-            }
-            case Kind.Mount:
-            {
-                // Pitching up onto the bark (or back off it): four pages from level to upright, about the feet.
-                float kk = seg.Up ? u : 1 - u;
-                int page = Math.Clamp((int)(kk * MountPages), 0, MountPages - 1);
-                Stamp(fb, _mount[nut], _mount[nut].Pages[page], seg.From.X, seg.From.Y, mirror, null);
-                break;
-            }
-            case Kind.Climb:
-            {
-                float x = seg.From.X + (seg.To.X - seg.From.X) * u, y = seg.From.Y + (seg.To.Y - seg.From.Y) * u;
-                float cyc = Dist(seg.From, seg.To) * u / (1.6f * k);
-                int page = (int)((cyc - MathF.Floor(cyc)) * RunPages) % RunPages;
-                // Head up: the back is to the left of the feet, so it clings to the trunk's left face as painted.
-                // Head first down: the back is to the right as painted, so the sticker is flipped to put it on the same face.
-                // Through the props stencil: the leaves hide it as it climbs into them, and uncover it as it comes down.
-                if (seg.Up) Stamp(fb, _up[nut], _up[nut].Pages[page], x, y, false, props);
-                else Stamp(fb, _down, _down.Pages[page], x, y, true, props);
-                break;
-            }
-            case Kind.Sit:
-            {
-                float s = t - seg.T0;
-                float ft = s % 1.5f;                                              // a flick every second and a half, as on the fence
-                int tail = ft < 0.4f ? new[] { 1, 2, 3, 2, 1 }[Math.Min(4, (int)(ft / 0.4f * 5))] : 0;
-                Sheet sh = seg.Look ? _lookUp[nut] : _sit[nut, tail];
-                Stamp(fb, sh, sh.Pages[0], seg.From.X, seg.From.Y, mirror, null);
-                break;
-            }
-            case Kind.Chatter:
-            {
-                // Rage: the tail lashes in three-frame snaps with holds between, the forepaws stamp by turns, the body shudders a pixel at fifteen a second. The two squirrels are out of step.
-                float s = t - seg.T0 + seg.P0 * 0.23f;
-                int f = (int)(s * 60);
-                int cyc = f % 14;
-                int snap = cyc < 6 ? new[] { 1, 2, 3, 3, 2, 1 }[cyc] : 0;
-                int paw = (f / 8) % 2;
-                float shudder = MathF.Round(MathF.Sin(s * 15f * MathF.Tau));
-                Sheet sh = _chatter[snap, paw];
-                Stamp(fb, sh, sh.Pages[0], seg.From.X + shudder, seg.From.Y, mirror, null);
-                break;
-            }
-            case Kind.Dazed:
-            {
-                float s = t - seg.T0;
-                int page = (int)MathF.Round(MathF.Sin(s * 3f * MathF.Tau)) + 1;
-                Stamp(fb, _dazed, _dazed.Pages[page], seg.From.X, seg.From.Y, mirror, null);
-                break;
-            }
-            case Kind.Dig:
-            {
-                float s = t - seg.T0;
-                int page = seg.P0 <= 0f ? 0 : (int)(s * seg.P0 * DigPages) % DigPages;
-                Stamp(fb, _dig[nut], _dig[nut].Pages[page], seg.From.X, seg.From.Y, mirror, seg.Rail ? props : null);
-                if (seg.P1 > 0f)
-                {
-                    // Earth flying: a fountain of specks from the paws, back past the tail, each on its own little arc.
-                    float px = seg.From.X + seg.Dir * 0.5f * k, py = seg.From.Y;
-                    for (int i = 0; i < 14; i++)
-                    {
-                        float p = (s * seg.P0 * 0.4f + i / 14f) % 1f;
-                        float reach = (1.3f + 0.35f * (i % 4)) * k, lift = (0.9f + 0.2f * (i % 3)) * k;
-                        float x = px - seg.Dir * reach * p, y = py - lift * 4 * p * (1 - p) + 0.02f * k;
-                        _speck.DrawCentered(fb, x, y, 1 - Smooth((p - 0.8f) / 0.2f));
-                    }
-                }
-                break;
-            }
-            case Kind.Mouse:
-            {
-                float x = seg.From.X + (seg.To.X - seg.From.X) * u, y = WalkY(x);
-                bool still = seg.From == seg.To;
-                float s = t - seg.T0;
-                Sheet sh;
-                int page;
-                if (still) { sh = seg.Acorn ? _mouseStillNut : _mouseStill; page = (int)(s * 12) % 2; }     // the nose twitching
-                else
-                {
-                    float dist = MathF.Abs(seg.To.X - seg.From.X) * u;
-                    float stride = 0.8f * _m;                                                              // paged by distance: about eight strides a second at its pace
-                    float cyc = dist / stride;
-                    sh = seg.Acorn ? _mouseNut : _mouse; page = (int)((cyc - MathF.Floor(cyc)) * MousePages) % MousePages;
-                }
-                Stamp(fb, sh, sh.Pages[page], x, y, mirror, null);        // the depth picture hides it behind the shock (and any nearer pumpkin)
-                break;
-            }
-            case Kind.Fracas:
-            {
-                float s = t - seg.T0;
-                float opacity = Smooth(s / seg.P0) * Smooth((seg.Dur - s) / seg.P1);
-                float spread = 1f + 0.5f * Smooth(1 - (seg.Dur - s) / seg.P1);                    // the cloud spreads as it thins
-                float x = seg.From.X + 0.3f * k * MathF.Sin(s * 6.1f), y = seg.From.Y;
-                int page = (int)(s * 36) % CloudPages;
-                Stamp(fb, _cloud, _cloud.Pages[page], x, y, false, null, opacity / spread);
-                // Bits of squirrel popping out, and tufts of fur and stars flying off on arcs.
-                float cx = x, cy = y - 0.62f * k;
-                foreach (Pop pop in _pops)
-                {
-                    if (t < pop.T || t >= pop.T + pop.Dur) continue;
-                    float a = pop.Angle * MathF.PI / 180f;
-                    _limb[pop.Kind].DrawCentered(fb, cx + 0.55f * k * MathF.Cos(a), cy - 0.45f * k * MathF.Sin(a), opacity);
-                }
-                for (int i = 0; i < 6; i++)
-                {
-                    float p = (s * 1.6f + i / 6f) % 1f;
-                    float a = (i * 61f + 20f) * MathF.PI / 180f;
-                    _tuft.DrawCentered(fb, cx + (0.6f + 1.2f * p) * k * MathF.Cos(a), cy - (0.5f + 0.9f * p) * k * MathF.Sin(a) + 1.4f * k * p * p, opacity * (1 - p));
-                }
-                for (int i = 0; i < 3; i++)
-                {
-                    float a = (s * 1.3f + i * 2.09f);
-                    float twinkle = 0.5f + 0.5f * MathF.Sin(s * 11f + i * 2f);
-                    _star.DrawCentered(fb, cx + 1.0f * k * MathF.Cos(a), cy - 0.75f * k * MathF.Sin(a), opacity * twinkle);
-                }
-                break;
-            }
+            if (t < pop.T || t >= pop.T + pop.Dur) continue;
+            float a = pop.Angle * MathF.PI / 180f;
+            _c.Limb[pop.Kind].DrawCentered(fb, cx + 0.55f * k * MathF.Cos(a), cy - 0.45f * k * MathF.Sin(a), opacity);
+        }
+        for (int i = 0; i < 6; i++)
+        {
+            float p = (s * 1.6f + i / 6f) % 1f;
+            float a = (i * 61f + 20f) * MathF.PI / 180f;
+            _c.Tuft.DrawCentered(fb, cx + (0.6f + 1.2f * p) * k * MathF.Cos(a), cy - (0.5f + 0.9f * p) * k * MathF.Sin(a) + 1.4f * k * p * p, opacity * (1 - p));
+        }
+        for (int i = 0; i < 3; i++)
+        {
+            float a = (s * 1.3f + i * 2.09f);
+            float twinkle = 0.5f + 0.5f * MathF.Sin(s * 11f + i * 2f);
+            _c.Star.DrawCentered(fb, cx + 1.0f * k * MathF.Cos(a), cy - 0.75f * k * MathF.Sin(a), opacity * twinkle);
         }
     }
 }

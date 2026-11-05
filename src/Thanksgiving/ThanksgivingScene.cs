@@ -55,7 +55,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly int _geese;
     private readonly TurkeyFlock _flock;           // the wild turkeys that live in the field
     private readonly DeerHerd _herd;               // the doe and her fawn at the far side of it
-    private readonly AcornCaper _caper;            // the squirrels' story on the near ground, every minute or two
+    private readonly StoryDirector _stories;       // the little scenes (the acorn caper, hide and seek, the fawn's apple, the mouse parade), one every minute or two
     private readonly PatchLife _life;              // the mice, birds and squirrel that live in the pumpkin patch
     private readonly int _geeseDir;                // +1 the V flies right, -1 left
     private readonly float[] _flapPhase;           // each goose's own place in the flap, so they are not all in step
@@ -136,7 +136,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         // ---- The flock: wild turkeys living in the field (after the director, so its dice are untouched) ----
         _flock = new TurkeyFlock(_scenery, settings.TurkeyCount, _rng);
         _herd = new DeerHerd(_scenery, settings.DeerCount, _rng);
-        _caper = new AcornCaper(_scenery, _happenings, _rng);
+        _stories = new StoryDirector(_scenery, _happenings, _rng, c => [new AcornCaper(c), new HideAndSeek(c), new FawnApple(c, _herd), new MouseParade(c)]);
         _life = new PatchLife(_scenery, settings.CritterCount, _rng);
     }
 
@@ -415,8 +415,9 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _scarfPhase = (_scarfPhase + dt * Math.PI * 2 * 2.1 * gust) % (Math.PI * 2);
         _leaves.Update(dt);
         _flock.Update(dt);
+        _stories.Update(dt);                       // before the herd (a story may drive the fawn) and the director (it holds the ground's claims while it plays)
+        _life.Lull = _stories.Playing;             // the patch's critters keep out of a story's way
         _herd.Update(dt);
-        _caper.Update(dt);                         // before the director: it holds the ground's claims while it plays
         _life.Update(dt);
         _happenings.Update(elapsedSeconds);
     }
@@ -491,10 +492,10 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         // 6a2. The patch's own life: mice, birds and a squirrel among the pumpkins, each hidden by the pumpkins nearer than it.
         _life.Draw(fb);
 
-        // 6b. The acorn caper: the squirrels, the mouse and the dust on the
-        //     near ground and the rail, in front of the fence (and behind the
-        //     corn shock and the maples where the rail passes them).
-        _caper.Draw(fb);
+        // 6b. The little scenes (Stories.cs): the squirrels, the mice, the dust, an apple on the
+        //     near ground and the rail, in front of the fence (and behind the corn shock and the
+        //     maples where the rail passes them, behind the nearer pumpkins on the ground).
+        _stories.Draw(fb);
 
         // 7. The NEAR happenings (layer 1): everything in front of the
         //    scenery and the geese, like the turkey on the ground.

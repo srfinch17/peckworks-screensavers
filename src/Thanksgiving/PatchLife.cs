@@ -206,10 +206,28 @@ internal sealed class PatchLife
     }
 
     /// <summary>The dice: what next, by kind, dials and what is at hand.</summary>
+    /// <summary>
+    /// While a story plays on the near ground the patch's own life keeps out of its way (a loose mouse sat at the
+    /// squirrel's feet while "the" mouse hid in the jack-o'-lantern): a mouse or squirrel that has to choose goes
+    /// behind a pumpkin and stays there, a bird stands still or stays on its perch. Set by the scene each frame.
+    /// </summary>
+    public bool Lull;
+
     private void Decide(Critter c)
     {
         float u = _s.U;
         c.Clock = 0;
+        if (Lull)
+        {
+            if (c.Kind == Kind.Bird) c.Mind.Begin(c.Perched >= 0 ? Doing.Perch : _rng.Next(3) == 0 ? Doing.Peck : Doing.Still, 2f + 2f * (float)_rng.NextDouble());
+            else
+            {
+                PointF? g = BehindPumpkin(c.X, 0.4f * u);
+                if (g == null) c.Mind.Begin(Doing.Still, 2f);
+                else { c.Goal = g.Value; c.Mind.Begin(Doing.Hide, 5f + 3f * (float)_rng.NextDouble()); c.Travelled = 0; }
+            }
+            return;
+        }
         switch (c.Kind)
         {
             case Kind.Mouse:

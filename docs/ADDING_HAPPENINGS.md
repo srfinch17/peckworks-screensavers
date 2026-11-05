@@ -108,9 +108,12 @@ fixed to a prop) before writing one. They are the pattern.
     one, check it against EVERY existing one for a shared prop or place, not only the obvious
     pair. A happening may claim several things, comma separated (`"sun,costly"`); it then never
     runs with anything that claims any one of them. A scene's OWN actors can hold claims the same
-    way: Thanksgiving's acorn caper sets `HappeningDirector.SceneClaims = "ground,fence,cornshock"`
-    while it plays (and asks `Claimed(...)` before it begins), so no turkey happening strolls
-    through the squirrels' scuffle. Use that for COST too: give every happening
+    way: Thanksgiving's stories set `HappeningDirector.SceneClaims` to their own claims (the caper
+    holds `"ground,fence,cornshock"`) while they play (and ask `Claimed(...)` before they begin), so
+    no turkey happening strolls through the squirrels' scuffle. On Thanksgiving's near ground a
+    happening is also stamped against the painter's depth picture (`NearDepth`, with
+    `Nearness(feetY)`), so the pumpkins nearer than its feet hide it; `Jack` and `JackHoles` name
+    the jack-o'-lantern and a stencil of its carved holes. Use claims for COST too: give every happening
     that is dear to draw at 4K one shared extra claim (`"costly"`), so at most one of them is
     ever on screen. (A single claim per happening let two dear ones that each held a different
     prop run together, and their costs added up.)

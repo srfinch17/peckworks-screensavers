@@ -175,8 +175,14 @@ a fed koi was as hungry as before and went straight back for the next.
     ThanksgivingSettings.cs        declares its knobs
     TurkeyFlock.cs                 the wild turkeys that live in the field: four doings and a timer each, the Turkey happening's pictures
     DeerHerd.cs                    the doe and fawn at the far side of the field: a body flip-book and a head flip-book stamped together, mirrored to face left
-    AcornCaper.cs                  the squirrels' story on the near ground (bury a nut, a thief, a scuffle, a mouse): a script of timed segments per actor, written fresh each cycle
+    Stories.cs                     the little scenes' machinery: the Cast (every actor's flip-books, painted once), a Script (timed segments per actor, with builders), and the StoryDirector that deals one story every minute or two
+    AcornCaper.cs                  the first story (bury a nut, a thief, a scuffle, a mouse)
+    HideAndSeek.cs                 the second: a mouse hides from the squirrel inside the jack-o'-lantern (drawn through the painter's stencil of its carved holes)
+    FawnApple.cs                   the third: an apple rolls under the fence and the fawn comes to eat it (the herd LENDS the fawn: DeerHerd.Lend, Drive, Chew, Release)
+    MouseParade.cs                 the fourth: four mice with acorns scattered by a swooping sparrow, hiding behind the pumpkins by depth
+    PatchLife.cs                   the mice, birds and squirrel that live in the patch: a Mind each from Core/Minds, steps by Ground.Step among the pumpkins' feet, drawn far to near against the depth picture
     SquirrelArt.cs                 how a squirrel is drawn and the poses it can take (the bound, a hop with its crouch and settle, a turn through the front view, sitting, digging, chattering), shared with the fence squirrel
+    MouseArt.cs, BirdArt.cs        how a field mouse and a small songbird are drawn, shared by the stories and the patch's life
     Happenings/                    nineteen small random events (a turkey, a tractor, a raccoon), one class per file
 
   CabinByStream/                   a cottage in a flowery meadow at dusk, aiming at a photograph's look
@@ -453,7 +459,19 @@ caper (`AcornCaper.cs`) is a third kind of thing: not a happening (it lasts fort
 and not a clockwork resident like the turkeys, but a SCRIPT. Each cycle rolls its dice once and writes every
 actor's whole part out as a list of timed segments (hop from here to there, run the rail, dig for so long);
 drawing a frame is then only "which segment is it, and how far through", which is the happenings' own
-"from t alone" rule with a longer t. It holds the director's ground claims while it plays.
+"from t alone" rule with a longer t. It holds the director's ground claims while it plays. Three more
+stories joined it (`Stories.cs` holds the shared machinery: the Cast of flip-books painted once, the Script
+with its builders, and a StoryDirector that deals the stories like a deck of happenings). One of them
+borrows the fawn: the herd keeps drawing her with her own walk and chewing pages while the story says
+where she stands (`DeerHerd.Lend` and `Drive`), which is the cheapest way to give a resident a part in a
+story without a second drawing of it.
+
+The pumpkin patch is the saver's DEPTH trick. The painter paints every pumpkin, gourd and leaf a second
+time, flat, into a depth picture (`ThanksgivingScenery.NearDepth`) in a grey that says how near its foot
+stands. Anything that moves on the ground is then stamped with the nearness of its own feet, and the engine
+leaves out every pixel where the depth picture is nearer: a mouse walking behind a pumpkin is hidden by it,
+and in front of a smaller one it is not. That one array is what makes "throughout the patch" true for the
+patch's own critters (`PatchLife.cs`), the stories' actors, the strutting turkey and the rolling apple.
 
 Each happening is one small class with one rule: it is told `t`, the number of seconds since it
 began, and works out the whole picture from that number alone. It keeps no notes from one frame

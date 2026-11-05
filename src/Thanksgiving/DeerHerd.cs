@@ -73,6 +73,53 @@ internal sealed class DeerHerd
         public float NeckF;                                 // where the neck is now, 0 up to 1 grazing (eased toward its target)
         public float BiteT = -1, NextBite, ChewT = -1, EarT = -1, NextEar, TailT = -1;
         public int BitesLeft;
+        public bool Lent;                                   // a story is driving it: the herd keeps the neck, the bites and the ears, nothing else
+        public float LentNeck;                              // where the story wants its neck
+        public float HomeDepth;                             // its own line across the field, given back when the story is over
+    }
+
+    /// <summary>The fawn's index, or -1 when there is none (for a story that borrows it).</summary>
+    public int FawnIndex => _deer.Length >= 2 ? 1 : -1;
+
+    /// <summary>A story takes an animal over: its walk and its doings stop; the story moves it with Drive and gives it back with Release.</summary>
+    public bool Lend(int i)
+    {
+        if (i < 0 || i >= _deer.Length || _deer[i].Lent) return false;
+        Animal a = _deer[i];
+        a.Lent = true; a.LentNeck = a.NeckF; a.HomeDepth = a.Depth; a.Gait = Gait.Settled; a.Doing = Doing.Look; a.Walked = 0;
+        return true;
+    }
+
+    /// <summary>Where a lent animal's feet are now, its height (pixels) and its depth (0 the far side of the field, 1 at the fence).</summary>
+    public (float X, float FeetY, float H, float Depth) Where(int i) => (_deer[i].X, FootY(_deer[i]), _deer[i].H, _deer[i].Depth);
+
+    /// <summary>Where an animal's feet would be if it stood at x on the line "depth" across the field (its own line when depth is left out).</summary>
+    public float FeetYAt(int i, float x, float depth = -1f) => _s.FieldY(x) + (_s.Ground.YAt(Math.Clamp(x, 0, _s.Width - 1)) - _s.U * 0.006f - _s.FieldY(x)) * (depth < 0 ? _deer[i].Depth : depth);
+
+    /// <summary>
+    /// Moves a lent animal to x (and to the line "depth" across the field, if given) facing dir, with walking pages if it
+    /// moved, its neck eased toward "neck" (0 up, 1 nose in the stubble).
+    /// </summary>
+    public void Drive(int i, float x, int dir, float neck, float depth = -1f)
+    {
+        Animal a = _deer[i];
+        float y0 = FootY(a), dx = x - a.X;
+        if (depth >= 0) a.Depth = depth;
+        a.X = x;
+        float dy = FootY(a) - y0;
+        float moved = MathF.Sqrt(dx * dx + dy * dy);
+        if (moved > 0.01f) { a.Walked += moved; a.Gait = Gait.Walking; }
+        else a.Gait = Gait.Settled;
+        a.Dir = dir; a.LentNeck = neck;
+    }
+
+    /// <summary>Lets the animal chew for a moment (the jaw pages), for a story that fed it.</summary>
+    public void Chew(int i) { _deer[i].ChewT = 0; }
+
+    public void Release(int i)
+    {
+        Animal a = _deer[i];
+        a.Lent = false; a.Depth = a.HomeDepth; a.Gait = Gait.Settled; a.Doing = Doing.Look; a.Timer = 1.5f; a.Clock = 0;
     }
 
     private const int WalkPages = 48, SettlePages = 4, TailPages = 3, HeadPages = 24, HeadKinds = 3;   // 48 walk pages: a planted hoof shimmers by half the stride a page covers, about a pixel
@@ -381,7 +428,7 @@ internal sealed class DeerHerd
             a.Clock += dt;
 
             // ---- the neck: eases toward where the doing wants it at a steady rate (a lift takes about half a second) ----
-            float want = a.Doing switch { Doing.Graze => 1f, Doing.Look => 0f, _ => 0.25f };
+            float want = a.Lent ? a.LentNeck : a.Doing switch { Doing.Graze => 1f, Doing.Look => 0f, _ => 0.25f };
             float step = NeckRate * dt;
             a.NeckF += Math.Clamp(want - a.NeckF, -step, step);
             // Bites while grazing with the nose down: bursts of a few, each a tug up, a hold and an ease down, then chewing.
@@ -402,6 +449,7 @@ internal sealed class DeerHerd
             if (a.EarT >= 0) { a.EarT += dt; if (a.EarT > 0.1f) a.EarT = -1; }
             else { a.NextEar -= dt; if (a.NextEar <= 0) { a.EarT = 0; a.NextEar = 2f + 4f * (float)_rng.NextDouble(); } }
             if (a.TailT >= 0) { a.TailT += dt; if (a.TailT > 0.27f) a.TailT = -1; }
+            if (a.Lent) continue;                                   // a story moves it
 
             // ---- the gait ----
             switch (a.Gait)
@@ -440,7 +488,7 @@ internal sealed class DeerHerd
                 if (a.X > hi) { a.X = hi; a.Dir = -1; }
             }
 
-            if (a.Fawn && doe != null)
+            if (a.Fawn && doe != null && !doe.Lent)
             {
                 // The fawn keeps close: if the doe has moved off, trot after her; otherwise do as she does, a little behind.
                 float want_x = doe.X - doe.Dir * u * 0.09f;

@@ -78,6 +78,7 @@ internal sealed class ThanksgivingScenery
     public required float CornShockHalfWidth { get; init; }
     public required List<(PointF At, float R)> Pumpkins { get; init; } // the pumpkin patch: each pumpkin's center and size (its foot is 0.8 R below the center)
     public required (PointF At, float R) Jack { get; init; }          // the carved jack-o'-lantern among them: its center and size, for the candle's flicker
+    public required bool[] JackHoles { get; init; }                   // stencil: true on the jack-o'-lantern's carved holes (a mouse peeking out of an eye shows only there)
     public required byte[] NearDepth { get; init; }                   // the near ground's depth picture: how near each pixel's pumpkin, gourd, leaf, the horn or the shock stands (0 = nothing there); see Nearness
     public required float CrestMin { get; init; }
     /// <summary>
@@ -251,6 +252,20 @@ internal static class ThanksgivingPainter
             if (beforeProps[i] != afterProps[i] && v < propNear) v = propNear;
             nearDepth[i] = v;
         }
+        // The jack-o'-lantern's carved holes, as a stencil: the pixels of candle yellow inside its bounds (a mouse peeking out of an eye is drawn only there).
+        var jackHoles = new bool[pixels.Length];
+        if (jack.R > 0)
+        {
+            int x0 = Math.Max(0, (int)(jack.At.X - jack.R)), x1 = Math.Min(w - 1, (int)(jack.At.X + jack.R));
+            int y0 = Math.Max(0, (int)(jack.At.Y - jack.R)), y1 = Math.Min(h - 1, (int)(jack.At.Y + jack.R));
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                {
+                    uint p = pixels[y * w + x] & 0xFFFFFF;
+                    int r = (int)(p >> 16), gg = (int)((p >> 8) & 0xFF), b = (int)(p & 0xFF);
+                    jackHoles[y * w + x] = r > 240 && gg > 200 && gg < 235 && b > 90 && b < 130;
+                }
+        }
 
         float wallW = u * 0.12f, wallH = u * 0.058f, farmTop = farmFoot.Y - wallH;
         float barnW = u * 0.13f, barnH = u * 0.06f, barnTop = barnFoot.Y - barnH;
@@ -280,7 +295,7 @@ internal static class ThanksgivingPainter
             ScarecrowArmL = new PointF(scarecrowX - scarecrowTall * 0.30f, scarecrowFoot - scarecrowTall * 0.62f),
             ScarecrowArmR = new PointF(scarecrowX + scarecrowTall * 0.30f, scarecrowFoot - scarecrowTall * 0.62f),
             CornShockFoot = shockFoot, CornShockTop = new PointF(shockFoot.X, shockFoot.Y - shockTall), CornShockHalfWidth = shockHalf,
-            Pumpkins = pumpkins, Jack = jack, NearDepth = nearDepth, CrestMin = crestMin,
+            Pumpkins = pumpkins, Jack = jack, JackHoles = jackHoles, NearDepth = nearDepth, CrestMin = crestMin,
             CornucopiaMouth = cornucopiaMouth, CornucopiaCenter = new PointF(cornucopiaMouth.X - hornLen * 0.45f, cornucopiaMouth.Y - hornLen * 0.22f),
             CornucopiaLength = hornLen,
             Canopies = canopies, CornerBranchSpots = cornerSpots,
