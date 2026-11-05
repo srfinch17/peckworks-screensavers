@@ -45,6 +45,17 @@ internal sealed class ThanksgivingScenery
     /// </summary>
     public float FieldY(float x) => Brushwork.RidgeYAt(NearRidge, Math.Clamp(x, 0, Width - 1)) * 0.55f + Ground.YAt(Math.Clamp(x, 0, Width - 1)) * 0.45f;
 
+    /// <summary>
+    /// THE FIELD'S ONE SCALE: how many U a metre is at a given depth across the field (0 the far lane, 1 the fence).
+    /// Pinned at the lane by the tractor (its rear wheel, 1.7 m, is 0.040 U) and at the fence by the posts (1.2 m,
+    /// about 0.048 U). Every animal that lives on the field takes its size from this and its real height or length,
+    /// so a deer is half a tractor wheel tall and a rabbit is a tenth of a tractor long, wherever it stands. (Before
+    /// this the deer stood 0.078 U at the shoulder, twice the wheel, four times their size: "all of your background
+    /// animals are like 20 ft tall compared to the tractor".) The near ground in front of the fence is a closer plane
+    /// with its own, bigger scale (the patch's pumpkins and critters), not this one.
+    /// </summary>
+    public float MetresToU(float depth) => 0.0235f + (0.040f - 0.0235f) * Math.Clamp(depth, 0f, 1f);
+
     // ---- The farmhouse (on the near hills, left of middle) ----
     public required PointF FarmFoot { get; init; }                   // the middle of the farmhouse's base
     public required SizeF FarmWall { get; init; }                    // its wall's width and height (the gable roof rises 0.05 U above the wall)

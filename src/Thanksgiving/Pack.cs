@@ -100,8 +100,9 @@ internal sealed class Pack
         _log = MindLog.Open();
         _stencil = s.OpenField;
         float u = s.U;
-        _k = Math.Max(14f, u * 0.062f);
-        _r = Math.Max(7f, u * 0.026f);
+        // Sized by the field's one scale at the lane (ThanksgivingScenery.MetresToU): a coyote a metre long, a cottontail 0.4.
+        _k = Math.Max(10f, u * s.MetresToU(0.06f) * 1.0f);
+        _r = Math.Max(5f, u * s.MetresToU(0.06f) * 0.42f);
         _cw = (int)(2.2f * _k) + 4; _ch = (int)(1.35f * _k) + 4; _cox = (int)(1.0f * _k) + 2; _cby = _ch - 2;
         _rw = (int)(1.7f * _r) + 4; _rh = (int)(1.15f * _r) + 4; _rox = (int)(0.85f * _r) + 2; _rby = _rh - 2;
         _lw = (int)(0.9f * _r) + 4; _lh = (int)(1.3f * _r) + 4; _lox = _lw / 2; _lby = (int)(0.12f * _r) + 2;

@@ -587,6 +587,10 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   few steps, stand and look about, and the tom fans his tail now and then; when he does, the
   curious hens walk over and stand watching him, and a bale dropped by the baler draws them over
   to scratch at the hay.
+- **The field has one scale.** Metres to pixels run from the tractor at the far lane (its rear wheel is
+  1.7 m) to the fence posts at the front, and every animal on the field is sized from that and its real
+  height or length, so a deer is half a tractor wheel tall and a rabbit a tenth of a tractor long,
+  wherever it stands.
 - **The field is being worked.** An old red tractor with a lit headlamp drives slowly along the far
   lane towing a round baler; every so often the baler's tailgate swings up and a finished bale rolls
   out the back and is left standing on the field. It goes off one side, comes back the other way a

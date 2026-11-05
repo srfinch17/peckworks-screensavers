@@ -94,8 +94,10 @@ internal sealed class TurkeyFlock
         _rng = new Random(sceneRng.Next());             // its own dice, so adding a bird never reshuffles the rest of the scene
         _log = MindLog.Open();
         float u = s.U;
-        _k[0] = Math.Max(8f, u * 0.060f);
-        _k[1] = Math.Max(8f, u * 0.074f);
+        // Sized by the field's one scale (ThanksgivingScenery.MetresToU): a wild turkey is about 1.1 m beak to tail; the far
+        // class stands at depth 0.45, the near at 0.8. (At 0.060 and 0.074 U they were as long as the tractor.)
+        _k[0] = Math.Max(8f, u * s.MetresToU(0.45f) * 1.1f);
+        _k[1] = Math.Max(8f, u * s.MetresToU(0.80f) * 1.1f);
         for (int z = 0; z < 2; z++)
         {
             _w[z] = (int)(1.45f * _k[z]) + 4;

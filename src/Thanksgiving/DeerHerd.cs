@@ -134,8 +134,8 @@ internal sealed class DeerHerd
     }
 
     private const int WalkPages = 48, SettlePages = 8, TailPages = 3, HeadPages = 24, HeadKinds = 3;   // 48 walk pages: a planted hoof shimmers by half the stride a page covers, about a pixel; 8 settle pages: two per foot
-    private const float Speed = 0.05f;                      // in U per second
-    private const float RetreatSpeed = 0.085f;              // a startled deer's brisk walk away
+    private const float Speed = 0.035f;                     // in U per second: 1.2 m/s at the field's scale (0.05 was set for a deer twice the size)
+    private const float RetreatSpeed = 0.06f;               // a startled deer's brisk walk away
     private const float StepReach = 0.17f;                  // how far a foot travels in front of and behind the hip, in body heights
     private const float Duty = 0.62f;                       // the share of the stride a foot is on the ground
     private const float NeckX = 0.30f, NeckY = 0.72f;       // where the neck leaves the body (body heights from the middle, up from the ground), standing
@@ -191,7 +191,8 @@ internal sealed class DeerHerd
             a.Pace = new Pace(Speed * s.U * 2.5f);                           // leans into a walk over about half a second
             if (_test == "walk") a.Pace.Want = Speed * s.U;
             a.Restless = (float)_rng.NextDouble() * 10;
-            Make(a, Math.Max(14, (int)(s.U * (fawn ? 0.048f : buck ? 0.086f : 0.078f))));
+            // Sized by the field's one scale at its depth: a doe 0.95 m at the shoulder, a buck 1.05, a fawn 0.62 (ThanksgivingScenery.MetresToU).
+            Make(a, Math.Max(10, (int)(s.U * s.MetresToU(a.Depth) * (fawn ? 0.62f : buck ? 1.05f : 0.95f))));
             _deer[i] = a;
         }
     }

@@ -89,7 +89,7 @@ internal sealed class Turkey : Happening
     public Turkey(ThanksgivingScenery s)
     {
         _s = s;
-        _k = Math.Max(10f, s.U * 0.095f);       // beak to tail is about a unit, so about 0.1 U long
+        _k = Math.Max(10f, s.U * 0.075f);       // beak to tail is about a unit: on the near ground just in front of the fence, between the flock's scale behind it and the patch's (at 0.095 it dwarfed the flock)
         _w = (int)(1.45f * _k) + 4;
         _ox = (int)(0.80f * _k) + 2;            // the origin (the middle of the body) sits right of center: the fan reaches back
         _h = (int)(1.08f * _k) + 8;
