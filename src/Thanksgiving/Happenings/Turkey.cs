@@ -342,13 +342,17 @@ internal sealed class Turkey : Happening
         PointF B(float x, float y) => P(x * puff, by0 + 0.30f + (y - 0.30f) * puff);     // the body swells about the hips in the display
         Blob([B(0.34f, 0.44f), B(0.27f, 0.56f), B(0.04f, 0.62f), B(-0.18f, 0.58f), B(-0.30f, 0.48f), B(-0.22f, 0.32f), B(0.02f, 0.25f), B(0.24f, 0.30f)], Bronze);
         Blob([B(0.30f, 0.52f), B(0.04f, 0.62f), B(-0.20f, 0.58f), B(-0.30f, 0.48f), B(-0.20f, 0.52f), B(0.02f, 0.555f), B(0.26f, 0.49f)], Dark, 0.4f);   // the dark back, a crescent along the top
-        foreach ((float sx, float sy) in ((float, float)[])[(-0.15f, 0.315f), (-0.04f, 0.285f), (0.08f, 0.285f), (0.19f, 0.31f)])
+        // The breast feathers' tips: a lit scallop CUT INTO the lower edge (a lit disc straddling the edge, then the body's
+        // colour over all but its rim), so the edge itself is scalloped; separate discs read as buttons.
+        foreach ((float sx, float sy) in ((float, float)[])[(-0.15f, 0.30f), (-0.04f, 0.265f), (0.08f, 0.265f), (0.19f, 0.295f)])
         {
             PointF c = B(sx, sy);
-            Ellipse(c.X, c.Y, 0.05f * puff, 0.032f * puff, BronzeLit);                              // the breast feathers' tips
+            Ellipse(c.X, c.Y, 0.055f * puff, 0.04f * puff, BronzeLit);
+            Ellipse(c.X, c.Y + 0.014f, 0.052f * puff, 0.038f * puff, Bronze);
         }
-        // The beard: a tuft of black bristles hanging from the chest.
-        Limb(B(0.17f, 0.36f), B(0.18f, 0.25f), 0.03f, Black);
+        // The beard: a tuft of black bristles hanging from the chest, tapering to a point.
+        using (var beard = new SolidBrush(Black))
+            g.FillPolygon(beard, [B(0.15f, 0.37f), B(0.20f, 0.36f), B(0.195f, 0.28f), B(0.18f, 0.24f), B(0.165f, 0.29f)]);
 
         // ---- the wing, a rounded wedge along the side with three pale bars that follow its curve; in the display it drops ----
         {
@@ -381,8 +385,8 @@ internal sealed class Turkey : Happening
         using (var neck = new Pen(HeadBlue, 0.05f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
             g.DrawBezier(neck, neckBase, P(neckBase.X - 0.02f + 0.06f * peck, neckBase.Y + 0.12f - 0.10f * peck), P(head.X - 0.06f, head.Y - 0.10f + 0.06f * peck), head);   // a slight S
         // The wattle: a red teardrop hanging from the front of the neck, and the caruncles above it.
-        PointF wat = P(neckBase.X + (head.X - neckBase.X) * 0.55f + 0.035f, neckBase.Y + (head.Y - neckBase.Y) * 0.5f);
-        Blob([P(wat.X - 0.025f, wat.Y + 0.03f), P(wat.X + 0.02f, wat.Y + 0.035f), P(wat.X + 0.025f, wat.Y - 0.02f), P(wat.X, wat.Y - 0.055f), P(wat.X - 0.025f, wat.Y - 0.02f)], Wattle, 0.5f);
+        PointF wat = P(neckBase.X + (head.X - neckBase.X) * 0.55f + 0.03f, neckBase.Y + (head.Y - neckBase.Y) * 0.5f);
+        Blob([P(wat.X - 0.016f, wat.Y + 0.02f), P(wat.X + 0.014f, wat.Y + 0.022f), P(wat.X + 0.017f, wat.Y - 0.012f), P(wat.X, wat.Y - 0.036f), P(wat.X - 0.017f, wat.Y - 0.012f)], Wattle, 0.5f);
         Ellipse(head.X, head.Y, 0.08f, 0.066f, HeadBlue, 10f);
         Ellipse(head.X - 0.015f, head.Y + 0.02f, 0.045f, 0.035f, HeadPale, 10f);                 // the crown, a shade paler
         Ellipse(head.X + 0.02f, head.Y - 0.065f, 0.026f, 0.036f, Wattle);                        // the wattle under the chin

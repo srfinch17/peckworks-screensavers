@@ -283,18 +283,19 @@ internal static class SquirrelArt
                 return pts;
             }
             PointF[] left = Edge(1f, 1f), right = Edge(-1f, 1f);
-            // The hair: a scallop of round tufts, light and dark by turns, along both edges just outside the core
-            // (the core is painted over their inner halves, so only the bumps show: a soft plume, not a saw).
-            for (int i = 1; i < N; i++)
-            {
-                float r = 0.03f + Width(i / (float)N) * 0.35f;
-                foreach (PointF[] edge in (PointF[][])[left, right])
+            // The hair: a scallop of round tufts along both edges just outside the core, all in the core's own colour
+            // (the core is painted over their inner halves, so only the bumps show: a soft plume's edge). Tufts that
+            // alternated light and dark banded the tail across like a lizard's plates.
+            using (var hb = new SolidBrush(TailCore))
+                for (int i = 1; i < N; i++)
                 {
-                    PointF a = edge[i];
-                    using var hb = new SolidBrush(i % 2 == 0 ? TailHair : TailCore);
-                    g.FillEllipse(hb, a.X - r, a.Y - r, r * 2, r * 2);
+                    float r = 0.03f + Width(i / (float)N) * 0.35f;
+                    foreach (PointF[] edge in (PointF[][])[left, right])
+                    {
+                        PointF a = edge[i];
+                        g.FillEllipse(hb, a.X - r, a.Y - r, r * 2, r * 2);
+                    }
                 }
-            }
             var core = new PointF[(N + 1) * 2];
             for (int i = 0; i <= N; i++) { core[i] = left[i]; core[2 * N + 1 - i] = right[i]; }
             using (var path = new GraphicsPath())
@@ -303,15 +304,23 @@ internal static class SquirrelArt
                 using var b = new SolidBrush(TailCore);
                 g.FillPath(b, path);
             }
-            PointF[] li = Edge(1f, 0.55f), ri = Edge(-1f, 0.55f);
+            // The lit side of the plume: one smooth teardrop inside the core, off centre toward the top edge, and a few
+            // short strokes of lighter hair along it (the lit side, not a stripe down the middle).
+            PointF[] li = Edge(1f, 0.70f), ri = Edge(-1f, 0.15f);
             var inner = new PointF[(N + 1) * 2];
             for (int i = 0; i <= N; i++) { inner[i] = li[i]; inner[2 * N + 1 - i] = ri[i]; }
             using (var path = new GraphicsPath())
             {
                 path.AddClosedCurve(inner, 0.4f);
                 using var b = new SolidBrush(TailHair);
-                g.FillPath(b, path);                                       // the lit centre of the plume
+                g.FillPath(b, path);
             }
+            using (var hair = new Pen(Color.FromArgb(150, 236, 200, 150), 0.016f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                for (int i = 2; i < N - 1; i += 2)
+                {
+                    PointF a = li[i], b = spine[i + 1];
+                    g.DrawLine(hair, P(a.X * 0.7f + spine[i].X * 0.3f, a.Y * 0.7f + spine[i].Y * 0.3f), P(b.X * 0.4f + li[i + 1].X * 0.6f, b.Y * 0.4f + li[i + 1].Y * 0.6f));
+                }
         }
 
         // ---- the legs: each two bones, the foot placed, the knee worked out. Front: elbow back. Hind: knee forward. ----
@@ -339,11 +348,11 @@ internal static class SquirrelArt
 
         // ---- the body: a thigh at the rump, a bean from hip to chest with a hump, the cream belly and chest ----
         float bw = 1f - 0.5f * front;                                        // narrower seen from the front
-        Ell2(P(hip.X - 0.02f, hip.Y - 0.02f), 0.26f * bw, 0.21f, FurDark, tilt - 30f);       // the thigh, big and tilted
+        Ell2(P(hip.X - 0.02f, hip.Y - 0.02f), 0.26f * bw, 0.21f, FurDark, tilt - 30f);       // the thigh, big and tilted, part of the outline
         Ell2(hip, 0.22f * bw, 0.20f, Fur);
         Ell2(mid, 0.28f * q.BodyScale * bw, 0.19f, Fur, tilt);
         Ell2(chest, 0.20f * bw, 0.17f, Fur);
-        Ell2(P(hip.X + 0.02f, hip.Y - 0.01f), 0.20f * bw, 0.16f, FurDark, tilt - 30f);       // the thigh's shading, over the bean
+        Ell2(P(hip.X + 0.01f, hip.Y - 0.05f), 0.13f * bw, 0.11f, FurDark, tilt);             // the thigh's shading, kept inside the hip (a tilted one floated above the back)
         Ell2(P(mid.X + 0.06f, mid.Y - 0.07f), 0.24f * q.BodyScale * bw, 0.11f, Belly, tilt);   // the pale belly
         Ell2(P(chest.X + 0.04f, chest.Y - 0.04f), 0.13f * bw, 0.13f, Belly);                   // the cream chest
         Ell2(P(mid.X - 0.02f, mid.Y + 0.13f), 0.22f * q.BodyScale * bw, 0.045f, Under, tilt);  // a darker line down the back (the first version used a pen)

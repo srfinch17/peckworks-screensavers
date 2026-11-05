@@ -178,9 +178,11 @@ internal sealed class ThanksgivingScene : IScreensaverScene
                 // flap changes is how much of the wing's span we see: all of it with the wing raised or lowered, a
                 // sliver when it is level and pointing at us. (The first version pushed the trailing edge down, so a
                 // raised wing was a tall wedge: a plank.)
+                // The wing rises high but does not drop far: a downstroke that hung the wing below the belly read as a leg.
+                float upY = up > 0 ? up : 0.55f * up, handY = hand > 0 ? hand : 0.55f * hand;
                 PointF shoulder = P(sx, sy);
-                PointF wrist = P(sx - 0.06f, sy - 0.48f * up * scale);
-                PointF tip = P(sx - 0.16f - 0.12f * rising, sy - 0.48f * up * scale - 0.58f * hand * scale * (1 - 0.25f * rising));
+                PointF wrist = P(sx - 0.06f, sy - 0.48f * upY * scale);
+                PointF tip = P(sx - 0.16f - 0.12f * rising, sy - 0.48f * upY * scale - 0.58f * handY * scale * (1 - 0.25f * rising));
                 PointF trailTip = new(tip.X - s * 0.13f, tip.Y + s * 0.02f * up);
                 PointF trailWrist = new(wrist.X - s * 0.24f, wrist.Y + s * 0.03f * up);
                 PointF root = P(sx - 0.42f, sy + 0.05f);
@@ -316,14 +318,19 @@ internal sealed class ThanksgivingScene : IScreensaverScene
                 // Then the folds: runs of pieces where the cloth curls the same way, each run one polygon over the base.
                 // Which way it curls is the cross product of the steps either side of the piece; a curl one way shows the
                 // lit face, the other way the darker underside. The stripe near the tip is painted the same way.
+                float Curl(int i)
+                {
+                    if (i <= 0 || i >= steps - 1) return 0f;
+                    float ax = c[i + 1].X - c[i].X, ay = c[i + 1].Y - c[i].Y, bx = c[i + 2].X - c[i + 1].X, by = c[i + 2].Y - c[i + 1].Y;
+                    return (ax * by - ay * bx) / (len / steps * len / steps);
+                }
                 Color? RunColour(int i)
                 {
                     Color? t = tint((i + 0.5f) / steps);
                     if (t != null) return t;
-                    if (i == 0 || i >= steps - 1) return null;
-                    float ax = c[i + 1].X - c[i].X, ay = c[i + 1].Y - c[i].Y, bx = c[i + 2].X - c[i + 1].X, by = c[i + 2].Y - c[i + 1].Y;
-                    float curl = (ax * by - ay * bx) / (len / steps * len / steps);
-                    return curl > 0.08f ? dark : curl < -0.08f ? lit : null;
+                    // The curl averaged over three pieces, so a fold turns through the base red over a few pieces rather than at one ruled seam.
+                    float curl = (Curl(i - 1) + Curl(i) + Curl(i + 1)) / 3f;
+                    return curl > 0.10f ? dark : curl < -0.10f ? lit : null;
                 }
                 int start = 0;
                 while (start < steps)
@@ -361,9 +368,9 @@ internal sealed class ThanksgivingScene : IScreensaverScene
             var knot = new PointF(ox, oy);
             // The band round the neck: an ellipse under the chin, over the collar, with a paler top lip and the knot's bulge.
             using (var b = new SolidBrush(dark))
-                g.FillEllipse(b, knot.X - tall * 0.045f - tall * 0.125f, knot.Y - tall * 0.03f, tall * 0.25f, tall * 0.06f);
+                g.FillEllipse(b, knot.X - tall * 0.045f - tall * 0.10f, knot.Y - tall * 0.03f, tall * 0.20f, tall * 0.06f);   // no wider than the head, so no end sticks out past the neck
             using (var b = new SolidBrush(lit))
-                g.FillEllipse(b, knot.X - tall * 0.045f - tall * 0.115f, knot.Y - tall * 0.03f, tall * 0.23f, tall * 0.028f);
+                g.FillEllipse(b, knot.X - tall * 0.045f - tall * 0.09f, knot.Y - tall * 0.03f, tall * 0.18f, tall * 0.028f);
 
             // The short tail: hangs down the chest from the knot, swaying gently, a quarter of a beat behind the long one.
             float swayPhase = phase - MathF.PI / 2;

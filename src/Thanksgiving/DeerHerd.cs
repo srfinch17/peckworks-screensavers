@@ -277,12 +277,17 @@ internal sealed class DeerHerd
         }
         // The tail: a tuft at the rump that overlaps the body, white underneath (the flag), raised by "tail".
         float lift = tail * 0.5f;
-        PointF root = P(-0.44f, 0.68f - cd);
-        float ang = 4.45f - 1.6f * lift;                                  // radians: hanging down against the rump; swung up when flagged
-        PointF tip = P(root.X + 0.14f * MathF.Cos(ang), root.Y + 0.14f * MathF.Sin(ang));
+        // At rest it lies along the curve of the rump, brown on top, mostly inside the body's outline, with the white
+        // showing only at the tip below the rump; flagged, it swings up and the white underside shows whole.
+        PointF root = P(-0.40f, 0.70f - cd);
+        float ang = 4.1f - 1.4f * lift;                                   // radians: down and back along the rump; up when flagged
+        float len = 0.13f;
+        PointF tip = P(root.X + len * MathF.Cos(ang), root.Y + len * MathF.Sin(ang));
         float tx = -(tip.Y - root.Y), ty = tip.X - root.X;                // across the tail
-        Blob([root, P(root.X + tx * 0.25f, root.Y + ty * 0.25f), P(tip.X + tx * 0.15f, tip.Y + ty * 0.15f), tip, P(tip.X - tx * 0.15f, tip.Y - ty * 0.15f), P(root.X - tx * 0.22f, root.Y - ty * 0.22f)], coat, 0.4f);
-        Blob([P(root.X - tx * 0.04f, root.Y - ty * 0.04f), P(tip.X + tx * 0.08f, tip.Y + ty * 0.08f), P(tip.X - tx * 0.17f, tip.Y - ty * 0.17f), P(root.X - tx * 0.24f, root.Y - ty * 0.24f)], White, 0.4f);
+        Blob([root, P(root.X + tx * 0.2f, root.Y + ty * 0.2f), P(tip.X + tx * 0.12f, tip.Y + ty * 0.12f), tip, P(tip.X - tx * 0.12f, tip.Y - ty * 0.12f), P(root.X - tx * 0.2f, root.Y - ty * 0.2f)], coatDark, 0.4f);
+        float ws = 0.55f - 0.45f * lift;                                  // how far down the tail the white starts
+        PointF wr = P(root.X + (tip.X - root.X) * ws, root.Y + (tip.Y - root.Y) * ws);
+        Blob([P(wr.X - tx * 0.04f, wr.Y - ty * 0.04f), P(tip.X + tx * 0.08f, tip.Y + ty * 0.08f), P(tip.X - tx * 0.14f, tip.Y - ty * 0.14f), P(wr.X - tx * 0.2f, wr.Y - ty * 0.2f)], White, 0.4f);
 
         Leg(0, true, coat, coatDark);
         Leg(1, false, coat, coatDark);
@@ -341,7 +346,12 @@ internal sealed class DeerHerd
         float ml = fawn ? 0.19f : 0.25f;                                   // a fawn's face is shorter
         using (var skull = new SolidBrush(coat)) g.FillEllipse(skull, -0.13f, -0.085f, 0.26f, 0.17f);
         using (var muzzle = new SolidBrush(coat))
-            g.FillPolygon(muzzle, [P(0.02f, 0.06f), P(ml, 0.04f), P(ml + 0.035f, -0.005f), P(ml, -0.045f), P(0.02f, -0.075f)]);
+        using (var mp = new GraphicsPath())
+        {
+            // The muzzle tapers to a rounded nose, and the jaw curves under it (a straight chin line read as chopped off).
+            mp.AddClosedCurve([P(0.0f, 0.07f), P(ml * 0.6f, 0.055f), P(ml, 0.04f), P(ml + 0.035f, -0.005f), P(ml, -0.045f), P(ml * 0.6f, -0.065f), P(0.02f, -0.08f), P(-0.06f, -0.06f)], 0.4f);
+            g.FillPath(muzzle, mp);
+        }
         if (kind == 1)
         {
             using var jaw = new SolidBrush(coatDark);
