@@ -138,7 +138,10 @@ internal static class SquirrelArt
         float lookUp = look ? 1f : 0f;
         q.Head = P(q.Chest.X + Lerp(0.29f, 0.07f, e) + 0.03f * lookUp, q.Chest.Y + Lerp(0.07f, 0.22f, e) + 0.04f * lookUp);
         q.HeadTilt = Lerp(-4f, 8f, e) + 14f * lookUp;
-        q.NearFore = Lerp(P(0.52f, 0f), P(0.50f, 0.55f), e); q.FarFore = Lerp(P(0.40f, 0f), P(0.60f, 0.55f), e);
+        // Sitting up with the paws held to the chest (paws true) the forefeet are drawn as the paws; with them down they rest on the
+        // ground just in front of the hind feet. (Placed at chest height out front with paws false, the two-bone legs pulled straight
+        // and every no-nut sit, turn and daze pointed a rod.)
+        q.NearFore = Lerp(P(0.52f, 0f), paws ? P(0.50f, 0.55f) : P(0.30f, 0.0f), e); q.FarFore = Lerp(P(0.40f, 0f), paws ? P(0.60f, 0.55f) : P(0.24f, 0.0f), e);
         q.NearHind = Lerp(P(-0.02f, 0f), P(0.0f, 0.03f), e); q.FarHind = Lerp(P(0.08f, 0f), P(-0.05f, 0.02f), e);
         q.HindFlat = e > 0.6f; q.PawsUp = paws && e > 0.45f;
         q.TailBase = Lerp(165f, 118f, e) + 8f * lookUp;
@@ -167,10 +170,12 @@ internal static class SquirrelArt
     /// forepaws (a squash), and the settle (the tail overshoots and comes back after the body has stopped).
     /// The hop's arc through the air is the caller's; this is only the body.
     /// </summary>
+    /// <summary>Phases of the hop's 22 frames: crouch 0-4, push 4-6, flight 6-15, land 15-18, settle 18-22. The feet are on the ground outside the flight.</summary>
+    public const float HopCrouch = 4 / 22f, HopPush = 6 / 22f, HopFlight = 15 / 22f, HopLand = 18 / 22f;
+
     public static Pose Hop(float k)
     {
-        // Phases of the 22 frames: crouch 0-4, push 4-6, flight 6-15, land 15-18, settle 18-22.
-        const float C = 4 / 22f, Pu = 6 / 22f, F = 15 / 22f, L = 18 / 22f;
+        const float C = HopCrouch, Pu = HopPush, F = HopFlight, L = HopLand;
         Pose q;
         if (k < C) { q = Sit(1f); float c = k / C; q.BodyScale = 1 - 0.15f * c; q.Hip = P(q.Hip.X, q.Hip.Y - 0.05f * c); q.Chest = P(q.Chest.X - 0.08f * c, q.Chest.Y - 0.12f * c); q.Head = P(q.Head.X - 0.06f * c, q.Head.Y - 0.12f * c); q.TailBase -= 20f * c; q.PawsUp = false; q.NearFore = P(0.36f, 0.02f); q.FarFore = P(0.30f, 0.02f); }
         else if (k < Pu) { float c = (k - C) / (Pu - C); q = Bound(0.47f, 2.2f); q.BodyScale = 1.05f + 0.15f * c; q.Hip = P(q.Hip.X, 0.26f + 0.08f * c); q.NearHind = P(-0.30f - 0.1f * c, 0f); q.FarHind = P(-0.22f - 0.1f * c, 0f); q.TailBase = 150f - 30f * c; q.TailCurl = -60f; }
@@ -181,10 +186,10 @@ internal static class SquirrelArt
     }
 
     /// <summary>A turn on the spot, sitting: k 0 is the profile, 0.5 facing the viewer, 1 the profile the other way (the caller mirrors from 0.5 on).</summary>
-    public static Pose Turn(float k)
+    public static Pose Turn(float k, bool paws = false)
     {
         float f = 1f - MathF.Abs(k - 0.5f) * 2f;                           // 0 profile, 1 front
-        Pose q = Sit(1f, 0, false, false);
+        Pose q = Sit(1f, 0, false, paws);
         q.HeadTurn = f;
         q.BodyScale = 1f - 0.45f * f;                                       // the body narrows as it comes round
         q.TailBase = 118f - 20f * f; q.TailCurl = -112f + 30f * f;

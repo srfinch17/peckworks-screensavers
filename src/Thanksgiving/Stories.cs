@@ -58,7 +58,9 @@ internal struct Sheet
 /// <summary>Every actor's pictures, shared by all the stories, and how a segment is drawn from them.</summary>
 internal sealed class Cast
 {
-    public const int RunPages = 16, HopPages = 10, TurnPages = 3, RisePages = 5, DigPages = 8, MousePages = 8, CloudPages = 12, PeekPages = 4, AirPages = 8, MountPages = 4, ApplePages = 8;
+    // 48 run pages: at 16, a 132 px bound at 4.9 px a frame put the planted paw 5 px forward and back again every page (the animator's "creep").
+    public const int RunPages = 48, HopPages = 10, TurnPages = 3, RisePages = 5, DigPages = 8, MousePages = 8, CloudPages = 12, PeekPages = 4, AirPages = 8, MountPages = 4, ApplePages = 8, DazedPages = 8, LimbTurns = 8;
+    public const float BoundLen = 2.2f;                 // the bound the run pages are painted at, in squirrel units: every run and climb is paged at it
     public const float Speed = 0.27f;                  // bounding, U per second (the fence squirrel's own pace)
     public const float ClimbSpeed = 0.34f;             // up a trunk: faster than on the ground, in body lengths a second
     public const float MouseSpeed = 0.19f;
@@ -70,8 +72,9 @@ internal sealed class Cast
     public Sheet[] Hop = new Sheet[2];
     public Sheet[] Up = new Sheet[2];                  // climbing, head up: [acorn]
     public Sheet Down;                                 // climbing, head first down
-    public Sheet[] Mount = new Sheet[2];
-    public Sheet Turn;
+    public Sheet[] Mount = new Sheet[2];               // pitching up onto the bark from a level stance facing right: [acorn]; played backward it is the dismount onto the rail
+    public Sheet[] MountDown = new Sheet[2];           // the end of a head-first descent: the body pitching from head-down to level, drawn mirrored like the descent, so it ends facing LEFT
+    public Sheet[] Turn = new Sheet[2];                // [acorn]: a turn with the nut held to the chest keeps it in view (the turn used to drop it for twelve frames)
     public Sheet[] Rise = new Sheet[2];
     public Sheet[,] Sit = new Sheet[2, 4];             // [acorn, tail flick pose]
     public Sheet[] LookUp = new Sheet[2];
@@ -82,7 +85,7 @@ internal sealed class Cast
     public const int AppleSizes = 4;
     public Sheet[] Apple = new Sheet[AppleSizes];       // [size]: 0 full, 3 the far size by the fence
     public Sheet[] BirdStand = new Sheet[2], BirdLook = new Sheet[2], BirdPeck = new Sheet[2], BirdHop = new Sheet[2], BirdFly = new Sheet[2];
-    public Sprite[] Limb = new Sprite[4];              // a paw, a hind foot, an ear, a tail tip, for the scuffle
+    public Sprite[,] Limb = new Sprite[4, LimbTurns];  // a paw, a hind foot, an ear, a tail tip, for the scuffle, each at eight angles round the circle
     public Sprite Acorn = null!, Mound = null!, Hole = null!, Speck = null!, Tuft = null!, Star = null!;
     public volatile bool Ready;
 
@@ -107,7 +110,7 @@ internal sealed class Cast
     {
         float k = K;
         int w = (int)(2.55f * k) + 6, h = (int)(1.9f * k) + 6, ox = (int)(1.75f * k) + 3, by = h - 4;
-        float bound = 2.2f;
+        float bound = BoundLen;
         Sheet Ground(int n, Func<int, SquirrelArt.Pose> pose) => MakeSheet(n, w, h, ox, by, i => SquirrelArt.Page(pose(i), k, w, h, ox, by));
         int cw = (int)(1.9f * k) + 6, ch = (int)(2.55f * k) + 6;
         int sq = (int)(4.0f * k) + 6, so = sq / 2;
@@ -118,6 +121,8 @@ internal sealed class Cast
             Hop[a] = Ground(HopPages, i => { var q = SquirrelArt.Hop((i + 0.5f) / HopPages); q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; return q; });
             Up[a] = MakeSheet(RunPages, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3, i => { var q = SquirrelArt.Bound(i / (float)RunPages, bound, cling: true); q.Acorn = nut; q.Rotate = -90f; return SquirrelArt.Page(q, k, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3); });
             Mount[a] = MakeSheet(MountPages, sq, sq, so, so, i => { var q = SquirrelArt.Bound(0.80f, bound); q.Acorn = nut; q.Rotate = -90f * (i + 1) / MountPages; return SquirrelArt.Page(q, k, sq, sq, so, so); });
+            MountDown[a] = MakeSheet(MountPages, sq, sq, so, so, i => { var q = SquirrelArt.Bound(0.80f, bound, cling: true); q.Acorn = nut; q.Rotate = 90f * (1f - (i + 1) / (float)MountPages); return SquirrelArt.Page(q, k, sq, sq, so, so); });
+            Turn[a] = Ground(TurnPages, i => { var q = SquirrelArt.Turn(i * 0.25f, nut == 1); q.Acorn = nut == 1 ? 2 : 0; return q; });
             Rise[a] = Ground(RisePages, i => { var q = SquirrelArt.Sit(0.2f + 0.8f * i / (RisePages - 1), 0, false, nut == 1); q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; return q; });
             for (int tail = 0; tail < 4; tail++)
             {
@@ -128,14 +133,13 @@ internal sealed class Cast
             Dig[a] = Ground(DigPages, i => { var q = SquirrelArt.Dig(i / (float)DigPages); q.Acorn = nut; return q; });
         }
         Down = MakeSheet(RunPages, cw, ch, 3, (int)(1.75f * k) + 3, i => { var q = SquirrelArt.Bound(i / (float)RunPages, bound, cling: true); q.Rotate = 90f; return SquirrelArt.Page(q, k, cw, ch, 3, (int)(1.75f * k) + 3); });
-        Turn = Ground(TurnPages, i => SquirrelArt.Turn(i * 0.25f));
         for (int snap = 0; snap < 4; snap++)
             for (int paw = 0; paw < 2; paw++)
             {
                 int sn = snap, pw = paw;
                 Chatter[snap, paw] = Ground(1, _ => SquirrelArt.Chatter(sn, pw));
             }
-        Dazed = Ground(3, i => SquirrelArt.Dazed((i - 1) * 5f));
+        Dazed = Ground(DazedPages, i => SquirrelArt.Dazed(15f * MathF.Sin(MathF.Tau * i / DazedPages)));   // a slow loll through 15 degrees each way (three pages of 5 degrees at 3 Hz was a twitch)
         {
             int pw2 = (int)(0.9f * k) + 4, ph = (int)(0.8f * k) + 4, pox = pw2 / 2, pby = (int)(0.72f * k) + 2;
             Peek = MakeSheet(PeekPages + 1, pw2, ph, pox, pby, i => Squirrel.PaintPeek(k, pw2, ph, pox, pby, i < PeekPages ? (i + 1) / (float)PeekPages : 1f, i == PeekPages));
@@ -187,7 +191,12 @@ internal sealed class Cast
         int fw = (int)(3.0f * k) + 4, fh = (int)(2.4f * k) + 4;
         Cloud = MakeSheet(CloudPages, fw, fh, fw / 2, fh - 2, i => PaintCloud(fw, fh, i / (float)CloudPages));
         int lw = (int)(0.9f * k) + 4;
-        for (int i = 0; i < 4; i++) { int kind = i; Limb[i] = Sprite.Paint(lw, lw, g => PaintLimb(g, lw, kind)); }
+        for (int i = 0; i < 4; i++)
+            for (int turn = 0; turn < LimbTurns; turn++)
+            {
+                int kind = i; float deg = 360f * turn / LimbTurns;
+                Limb[i, turn] = Sprite.Paint(lw, lw, g => PaintLimb(g, lw, kind, deg));
+            }
         int tw = Math.Max(4, (int)(k * 0.12f));
         Tuft = Sprite.Paint(tw, tw, g => { using var br = new SolidBrush(SquirrelArt.TailHair); g.FillEllipse(br, 0.5f, tw * 0.25f, tw - 1f, tw * 0.5f); });
         int stw = Math.Max(6, (int)(k * 0.16f));
@@ -251,17 +260,19 @@ internal sealed class Cast
             float squash = 1f + 0.10f * MathF.Max(0f, 1f - MathF.Abs(MathF.Sin(MathF.PI * t)) * 6f);
             g.TranslateTransform(w / 2f, h - 2 - (0.62f + hop) * k);
             PointF Polar(float deg, float r) { float a = deg * MathF.PI / 180f; return new PointF(r * k * MathF.Cos(a) * squash, r * k * MathF.Sin(a) / squash); }
-            foreach (float deg in (float[])[25f + 360f * t, 205f + 360f * t])
+            // Two tails thrashing out of the ball: each wags through forty degrees (at a full turn a page they spun like a pinwheel),
+            // the tufts all the core's colour as on the real tail (light and dark by turns banded it).
+            foreach (float deg in (float[])[25f + 20f * MathF.Sin(MathF.Tau * t), 205f - 20f * MathF.Sin(MathF.Tau * t + 1f)])
             {
                 PointF a = Polar(deg, 0.30f), b = Polar(deg + 12f, 0.72f), c = Polar(deg - 18f, 1.0f);
                 using var hair = new Pen(SquirrelArt.TailHair, k * 0.20f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
                 using var core = new Pen(SquirrelArt.TailCore, k * 0.11f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
                 g.DrawBezier(hair, a, b, Polar(deg - 5f, 0.9f), c);
                 g.DrawBezier(core, a, b, Polar(deg - 5f, 0.9f), c);
+                using var tuft = new SolidBrush(SquirrelArt.TailCore);
                 for (int i = 0; i < 5; i++)
                 {
                     PointF p = Polar(deg + 12f - 30f * (i / 4f), 0.5f + 0.5f * (i / 4f));
-                    using var tuft = new SolidBrush(i % 2 == 0 ? SquirrelArt.TailHair : SquirrelArt.TailCore);
                     g.FillEllipse(tuft, p.X - k * 0.07f, p.Y - k * 0.07f, k * 0.14f, k * 0.14f);
                 }
             }
@@ -291,11 +302,12 @@ internal sealed class Cast
                 }
         });
 
-    /// <summary>A bit of squirrel that pops out of the dust: 0 a paw with spread fingers, 1 a long hind foot, 2 an ear, 3 a tail tip. Painted pointing right from the sheet's centre.</summary>
-    private void PaintLimb(Graphics g, int size, int kind)
+    /// <summary>A bit of squirrel that pops out of the dust: 0 a paw with spread fingers, 1 a long hind foot, 2 an ear, 3 a tail tip. Painted from the sheet's centre pointing "deg" degrees round from the right (anticlockwise on the screen).</summary>
+    private void PaintLimb(Graphics g, int size, int kind, float deg)
     {
         float k = K;
         g.TranslateTransform(size / 2f, size / 2f);
+        g.RotateTransform(-deg);
         g.ScaleTransform(k, -k);
         using var limb = new SolidBrush(SquirrelArt.LimbNear);
         using var fur = new SolidBrush(SquirrelArt.Fur);
@@ -365,11 +377,16 @@ internal sealed class Cast
             }
             case Kind.Hop:
             {
-                float x = seg.From.X + (seg.To.X - seg.From.X) * u;
-                float y = seg.From.Y + (seg.To.Y - seg.From.Y) * u - seg.P0 * k * 4 * u * (1 - u);
+                // The feet stay put through the crouch and the push, and again through the landing and the settle: only the
+                // FLIGHT pages travel, on a parabola whose height is P0 squirrel units. (Spread over the whole hop, the crouch
+                // was already in the air and the landing squash played above the ground.) A drop is the same parabola with
+                // the far end lower, so it speeds up as it falls.
                 int flags = (int)seg.P1;
-                float k0 = (flags & 1) != 0 ? 4 / 22f : 0f, k1 = (flags & 2) != 0 ? 18 / 22f : 1f;
+                float k0 = (flags & 1) != 0 ? SquirrelArt.HopCrouch : 0f, k1 = (flags & 2) != 0 ? SquirrelArt.HopLand : 1f;
                 float kk = k0 + (k1 - k0) * u;
+                float fl = Math.Clamp((kk - SquirrelArt.HopPush) / (SquirrelArt.HopFlight - SquirrelArt.HopPush), 0f, 1f);
+                float x = seg.From.X + (seg.To.X - seg.From.X) * fl;
+                float y = seg.From.Y + (seg.To.Y - seg.From.Y) * fl - seg.P0 * k * 4 * fl * (1 - fl);
                 int page = Math.Clamp((int)(kk * HopPages), 0, HopPages - 1);
                 Stamp(fb, Hop[nut], Hop[nut].Pages[page], x, y, mirror, null, 1f, S.Nearness(Math.Max(seg.From.Y, seg.To.Y)));
                 break;
@@ -379,7 +396,7 @@ internal sealed class Cast
                 int toDir = seg.Dir, fromDir = -seg.Dir;
                 int page = u < 0.5f ? Math.Min(TurnPages - 1, (int)(u * 2 * TurnPages)) : Math.Min(TurnPages - 1, (int)((1 - u) * 2 * TurnPages));
                 bool m = u < 0.5f ? fromDir < 0 : toDir < 0;
-                Stamp(fb, Turn, Turn.Pages[page], seg.From.X, seg.From.Y, m, null);
+                Stamp(fb, Turn[nut], Turn[nut].Pages[page], seg.From.X, seg.From.Y, m, null);
                 break;
             }
             case Kind.Rise:
@@ -401,15 +418,27 @@ internal sealed class Cast
             }
             case Kind.Mount:
             {
+                // Never mirrored: the climb pages are not, and a mirrored mount put the body on the other side of the trunk
+                // from the climb's first page. A mount up (Up) starts facing right; a dismount (not Up) ends facing right; a
+                // dismount from a head-first descent (P0 1) uses its own pages, mirrored like the descent, and ends facing LEFT.
+                // The script builders put a Turn before or after for the other direction.
+                if (seg.P0 > 0f)
+                {
+                    int page = Math.Clamp((int)(u * MountPages), 0, MountPages - 1);
+                    Stamp(fb, MountDown[nut], MountDown[nut].Pages[page], seg.From.X, seg.From.Y, true, null);
+                    break;
+                }
                 float kk = seg.Up ? u : 1 - u;
-                int page = Math.Clamp((int)(kk * MountPages), 0, MountPages - 1);
-                Stamp(fb, Mount[nut], Mount[nut].Pages[page], seg.From.X, seg.From.Y, mirror, null);
+                {
+                    int page = Math.Clamp((int)(kk * MountPages), 0, MountPages - 1);
+                    Stamp(fb, Mount[nut], Mount[nut].Pages[page], seg.From.X, seg.From.Y, false, null);
+                }
                 break;
             }
             case Kind.Climb:
             {
                 float x = seg.From.X + (seg.To.X - seg.From.X) * u, y = seg.From.Y + (seg.To.Y - seg.From.Y) * u;
-                float cyc = Dist(seg.From, seg.To) * u / (1.6f * k);
+                float cyc = Dist(seg.From, seg.To) * u / (BoundLen * k);                    // paged at the bound the art was painted at (at 1.6 the paws slipped 9 px a contact)
                 int page = (int)((cyc - MathF.Floor(cyc)) * RunPages) % RunPages;
                 if (seg.Up) Stamp(fb, Up[nut], Up[nut].Pages[page], x, y, false, props);
                 else Stamp(fb, Down, Down.Pages[page], x, y, true, props);
@@ -438,9 +467,10 @@ internal sealed class Cast
             }
             case Kind.Dazed:
             {
+                // A slow loll at 0.8 a second through the eight pages; the pair fade in under the thinning dust (they used to pop in at full strength half outside it).
                 float s = t - seg.T0;
-                int page = (int)MathF.Round(MathF.Sin(s * 3f * MathF.Tau)) + 1;
-                Stamp(fb, Dazed, Dazed.Pages[page], seg.From.X, seg.From.Y, mirror, null);
+                int page = (int)(s * 0.8f * DazedPages) % DazedPages;
+                Stamp(fb, Dazed, Dazed.Pages[page], seg.From.X, seg.From.Y, mirror, null, Smooth(s / 0.3f));
                 break;
             }
             case Kind.Dig:
@@ -553,13 +583,18 @@ internal sealed class Script
     public PointF OnGround(float x) => new(x, _c.WalkY(x));
     public PointF OnRail(float x) => new(x, _c.RailAt(x) - 1.5f);
 
-    /// <summary>A bounding run from "from" to "to" (the feet), the bound length squeezed so a whole number of bounds fit. Returns when it ends.</summary>
+    /// <summary>
+    /// A bounding run from "from" to "to" (the feet), paged at the bound the art was painted at (a bound squeezed to fit a
+    /// short run slid the feet at twice the body's speed). A run on the ground shorter than a bound and a half is a hop
+    /// instead. Returns when it ends.
+    /// </summary>
     public float Run(List<Seg> track, float t0, PointF from, PointF to, bool acorn, bool rail)
     {
         float dist = Cast.Dist(from, to);
-        int bounds = Math.Max(1, (int)MathF.Round(dist / (2.2f * _c.K)));
+        float boundPx = Cast.BoundLen * _c.K;
+        if (!rail && dist < 1.5f * boundPx) return Hop(track, t0, from, to, to.X >= from.X ? 1 : -1, acorn, 0.3f);
         float dur = dist / (Cast.Speed * _c.S.U);
-        Add(track, Kind.Run, t0, dur, from, to, to.X >= from.X ? 1 : -1, acorn, rail, dist / bounds);
+        Add(track, Kind.Run, t0, dur, from, to, to.X >= from.X ? 1 : -1, acorn, rail, boundPx);
         return t0 + dur;
     }
 
@@ -588,10 +623,30 @@ internal sealed class Script
         return t0 + dur;
     }
 
-    public static float Mount(List<Seg> track, float t0, PointF at, int dir, bool acorn, bool up)
+    /// <summary>Pitching up onto the bark at the foot of a climb. The pages face right; arriving facing left, the squirrel turns first.</summary>
+    public static float MountUp(List<Seg> track, float t0, PointF at, int facing, bool acorn)
     {
-        Add(track, Kind.Mount, t0, Cast.MountFor, at, at, dir, acorn, rail: false, up: up);
+        if (facing < 0) t0 = Turn(track, t0, at, 1, acorn);
+        Add(track, Kind.Mount, t0, Cast.MountFor, at, at, 1, acorn, up: true);
         return t0 + Cast.MountFor;
+    }
+
+    /// <summary>Coming off the bark onto the rail after a head-up climb (facing right); a Turn follows if the next move goes left.</summary>
+    public static float Dismount(List<Seg> track, float t0, PointF at, int nextDir, bool acorn)
+    {
+        Add(track, Kind.Mount, t0, Cast.MountFor, at, at, 1, acorn, up: false);
+        t0 += Cast.MountFor;
+        if (nextDir < 0) t0 = Turn(track, t0, at, -1, acorn);
+        return t0;
+    }
+
+    /// <summary>The end of a head-first descent: the body pitches from head-down to level and ends facing LEFT (a hop straight out of the descent snapped it round 180 degrees); a Turn follows if the next move goes right.</summary>
+    public static float DismountDown(List<Seg> track, float t0, PointF at, int nextDir, bool acorn)
+    {
+        Add(track, Kind.Mount, t0, Cast.MountFor, at, at, -1, acorn, up: false, p0: 1f);
+        t0 += Cast.MountFor;
+        if (nextDir > 0) t0 = Turn(track, t0, at, 1, acorn);
+        return t0;
     }
 
     public static float Sit(List<Seg> track, float t0, float dur, PointF at, int dir, bool acorn, bool look = false)
@@ -655,8 +710,8 @@ internal sealed class Script
             for (int i = 0; i < track.Count; i++)
             {
                 if (track[i].Kind != Kind.Hop) continue;
-                bool fromRun = i > 0 && track[i - 1].Kind is Kind.Run or Kind.Mount;
-                bool toRun = i + 1 < track.Count && track[i + 1].Kind is Kind.Run or Kind.Mount;
+                bool fromRun = i > 0 && track[i - 1].Kind is Kind.Run or Kind.Mount or Kind.Climb;
+                bool toRun = i + 1 < track.Count && track[i + 1].Kind is Kind.Run or Kind.Mount or Kind.Climb;
                 track[i].P1 = (fromRun ? 1 : 0) + (toRun ? 2 : 0);
             }
     }
@@ -732,7 +787,7 @@ internal sealed class StoryDirector
         // Test aids: PECKWORKS_STORY=1 starts at once with short rests (PECKWORKS_CAPER=1 too), 0 never; PECKWORKS_STORYPICK names the story to play, every time.
         string? ask = Environment.GetEnvironmentVariable("PECKWORKS_STORY") ?? Environment.GetEnvironmentVariable("PECKWORKS_CAPER");
         _quick = ask == "1";
-        _next = ask == "1" ? 1.0 : ask == "0" ? double.MaxValue : 8 + 14 * _rng.NextDouble();
+        _next = ask == "1" ? 4.0 : ask == "0" ? double.MaxValue : 8 + 14 * _rng.NextDouble();    // quick: at 4 s exactly (the cast is built by then), so a frame dump's story time is its process time less four
         _only = Environment.GetEnvironmentVariable("PECKWORKS_STORYPICK");
     }
 

@@ -71,6 +71,7 @@ internal sealed class DeerHerd
         public float GaitT;                                 // seconds into a Rising or Settling
         public float StopFrom, StopDist, StopT, StopFor;    // a stop: where it began, how far to the rest page, how long it takes
         public float NeckF;                                 // where the neck is now, 0 up to 1 grazing (eased toward its target)
+        public float NeckV;                                 // and how fast it is moving (the spring's state)
         public float BiteT = -1, NextBite, ChewT = -1, EarT = -1, NextEar, TailT = -1;
         public int BitesLeft;
         public bool Lent;                                   // a story is driving it: the herd keeps the neck, the bites and the ears, nothing else
@@ -127,7 +128,8 @@ internal sealed class DeerHerd
     private const float StepReach = 0.17f;                  // how far a foot travels in front of and behind the hip, in body heights
     private const float Duty = 0.62f;                       // the share of the stride a foot is on the ground
     private const float NeckX = 0.30f, NeckY = 0.72f;       // where the neck leaves the body (body heights from the middle, up from the ground), standing
-    private const float NeckRate = 2.0f;                    // how fast the neck moves, whole books per second (a lift takes about half a second)
+    private const float HeadRootF = 0.42f;                  // the neck's root is this far down the head sheet
+    private const float NeckSpring = 60f, NeckDamp = 15.5f; // the neck eases to where it is wanted like a damped spring: slow off the mark, fastest in the middle, settling in about half a second (a fixed rate started and stopped dead)
     private const float SettleFor = 0.25f;
 
     private static readonly Color Tan = Color.FromArgb(140, 92, 58);
@@ -177,7 +179,10 @@ internal sealed class DeerHerd
         a.BodyOx = a.BodyW / 2;
         a.BodyH = (int)(0.95f * h) + 4;
         a.BodyOy = a.BodyH - 2;
-        a.HeadS = (int)(1.05f * h) + 4;
+        // The head sheet is square, 1.5 body heights, with the neck's root HeadRootF of the way down: 0.63 above the root for the
+        // alert head and 0.87 below it for the grazing one (at 1.05 with the root 0.55 down it held 0.50 below, and the grazing
+        // doe's muzzle, cream ring and jaw were cut off along a ruled line: the animator's blocker).
+        a.HeadS = (int)(1.5f * h) + 4;
         Sprite Body(Action<Graphics> paint) => Sprite.Paint(a.BodyW, a.BodyH, g =>
         {
             g.TranslateTransform(a.BodyOx, a.BodyOy);
@@ -214,7 +219,7 @@ internal sealed class DeerHerd
                 int kk = kind;
                 a.Head[j, kind] = Sprite.Paint(a.HeadS, a.HeadS, g =>
                 {
-                    g.TranslateTransform(a.HeadS / 2f, a.HeadS * 0.55f);
+                    g.TranslateTransform(a.HeadS / 2f, a.HeadS * HeadRootF);
                     g.ScaleTransform(h, -h);
                     PaintHead(g, f, kk, a.Fawn, h);
                 });
@@ -350,7 +355,7 @@ internal sealed class DeerHerd
         Color coat = fawn ? TanFawn : Tan, coatDark = fawn ? TanFawnDark : TanDark;
         float a = (24f + 136f * f) * MathF.PI / 180f;                      // the neck's angle from straight up, forward
         float ha = (84f + 90f * f) * MathF.PI / 180f;                      // the head's axis: forward when alert, down when grazing
-        float len = 0.30f + 0.10f * f;                                     // the neck stretches a little to reach the ground
+        float len = 0.30f + 0.04f * f;                                     // the neck stretches a little to reach the ground (0.10 put the grazing nose below the hoof line)
         PointF root = P(0, 0);
         PointF top = P(len * MathF.Sin(a), len * MathF.Cos(a));
         PointF Along(PointF from, float ang, float d) => P(from.X + d * MathF.Sin(ang), from.Y + d * MathF.Cos(ang));
@@ -427,13 +432,13 @@ internal sealed class DeerHerd
             a.Timer -= dt;
             a.Clock += dt;
 
-            // ---- the neck: eases toward where the doing wants it at a steady rate (a lift takes about half a second) ----
+            // ---- the neck: a damped spring toward where the doing wants it (slow off the mark, fastest in the middle, settling in about half a second) ----
             float want = a.Lent ? a.LentNeck : a.Doing switch { Doing.Graze => 1f, Doing.Look => 0f, _ => 0.25f };
-            float step = NeckRate * dt;
-            a.NeckF += Math.Clamp(want - a.NeckF, -step, step);
+            a.NeckV += ((want - a.NeckF) * NeckSpring - a.NeckV * NeckDamp) * dt;
+            a.NeckF = Math.Clamp(a.NeckF + a.NeckV * dt, 0f, 1f);
             // Bites while grazing with the nose down: bursts of a few, each a tug up, a hold and an ease down, then chewing.
             if (a.BiteT >= 0) { a.BiteT += dt; if (a.BiteT > 0.27f) { a.BiteT = -1; a.ChewT = 0; } }
-            if (a.ChewT >= 0) { a.ChewT += dt; if (a.ChewT > 0.7f) a.ChewT = -1; }
+            if (a.ChewT >= 0) { a.ChewT += dt; if (a.ChewT > 1.4f) a.ChewT = -1; }
             if (a.Doing == Doing.Graze && a.NeckF > 0.95f && a.BiteT < 0)
             {
                 a.NextBite -= dt;
@@ -599,9 +604,9 @@ internal sealed class DeerHerd
                 f -= 0.09f * tug;
             }
             int hp = Math.Clamp((int)MathF.Round(f * (HeadPages - 1)), 0, HeadPages - 1);
-            int kind = a.ChewT >= 0 ? ((int)(a.ChewT * 12) % 2) : a.EarT >= 0 ? 2 : 0;
+            int kind = a.ChewT >= 0 ? ((int)(a.ChewT * 3) % 2) : a.EarT >= 0 ? 2 : 0;      // a chew is a jaw cycle and a half a second (six was a shiver)
             float neckX = a.X + (mirror ? -1 : 1) * neck.X * a.H, neckY = foot - neck.Y * a.H;
-            int hl = (int)MathF.Round(neckX) - a.HeadS / 2, ht = (int)MathF.Round(neckY) - (int)(a.HeadS * 0.55f);
+            int hl = (int)MathF.Round(neckX) - a.HeadS / 2, ht = (int)MathF.Round(neckY) - (int)(a.HeadS * HeadRootF);
             a.Head[hp, kind].Draw(fb, hl, ht, 1f, _s.OpenField, mirror);
         }
     }

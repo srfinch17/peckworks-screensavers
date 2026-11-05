@@ -105,7 +105,9 @@ internal sealed class AcornCaper : Story
         static float Hop(List<Seg> tr, float t0, PointF from, PointF to, int dir, bool acorn, float height = 0.55f) => Script.Hop(tr, t0, from, to, dir, acorn, height);
         static float Turn(List<Seg> tr, float t0, PointF at, int toDir, bool acorn) => Script.Turn(tr, t0, at, toDir, acorn);
         static float Rise(List<Seg> tr, float t0, PointF at, int dir, bool acorn, int way = 1) => Script.Rise(tr, t0, at, dir, acorn, way);
-        static float Mount(List<Seg> tr, float t0, PointF at, int dir, bool acorn, bool up) => Script.Mount(tr, t0, at, dir, acorn, up);
+        static float MountUp(List<Seg> tr, float t0, PointF at, int facing, bool acorn) => Script.MountUp(tr, t0, at, facing, acorn);
+        static float Dismount(List<Seg> tr, float t0, PointF at, int nextDir, bool acorn) => Script.Dismount(tr, t0, at, nextDir, acorn);
+        static float DismountDown(List<Seg> tr, float t0, PointF at, int nextDir, bool acorn) => Script.DismountDown(tr, t0, at, nextDir, acorn);
         static float Sit(List<Seg> tr, float t0, float dur, PointF at, int dir, bool acorn, bool look = false) => Script.Sit(tr, t0, dur, at, dir, acorn, look);
         static float Chatter(List<Seg> tr, float t0, float dur, PointF at, int dir, bool acorn, int who) => Script.Chatter(tr, t0, dur, at, dir, acorn, who);
         static float Dig(List<Seg> tr, float t0, float dur, PointF at, int dir, float rate, bool earth, bool acorn = false, bool rail = false) => Script.Dig(tr, t0, dur, at, dir, rate, earth, acorn, rail);
@@ -139,10 +141,11 @@ internal sealed class AcornCaper : Story
         t = Rise(A, t, atPile, -1, true);
         t = Sit(A, t, 0.5f, atPile, -1, true, look: true);                               // got one
         t = Turn(A, t, atPile, 1, true);                                                 // round to face the tree
-        t = Hop(A, t, atPile, OnGround(lt[0].X - u * 0.0065f - 0.25f * k), 1, true, 0.3f);
-        t = Mount(A, t, OnTrunk(lt, WalkY(lt[0].X)), 1, true, true);
-        t = Climb(A, t, OnTrunk(lt, WalkY(lt[0].X)), lTrunkAtRail, true, true);
-        t = Mount(A, t, lTrunkAtRail, 1, true, false);
+        PointF lTrunkFoot = OnTrunk(lt, WalkY(lt[0].X));
+        t = Hop(A, t, atPile, lTrunkFoot, 1, true, 0.3f);                                // lands exactly where the mount begins (a 14 px jump between the two before)
+        t = MountUp(A, t, lTrunkFoot, 1, true);
+        t = Climb(A, t, lTrunkFoot, lTrunkAtRail, true, true);
+        t = Dismount(A, t, lTrunkAtRail, 1, true);
         t = Hop(A, t, lTrunkAtRail, OnRail(lt[0].X + 1.0f * k), 1, true, 0.4f);
         t = Run(A, t, OnRail(lt[0].X + 1.0f * k), OnRail(_spotX - 0.5f * k), true, true);
         t = Hop(A, t, OnRail(_spotX - 0.5f * k), OnGround(_spotX - 0.5f * k), 1, true, 0.2f);
@@ -158,7 +161,7 @@ internal sealed class AcornCaper : Story
         t = Hop(A, t, OnGround(_spotX - 0.5f * k), OnRail(_spotX - 1.3f * k), -1, false, 0.5f);
         t = Run(A, t, OnRail(_spotX - 1.3f * k), OnRail(lt[0].X + 1.0f * k), false, true);
         t = Hop(A, t, OnRail(lt[0].X + 1.0f * k), lTrunkAtRail, -1, false, 0.4f);
-        t = Mount(A, t, lTrunkAtRail, -1, false, true);
+        t = MountUp(A, t, lTrunkAtRail, -1, false);
         t = Climb(A, t, lTrunkAtRail, lFork, true, false);
         t = Climb(A, t, lFork, lTop, true, false);
         float aHome = t;
@@ -167,6 +170,7 @@ internal sealed class AcornCaper : Story
         t = aHome + 2.5f + 3f * (float)_rng.NextDouble();
         t = Climb(B, t, rTop, rFork, false, false);
         t = Climb(B, t, rFork, rTrunkAtRail, false, false);
+        t = DismountDown(B, t, rTrunkAtRail, -1, false);
         t = Hop(B, t, rTrunkAtRail, OnRail(rt[0].X - 1.0f * k), -1, false, 0.4f);
         float bx = rt[0].X - 1.0f * k;
         float sniff1 = bx - (bx - (_spotX + 0.5f * k)) * (0.30f + 0.15f * (float)_rng.NextDouble());
@@ -196,6 +200,7 @@ internal sealed class AcornCaper : Story
         t = Climb(A, t, lTop, lFork, false, false);
         Add(A, Kind.Climb, t, 0.7f, lFork, lFork, 1, rail: true); t += 0.7f;             // freezes: what is THAT?
         t = Climb(A, t, lFork, lTrunkAtRail, false, false);
+        t = DismountDown(A, t, lTrunkAtRail, 1, false);
         t = Hop(A, t, lTrunkAtRail, OnRail(lt[0].X + 1.0f * k), 1, false, 0.4f);
         t = Run(A, t, OnRail(lt[0].X + 1.0f * k), OnRail(_spotX - 1.6f * k), false, true);
         t = Hop(A, t, OnRail(_spotX - 1.6f * k), OnGround(_spotX - 1.6f * k), 1, false, 0.2f);
@@ -206,13 +211,14 @@ internal sealed class AcornCaper : Story
         Chatter(A, t, 1.8f, OnGround(_spotX - 1.6f * k), 1, false, 0);
         Chatter(B, t, 1.8f, OnGround(_spotX + 0.5f * k), -1, true, 1);
         t += 1.8f;
-        // The lunge: both at each other; the dust bursts over them the moment they meet.
+        // The lunge: both at each other, the feet stopping a squirrel apart (closer, the two bodies passed through each other
+        // for six frames); the dust bursts over them five frames before they meet, so nothing is ever uncovered.
         float cloudX = _spotX - 0.55f * k;
-        Add(A, Kind.Run, t, 0.22f, OnGround(_spotX - 1.6f * k), OnGround(cloudX - 0.2f * k), 1, p0: 1.4f * k, p1: 1f);
-        Add(B, Kind.Run, t, 0.22f, OnGround(_spotX + 0.5f * k), OnGround(cloudX + 0.2f * k), -1, true, p0: 1.4f * k, p1: 1f);
+        Add(A, Kind.Run, t, 0.22f, OnGround(_spotX - 1.6f * k), OnGround(cloudX - 0.5f * k), 1, p0: 1.4f * k, p1: 1f);
+        Add(B, Kind.Run, t, 0.22f, OnGround(_spotX + 0.5f * k), OnGround(cloudX + 0.5f * k), -1, true, p0: 1.4f * k, p1: 1f);
         t += 0.22f;
         float fracasFor = 3.8f;
-        Add(C, Kind.Fracas, t - 0.035f, fracasFor + 0.035f, OnGround(cloudX), OnGround(cloudX), 1, p0: 0.035f, p1: 0.45f);
+        Add(C, Kind.Fracas, t - 0.085f, fracasFor + 0.085f, OnGround(cloudX), OnGround(cloudX), 1, p0: 0.05f, p1: 0.45f);
         _flingAt = t + 0.8f;
         _flingX = cloudX;
         _landX = cloudX + 2.3f * k;
@@ -252,8 +258,8 @@ internal sealed class AcornCaper : Story
 
         // ---- Act 5: the dust settles over two dazed squirrels ----
         t += fracasFor;
-        PointF aAfter = OnGround(cloudX - 0.8f * k), bAfter = OnGround(cloudX + 0.8f * k);
-        Add(A, Kind.Dazed, t - 0.3f, 0.9f, aAfter, aAfter, 1); Add(B, Kind.Dazed, t - 0.3f, 0.9f, bAfter, bAfter, -1);
+        PointF aAfter = OnGround(cloudX - 0.6f * k), bAfter = OnGround(cloudX + 0.6f * k);                       // inside the cloud's footprint, fading in under it
+        Add(A, Kind.Dazed, t - 0.4f, 1.0f, aAfter, aAfter, 1); Add(B, Kind.Dazed, t - 0.4f, 1.0f, bAfter, bAfter, -1);
         t += 0.6f;
         Sit(A, t, 1.2f, aAfter, 1, false, look: true);                                     // where did it go?
         float tb = Turn(B, t, bAfter, 1, false);
@@ -267,14 +273,14 @@ internal sealed class AcornCaper : Story
         ta = Hop(A, ta, aAfter, OnRail(cloudX - 1.6f * k), -1, false, 0.5f);
         ta = Run(A, ta, OnRail(cloudX - 1.6f * k), OnRail(lt[0].X + 1.0f * k), false, true);
         ta = Hop(A, ta, OnRail(lt[0].X + 1.0f * k), lTrunkAtRail, -1, false, 0.4f);
-        ta = Mount(A, ta, lTrunkAtRail, -1, false, true);
+        ta = MountUp(A, ta, lTrunkAtRail, -1, false);
         ta = Climb(A, ta, lTrunkAtRail, lFork, true, false);
         ta = Climb(A, ta, lFork, lTop, true, false);
         tb = Turn(B, t + 0.3f, bAfter, 1, false);
         tb = Hop(B, tb, bAfter, OnRail(cloudX + 1.6f * k), 1, false, 0.5f);
         tb = Run(B, tb, OnRail(cloudX + 1.6f * k), OnRail(rt[0].X - 1.0f * k), false, true);
         tb = Hop(B, tb, OnRail(rt[0].X - 1.0f * k), rTrunkAtRail, 1, false, 0.4f);
-        tb = Mount(B, tb, rTrunkAtRail, 1, false, true);
+        tb = MountUp(B, tb, rTrunkAtRail, 1, false);
         tb = Climb(B, tb, rTrunkAtRail, rFork, true, false);
         tb = Climb(B, tb, rFork, rTop, true, false);
         _end = Math.Max(ta, tb) + 0.8f;
@@ -351,7 +357,8 @@ internal sealed class AcornCaper : Story
         {
             if (t < pop.T || t >= pop.T + pop.Dur) continue;
             float a = pop.Angle * MathF.PI / 180f;
-            _c.Limb[pop.Kind].DrawCentered(fb, cx + 0.55f * k * MathF.Cos(a), cy - 0.45f * k * MathF.Sin(a), opacity);
+            int turn = (int)MathF.Round(pop.Angle / 360f * Cast.LimbTurns) % Cast.LimbTurns;              // the bit points outward from the ball (they all pointed right before)
+            _c.Limb[pop.Kind, turn].DrawCentered(fb, cx + 0.55f * k * MathF.Cos(a), cy - 0.45f * k * MathF.Sin(a), opacity);
         }
         for (int i = 0; i < 6; i++)
         {

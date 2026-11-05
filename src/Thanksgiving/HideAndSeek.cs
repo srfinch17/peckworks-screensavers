@@ -91,9 +91,8 @@ internal sealed class HideAndSeek : Story
         t = Script.Sit(A, t, 0.6f, squirrelStop, toJack, false);
         t = Script.Turn(A, t, squirrelStop, -toJack, false);
         PointF trunkFoot = AcornCaper.OnTrunk(_s, lt, _s.WalkY(lt[0].X));
-        PointF beforeTrunk = OnGround(lt[0].X - u * 0.0065f - 0.25f * k);
-        t = _script.Run(A, t, squirrelStop, beforeTrunk, false, false);
-        t = Script.Mount(A, t, trunkFoot, 1, false, true);
+        t = _script.Run(A, t, squirrelStop, trunkFoot, false, false);
+        t = Script.MountUp(A, t, trunkFoot, trunkFoot.X >= squirrelStop.X ? 1 : -1, false);
         float rail = _c.RailAt(lt[0].X) - 1.5f;
         t = _script.Climb(A, t, trunkFoot, AcornCaper.OnTrunk(_s, lt, rail), true, false);
         t = _script.Climb(A, t, AcornCaper.OnTrunk(_s, lt, rail), new PointF(lt[1].X - u * 0.0065f, lt[1].Y), true, false);
