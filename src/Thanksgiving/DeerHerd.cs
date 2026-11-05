@@ -50,7 +50,7 @@ namespace Thanksgiving;
 internal sealed class DeerHerd
 {
     private enum Doing { Graze, Look, Walk }
-    private enum Gait { Settled, Rising, Walking, Stopping, Settling }   // Rising: the settle pages backward (about to walk); Settling: forward (just stopped)
+    private enum Gait { Settled, Rising, Walking, Stopping, Settling, Turning }   // Rising: the settle pages backward (about to walk); Settling: forward (just stopped); Turning: coming round on the spot
 
     private sealed class Animal
     {
@@ -62,6 +62,11 @@ internal sealed class DeerHerd
         public PointF[] NeckWalk = new PointF[WalkPages];   // where the neck's root is on each walk page (body heights from the middle, up from the ground)
         public PointF[] NeckSettle = new PointF[SettlePages];
         public Sprite[,] Head = new Sprite[HeadPages, HeadKinds];
+        public Sprite[] TurnBody = new Sprite[TurnPages];   // the square stance narrowed about the feet, for a turn on the spot
+        public Sprite[,] TurnHead = new Sprite[HeadPages, TurnPages];   // the head (jaw closed) narrowed the same, per neck page
+        public int TurnTo;                                  // the way a turn ends facing; Dir flips at its middle
+        public float TurnT;
+        public int TurnWhenSettled;                         // a turn owed once the stop has settled (a wall, the fawn facing her mother's way), or 0
         public bool Fawn;
         public float X, Depth;
         public int Dir;
@@ -123,14 +128,17 @@ internal sealed class DeerHerd
         a.Lent = false; a.Depth = a.HomeDepth; a.Gait = Gait.Settled; a.Doing = Doing.Look; a.Timer = 1.5f; a.Clock = 0;
     }
 
-    private const int WalkPages = 48, SettlePages = 4, TailPages = 3, HeadPages = 24, HeadKinds = 3;   // 48 walk pages: a planted hoof shimmers by half the stride a page covers, about a pixel
+    private const int WalkPages = 48, SettlePages = 8, TailPages = 3, HeadPages = 24, HeadKinds = 3;   // 48 walk pages: a planted hoof shimmers by half the stride a page covers, about a pixel; 8 settle pages: two per foot
     private const float Speed = 0.05f;                      // in U per second
     private const float StepReach = 0.17f;                  // how far a foot travels in front of and behind the hip, in body heights
     private const float Duty = 0.62f;                       // the share of the stride a foot is on the ground
     private const float NeckX = 0.30f, NeckY = 0.72f;       // where the neck leaves the body (body heights from the middle, up from the ground), standing
     private const float HeadRootF = 0.42f;                  // the neck's root is this far down the head sheet
     private const float NeckSpring = 60f, NeckDamp = 15.5f; // the neck eases to where it is wanted like a damped spring: slow off the mark, fastest in the middle, settling in about half a second (a fixed rate started and stopped dead)
-    private const float SettleFor = 0.25f;
+    private const float SettleFor = 0.4f;                   // eight settle pages: the feet come square one at a time, each with a lift (blended together they skated 17 px)
+    private const int TurnPages = 3;
+    private const float TurnFor = 0.3f;                     // a turn on the spot: three narrowing pages facing the old way, three widening facing the new
+    private static readonly float[] Squash = [0.72f, 0.42f, 0.14f];
 
     private static readonly Color Tan = Color.FromArgb(140, 92, 58);
     private static readonly Color TanDark = Color.FromArgb(104, 66, 40);
@@ -195,13 +203,21 @@ internal sealed class DeerHerd
             a.NeckWalk[i] = NeckRoot(p);
             a.Walk[i] = Body(g => PaintBody(g, WalkFeet(p), WithersDip(p), CroupDip(p), 0, a.Fawn, h));
         }
-        // The settle pages: the feet go from the rest page's places to square under the hips, the body's dip easing out.
+        // The settle pages: the feet go from the rest page's places to square under the hips ONE AT A TIME, each lifting as it
+        // moves (far fore, far hind, near fore, and the near hind last), two pages per foot; the body's dip eases out.
+        // (Blending all four together along the ground slid a planted hoof 17 px.)
         PointF[] rest = WalkFeet(0f), square = SquareFeet();
+        int[] order = [3, 2, 1, 0];                                        // which foot moves first, second, ...
         for (int i = 0; i < SettlePages; i++)
         {
             float k = (i + 1) / (float)SettlePages;
             var feet = new PointF[4];
-            for (int j = 0; j < 4; j++) feet[j] = new PointF(rest[j].X + (square[j].X - rest[j].X) * k, rest[j].Y * (1 - k));
+            for (int n = 0; n < 4; n++)
+            {
+                int j = order[n];
+                float kj = Math.Clamp((i + 1 - 2 * n) / 2f, 0f, 1f);       // this foot's own progress: pages 2n and 2n+1
+                feet[j] = new PointF(rest[j].X + (square[j].X - rest[j].X) * kj, rest[j].Y * (1 - kj) + 0.05f * MathF.Sin(MathF.PI * kj));
+            }
             float dip = 0.008f * (1 - k);
             a.NeckSettle[i] = new PointF(NeckX, NeckRoot(0f).Y + (NeckY - NeckRoot(0f).Y) * k);
             a.Settle[i] = Body(g => PaintBody(g, feet, -dip, -dip, 0, a.Fawn, h));
@@ -210,6 +226,17 @@ internal sealed class DeerHerd
         {
             int tail = t;
             a.Tail[t] = Body(g => PaintBody(g, square, 0, 0, tail, a.Fawn, h));
+        }
+        // The turn pages: the square stance narrowed about the feet (a deer coming round through the front view is a sliver).
+        for (int t = 0; t < TurnPages; t++)
+        {
+            float sq = Squash[t];
+            a.TurnBody[t] = Sprite.Paint(a.BodyW, a.BodyH, g =>
+            {
+                g.TranslateTransform(a.BodyOx, a.BodyOy);
+                g.ScaleTransform(h * sq, -h);
+                PaintBody(g, square, 0, 0, 0, a.Fawn, h);
+            });
         }
         for (int j = 0; j < HeadPages; j++)
         {
@@ -222,6 +249,16 @@ internal sealed class DeerHerd
                     g.TranslateTransform(a.HeadS / 2f, a.HeadS * HeadRootF);
                     g.ScaleTransform(h, -h);
                     PaintHead(g, f, kk, a.Fawn, h);
+                });
+            }
+            for (int t = 0; t < TurnPages; t++)
+            {
+                float sq = Squash[t];
+                a.TurnHead[j, t] = Sprite.Paint(a.HeadS, a.HeadS, g =>
+                {
+                    g.TranslateTransform(a.HeadS / 2f, a.HeadS * HeadRootF);
+                    g.ScaleTransform(h * sq, -h);
+                    PaintHead(g, f, 0, a.Fawn, h);
                 });
             }
         }
@@ -483,14 +520,28 @@ internal sealed class DeerHerd
                 }
                 case Gait.Settling:
                     a.GaitT += dt;
-                    if (a.GaitT >= SettleFor) a.Gait = Gait.Settled;
+                    if (a.GaitT >= SettleFor)
+                    {
+                        a.Gait = Gait.Settled;
+                        if (a.TurnWhenSettled != 0) { BeginTurn(a, a.TurnWhenSettled); a.TurnWhenSettled = 0; }
+                    }
                     break;
+                case Gait.Turning:
+                {
+                    // Coming round on the spot: Dir flips at the middle; a walk that was waiting sets off after it.
+                    float was = a.TurnT;
+                    a.TurnT += dt;
+                    if (was < TurnFor / 2 && a.TurnT >= TurnFor / 2) a.Dir = a.TurnTo;
+                    if (a.TurnT >= TurnFor) { if (a.Doing == Doing.Walk) { a.Gait = Gait.Rising; a.GaitT = 0; } else a.Gait = Gait.Settled; }
+                    break;
+                }
             }
-            if (a.Gait == Gait.Walking || a.Gait == Gait.Stopping)
+            if (a.Gait == Gait.Walking)
             {
-                float lo = _s.Width * 0.20f, hi = _s.Width * 0.78f;        // keeps the herd between the maples' leaves
-                if (a.X < lo) { a.X = lo; a.Dir = 1; }
-                if (a.X > hi) { a.X = hi; a.Dir = -1; }
+                // At the edge of the herd's range (between the maples' leaves) it stops, settles and turns, then walks on.
+                float lo = _s.Width * 0.20f, hi = _s.Width * 0.78f;
+                if (a.X < lo) { a.X = lo; StopWalk(a); a.Doing = Doing.Walk; a.TurnWhenSettled = 1; }
+                if (a.X > hi) { a.X = hi; StopWalk(a); a.Doing = Doing.Walk; a.TurnWhenSettled = -1; }
             }
 
             if (a.Fawn && doe != null && !doe.Lent)
@@ -504,7 +555,7 @@ internal sealed class DeerHerd
                     a.Timer = 99f;
                     continue;
                 }
-                if (a.Doing == Doing.Walk && a.Gait == Gait.Walking && MathF.Abs(gap) <= u * 0.02f) { StopWalk(a); a.Timer = 2f + 3f * (float)_rng.NextDouble(); a.Dir = doe.Dir; }
+                if (a.Doing == Doing.Walk && a.Gait == Gait.Walking && MathF.Abs(gap) <= u * 0.02f) { StopWalk(a); a.Timer = 2f + 3f * (float)_rng.NextDouble(); if (doe.Dir != a.Dir) a.TurnWhenSettled = doe.Dir; }
                 if (a.Doing == Doing.Walk) continue;
             }
             if (_test == "walk" && !a.Fawn) { a.Doing = Doing.Walk; a.Gait = a.Gait == Gait.Settled ? Gait.Walking : a.Gait; continue; }
@@ -513,12 +564,12 @@ internal sealed class DeerHerd
             {
                 // Walks for three seconds, stops, grazes for three, walks again: for watching the stop and the start.
                 float c = a.Clock % 6.5f;
-                if (c < 3f && a.Doing != Doing.Walk && a.Gait == Gait.Settled) StartWalk(a, a.Dir);
+                if (c < 3f && a.Doing != Doing.Walk && a.Gait == Gait.Settled) StartWalk(a, -a.Dir);   // the other way each time: the turn pages show too
                 if (c >= 3f && a.Doing == Doing.Walk && a.Gait == Gait.Walking) StopWalk(a);
                 continue;
             }
             if (a.Timer > 0) continue;
-            if (a.Gait == Gait.Stopping || a.Gait == Gait.Settling || a.Gait == Gait.Rising) continue;   // finish the step first
+            if (a.Gait != Gait.Settled && a.Gait != Gait.Walking) continue;   // finish the step, the settle or the turn first
 
             a.Clock = 0;
             double roll = _rng.NextDouble();
@@ -531,11 +582,16 @@ internal sealed class DeerHerd
 
     private void StartWalk(Animal a, int dir)
     {
-        a.Dir = dir;
         a.Doing = Doing.Walk;
+        a.Clock = 0;
+        if (dir != a.Dir) { BeginTurn(a, dir); return; }                   // the turn pages first; the walk rises after them (a mirror flip before)
         a.Gait = Gait.Rising;
         a.GaitT = 0;
-        a.Clock = 0;
+    }
+
+    private static void BeginTurn(Animal a, int dir)
+    {
+        a.Gait = Gait.Turning; a.TurnTo = dir; a.TurnT = 0;
     }
 
     /// <summary>Begins a stop: the walk eases down so that it ends exactly on the rest page, then the settle pages play.</summary>
@@ -562,8 +618,17 @@ internal sealed class DeerHerd
             Sprite body;
             PointF neck;
             float stride = Stride(a);
+            int turnPage = -1;                                              // the turn's squash page, or -1
             switch (a.Gait)
             {
+                case Gait.Turning:
+                {
+                    // Narrowing while it still faces the old way (Dir flips at the middle), then widening facing the new.
+                    float q = a.TurnT / TurnFor;
+                    turnPage = q < 0.5f ? Math.Min(TurnPages - 1, (int)(q * 2 * TurnPages)) : Math.Min(TurnPages - 1, (int)((1 - q) * 2 * TurnPages));
+                    body = a.TurnBody[turnPage]; neck = P(NeckX * Squash[turnPage], NeckY);
+                    break;
+                }
                 case Gait.Walking:
                 case Gait.Stopping:
                 {
@@ -607,7 +672,7 @@ internal sealed class DeerHerd
             int kind = a.ChewT >= 0 ? ((int)(a.ChewT * 3) % 2) : a.EarT >= 0 ? 2 : 0;      // a chew is a jaw cycle and a half a second (six was a shiver)
             float neckX = a.X + (mirror ? -1 : 1) * neck.X * a.H, neckY = foot - neck.Y * a.H;
             int hl = (int)MathF.Round(neckX) - a.HeadS / 2, ht = (int)MathF.Round(neckY) - (int)(a.HeadS * HeadRootF);
-            a.Head[hp, kind].Draw(fb, hl, ht, 1f, _s.OpenField, mirror);
+            (turnPage < 0 ? a.Head[hp, kind] : a.TurnHead[hp, turnPage]).Draw(fb, hl, ht, 1f, _s.OpenField, mirror);
         }
     }
 

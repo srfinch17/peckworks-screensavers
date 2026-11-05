@@ -46,7 +46,7 @@ internal sealed class Turkey : Happening
     private const float Display = 3.6f;         // the full wheel, with a gobble in the middle of it
     private const float TransOut = 0.9f;
     private const float GobbleAt = 1.4f, GobbleFor = 0.7f;   // when in the display the gobble happens, and how long it takes
-    private const int WalkPages = 24, TransPages = 8, QuiverPages = 4, GobblePages = 6;
+    private const int WalkPages = 72, TransPages = 8, QuiverPages = 4, GobblePages = 6;   // 72: at 24 the held head stepped 1.9 px a page under a body moving 1 px a frame, and buzzed
     private const float Reach = 0.11f;          // how far each foot travels in front of and behind the hip (turkey lengths)
     private const float Legs = 0.17f;           // each leg bone
     private const int Feathers = 13;            // in the tail
@@ -220,7 +220,13 @@ internal sealed class Turkey : Happening
     /// pixels at 1080p, not the fraction of a pixel it was) and rocks a
     /// couple of degrees with each step.
     /// </summary>
-    internal static Sprite PaintPage(float k, int w, int h, int ox, int by, bool mirror, float phase, float walk, float fan, float gobble, float shake, float peck) =>
+    /// <summary>
+    /// One page. "legs" is how far the feet are in their stride stance (-1: the same as "walk"); a standing page with legs 1
+    /// and walk 0 has the feet where the walk's rest page leaves them, so a peck or a display begins without the legs
+    /// snapping together. "squash" narrows the bird about its feet, for the pages of a turn (a bird coming round through
+    /// the front view is a sliver).
+    /// </summary>
+    internal static Sprite PaintPage(float k, int w, int h, int ox, int by, bool mirror, float phase, float walk, float fan, float gobble, float shake, float peck, float legs = -1f, float squash = 1f) =>
         Sprite.Paint(w, h, g =>
         {
             // Everything below is drawn in turkey-length units: x runs along the
@@ -228,13 +234,13 @@ internal sealed class Turkey : Happening
             // from the ground. These lines turn those into pixels.
             if (mirror) { g.TranslateTransform(w, 0); g.ScaleTransform(-1, 1); }
             g.TranslateTransform(ox, by);
-            g.ScaleTransform(k, -k);
-            Turkey_(g, phase, walk, fan, gobble, shake, peck);
+            g.ScaleTransform(k * squash, -k);
+            Turkey_(g, phase, walk, fan, gobble, shake, peck, legs < 0 ? walk : legs);
         });
 
     private static PointF P(float x, float y) => new(x, y);
 
-    private static void Turkey_(Graphics g, float phase, float walk, float fan, float gobble, float shake, float peck)
+    private static void Turkey_(Graphics g, float phase, float walk, float fan, float gobble, float shake, float peck, float legs)
     {
         void Blob(PointF[] pts, Color c, float tension = 0.5f)
         {
@@ -318,7 +324,7 @@ internal sealed class Turkey : Happening
             if (u < MathF.PI) { fx = 1 - 2 * u / MathF.PI; lift = 0; }
             else { float q = (u - MathF.PI) / MathF.PI; fx = -1 + 2 * Smooth(q); lift = 0.07f * MathF.Sin(q * MathF.PI); }
             PointF hipP = P(hx, hip);
-            PointF foot = P(hx + Reach * walk * fx, lift * walk);
+            PointF foot = P(hx + Reach * legs * fx, lift * legs);
             // Two-bone IK: where does the ankle go so two bones of length Legs span hip to foot? A bird's ankle points backward.
             float dx = foot.X - hipP.X, dy = foot.Y - hipP.Y;
             float d = MathF.Min(MathF.Sqrt(dx * dx + dy * dy), 2 * Legs - 0.002f);

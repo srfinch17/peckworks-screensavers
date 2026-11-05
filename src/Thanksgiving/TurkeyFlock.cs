@@ -46,9 +46,14 @@ internal sealed class TurkeyFlock
         public float StopFrom, StopDist, StopT, StopFor;
         public int Strikes;             // this peck's number of strikes
         public float Hold;              // seconds the beak stays on the ground each strike
+        public bool Turning;            // coming round to face the other way through the turn pages (never a mirror flip)
+        public float TurnT;             // seconds into the turn; Dir flips at the middle
     }
 
-    private const int WalkPages = 24, PeckPages = 12, FanPages = 8, QuiverPages = 4;
+    // 72 walk pages: at 24 the held head stepped 1.9 px a page under a body moving 1 px a frame, and buzzed.
+    private const int WalkPages = 72, PeckPages = 12, FanPages = 8, QuiverPages = 4, TurnPages = 3;
+    private const float TurnFor = 0.2f;             // a turn on the spot: three narrowing pages facing the old way, three widening facing the new
+    private static readonly float[] Squash = [0.72f, 0.42f, 0.14f];
     private const float Speed = 0.03f;              // in U per second: a slow stroll, about two steps a second
     private const float StrikeFor = 4f / 60, PullFor = 2f / 60, LiftFor = 11f / 60;
     private const float FanOpen = 0.9f, FanHold = 3.2f;
@@ -56,12 +61,14 @@ internal sealed class TurkeyFlock
     private readonly ThanksgivingScenery _s;
     private readonly Random _rng;
     private readonly Bird[] _birds;
+    private readonly bool _turnTest = Environment.GetEnvironmentVariable("PECKWORKS_TURKEY") == "turn";
     private readonly float[] _k = new float[2];
     private readonly int[] _w = new int[2], _h = new int[2], _ox = new int[2], _by = new int[2];
     private readonly Sprite[][][] _walk = new Sprite[2][][];    // [size][dir][page]
     private readonly Sprite[][][] _peck = new Sprite[2][][];
     private readonly Sprite[][][] _fan = new Sprite[2][][];
     private readonly Sprite[][][] _quiver = new Sprite[2][][];
+    private readonly Sprite[][][] _turn = new Sprite[2][][];     // [size][dir][page]: the standing bird narrowed about its feet
 
     public TurkeyFlock(ThanksgivingScenery s, int count, Random sceneRng)
     {
@@ -76,23 +83,28 @@ internal sealed class TurkeyFlock
             _ox[z] = (int)(0.80f * _k[z]) + 2;
             _h[z] = (int)(1.08f * _k[z]) + 8;
             _by[z] = _h[z] - 5;
-            _walk[z] = new Sprite[2][]; _peck[z] = new Sprite[2][]; _fan[z] = new Sprite[2][]; _quiver[z] = new Sprite[2][];
+            _walk[z] = new Sprite[2][]; _peck[z] = new Sprite[2][]; _fan[z] = new Sprite[2][]; _quiver[z] = new Sprite[2][]; _turn[z] = new Sprite[2][];
             for (int d = 0; d < 2; d++)
             {
                 bool mirror = d == 1;
                 _walk[z][d] = new Sprite[WalkPages];
                 for (int i = 0; i < WalkPages; i++)
                     _walk[z][d][i] = Page(z, mirror, MathF.Tau * i / WalkPages, 1f, 0f, 0f, 0f, 0f);
+                // The standing pages (a peck, the display, a turn) keep the feet where the walk's rest page (page 0) leaves them,
+                // so nothing snaps when a bird that has just stopped starts to peck (the feet used to jump together).
                 _peck[z][d] = new Sprite[PeckPages];
                 for (int i = 0; i < PeckPages; i++)
-                    _peck[z][d][i] = Page(z, mirror, 0f, 0f, 0f, 0f, 0f, (i + 1) / (float)PeckPages);
+                    _peck[z][d][i] = Page(z, mirror, 0f, 0f, 0f, 0f, 0f, (i + 1) / (float)PeckPages, legs: 1f);
                 _fan[z][d] = new Sprite[FanPages];
                 for (int i = 0; i < FanPages; i++)
-                    _fan[z][d][i] = Page(z, mirror, 0f, 0f, (i + 1) / (float)(FanPages + 1), 0f, 0f, 0f);
+                    _fan[z][d][i] = Page(z, mirror, 0f, 0f, (i + 1) / (float)(FanPages + 1), 0f, 0f, 0f, legs: 1f);
                 _quiver[z][d] = new Sprite[QuiverPages];
                 float[] shake = [0f, 1.2f, 0f, -1.2f];
                 for (int i = 0; i < QuiverPages; i++)
-                    _quiver[z][d][i] = Page(z, mirror, 0f, 0f, 1f, 0f, shake[i], 0f);
+                    _quiver[z][d][i] = Page(z, mirror, 0f, 0f, 1f, 0f, shake[i], 0f, legs: 1f);
+                _turn[z][d] = new Sprite[TurnPages];
+                for (int i = 0; i < TurnPages; i++)
+                    _turn[z][d][i] = Page(z, mirror, 0f, 0f, 0f, 0f, 0f, 0f, legs: 1f, squash: Squash[i]);
             }
         }
 
@@ -113,8 +125,15 @@ internal sealed class TurkeyFlock
         }
     }
 
-    private Sprite Page(int z, bool mirror, float phase, float walk, float fan, float gobble, float shake, float peck) =>
-        Turkey.PaintPage(_k[z], _w[z], _h[z], _ox[z], _by[z], mirror, phase, walk, fan, gobble, shake, peck);
+    private Sprite Page(int z, bool mirror, float phase, float walk, float fan, float gobble, float shake, float peck, float legs = -1f, float squash = 1f) =>
+        Turkey.PaintPage(_k[z], _w[z], _h[z], _ox[z], _by[z], mirror, phase, walk, fan, gobble, shake, peck, legs, squash);
+
+    /// <summary>Starts a turn to face "dir" (nothing if already facing it): the bird stands while the turn pages play, and Dir flips at the middle.</summary>
+    private static void BeginTurn(ref Bird b, int dir)
+    {
+        if (dir == b.Dir || b.Turning) return;
+        b.Turning = true; b.TurnT = 0;
+    }
 
     /// <summary>Where this bird's feet are on the field at x: between the lane and the near ground's crest, by its depth.</summary>
     private float FootY(in Bird b) => _s.FieldY(b.X) + (_s.Ground.YAt(Math.Clamp(b.X, 0, _s.Width - 1)) - _s.U * 0.006f - _s.FieldY(b.X)) * b.Depth;
@@ -129,6 +148,16 @@ internal sealed class TurkeyFlock
             ref Bird b = ref _birds[i];
             b.Timer -= dt;
             b.Clock += dt;
+            if (b.Turning)
+            {
+                // A turn on the spot: whatever it was doing waits (its clock too, so a peck is not half spent when it begins).
+                b.Clock -= dt;
+                float was = b.TurnT;
+                b.TurnT += dt;
+                if (was < TurnFor / 2 && b.TurnT >= TurnFor / 2) b.Dir = -b.Dir;
+                if (b.TurnT >= TurnFor) b.Turning = false;
+                continue;
+            }
             if (b.Doing == Doing.Walk)
             {
                 if (b.Stopping)
@@ -150,8 +179,8 @@ internal sealed class TurkeyFlock
                 }
                 // Turn round at the edges of the field (a margin keeps the whole bird in the picture).
                 float margin = _k[b.Size] * 0.9f;
-                if (b.X < margin) { b.X = margin; b.Dir = 1; }
-                if (b.X > _s.Width - margin) { b.X = _s.Width - margin; b.Dir = -1; }
+                if (b.X < margin) { b.X = margin; BeginTurn(ref b, 1); }
+                if (b.X > _s.Width - margin) { b.X = _s.Width - margin; BeginTurn(ref b, -1); }
                 continue;
             }
             if (b.Timer > 0) continue;
@@ -160,6 +189,7 @@ internal sealed class TurkeyFlock
             // thing; a tom who has been quiet a while puts on his show.
             b.Clock = 0;
             double roll = _rng.NextDouble();
+            if (_turnTest) { b.Doing = Doing.Stand; b.Timer = 1.2f; BeginTurn(ref b, -b.Dir); continue; }   // PECKWORKS_TURKEY=turn: every bird turns at every roll, for watching the turn pages
             if (b.Tom && roll < 0.12) { b.Doing = Doing.Display; b.Timer = FanOpen + FanHold + FanOpen; }
             else if (roll < 0.50)
             {
@@ -168,8 +198,8 @@ internal sealed class TurkeyFlock
                 b.Hold = (3 + _rng.Next(4)) / 60f;
                 b.Timer = PeckFor(in b) + 0.3f + 0.6f * (float)_rng.NextDouble();
             }
-            else if (roll < 0.72) { b.Doing = Doing.Stand; b.Timer = 1f + 2.5f * (float)_rng.NextDouble(); if (_rng.Next(3) == 0) b.Dir = -b.Dir; }
-            else { b.Doing = Doing.Walk; b.Walked = 0; b.Timer = 2f + 6f * (float)_rng.NextDouble(); if (_rng.Next(4) == 0) b.Dir = -b.Dir; }
+            else if (roll < 0.72) { b.Doing = Doing.Stand; b.Timer = 1f + 2.5f * (float)_rng.NextDouble(); if (_rng.Next(3) == 0) BeginTurn(ref b, -b.Dir); }
+            else { b.Doing = Doing.Walk; b.Walked = 0; b.Timer = 2f + 6f * (float)_rng.NextDouble(); if (_rng.Next(4) == 0) BeginTurn(ref b, -b.Dir); }
         }
     }
 
@@ -216,7 +246,14 @@ internal sealed class TurkeyFlock
             ref Bird b = ref _birds[pick];
             int z = b.Size, d = b.Dir > 0 ? 0 : 1;
             Sprite page;
-            switch (b.Doing)
+            if (b.Turning)
+            {
+                // Narrowing while it still faces the old way (Dir flips at the middle), then widening facing the new.
+                float q = b.TurnT / TurnFor;
+                int tp = q < 0.5f ? Math.Min(TurnPages - 1, (int)(q * 2 * TurnPages)) : Math.Min(TurnPages - 1, (int)((1 - q) * 2 * TurnPages));
+                page = _turn[z][d][tp];
+            }
+            else switch (b.Doing)
             {
                 case Doing.Walk:
                 {
