@@ -188,7 +188,7 @@ internal sealed class Turkey : Happening
 
         int left = (int)MathF.Round(x - (d == 0 ? _ox : _w - _ox));
         int top = (int)MathF.Round(y) - _by;
-        page.Draw(fb, left, top);
+        page.Draw(fb, left, top, 1f, null, false, _s.NearDepth, _s.Nearness(y));   // behind the shock, the horn and any pumpkin nearer than its feet
     }
 
     // ----------------------------------------------------------------- paint

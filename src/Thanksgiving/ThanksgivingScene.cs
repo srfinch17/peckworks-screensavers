@@ -61,6 +61,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly Sprite[] _smoke;              // four puff sizes, small to big
     private readonly Sprite _windowGlow, _loftGlow;
     private readonly Sprite _starGlow;             // the twinkle stamped on the brighter stars
+    private readonly Sprite _candle;               // the jack-o'-lantern's candle, flickering over its carved face
     private readonly float[] _starPhase, _starSpeed;
     private readonly float[] _windowPhase;
     private readonly Sprite[] _scarf;
@@ -113,6 +114,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _windowPhase = new float[_scenery.FarmWindows.Length + 1];
         // ---- The stars: a small warm glow each, on its own slow rhythm, like the Christmas bulbs ----
         _starGlow = Sprite.Glow(Math.Max(2, (int)(_u * 0.0065f)), Color.FromArgb(255, 244, 220));
+        _candle = Sprite.Glow(Math.Max(4, (int)(_scenery.Jack.R * 1.6f)), Color.FromArgb(255, 160, 50));
         _starPhase = new float[_scenery.Stars.Count];
         _starSpeed = new float[_scenery.Stars.Count];
         for (int i = 0; i < _starPhase.Length; i++)
@@ -475,6 +477,13 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         int scarfPage = (int)(_scarfPhase / (Math.PI * 2) * ScarfPages) % ScarfPages;
         float tall = _scenery.ScarecrowHeight;
         _scarf[scarfPage].Draw(fb, (int)MathF.Round(_scenery.ScarecrowNeck.X - tall * ScarfOxF - 2), (int)MathF.Round(_scenery.ScarecrowNeck.Y - tall * ScarfOyF - 2));
+
+        // 6a. The jack-o'-lantern's candle: a warm glow over the carved face that gutters and flares, the Halloween
+        //     saver's own trick (two slow waves and a quick one added, so it never ticks like a clock).
+        {
+            float flick = 0.30f + 0.08f * (float)Math.Sin(_time * 7.3) + 0.06f * (float)Math.Sin(_time * 13.1 + 1.0) + 0.05f * (float)Math.Sin(_time * 2.1);
+            _candle.DrawCentered(fb, _scenery.Jack.At.X, _scenery.Jack.At.Y + _scenery.Jack.R * 0.1f, flick);
+        }
 
         // 6b. The acorn caper: the squirrels, the mouse and the dust on the
         //     near ground and the rail, in front of the fence (and behind the

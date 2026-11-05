@@ -158,7 +158,8 @@ internal sealed class AppleRoll : Happening
         _shadow.DrawCentered(fb, x, groundY - _r * 0.05f, Math.Min(1f, shadowOp));
 
         int page = (int)MathF.Round(((angle / MathF.Tau) % 1f + 1f) % 1f * Pages) % Pages;
-        _page[_colour][page].Draw(fb, (int)MathF.Round(x) - _size / 2, (int)MathF.Round(cy) - _size / 2, opacity);
+        // Against the near ground's depth picture: it rolls out from behind the horn's rim and passes behind any pumpkin nearer than its spot.
+        _page[_colour][page].Draw(fb, (int)MathF.Round(x) - _size / 2, (int)MathF.Round(cy) - _size / 2, opacity, null, false, _s.NearDepth, _s.Nearness(groundY));
     }
 
     // ----------------------------------------------------------------- paint

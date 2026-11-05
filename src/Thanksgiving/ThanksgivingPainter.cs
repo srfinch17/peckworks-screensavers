@@ -76,7 +76,16 @@ internal sealed class ThanksgivingScenery
     public required PointF CornShockFoot { get; init; }              // the corn shock: where it stands, its top, and its widest half width
     public required PointF CornShockTop { get; init; }
     public required float CornShockHalfWidth { get; init; }
-    public required List<(PointF At, float R)> Pumpkins { get; init; } // the pumpkin patch: each pumpkin's center and size
+    public required List<(PointF At, float R)> Pumpkins { get; init; } // the pumpkin patch: each pumpkin's center and size (its foot is 0.8 R below the center)
+    public required (PointF At, float R) Jack { get; init; }          // the carved jack-o'-lantern among them: its center and size, for the candle's flicker
+    public required byte[] NearDepth { get; init; }                   // the near ground's depth picture: how near each pixel's pumpkin, gourd, leaf, the horn or the shock stands (0 = nothing there); see Nearness
+    public required float CrestMin { get; init; }
+    /// <summary>
+    /// How near a thing standing with its feet at y is, on the depth picture's scale (1 far, at the ground's crest,
+    /// to 254 at the bottom edge). Stamp a ground actor with NearDepth and this of its feet: it is then hidden by
+    /// exactly the pumpkins whose feet are lower on the screen than its own, and shows in front of the rest.
+    /// </summary>
+    public byte Nearness(float y) => (byte)Math.Clamp(1 + 253 * (y - CrestMin) / (Height + 0.1f * U - CrestMin), 1, 254);
     public required PointF CornucopiaMouth { get; init; }            // the open end of the horn (it faces right), on the ground
     public required PointF CornucopiaCenter { get; init; }
     public required float CornucopiaLength { get; init; }
@@ -185,20 +194,40 @@ internal static class ThanksgivingPainter
 
         var cornucopiaMouth = new PointF(w * 0.215f, ground.YAt(w * 0.215f) + u * 0.055f);
         float hornLen = u * 0.11f;
-        PaintCornucopia(g, cornucopiaMouth.X, cornucopiaMouth.Y, hornLen, u);
-
         var shockFoot = new PointF(w * 0.555f, ground.YAt(w * 0.555f) + u * 0.052f);
         float shockTall = u * 0.15f, shockHalf = u * 0.045f;
-        PaintCornShock(g, shockFoot.X, shockFoot.Y, shockTall, shockHalf, rng);
 
+        // THE PUMPKIN PATCH covers the whole foreground, in two bands with a clear lane between them: small
+        // pumpkins BEHIND the walk line (painted now, so the horn, the shock and the maples stand in front of
+        // them) and big ones IN FRONT of it along the bottom edge (painted after the maples, in front of their
+        // trunks). Every pumpkin, gourd and leaf is painted a second time, flat, into a DEPTH picture, each in a
+        // grey that says how near it is (its foot's height on the screen), so anything that moves on the
+        // ground can be hidden by exactly the pumpkins nearer than itself and show in front of the rest.
+        float crestMin = h * 0.79f;
+        byte NearnessOf(float y) => (byte)Math.Clamp(1 + 253 * (y - crestMin) / (h + 0.1f * u - crestMin), 1, 254);
+        using var depthBmp = new Bitmap(w, h, PixelFormat.Format32bppRgb);
+        using var gd = Graphics.FromImage(depthBmp);
+        gd.SmoothingMode = SmoothingMode.None;
+        List<PatchItem> patch = PlanPatch(w, h, u, ground, rng, hollowX: w * 0.12f, stageRight: w * 0.60f, shockFoot.X, shockHalf, cornucopiaMouth.X, hornLen);
+        PaintVineRunners(g, patch, u);
         var pumpkins = new List<(PointF At, float R)>();
-        (float X, float R, float Down)[] patch = [(0.66f, 0.030f, 0.046f), (0.71f, 0.022f, 0.056f), (0.755f, 0.034f, 0.050f), (0.81f, 0.026f, 0.058f)];
-        PaintVines(g, w, u, ground, patch, rng);
-        foreach (var p in patch)
-            pumpkins.Add(PaintPumpkin(g, w * p.X, ground.YAt(w * p.X) + u * p.Down, u * p.R));
-        PaintGourds(g, w, u, ground);
+        (PointF At, float R) jack = default;
+        foreach (PatchItem item in patch)
+            if (!item.Front) PaintPatchItem(g, gd, item, u, NearnessOf(item.Foot.Y), pumpkins, ref jack);
+
+        // The horn and the shock stand ON the walk line: in the depth picture they are a hair nearer than it, so a
+        // mouse or a turkey at the walk line passes behind them (their silhouettes are read off the picture: what changed).
+        g.Flush();
+        uint[] beforeProps = Brushwork.ToPixels(bmp);
+        PaintCornucopia(g, cornucopiaMouth.X, cornucopiaMouth.Y, hornLen, u);
+        PaintCornShock(g, shockFoot.X, shockFoot.Y, shockTall, shockHalf, rng);
+        g.Flush();
+        uint[] afterProps = Brushwork.ToPixels(bmp);
 
         var (leafSpots, canopies, hollow, leftTrunk, rightTrunk) = PaintMaples(g, w, u, ground, rng);
+
+        foreach (PatchItem item in patch)
+            if (item.Front) PaintPatchItem(g, gd, item, u, NearnessOf(item.Foot.Y), pumpkins, ref jack);
 
         g.Flush();
         uint[] upToBranches = Brushwork.ToPixels(bmp);  // a fourth copy: "unchanged since here" = no corner branch in front
@@ -209,6 +238,19 @@ internal static class ThanksgivingPainter
 
         g.Flush();
         uint[] pixels = Brushwork.ToPixels(bmp);
+
+        // The depth picture, as bytes: the grey of each pumpkin, gourd and leaf; the horn's and the shock's silhouettes
+        // a hair nearer than the walk line; 0 where nothing on the near ground stands.
+        gd.Flush();
+        uint[] depthPixels = Brushwork.ToPixels(depthBmp);
+        var nearDepth = new byte[depthPixels.Length];
+        byte propNear = (byte)Math.Min(254, NearnessOf(ground.YAt(w * 0.5f) + u * 0.052f) + 1);
+        for (int i = 0; i < nearDepth.Length; i++)
+        {
+            byte v = (byte)(depthPixels[i] & 0xFF);
+            if (beforeProps[i] != afterProps[i] && v < propNear) v = propNear;
+            nearDepth[i] = v;
+        }
 
         float wallW = u * 0.12f, wallH = u * 0.058f, farmTop = farmFoot.Y - wallH;
         float barnW = u * 0.13f, barnH = u * 0.06f, barnTop = barnFoot.Y - barnH;
@@ -238,7 +280,7 @@ internal static class ThanksgivingPainter
             ScarecrowArmL = new PointF(scarecrowX - scarecrowTall * 0.30f, scarecrowFoot - scarecrowTall * 0.62f),
             ScarecrowArmR = new PointF(scarecrowX + scarecrowTall * 0.30f, scarecrowFoot - scarecrowTall * 0.62f),
             CornShockFoot = shockFoot, CornShockTop = new PointF(shockFoot.X, shockFoot.Y - shockTall), CornShockHalfWidth = shockHalf,
-            Pumpkins = pumpkins,
+            Pumpkins = pumpkins, Jack = jack, NearDepth = nearDepth, CrestMin = crestMin,
             CornucopiaMouth = cornucopiaMouth, CornucopiaCenter = new PointF(cornucopiaMouth.X - hornLen * 0.45f, cornucopiaMouth.Y - hornLen * 0.22f),
             CornucopiaLength = hornLen,
             Canopies = canopies, CornerBranchSpots = cornerSpots,
@@ -912,69 +954,253 @@ internal static class ThanksgivingPainter
         g.DrawLine(twine, x - half * 0.45f, tie, x + half * 0.45f, tie);
     }
 
-    /// <summary>Pumpkin vines on the ground under the patch: dark green runners with a few broad leaves and curling tendrils.</summary>
-    private static void PaintVines(Graphics g, int w, float u, Bank ground, (float X, float R, float Down)[] patch, Random rng)
+    /// <summary>One thing in the pumpkin patch: where its foot is, how big, what it is, which band it is in, and its tint.</summary>
+    internal sealed class PatchItem
+    {
+        public PointF Foot;
+        public float R;
+        public int Kind;                 // 0 a pumpkin, 1 a green striped gourd, 2 a knobbly yellow gourd, 3 a leaf
+        public bool Front;               // in front of the walk line (painted after the maples) or behind it
+        public int Tint;                 // a pumpkin's colour, 0 orange, 1 deep, 2 pale
+        public bool Jack;                // the carved one
+        public float Turn;               // a leaf's turn, degrees
+    }
+
+    /// <summary>
+    /// Plans the patch: pumpkins, gourds and leaves scattered over the whole near ground by chance with a clearance
+    /// test, bigger the nearer they stand, in two bands that leave the WALK LINE clear. Behind the line (a foot
+    /// at least 0.04 U above it) they are small; in front of it, across the stage (left of "stageRight"), a
+    /// pumpkin's TOP must stay below the line plus a little, so the story's actors are never hidden behind one
+    /// (on the right there is no stage, so they may stand anywhere in front). Nothing stands near the hollow or
+    /// the nut pile, under the horn, or in the shock's foot. One pumpkin in the front band, fully on screen,
+    /// right of the middle, is the jack-o'-lantern.
+    /// </summary>
+    private static List<PatchItem> PlanPatch(int w, int h, float u, Bank ground, Random rng, float hollowX, float stageRight, float shockX, float shockHalf, float hornX, float hornLen)
+    {
+        var items = new List<PatchItem>();
+        float Walk(float x) => ground.YAt(Math.Clamp(x, 0, w - 1)) + u * 0.052f;
+        float Crest(float x) => ground.YAt(Math.Clamp(x, 0, w - 1));
+        float RAt(float x, float y) => 0.018f * u + 0.047f * u * Math.Clamp((y - Crest(x)) / (h + 0.05f * u - Crest(x)), 0f, 1f);
+
+        bool Allowed(float x, float y, float r, float top, out bool front)
+        {
+            float walk = Walk(x);
+            front = y > walk;
+            if (!front && y > walk - 0.024f * u) return false;                                  // straddling the lane (an actor's feet are 0.024 U lower: it is the nearer, drawn over)
+            if (front && x < stageRight && y - top < walk + 0.012f * u) return false;             // on the stage: the top stays under the lane
+            if (front && y < walk + 0.02f * u) return false;
+            if (!front && x > hollowX - 0.14f * u && x < hollowX + 0.07f * u) return false;      // the hollow and the nut pile
+            if (!front && x > hornX - hornLen * 1.2f - r && x < hornX + hornLen * 0.6f + r) return false;   // under the horn
+            if (MathF.Abs(x - shockX) < shockHalf + r && MathF.Abs(y - Walk(shockX)) < 0.06f * u) return false;   // in the shock's foot
+            return true;
+        }
+        bool Clear(float x, float y, float r)
+        {
+            foreach (PatchItem o in items)
+            {
+                if (o.Kind == 3) continue;
+                float dx = MathF.Abs(o.Foot.X - x), dy = MathF.Abs(o.Foot.Y - y);
+                if (dx < (o.R + r) * 1.15f && dy < (o.R + r) * 0.9f) return false;
+            }
+            return true;
+        }
+
+        int wanted = (int)(22 * w / (u * 16f / 9f)) + 6;                                       // about 28 pumpkins on a 16:9 screen, more on a wider one
+        int pumpkinsPlaced = 0;
+        for (int tries = 0; tries < 1500 && pumpkinsPlaced < wanted; tries++)
+        {
+            float x = -0.02f * w + 1.04f * w * (float)rng.NextDouble();
+            // Half the tries go to the thin band behind the lane, or chance alone would leave it nearly empty.
+            float y = tries % 2 == 0
+                ? Crest(x) + 0.012f * u + (0.016f * u) * (float)rng.NextDouble()
+                : Crest(x) + 0.012f * u + (h + 0.06f * u - Crest(x) - 0.012f * u) * (float)rng.NextDouble();
+            float r = RAt(x, y) * (0.85f + 0.3f * (float)rng.NextDouble());
+            if (!Allowed(x, y, r, 1.9f * r, out bool front) || !Clear(x, y, r)) continue;
+            int kind = rng.NextDouble() < 0.82 ? 0 : 1 + rng.Next(2);
+            if (kind != 0) r *= 0.55f;
+            items.Add(new PatchItem { Foot = new PointF(x, y), R = r, Kind = kind, Front = front, Tint = rng.Next(3) });
+            if (kind == 0) pumpkinsPlaced++;
+        }
+        // The leaves: broad, between the pumpkins, never on the lane.
+        int leavesPlaced = 0;
+        for (int tries = 0; tries < 800 && leavesPlaced < wanted * 2; tries++)
+        {
+            float x = -0.02f * w + 1.04f * w * (float)rng.NextDouble();
+            float y = Crest(x) + 0.01f * u + (h + 0.03f * u - Crest(x) - 0.01f * u) * (float)rng.NextDouble();
+            float r = RAt(x, y) * 0.6f * (0.8f + 0.4f * (float)rng.NextDouble());
+            if (!Allowed(x, y, r, 0.8f * r, out bool front)) continue;
+            items.Add(new PatchItem { Foot = new PointF(x, y), R = r, Kind = 3, Front = front, Turn = (float)(rng.NextDouble() * 360) });
+            leavesPlaced++;
+        }
+        // The jack-o'-lantern: the front-band pumpkin nearest x = 0.66 w that is whole on the screen; made if there is none.
+        PatchItem? best = null;
+        foreach (PatchItem o in items)
+            if (o.Kind == 0 && o.Front && o.Foot.Y <= h - 0.005f * u && o.Foot.X > 0.50f * w && o.Foot.X < 0.85f * w && o.R > 0.035f * u
+                && (best == null || MathF.Abs(o.Foot.X - 0.66f * w) < MathF.Abs(best.Foot.X - 0.66f * w))) best = o;
+        if (best == null)
+        {
+            best = new PatchItem { Foot = new PointF(0.66f * w, h - 0.02f * u), R = 0.052f * u, Kind = 0, Front = true, Tint = 0 };
+            items.RemoveAll(o => o.Kind != 3 && MathF.Abs(o.Foot.X - best.Foot.X) < (o.R + best.R) * 1.15f && MathF.Abs(o.Foot.Y - best.Foot.Y) < (o.R + best.R) * 0.9f);
+            items.Add(best);
+        }
+        best.Jack = true; best.Tint = 0;
+        // Far to near within each band: the painter's order.
+        items.Sort((a, b) => a.Foot.Y.CompareTo(b.Foot.Y));
+        return items;
+    }
+
+    /// <summary>Vine runners: thin dark-green lines joining each pumpkin to its nearest neighbour in its band, with a curling tendril off each.</summary>
+    private static void PaintVineRunners(Graphics g, List<PatchItem> patch, float u)
     {
         using var vine = new Pen(Color.FromArgb(70, 96, 40), Math.Max(1f, u * 0.0025f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        using var leaf = new SolidBrush(Color.FromArgb(84, 116, 46));
-        float x0 = w * (patch[0].X - 0.04f), x1 = w * (patch[^1].X + 0.04f);
-        float yAt(float x) => ground.YAt(x) + u * 0.05f;
-        g.DrawBezier(vine, x0, yAt(x0), w * patch[1].X, yAt(w * patch[1].X) + u * 0.012f, w * patch[2].X, yAt(w * patch[2].X) - u * 0.01f, x1, yAt(x1));
-        for (int i = 0; i < 7; i++)
+        foreach (PatchItem a in patch)
         {
-            float x = x0 + (x1 - x0) * (float)rng.NextDouble(), y = yAt(x) + u * 0.012f * ((float)rng.NextDouble() - 0.5f);
-            float r = u * (0.010f + 0.008f * (float)rng.NextDouble());
-            g.FillEllipse(leaf, x - r, y - r * 0.6f, r * 2, r * 1.2f);
-            // A tendril: a small curl off the runner.
-            g.DrawArc(vine, x + r, y - r, r, r, 90, 270);
+            if (a.Kind != 0) continue;
+            PatchItem? near = null; float best = float.MaxValue;
+            foreach (PatchItem b in patch)
+            {
+                if (b == a || b.Kind != 0 || b.Front != a.Front) continue;
+                float d = (a.Foot.X - b.Foot.X) * (a.Foot.X - b.Foot.X) + (a.Foot.Y - b.Foot.Y) * (a.Foot.Y - b.Foot.Y);
+                if (d < best) { best = d; near = b; }
+            }
+            if (near == null || best > (0.25f * u) * (0.25f * u)) continue;
+            float mx = (a.Foot.X + near.Foot.X) / 2, my = (a.Foot.Y + near.Foot.Y) / 2 + u * 0.01f;
+            g.DrawBezier(vine, a.Foot.X, a.Foot.Y, mx, my + u * 0.008f, mx, my - u * 0.008f, near.Foot.X, near.Foot.Y);
+            g.DrawArc(vine, mx, my - a.R * 0.3f, a.R * 0.3f, a.R * 0.3f, 90, 270);
+        }
+    }
+
+    /// <summary>Paints one thing of the patch into the picture, and the same shape flat into the depth picture in its grey of nearness.</summary>
+    private static void PaintPatchItem(Graphics g, Graphics gd, PatchItem item, float u, byte near, List<(PointF At, float R)> pumpkins, ref (PointF At, float R) jack)
+    {
+        Color flat = Color.FromArgb(near, near, near);
+        switch (item.Kind)
+        {
+            case 0:
+                var at = PaintPumpkin(g, item.Foot.X, item.Foot.Y, item.R, item.Tint);
+                PaintPumpkin(gd, item.Foot.X, item.Foot.Y, item.R, item.Tint, flat);
+                pumpkins.Add(at);
+                if (item.Jack) { CarveFace(g, at.At.X, at.At.Y, item.R); jack = at; }
+                break;
+            case 1:
+            case 2:
+                PaintGourd(g, item.Foot.X, item.Foot.Y, item.R, item.Kind);
+                PaintGourd(gd, item.Foot.X, item.Foot.Y, item.R, item.Kind, flat);
+                break;
+            default:
+                PaintLeaf(g, item.Foot.X, item.Foot.Y, item.R, item.Turn);
+                PaintLeaf(gd, item.Foot.X, item.Foot.Y, item.R, item.Turn, flat);
+                break;
         }
     }
 
     /// <summary>
     /// A pumpkin standing on the ground at (x, footY): three overlapping orange
     /// lobes (which is what gives a pumpkin its ribs), a stubby stem, and a
-    /// paler highlight on the lit side. Returns its center and size.
+    /// paler highlight on the lit side. "tint" picks orange, deep or pale.
+    /// With "flat" set, every shape is painted in that one colour and the
+    /// shadow is left out (that is the depth picture). Returns its center and size.
     /// </summary>
-    internal static (PointF At, float R) PaintPumpkin(Graphics g, float x, float footY, float r)
+    internal static (PointF At, float R) PaintPumpkin(Graphics g, float x, float footY, float r, int tint = 0, Color? flat = null)
     {
         float cy = footY - r * 0.8f;
-        using (var shadow = new SolidBrush(Color.FromArgb(60, 60, 30, 10)))
-            g.FillEllipse(shadow, x - r * 1.1f, footY - r * 0.22f, r * 2.3f, r * 0.45f);
-        using (var stem = new SolidBrush(Color.FromArgb(80, 92, 40)))
+        (Color side, Color middle) = tint switch
+        {
+            1 => (Color.FromArgb(188, 78, 16), Color.FromArgb(218, 106, 26)),
+            2 => (Color.FromArgb(226, 138, 50), Color.FromArgb(246, 170, 78)),
+            _ => (Color.FromArgb(208, 96, 22), Color.FromArgb(236, 124, 34)),
+        };
+        if (flat == null)
+            using (var shadow = new SolidBrush(Color.FromArgb(60, 60, 30, 10)))
+                g.FillEllipse(shadow, x - r * 1.1f, footY - r * 0.22f, r * 2.3f, r * 0.45f);
+        using (var stem = new SolidBrush(flat ?? Color.FromArgb(80, 92, 40)))
             g.FillPolygon(stem, [
                 new PointF(x - r * 0.10f, cy - r * 0.70f), new PointF(x - r * 0.02f, cy - r * 1.10f),
                 new PointF(x + r * 0.16f, cy - r * 1.05f), new PointF(x + r * 0.12f, cy - r * 0.70f)]);
-        using (var side = new SolidBrush(Color.FromArgb(208, 96, 22)))
+        using (var sb = new SolidBrush(flat ?? side))
         {
-            g.FillEllipse(side, x - r * 1.0f, cy - r * 0.76f, r * 1.1f, r * 1.52f);
-            g.FillEllipse(side, x - r * 0.1f, cy - r * 0.76f, r * 1.1f, r * 1.52f);
+            g.FillEllipse(sb, x - r * 1.0f, cy - r * 0.76f, r * 1.1f, r * 1.52f);
+            g.FillEllipse(sb, x - r * 0.1f, cy - r * 0.76f, r * 1.1f, r * 1.52f);
         }
-        using (var middle = new SolidBrush(Color.FromArgb(236, 124, 34)))
-            g.FillEllipse(middle, x - r * 0.55f, cy - r * 0.80f, r * 1.1f, r * 1.60f);
-        using (var hi = new SolidBrush(Color.FromArgb(70, 255, 210, 150)))
-            g.FillEllipse(hi, x - r * 0.45f, cy - r * 0.62f, r * 0.4f, r * 0.7f);
+        using (var mb = new SolidBrush(flat ?? middle))
+            g.FillEllipse(mb, x - r * 0.55f, cy - r * 0.80f, r * 1.1f, r * 1.60f);
+        if (flat == null)
+            using (var hi = new SolidBrush(Color.FromArgb(70, 255, 210, 150)))
+                g.FillEllipse(hi, x - r * 0.45f, cy - r * 0.62f, r * 0.4f, r * 0.7f);
         return (new PointF(x, cy), r);
     }
 
-    /// <summary>Two gourds beside the pumpkins: a striped green one and a knobbly yellow one, each a pair of ovals.</summary>
-    private static void PaintGourds(Graphics g, int w, float u, Bank ground)
+    /// <summary>
+    /// The jack-o'-lantern's face, carved in candle yellow: the Halloween saver's own face (the homage), two
+    /// triangle eyes, a nose and a jagged grin. Every point is (across, down) from the pumpkin's centre in units of r.
+    /// </summary>
+    private static void CarveFace(Graphics g, float x, float cy, float r)
     {
-        float gx = w * 0.735f, gy = ground.YAt(gx) + u * 0.066f, r = u * 0.012f;
-        using (var green = new SolidBrush(Color.FromArgb(120, 150, 60)))
+        PointF P(float ax, float ay) => new(x + r * ax, cy + r * ay);
+        using var candle = new SolidBrush(Color.FromArgb(255, 222, 110));
+        g.FillPolygon(candle, [P(-0.52f, -0.12f), P(-0.30f, -0.42f), P(-0.14f, -0.12f)]);   // left eye
+        g.FillPolygon(candle, [P(0.14f, -0.12f), P(0.30f, -0.42f), P(0.52f, -0.12f)]);      // right eye
+        g.FillPolygon(candle, [P(-0.08f, 0.10f), P(0f, -0.06f), P(0.08f, 0.10f)]);          // nose
+        g.FillPolygon(candle, [                                                             // a jagged grin
+            P(-0.62f, 0.16f), P(-0.40f, 0.26f), P(-0.30f, 0.38f), P(-0.18f, 0.27f), P(0.02f, 0.27f),
+            P(0.12f, 0.39f), P(0.24f, 0.27f), P(0.40f, 0.26f), P(0.62f, 0.16f),
+            P(0.36f, 0.50f), P(0f, 0.58f), P(-0.36f, 0.50f)]);
+    }
+
+    /// <summary>A gourd on the ground at (x, footY), "r" its size: kind 1 a striped green one, kind 2 a knobbly yellow one, each a pair of ovals.</summary>
+    private static void PaintGourd(Graphics g, float x, float footY, float r, int kind, Color? flat = null)
+    {
+        float gy = footY - r * 0.1f;
+        if (kind == 1)
         {
-            g.FillEllipse(green, gx - r * 1.3f, gy - r * 1.1f, r * 2.6f, r * 1.3f);
-            g.FillEllipse(green, gx - r * 0.8f, gy - r * 1.8f, r * 1.4f, r * 1.2f);
+            using (var green = new SolidBrush(flat ?? Color.FromArgb(120, 150, 60)))
+            {
+                g.FillEllipse(green, x - r * 1.3f, gy - r * 1.1f, r * 2.6f, r * 1.3f);
+                g.FillEllipse(green, x - r * 0.8f, gy - r * 1.8f, r * 1.4f, r * 1.2f);
+            }
+            if (flat == null)
+                using (var stripe = new Pen(Color.FromArgb(120, 230, 220, 120), Math.Max(1f, r * 0.12f)))
+                    for (int i = -2; i <= 2; i++)
+                        g.DrawArc(stripe, x - r * 0.5f + i * r * 0.5f, gy - r * 1.1f, r, r * 1.3f, 180, 180);
         }
-        using (var stripe = new Pen(Color.FromArgb(120, 230, 220, 120), Math.Max(1f, u * 0.0015f)))
-            for (int i = -2; i <= 2; i++)
-                g.DrawArc(stripe, gx - r * 1.3f + i * r * 0.5f + r * 1.3f - r * 0.5f, gy - r * 1.1f, r, r * 1.3f, 180, 180);
-        float yx = w * 0.845f, yy = ground.YAt(yx) + u * 0.064f;
-        using var yellow = new SolidBrush(Color.FromArgb(226, 190, 60));
-        g.FillEllipse(yellow, yx - r * 1.2f, yy - r * 1.2f, r * 2.4f, r * 1.4f);
-        g.FillEllipse(yellow, yx - r * 0.7f, yy - r * 2.0f, r * 1.3f, r * 1.3f);
-        using var knob = new SolidBrush(Color.FromArgb(120, 100, 50));
-        foreach (var (kx, ky) in new[] { (-0.6f, -0.9f), (0.3f, -1.5f), (0.7f, -0.6f) })
-            g.FillEllipse(knob, yx + r * kx - r * 0.12f, yy + r * ky - r * 0.12f, r * 0.24f, r * 0.24f);
+        else
+        {
+            using (var yellow = new SolidBrush(flat ?? Color.FromArgb(226, 190, 60)))
+            {
+                g.FillEllipse(yellow, x - r * 1.2f, gy - r * 1.2f, r * 2.4f, r * 1.4f);
+                g.FillEllipse(yellow, x - r * 0.7f, gy - r * 2.0f, r * 1.3f, r * 1.3f);
+            }
+            if (flat == null)
+                using (var knob = new SolidBrush(Color.FromArgb(120, 100, 50)))
+                    foreach (var (kx, ky) in new[] { (-0.6f, -0.9f), (0.3f, -1.5f), (0.7f, -0.6f) })
+                        g.FillEllipse(knob, x + r * kx - r * 0.12f, gy + r * ky - r * 0.12f, r * 0.24f, r * 0.24f);
+        }
+    }
+
+    /// <summary>A broad pumpkin leaf lying on the ground at (x, y), "r" across, turned by "turn": a heart with a notch, a paler vein, a stalk.</summary>
+    private static void PaintLeaf(Graphics g, float x, float y, float r, float turn, Color? flat = null)
+    {
+        var st = g.Save();
+        g.TranslateTransform(x, y);
+        g.RotateTransform(turn);
+        g.ScaleTransform(1f, 0.55f);                                   // lying flat on the ground, seen from a low angle
+        using (var leaf = new SolidBrush(flat ?? Color.FromArgb(84, 116, 46)))
+        using (var path = new GraphicsPath())
+        {
+            path.AddClosedCurve([new PointF(0, -r * 0.1f), new PointF(r * 0.55f, -r * 0.7f), new PointF(r, -r * 0.2f), new PointF(r * 0.8f, r * 0.5f), new PointF(0, r),
+                                 new PointF(-r * 0.8f, r * 0.5f), new PointF(-r, -r * 0.2f), new PointF(-r * 0.55f, -r * 0.7f)], 0.5f);
+            g.FillPath(leaf, path);
+        }
+        if (flat == null)
+        {
+            using var vein = new Pen(Color.FromArgb(110, 150, 70), Math.Max(1f, r * 0.08f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawLine(vein, 0, -r * 0.1f, 0, r * 0.85f);
+            g.DrawLine(vein, 0, r * 0.3f, r * 0.5f, -r * 0.1f);
+            g.DrawLine(vein, 0, r * 0.3f, -r * 0.5f, -r * 0.1f);
+            using var stalk = new Pen(Color.FromArgb(70, 96, 40), Math.Max(1f, r * 0.1f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawLine(stalk, 0, -r * 0.1f, 0, -r * 0.6f);
+        }
+        g.Restore(st);
     }
 
     /// <summary>

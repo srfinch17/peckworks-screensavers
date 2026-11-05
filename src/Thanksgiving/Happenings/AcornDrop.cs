@@ -187,7 +187,7 @@ internal sealed class AcornDrop : Happening
             if (local >= release)
                 _shadow.DrawCentered(fb, x, _s.WalkY(x) - _a * 0.1f, Math.Min(1f, opacity * 1.7f / (1f + height / (_a * 2))));
             int page = (int)MathF.Round(((angle / MathF.Tau) % 1f + 1f) % 1f * Pages) % Pages;
-            _page[page].Draw(fb, (int)MathF.Round(x) - _size / 2, (int)MathF.Round(cy) - _size / 2, opacity);
+            _page[page].Draw(fb, (int)MathF.Round(x) - _size / 2, (int)MathF.Round(cy) - _size / 2, opacity, null, false, _s.NearDepth, _s.Nearness(_s.WalkY(x)));
         }
     }
 

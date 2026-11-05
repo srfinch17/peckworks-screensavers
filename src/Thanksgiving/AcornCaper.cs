@@ -698,10 +698,15 @@ internal sealed class AcornCaper
 
     private static float Smooth(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3 - 2 * x); }
 
-    private static void Stamp(FrameBuffer fb, in Sheet sh, Sprite page, float feetX, float feetY, bool mirror, bool[]? stencil, float opacity = 1f)
+    /// <summary>
+    /// Stamps a page with its feet at (feetX, feetY). Through the stencil if one is given (the rail and the trunks),
+    /// and always against the near ground's depth picture: a pumpkin whose foot is lower on the screen than these
+    /// feet is nearer, and hides the actor where they overlap.
+    /// </summary>
+    private void Stamp(FrameBuffer fb, in Sheet sh, Sprite page, float feetX, float feetY, bool mirror, bool[]? stencil, float opacity = 1f)
     {
         int left = (int)MathF.Round(feetX) - (mirror ? sh.W - sh.Ox : sh.Ox);
-        page.Draw(fb, left, (int)MathF.Round(feetY) - sh.By, opacity, stencil, mirror);
+        page.Draw(fb, left, (int)MathF.Round(feetY) - sh.By, opacity, stencil, mirror, _s.NearDepth, _s.Nearness(feetY));
     }
 
     public void Draw(FrameBuffer fb)
@@ -712,11 +717,13 @@ internal sealed class AcornCaper
 
         // ---- the props: the nut pile, the mound or the hole, the nut that got away ----
         float pileIn = Smooth(t / 0.5f);
-        _acorn.DrawCentered(fb, _pileX - 0.16f * k, _pileY - 0.07f * k, pileIn * over);
-        _acorn.DrawCentered(fb, _pileX + 0.14f * k, _pileY - 0.07f * k, pileIn * over);
-        if (t < _pileTaken) _acorn.DrawCentered(fb, _pileX - 0.01f * k, _pileY - 0.18f * k, pileIn);   // the one on top is the one it takes
-        if (t >= _buryAt + 0.3f && t < _digUpAt) _mound.DrawCentered(fb, _spotX, WalkY(_spotX) - 0.05f * k, Smooth((t - _buryAt - 0.3f) / 0.4f));
-        if (t >= _digUpAt) _hole.DrawCentered(fb, _spotX, WalkY(_spotX) - 0.05f * k, over);
+        byte[] nd = _s.NearDepth;
+        byte pileNear = _s.Nearness(_pileY), spotNear = _s.Nearness(WalkY(_spotX));
+        _acorn.DrawCentered(fb, _pileX - 0.16f * k, _pileY - 0.07f * k, pileIn * over, null, false, nd, pileNear);
+        _acorn.DrawCentered(fb, _pileX + 0.14f * k, _pileY - 0.07f * k, pileIn * over, null, false, nd, pileNear);
+        if (t < _pileTaken) _acorn.DrawCentered(fb, _pileX - 0.01f * k, _pileY - 0.18f * k, pileIn, null, false, nd, pileNear);   // the one on top is the one it takes
+        if (t >= _buryAt + 0.3f && t < _digUpAt) _mound.DrawCentered(fb, _spotX, WalkY(_spotX) - 0.05f * k, Smooth((t - _buryAt - 0.3f) / 0.4f), null, false, nd, spotNear);
+        if (t >= _digUpAt) _hole.DrawCentered(fb, _spotX, WalkY(_spotX) - 0.05f * k, over, null, false, nd, spotNear);
         if (t >= _buryAt && t < _buryAt + 0.5f)
         {
             // The nut leaves the mouth (at the nose, down by the paws) and is tipped into the hole.
@@ -886,7 +893,7 @@ internal sealed class AcornCaper
                     float cyc = dist / stride;
                     sh = seg.Acorn ? _mouseNut : _mouse; page = (int)((cyc - MathF.Floor(cyc)) * MousePages) % MousePages;
                 }
-                Stamp(fb, sh, sh.Pages[page], x, y, mirror, props);
+                Stamp(fb, sh, sh.Pages[page], x, y, mirror, null);        // the depth picture hides it behind the shock (and any nearer pumpkin)
                 break;
             }
             case Kind.Fracas:
