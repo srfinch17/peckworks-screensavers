@@ -43,7 +43,7 @@ namespace Thanksgiving;
 internal sealed class ThanksgivingScene : IScreensaverScene
 {
     private const int FlapPages = 16;
-    private const int ScarfPages = 24;
+    private const int ScarfPages = 32;
     private const int SmokePuffs = 7;
     private const float SmokeCycle = 11f;          // seconds a puff takes to rise, spread and vanish
 
@@ -72,6 +72,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     // that large can no longer register a 16 millisecond step, and the geese
     // and the smoke would freeze.
     private double _time;
+    private double _scarfPhase;                    // where the scarf's wave is, 0 to two pi (its own clock, added up each frame)
 
     public ThanksgivingScene(int width, int height, ThanksgivingSettings settings)
     {
@@ -234,37 +235,133 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     }
 
     /// <summary>
-    /// The scarecrow's scarf at one moment of its flutter: a red ribbon
-    /// trailing to the right from its knot, in six short pieces, each one
-    /// turned a little more by the wave that runs along it. The knot is at
-    /// the sprite's left-middle, so the scene stamps it with that point on
-    /// the scarecrow's neck.
+    /// The scarecrow's scarf at one moment of its flutter. The sprite's origin
+    /// (ScarfOx, ScarfOy) is the KNOT, which the scene stamps on the
+    /// scarecrow's neck.
+    ///
+    /// FEYNMAN VERSION: the first scarf was six hinged sticks drawn as one
+    /// thick line, and every hinge swung by the same amount, so the end near
+    /// the neck flapped as hard as the tip and the whole thing read as a red
+    /// sausage. A strip of cloth in wind is the opposite: it is held still
+    /// at the knot and whips at the free end. So the centre line is built
+    /// from 28 tiny steps, and the angle of each step is a wave that travels
+    /// toward the tip whose size GROWS along the strip (s to the power 1.6,
+    /// where s is 0 at the knot and 1 at the tip), plus a little droop from
+    /// gravity that also grows toward the tip. The strip is then FILLED as a
+    /// polygon round that line (wide at the knot, narrower at the tip), not
+    /// drawn as a pen stroke, and each short piece is shaded by which way the
+    /// cloth is curving there: where it curls one way you see its lit face,
+    /// where it curls the other way its darker underside. Those light and
+    /// dark bands move along with the wave, which is what makes it read as
+    /// folding cloth. A band round the neck, a short tail hanging down the
+    /// chest (swinging gently, a quarter of a beat behind), a cream stripe
+    /// near the end, and tassels that carry the wave one step further.
     /// </summary>
+    private const float ScarfOxF = 0.14f, ScarfOyF = 0.42f, ScarfWF = 0.66f, ScarfHF = 0.72f;   // the sheet, and the knot's place on it, in scarecrow heights
+
     private static Sprite PaintScarf(float tall, float phase)
     {
-        int w = (int)(tall * 0.34f) + 4, h = (int)(tall * 0.24f) + 4;
-        float ox = 2, oy = h * 0.5f;
+        int w = (int)(tall * ScarfWF) + 4, h = (int)(tall * ScarfHF) + 4;
+        float ox = tall * ScarfOxF + 2, oy = tall * ScarfOyF + 2;
+        Color red = Color.FromArgb(188, 44, 40), lit = Color.FromArgb(214, 70, 56), dark = Color.FromArgb(136, 28, 28), cream = Color.FromArgb(232, 196, 120);
         return Sprite.Paint(w, h, g =>
         {
-            using var ribbon = new Pen(Color.FromArgb(188, 44, 40), Math.Max(1.5f, tall * 0.045f)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-            using var fringe = new Pen(Color.FromArgb(214, 72, 60), Math.Max(1f, tall * 0.012f)) { EndCap = LineCap.Round };
-            var pts = new PointF[7];
-            pts[0] = new PointF(ox, oy);
-            float x = ox, y = oy;
-            for (int k = 1; k < pts.Length; k++)
+            // A strip of cloth: "steps" short pieces from "from", each turned by angle(s) (radians, 0 = right, down positive),
+            // "len" long in all, "w0" wide at the start and "w1" at the end. Returns the centre line and paints the strip.
+            PointF[] Strip(PointF from, int steps, float len, float w0, float w1, Func<float, float> angle, Func<float, Color?> tint)
             {
-                // Each piece points a little up (the wind lifts it) plus a wave that travels along the ribbon.
-                float angle = -0.25f + 0.55f * MathF.Sin(phase - k * 0.85f) + 0.04f * k;
-                x += tall * 0.048f * MathF.Cos(angle);
-                y += tall * 0.048f * MathF.Sin(angle);
-                pts[k] = new PointF(x, y);
+                var c = new PointF[steps + 1];
+                c[0] = from;
+                for (int i = 0; i < steps; i++)
+                {
+                    float a = angle((i + 0.5f) / steps);
+                    c[i + 1] = new PointF(c[i].X + len / steps * MathF.Cos(a), c[i].Y + len / steps * MathF.Sin(a));
+                }
+                // The two edges: each centre point pushed out along its normal by half the width there.
+                var left = new PointF[steps + 1]; var right = new PointF[steps + 1];
+                for (int i = 0; i <= steps; i++)
+                {
+                    PointF a = c[Math.Max(0, i - 1)], b = c[Math.Min(steps, i + 1)];
+                    float dx = b.X - a.X, dy = b.Y - a.Y, l = MathF.Sqrt(dx * dx + dy * dy) + 1e-5f;
+                    float hw = (w0 + (w1 - w0) * i / steps) * 0.5f;
+                    left[i] = new PointF(c[i].X - dy / l * hw, c[i].Y + dx / l * hw);
+                    right[i] = new PointF(c[i].X + dy / l * hw, c[i].Y - dx / l * hw);
+                }
+                // The whole strip first, in the base red, as ONE polygon (both edges joined end to end), so there
+                // are no seams between pieces: pieces drawn one by one leave a hairline at every join that reads as stripes.
+                var outline = new PointF[(steps + 1) * 2];
+                for (int i = 0; i <= steps; i++) { outline[i] = left[i]; outline[2 * steps + 1 - i] = right[i]; }
+                using (var b = new SolidBrush(red)) g.FillPolygon(b, outline);
+                // Then the folds: runs of pieces where the cloth curls the same way, each run one polygon over the base.
+                // Which way it curls is the cross product of the steps either side of the piece; a curl one way shows the
+                // lit face, the other way the darker underside. The stripe near the tip is painted the same way.
+                Color? RunColour(int i)
+                {
+                    Color? t = tint((i + 0.5f) / steps);
+                    if (t != null) return t;
+                    if (i == 0 || i >= steps - 1) return null;
+                    float ax = c[i + 1].X - c[i].X, ay = c[i + 1].Y - c[i].Y, bx = c[i + 2].X - c[i + 1].X, by = c[i + 2].Y - c[i + 1].Y;
+                    float curl = (ax * by - ay * bx) / (len / steps * len / steps);
+                    return curl > 0.08f ? dark : curl < -0.08f ? lit : null;
+                }
+                int start = 0;
+                while (start < steps)
+                {
+                    Color? col = RunColour(start);
+                    int end = start + 1;
+                    while (end < steps && RunColour(end) == col) end++;
+                    if (col != null)
+                    {
+                        var run = new PointF[(end - start + 1) * 2];
+                        for (int i = start; i <= end; i++) { run[i - start] = left[i]; run[run.Length - 1 - (i - start)] = right[i]; }
+                        using var b = new SolidBrush(col.Value);
+                        g.FillPolygon(b, run);
+                    }
+                    start = end;
+                }
+                return c;
             }
-            g.DrawLines(ribbon, pts);
-            // The knot: a small round at the start, and a fringe of three threads at the end.
-            using var knot = new SolidBrush(Color.FromArgb(160, 34, 32));
-            g.FillEllipse(knot, ox - tall * 0.025f, oy - tall * 0.025f, tall * 0.05f, tall * 0.05f);
-            for (int i = -1; i <= 1; i++)
-                g.DrawLine(fringe, pts[^1], new PointF(pts[^1].X + tall * 0.03f, pts[^1].Y + i * tall * 0.022f));
+            void Tassels(PointF[] line, float width, float length, int n)
+            {
+                PointF end = line[^1], prev = line[^2];
+                float dx = end.X - prev.X, dy = end.Y - prev.Y, l = MathF.Sqrt(dx * dx + dy * dy) + 1e-5f;
+                dx /= l; dy /= l;
+                using var pen = new Pen(dark, Math.Max(1f, tall * 0.010f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                for (int i = 0; i < n; i++)
+                {
+                    float k = (i + 0.5f) / n - 0.5f;                     // across the end edge
+                    PointF at = new(end.X - dy * k * width, end.Y + dx * k * width);
+                    // Each tassel carries the wave one step past the end, and the outer ones splay a little.
+                    float splay = 0.5f * k;
+                    g.DrawLine(pen, at, new PointF(at.X + length * (dx * MathF.Cos(splay) - dy * MathF.Sin(splay)), at.Y + length * (dy * MathF.Cos(splay) + dx * MathF.Sin(splay))));
+                }
+            }
+
+            var knot = new PointF(ox, oy);
+            // The band round the neck: an ellipse under the chin, over the collar, with a paler top lip and the knot's bulge.
+            using (var b = new SolidBrush(dark))
+                g.FillEllipse(b, knot.X - tall * 0.045f - tall * 0.125f, knot.Y - tall * 0.03f, tall * 0.25f, tall * 0.06f);
+            using (var b = new SolidBrush(lit))
+                g.FillEllipse(b, knot.X - tall * 0.045f - tall * 0.115f, knot.Y - tall * 0.03f, tall * 0.23f, tall * 0.028f);
+
+            // The short tail: hangs down the chest from the knot, swaying gently, a quarter of a beat behind the long one.
+            float swayPhase = phase - MathF.PI / 2;
+            PointF[] shortLine = Strip(new PointF(knot.X - tall * 0.01f, knot.Y + tall * 0.01f), 8, tall * 0.16f, tall * 0.055f, tall * 0.042f,
+                s => MathF.PI / 2 - 0.10f + 0.22f * MathF.Sin(swayPhase - 2.5f * s) * s, s => null);
+            Tassels(shortLine, tall * 0.042f, tall * 0.025f, 3);
+
+            // The long tail: streams downwind (right and a touch up), the travelling wave growing toward the tip, with gravity's droop.
+            float A = 1.25f, wind = -0.18f, droop = 0.30f;
+            PointF[] longLine = Strip(knot, 28, tall * 0.44f, tall * 0.065f, tall * 0.046f,
+                s => wind + A * MathF.Pow(s, 2.0f) * MathF.Sin(phase - MathF.Tau * 1.3f * s) + droop * s * s,
+                s => s > 0.80f && s < 0.88f ? cream : null);
+            Tassels(longLine, tall * 0.046f, tall * 0.03f, 5);
+
+            // The knot itself, over both tails.
+            using (var b = new SolidBrush(red))
+                g.FillEllipse(b, knot.X - tall * 0.035f, knot.Y - tall * 0.03f, tall * 0.07f, tall * 0.06f);
+            using (var b = new SolidBrush(lit))
+                g.FillEllipse(b, knot.X - tall * 0.025f, knot.Y - tall * 0.025f, tall * 0.035f, tall * 0.025f);
         });
     }
 
@@ -276,6 +373,14 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     {
         float dt = (float)elapsedSeconds;
         _time += dt;
+        // The scarf's wave: its phase is ADDED UP each frame at the moment's
+        // speed (about two beats a second, swelling and easing with slow
+        // gusts). The first version multiplied the clock by a changing speed,
+        // which is not the same thing: the wave stalled, ran backward and
+        // finally strobed after a few minutes. An added-up phase only ever
+        // moves forward.
+        double gust = 0.95 + 0.30 * Math.Sin(_time * 0.37) + 0.10 * Math.Sin(_time * 1.13);
+        _scarfPhase = (_scarfPhase + dt * Math.PI * 2 * 2.1 * gust) % (Math.PI * 2);
         _leaves.Update(dt);
         _flock.Update(dt);
         _herd.Update(dt);
@@ -337,12 +442,11 @@ internal sealed class ThanksgivingScene : IScreensaverScene
             _loftGlow.DrawCentered(fb, loft.X + loft.Width / 2, loft.Y + loft.Height / 2, lamp);
         }
 
-        // 6. The scarf: the wave runs along it about four times a second,
-        //    with gusts (a slow wave on the speed) so it does not tick like a clock.
-        float gust = 0.7f + 0.3f * (float)Math.Sin(_time * 0.9);
-        double flutter = (_time * 4.2 * gust) % (Math.PI * 2);
-        int scarfPage = (int)(flutter / (Math.PI * 2) * ScarfPages) % ScarfPages;
-        _scarf[scarfPage].Draw(fb, (int)_scenery.ScarecrowNeck.X - 2, (int)_scenery.ScarecrowNeck.Y - _scarf[scarfPage].Height / 2);
+        // 6. The scarf: the page is picked from its own clock (see Update), so
+        //    the wave only ever runs forward along the cloth, one page or so a frame.
+        int scarfPage = (int)(_scarfPhase / (Math.PI * 2) * ScarfPages) % ScarfPages;
+        float tall = _scenery.ScarecrowHeight;
+        _scarf[scarfPage].Draw(fb, (int)MathF.Round(_scenery.ScarecrowNeck.X - tall * ScarfOxF - 2), (int)MathF.Round(_scenery.ScarecrowNeck.Y - tall * ScarfOyF - 2));
 
         // 6b. The acorn caper: the squirrels, the mouse and the dust on the
         //     near ground and the rail, in front of the fence (and behind the
