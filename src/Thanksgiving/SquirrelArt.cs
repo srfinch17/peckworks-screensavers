@@ -27,16 +27,17 @@ namespace Thanksgiving;
 /// </summary>
 internal static class SquirrelArt
 {
-    public static readonly Color Fur = Color.FromArgb(156, 112, 78);
-    public static readonly Color FurDark = Color.FromArgb(118, 80, 52);
-    public static readonly Color Under = Color.FromArgb(88, 56, 34);
-    public static readonly Color Belly = Color.FromArgb(236, 214, 176);
-    public static readonly Color TailCore = Color.FromArgb(122, 82, 52);
-    public static readonly Color TailHair = Color.FromArgb(214, 170, 112);
-    public static readonly Color TailLit = Color.FromArgb(168, 122, 80);      // the plume's lit side, between the core and the hair tips
+    public static readonly Color Fur = Color.FromArgb(206, 108, 46);          // a red squirrel's rust: bright against the patch's dull earth
+    public static readonly Color FurDark = Color.FromArgb(158, 74, 32);
+    public static readonly Color Belly = Color.FromArgb(248, 230, 200);
+    public static readonly Color EarIn = Color.FromArgb(226, 160, 136);
+    public static readonly Color TailDark = Color.FromArgb(150, 70, 30);     // the plume's inner band
+    public static readonly Color TailMain = Color.FromArgb(214, 118, 52);
+    public static readonly Color TailLight = Color.FromArgb(240, 168, 96);   // the streaks along it
     public static readonly Color Ink = Color.FromArgb(40, 30, 28);
-    public static readonly Color LimbNear = Color.FromArgb(132, 92, 62);
-    public static readonly Color LimbFar = Color.FromArgb(104, 70, 46);
+    public static readonly Color TailHair = TailLight, TailCore = TailDark, Under = FurDark;   // the stories' dust cloud paints squirrel-coloured tufts and limbs by these names
+    public static readonly Color LimbNear = Color.FromArgb(206, 108, 46);
+    public static readonly Color LimbFar = Color.FromArgb(158, 74, 32);
 
     /// <summary>One pose. Positions in squirrel units from the feet's origin; angles in degrees.</summary>
     public sealed class Pose
@@ -154,9 +155,9 @@ internal static class SquirrelArt
         q.NearHind = Lerp(P(-0.02f, 0f), P(0.0f, 0.03f), e); q.FarHind = Lerp(P(0.08f, 0f), P(-0.05f, 0.02f), e);
         q.HindFlat = e > 0.6f; q.PawsUp = paws && e > 0.45f;
         // Sitting, the tail is a question mark: up the back, leaning back in the middle, curling forward over the head.
-        q.TailBase = Lerp(150f, 95f, e) + 8f * lookUp;
-        q.TailCurl = Lerp(-45f, -100f, e);
-        q.TailS = Lerp(25f, 70f, e);
+        q.TailBase = Lerp(150f, 100f, e) + 8f * lookUp;
+        q.TailCurl = Lerp(-45f, -170f, e);                                 // the tip ends pointing forward and down: the hook of the question mark
+        q.TailS = Lerp(25f, 80f, e);
         q.TailFlick = new[] { 0f, 14f, 30f, 14f }[tail] * e;
         return q;
     }
@@ -205,7 +206,7 @@ internal static class SquirrelArt
         Pose q = Sit(1f, 0, false, paws);
         q.HeadTurn = f;
         q.BodyScale = 1f - 0.45f * f;                                       // the body narrows as it comes round
-        q.TailBase = 95f - 10f * f; q.TailCurl = -100f + 30f * f; q.TailS = 70f - 30f * f;
+        q.TailBase = 100f - 10f * f; q.TailCurl = -170f + 60f * f; q.TailS = 80f - 30f * f;
         return q;
     }
 
@@ -255,8 +256,26 @@ internal static class SquirrelArt
         g.Restore(st);
     }
 
+    /// <summary>
+    /// THE LOOK, taken from cute flat-vector squirrels (his line: "develop an eye for what cute animals look like in
+    /// line art"): every shape is one smooth closed curve, never a stack of ovals with a pen line. The TAIL is the
+    /// hero and as tall as the animal: a fat, smooth plume that leaves the rump going back and up and curls forward
+    /// over the top in an S, rounded at the tip, with three long pale streaks following its curve and a darker band
+    /// along its inner edge; no fringe, no spikes, no scallops. The BODY is a pear: a big round rump and belly at
+    /// the bottom, narrowing up to the chest, a wide cream front from the chin down between the feet. The HEAD is
+    /// a round skull with a short snout tipped a little down, one big round eye high and forward, a cream cheek,
+    /// and tall ears with a tuft on top. Little hands tucked at the chest; long flat hind feet along the ground.
+    /// Colours: a red squirrel's bright rust against the patch's dull earth.
+    /// </summary>
     public static void Paint(Graphics g, Pose q)
     {
+        void Blob(PointF[] pts, Color c, float tension = 0.5f)
+        {
+            using var path = new GraphicsPath();
+            path.AddClosedCurve(pts, tension);
+            using var b = new SolidBrush(c);
+            g.FillPath(b, path);
+        }
         void Ell2(PointF c, float rx, float ry, Color col, float tilt = 0) => Ell(g, c.X, c.Y, rx, ry, col, tilt);
         void Bone(PointF a, PointF b, float wa, float wb, Color c)
         {
@@ -269,19 +288,16 @@ internal static class SquirrelArt
 
         PointF hip = q.Hip, chest = q.Chest;
         PointF mid = P((hip.X + chest.X) / 2 - q.Hump * 0.3f, (hip.Y + chest.Y) / 2 + q.Hump);
-        float tilt = MathF.Atan2(chest.Y - hip.Y, chest.X - hip.X) * 180f / MathF.PI;
         float front = q.HeadTurn;                                          // 0 side view, 1 facing us
+        float bw = 1f - 0.45f * front;                                     // narrower seen from the front
+        float upright = Math.Clamp((chest.Y - hip.Y) / 0.5f, 0f, 1f);      // 0 on all fours, 1 sitting up: the body's shape follows
+        float sc = q.BodyScale;
 
-        // ---- the tail first, behind everything: a big plume, the squirrel's banner ----
-        // A chain of short pieces (the spine) bent by the pose: the root angle, a curl that grows along the length,
-        // a travelling ripple, and a lash at the tip. The plume round it is as big as the body (half-width 0.24 at
-        // its fullest; at 0.13 it read as a rat's), rounded at the end: a dark core, a lit band along its outer edge,
-        // and a FRINGE of long hair strokes fanning out from both edges, which is what a tail's hair actually looks
-        // like (the first version scalloped the edge with round tufts, which read as a plated lizard's).
+        // ---- the tail first, behind everything ----
         {
-            PointF root = P(hip.X - 0.12f, hip.Y + 0.04f);
-            const int N = 14;
-            float segLen = 1.15f / N;
+            PointF root = P(hip.X - 0.14f, hip.Y + 0.02f);
+            const int N = 16;
+            float segLen = 1.25f / N;
             var spine = new PointF[N + 1];
             spine[0] = root;
             for (int i = 0; i < N; i++)
@@ -291,145 +307,138 @@ internal static class SquirrelArt
                 float r = ang * MathF.PI / 180f;
                 spine[i + 1] = P(spine[i].X + segLen * MathF.Cos(r), spine[i].Y + segLen * MathF.Sin(r));
             }
-            // Half the plume's width along it: narrow at the root, fullest at 0.45, still fat at 0.85, then a rounded end.
-            float Width(float s) => s < 0.45f ? Lerp(0.07f, 0.24f, Smooth(s / 0.45f)) : s < 0.85f ? Lerp(0.24f, 0.17f, Smooth((s - 0.45f) / 0.4f)) : Lerp(0.17f, 0.03f, Smooth((s - 0.85f) / 0.15f));
-            PointF[] Edge(float side, float scale)
+            // Half the plume's width along it: narrow at the root, fat from a third of the way to near the end, a round tip.
+            float Width(float s) => s < 0.35f ? Lerp(0.10f, 0.27f, Smooth(s / 0.35f)) : s < 0.80f ? Lerp(0.27f, 0.23f, (s - 0.35f) / 0.45f) : Lerp(0.23f, 0.06f, Smooth((s - 0.80f) / 0.20f));
+            PointF[] Edge(float side, float scale, float shift = 0f)
             {
-                var pts = new PointF[N + 1];
+                var pts = new PointF[N + 2];
                 for (int i = 0; i <= N; i++)
                 {
                     PointF a = spine[Math.Max(0, i - 1)], b = spine[Math.Min(N, i + 1)];
                     float dx = b.X - a.X, dy = b.Y - a.Y, len = MathF.Sqrt(dx * dx + dy * dy) + 1e-5f;
-                    float w = Width(i / (float)N) * scale;
+                    float w = Width(i / (float)N) * scale + shift;
                     pts[i] = P(spine[i].X - dy / len * w * side, spine[i].Y + dx / len * w * side);
                 }
+                // The round tip: one point a little past the end along the tail's direction.
+                PointF e = spine[N], f = spine[N - 1];
+                float ex = e.X - f.X, ey = e.Y - f.Y, el = MathF.Sqrt(ex * ex + ey * ey) + 1e-5f;
+                pts[N + 1] = P(e.X + ex / el * 0.07f * scale, e.Y + ey / el * 0.07f * scale);
                 return pts;
             }
-            PointF[] left = Edge(1f, 1f), right = Edge(-1f, 1f);
-            // The fringe: strokes of hair fanning out from both edges, leaning back toward the root, longer where the
-            // plume is fuller; pale on the outer (lit) edge, the core's dark on the inner. Drawn first so the core
-            // covers their roots and only the free ends show.
-            using (var pale = new Pen(TailHair, 0.024f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-            using (var dark = new Pen(TailCore, 0.024f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                for (int i = 1; i < N; i++)
+            PointF[] Plume(float scale, float shiftOuter, float shiftInner)
+            {
+                PointF[] l = Edge(1f, scale, shiftOuter), r = Edge(-1f, scale, shiftInner);
+                var outline = new PointF[(N + 1) * 2 + 1];
+                for (int i = 0; i <= N; i++) { outline[i] = l[i]; outline[2 * N + 2 - i] = r[i]; }
+                outline[N + 1] = l[N + 1];
+                return outline;
+            }
+            Blob(Plume(1f, 0f, 0f), TailDark, 0.45f);                                              // the whole plume, dark
+            Blob(Plume(1f, -0.01f, -0.09f), TailMain, 0.45f);                                      // the main colour, leaving a dark band along the inner edge
+            // Three long pale streaks following the curve, each a smooth line from a fifth of the way to near the tip.
+            using (var streak = new Pen(TailLight, 0.030f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                foreach ((float off, int from, int to) in ((float, int, int)[])[(0.55f, 3, N - 2), (0.15f, 5, N - 1), (-0.25f, 4, N - 4)])   // three streaks, each its own length, never a set of rails
                 {
-                    float w = Width(i / (float)N);
-                    PointF a = spine[i - 1], b = spine[i + 1];
-                    float dx = b.X - a.X, dy = b.Y - a.Y, len = MathF.Sqrt(dx * dx + dy * dy) + 1e-5f;
-                    float tx = dx / len, ty = dy / len;                                   // along the tail, root to tip
-                    foreach (float side in (float[])[1f, -1f])
+                    var pts = new List<PointF>();
+                    for (int i = from; i <= to; i++)
                     {
-                        float nx = -ty * side, ny = tx * side;                             // out of this edge
-                        Pen pen = side > 0 ? pale : dark;
-                        for (int j = 0; j < 2; j++)
-                        {
-                            // Every hair its own: a fixed scatter from its place in the row (never a comb of equal teeth).
-                            float scatter = MathF.Sin(i * 7.3f + j * 2.1f + side * 1.7f), scatter2 = MathF.Sin(i * 3.9f + j * 5.3f);
-                            float along = (j - 0.5f) * 0.5f + 0.15f * scatter2;             // two strokes a segment, spread along it
-                            PointF at = P(spine[i].X + tx * along * segLen + nx * w * 0.75f, spine[i].Y + ty * along * segLen + ny * w * 0.75f);
-                            float lean = 0.55f + 0.3f * scatter;                             // the hair leans back toward the root, each a little differently
-                            float hx = nx - tx * lean, hy = ny - ty * lean, hl = MathF.Sqrt(hx * hx + hy * hy);
-                            float length = (0.05f + 0.5f * w) * (0.75f + 0.35f * scatter2) * (side > 0 ? 1f : 0.45f);   // the inner edge's hair is short: long dark spikes on the ground side read as thorns
-                            g.DrawLine(pen, at, P(at.X + hx / hl * length, at.Y + hy / hl * length));
-                        }
+                        PointF a = spine[i - 1], b = spine[i + 1];
+                        float dx = b.X - a.X, dy = b.Y - a.Y, len = MathF.Sqrt(dx * dx + dy * dy) + 1e-5f;
+                        float w = Width(i / (float)N) * off;
+                        pts.Add(P(spine[i].X - dy / len * w, spine[i].Y + dx / len * w));
                     }
-                }
-            var core = new PointF[(N + 1) * 2];
-            for (int i = 0; i <= N; i++) { core[i] = left[i]; core[2 * N + 1 - i] = right[i]; }
-            using (var path = new GraphicsPath())
-            {
-                path.AddClosedCurve(core, 0.4f);
-                using var b = new SolidBrush(TailCore);
-                g.FillPath(b, path);
-            }
-            // The lit side of the plume: one smooth band inside the core, off centre toward the outer edge, in a tone
-            // between the core and the hair tips (the hair colour itself made a hard pale stripe: a two-tone leaf).
-            PointF[] li = Edge(1f, 0.62f), ri = Edge(-1f, 0.05f);
-            var inner = new PointF[(N + 1) * 2];
-            for (int i = 0; i <= N; i++) { inner[i] = li[i]; inner[2 * N + 1 - i] = ri[i]; }
-            using (var path = new GraphicsPath())
-            {
-                path.AddClosedCurve(inner, 0.4f);
-                using var b = new SolidBrush(TailLit);
-                g.FillPath(b, path);
-            }
-            // A frosting of pale hair tips along the lit band, in short strokes that follow the hair's lean.
-            using (var frost = new Pen(Color.FromArgb(170, 240, 206, 156), 0.018f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                for (int i = 2; i < N - 1; i++)
-                {
-                    PointF a = li[i], b = spine[i];
-                    g.DrawLine(frost, P(a.X * 0.85f + b.X * 0.15f, a.Y * 0.85f + b.Y * 0.15f), P(a.X * 0.5f + b.X * 0.5f, a.Y * 0.5f + b.Y * 0.5f));
+                    g.DrawCurve(streak, pts.ToArray(), 0.5f);
                 }
         }
 
-        // ---- the legs: each two bones, the foot placed, the knee worked out. Front: elbow back. Hind: knee forward. ----
-        void Leg(PointF joint, PointF foot, bool hind, Color col, float thick)
+        // ---- the far legs: a hind foot and a hand, behind the body ----
+        void Hand(PointF at, Color c) => Ell2(at, 0.05f, 0.04f, c);
+        void FootFlat(PointF at, Color c) => Blob([P(at.X - 0.06f, at.Y + 0.0f), P(at.X - 0.04f, at.Y + 0.07f), P(at.X + 0.12f, at.Y + 0.06f), P(at.X + 0.24f, at.Y + 0.035f), P(at.X + 0.25f, at.Y + 0.0f)], c, 0.3f);
+        void Arm(PointF shoulder, PointF hand, Color c, float thick)
         {
             const float L = 0.21f;
-            float dx = foot.X - joint.X, dy = foot.Y - joint.Y;
+            float dx = hand.X - shoulder.X, dy = hand.Y - shoulder.Y;
             float d = MathF.Min(MathF.Sqrt(dx * dx + dy * dy), 2 * L - 0.003f);
             float al = MathF.Acos(Math.Clamp(d / (2 * L), -1f, 1f));
-            float th = MathF.Atan2(dy, dx) + (hind ? al : -al);
-            PointF knee = P(joint.X + L * MathF.Cos(th), joint.Y + L * MathF.Sin(th));
-            PointF end = P(knee.X + (foot.X - knee.X) * 0.999f, knee.Y + (foot.Y - knee.Y) * 0.999f);
-            Bone(joint, knee, thick, thick * 0.8f, col);
-            Bone(knee, end, thick * 0.8f, thick * 0.6f, col);
-            if (hind) Ell(g, end.X + 0.06f, end.Y + 0.01f, 0.10f, 0.03f, col);      // the long hind foot
-            else Ell(g, end.X + 0.03f, end.Y + 0.005f, 0.055f, 0.03f, col);         // the hand
+            float th = MathF.Atan2(dy, dx) - al;                                           // the elbow back
+            PointF elbow = P(shoulder.X + L * MathF.Cos(th), shoulder.Y + L * MathF.Sin(th));
+            Bone(shoulder, elbow, thick, thick * 0.85f, c);
+            Bone(elbow, hand, thick * 0.85f, thick * 0.7f, c);
+            Hand(hand, c);
         }
-        PointF shoulder = P(chest.X - 0.02f, chest.Y - 0.08f), haunch = P(hip.X + 0.04f, hip.Y - 0.06f);
-        PointF pawL = P(q.Head.X + 0.06f, q.Head.Y - 0.20f), pawR = P(q.Head.X + 0.19f, q.Head.Y - 0.20f);
+        void HindLeg(PointF haunch, PointF foot, Color c, float thick, bool flat)
+        {
+            if (flat) { FootFlat(foot, c); return; }
+            const float L = 0.21f;
+            float dx = foot.X - haunch.X, dy = foot.Y - haunch.Y;
+            float d = MathF.Min(MathF.Sqrt(dx * dx + dy * dy), 2 * L - 0.003f);
+            float al = MathF.Acos(Math.Clamp(d / (2 * L), -1f, 1f));
+            float th = MathF.Atan2(dy, dx) + al;                                           // the hock forward (a squirrel's hind leg folds like a Z)
+            PointF knee = P(haunch.X + L * MathF.Cos(th), haunch.Y + L * MathF.Sin(th));
+            Bone(haunch, knee, thick, thick * 0.8f, c);
+            Bone(knee, foot, thick * 0.8f, thick * 0.6f, c);
+            Blob([P(foot.X - 0.04f, foot.Y), P(foot.X - 0.03f, foot.Y + 0.05f), P(foot.X + 0.10f, foot.Y + 0.045f), P(foot.X + 0.17f, foot.Y + 0.02f), P(foot.X + 0.17f, foot.Y - 0.005f)], c, 0.3f);
+        }
+        PointF shoulder = P(chest.X + 0.02f, chest.Y - 0.02f), haunch = P(hip.X + 0.02f, hip.Y - 0.04f);
+        PointF pawL = P(q.Head.X + 0.04f, q.Head.Y - 0.22f), pawR = P(q.Head.X + 0.16f, q.Head.Y - 0.22f);
         if (front < 0.5f)
         {
-            Leg(P(shoulder.X + 0.04f, shoulder.Y), q.PawsUp ? pawR : q.FarFore, false, LimbFar, 0.075f);
-            Leg(P(haunch.X + 0.03f, haunch.Y), q.FarHind, true, LimbFar, 0.10f);
+            Arm(P(shoulder.X + 0.03f, shoulder.Y), q.PawsUp ? pawR : q.FarFore, FurDark, 0.075f);
+            HindLeg(P(haunch.X + 0.03f, haunch.Y), q.FarHind, FurDark, 0.10f, q.HindFlat);
         }
 
-        // ---- the body: a plump round haunch at the rump, a bean from hip to chest with a hump, the cream belly and chest ----
-        // Rounder than the first version (a longer, flatter body with a thin tail was a rat's): the haunch is a big
-        // disc that IS the outline at the back, the belly is deep, and nothing on the body is drawn with a pen.
-        float bw = 1f - 0.5f * front;                                        // narrower seen from the front
-        Ell2(P(hip.X - 0.01f, hip.Y - 0.01f), 0.27f * bw, 0.25f, FurDark, tilt - 25f);       // the haunch, big and round
-        Ell2(hip, 0.24f * bw, 0.23f, Fur);
-        Ell2(mid, 0.27f * q.BodyScale * bw, 0.21f, Fur, tilt);
-        Ell2(chest, 0.20f * bw, 0.18f, Fur);
-        Ell2(P(mid.X + 0.05f, mid.Y - 0.08f), 0.25f * q.BodyScale * bw, 0.12f, Belly, tilt);   // the pale belly, deep (the thigh's shading disc is gone: it read as a hole in the back)
-        Ell2(P(chest.X + 0.04f, chest.Y - 0.04f), 0.14f * bw, 0.14f, Belly);                   // the cream chest
-        Ell2(P(mid.X - 0.02f, mid.Y + 0.175f), 0.22f * q.BodyScale * bw, 0.05f, FurDark, tilt);   // a darker ridge along the top of the back, half over the outline (inside the body it was a dark slot)
+        // ---- the body: one pear, built on the hip and the chest ----
+        {
+            // The outline runs from the throat, down the front over the belly, under the rump, up the back to the neck.
+            PointF throat = P(chest.X + 0.14f * bw, chest.Y + 0.10f);
+            PointF breast = P(chest.X + 0.22f * bw, chest.Y - 0.08f);
+            PointF belly = P(mid.X + (0.16f + 0.10f * upright) * bw * sc, mid.Y - 0.22f - 0.04f * upright);
+            PointF under = P(hip.X - 0.02f, hip.Y - 0.26f + 0.02f * upright);
+            PointF rumpLow = P(hip.X - (0.28f + 0.06f * upright) * bw, hip.Y - 0.16f);
+            PointF rumpBack = P(hip.X - (0.30f + 0.04f * upright) * bw, hip.Y + 0.06f);
+            PointF back = P(mid.X - 0.10f * sc, mid.Y + 0.24f + 0.02f * upright);
+            PointF wither = P(chest.X - 0.06f, chest.Y + 0.20f);
+            PointF nape = P(chest.X + 0.04f, chest.Y + 0.20f);
+            Blob([throat, breast, belly, under, rumpLow, rumpBack, back, wither, nape], Fur, 0.55f);
+            // The cream front: chin to the lap, wide, one soft shape.
+            Blob([P(chest.X + 0.10f * bw, chest.Y + 0.08f), P(chest.X + 0.19f * bw, chest.Y - 0.06f), P(mid.X + 0.14f * bw * sc, mid.Y - 0.18f), P(hip.X + 0.02f, hip.Y - 0.20f), P(hip.X - 0.02f, hip.Y - 0.08f), P(mid.X + 0.02f * sc, mid.Y - 0.06f), P(chest.X + 0.02f * bw, chest.Y - 0.02f)], Belly, 0.5f);
+            // The haunch: a round mass over the rump, the thigh's muscle, in the fur colour with a soft shade line.
+            Ell2(P(hip.X - 0.06f * bw, hip.Y - 0.02f), 0.21f * bw, 0.19f, Fur);   // (a translucent shade disc on it read as a patch; the mass alone is enough)
+        }
 
-        // ---- the head: big and nearly round, a short muzzle, a round pale cheek, small round ears, a big eye with a pale ring and a glint ----
-        // What makes a squirrel's face cute rather than a rat's: the skull is round and big for the body, the muzzle is
-        // short, the ears are small rounded cups (not tall and pointed), and the eye is large, high and ringed with
-        // pale fur. The first version had a long muzzle and tall tufted ears: a rat in a tawny coat.
+        // ---- the head: a round skull, a short snout, the big eye, a cream cheek, tall tufted ears ----
         {
             var st = g.Save();
             g.TranslateTransform(q.Head.X, q.Head.Y);
             g.RotateTransform(q.HeadTilt);
-            float hw = 0.21f * (1f - 0.1f * front), muzzle = 0.09f * (1 - front);
-            // The ears: one in profile; both when turned toward us.
-            void Ear(float ex, float tiltDeg)
+            float sk = 0.20f * (1f - 0.08f * front), snout = 1f - front;
+            // The ears: tall leaves standing up from the back of the skull, pink inside, a tuft of hair at the tip.
+            void Ear(float ex, float tiltDeg, Color c)
             {
-                Ell(g, ex, 0.165f, 0.062f, 0.072f, Fur, tiltDeg);                               // a small round cup
-                Ell(g, ex + 0.004f, 0.16f, 0.036f, 0.046f, Color.FromArgb(220, 200, 150, 130), tiltDeg);   // its pink inside
-                Ell(g, ex - 0.004f, 0.232f, 0.024f, 0.026f, FurDark, tiltDeg);                  // a little tuft on top
+                Ell(g, ex, 0.22f, 0.062f, 0.13f, c, tiltDeg);
+                Ell(g, ex + 0.004f, 0.21f, 0.034f, 0.085f, EarIn, tiltDeg);
+                using var tuft = new Pen(FurDark, 0.022f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                float a = (90f - tiltDeg) * MathF.PI / 180f;
+                PointF top = P(ex + 0.13f * MathF.Cos(a), 0.22f + 0.13f * MathF.Sin(a));
+                g.DrawLine(tuft, top, P(top.X - 0.015f, top.Y + 0.07f));
+                g.DrawLine(tuft, top, P(top.X + 0.03f, top.Y + 0.06f));
             }
-            Ear(-0.05f - 0.06f * front, -8f);
-            if (front > 0.3f) Ear(0.08f + 0.04f * front, 8f);
-            Ell(g, 0f, 0f, hw, 0.20f, Fur);                                                    // the skull, nearly round
-            Ell(g, 0.09f + 0.05f * (1 - front), -0.06f, 0.11f * (1 - 0.3f * front), 0.095f, Belly);   // the pale cheek and short muzzle
-            Ell(g, 0.11f + muzzle * 0.6f, -0.02f, 0.028f, 0.024f, Ink);                       // the nose, small and dark
-            using (var mouth = new Pen(Ink, 0.014f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                g.DrawLine(mouth, 0.08f, -0.085f - 0.012f * q.Nib, 0.13f, -0.06f);
+            Ear(-0.05f - 0.05f * front, -8f, front > 0.3f ? FurDark : Fur);
+            if (front > 0.3f) Ear(0.08f + 0.03f * front, 8f, Fur);
+            Ell(g, 0f, 0f, sk, 0.195f, Fur);                                               // the skull
+            Blob([P(0.06f, 0.08f), P(0.26f * snout + 0.02f, -0.02f), P(0.28f * snout + 0.02f, -0.07f), P(0.20f * snout + 0.02f, -0.12f), P(0.02f, -0.14f)], Fur, 0.35f);   // the snout, short and tipped down
+            Blob([P(0.04f, -0.04f), P(0.22f * snout + 0.02f, -0.07f), P(0.19f * snout + 0.02f, -0.13f), P(0.04f, -0.16f), P(-0.08f, -0.12f)], Belly, 0.4f);                 // the cream cheek and chin
+            Ell(g, 0.27f * snout + 0.02f, -0.065f, 0.03f, 0.026f, Ink);                     // the nose
+            using (var mouth = new Pen(Ink, 0.012f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                g.DrawLine(mouth, 0.14f * snout + 0.02f, -0.105f - 0.012f * q.Nib, 0.20f * snout + 0.02f, -0.085f);
             void Eye(float ex, float ey)
             {
-                Ell(g, ex, ey, 0.058f, 0.06f, Color.FromArgb(226, 206, 178));                  // the pale ring round the eye, soft (a white one was a goggle)
-                Ell(g, ex, ey, 0.05f, 0.052f, Ink);                                            // the eye, big and round
-                Ell(g, ex + 0.015f, ey + 0.017f, 0.017f, 0.017f, Color.White);                  // the glint
+                Ell(g, ex, ey, 0.058f, 0.062f, Ink);                                        // big and round
+                Ell(g, ex + 0.018f, ey + 0.022f, 0.02f, 0.02f, Color.White);                  // the glint
+                Ell(g, ex - 0.012f, ey - 0.03f, 0.009f, 0.009f, Color.FromArgb(200, 255, 255, 255));
             }
-            Eye(0.055f - 0.05f * front, 0.05f);
-            if (front > 0.3f) Eye(-0.075f, 0.05f);
-            using (var wh = new Pen(Color.FromArgb(120, 236, 226, 210), 0.008f))
-                for (int i = -1; i <= 1; i++) g.DrawLine(wh, 0.14f, -0.045f, 0.25f * (1 - front), -0.035f + i * 0.04f);
+            Eye(0.07f - 0.05f * front, 0.05f);
+            if (front > 0.3f) Eye(-0.08f, 0.05f);
             g.Restore(st);
         }
 
@@ -437,24 +446,18 @@ internal static class SquirrelArt
         if (q.Acorn == 1)
         {
             float ca = MathF.Cos(q.HeadTilt * MathF.PI / 180f), sa = MathF.Sin(q.HeadTilt * MathF.PI / 180f);
-            const float mx = 0.21f, my = -0.03f;
+            const float mx = 0.24f, my = -0.09f;
             Acorn(g, P(q.Head.X + mx * ca - my * sa, q.Head.Y + mx * sa + my * ca), 8f + q.HeadTilt);
         }
-        else if (q.Acorn == 2) Acorn(g, P(q.Head.X + 0.13f, q.Head.Y - 0.165f - 0.01f * q.Nib), 20f + 25f * q.Nib);
+        else if (q.Acorn == 2) Acorn(g, P(q.Head.X + 0.10f, q.Head.Y - 0.19f - 0.01f * q.Nib), 20f + 25f * q.Nib);
 
         // ---- the near legs, in front of the body ----
-        if (q.HindFlat) Ell(g, q.NearHind.X + 0.10f, 0.03f, 0.15f, 0.05f, Fur);               // the long hind foot flat on the ground
-        Leg(shoulder, q.PawsUp ? pawL : q.NearFore, false, LimbNear, 0.08f);
-        Leg(haunch, q.NearHind, true, LimbNear, 0.095f);
+        Arm(shoulder, q.PawsUp ? pawL : q.NearFore, Fur, 0.08f);
+        HindLeg(haunch, q.NearHind, Fur, 0.10f, q.HindFlat);
         if (front >= 0.5f)
         {
-            Leg(P(shoulder.X + 0.04f, shoulder.Y), q.PawsUp ? pawR : q.FarFore, false, LimbFar, 0.075f);
-            Leg(P(haunch.X + 0.03f, haunch.Y), q.FarHind, true, LimbFar, 0.10f);
-        }
-        if (q.PawsUp)
-        {
-            Ell2(pawL, 0.04f, 0.035f, LimbNear);                                               // the little hands round the nut
-            Ell2(pawR, 0.04f, 0.035f, LimbNear);
+            Arm(P(shoulder.X + 0.03f, shoulder.Y), q.PawsUp ? pawR : q.FarFore, FurDark, 0.075f);
+            HindLeg(P(haunch.X + 0.03f, haunch.Y), q.FarHind, FurDark, 0.10f, q.HindFlat);
         }
     }
 

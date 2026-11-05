@@ -175,6 +175,8 @@ a fed koi was as hungry as before and went straight back for the next.
     Program.cs                     Main(), plus the definition
     ThanksgivingScene.cs           backdrop + the geese + the smoke + the window lamplight + the scarf + the shared engine dropping leaves
     ThanksgivingPainter.cs         paints the harvest dusk, the moon, the farmhouse and barn, the field, the fence, the scarecrow, the pumpkins, the maples (one with a hollow in its roots)
+    Pack.cs                        the coyotes and the rabbits on the far lane: minds, the chase, the catch, a minute's play with the carcass, the leave; Threat notices as they pass
+    CoyoteArt.cs, RabbitArt.cs     how a coyote and a cottontail are drawn and the poses they take (trot, gallop, sit, dig, carry, shake, pounce, pull; sit, graze, hop, flee, dead, limp)
     FieldWork.cs                   the tractor baling the far lane: a resident with a job (baling, hauling, away), the bales it leaves, the Loud and Food notices it pins
     TractorArt.cs                  how the tractor, the round baler (with its tailgate) and the hay wagon (with a growing heap) are drawn, and the wheels turned by distance rolled
     ThanksgivingSettings.cs        declares its knobs
@@ -187,7 +189,7 @@ a fed koi was as hungry as before and went straight back for the next.
     MouseParade.cs                 the fourth: four mice with acorns scattered by a swooping sparrow, hiding behind the pumpkins by depth
     PatchLife.cs                   the mice, birds and squirrel that live in the patch: a Mind each from Core/Minds, steps by Ground.Step among the pumpkins' feet, drawn far to near against the depth picture
     SquirrelArt.cs                 how a squirrel is drawn and the poses it can take (the bound, a hop with its crouch and settle, a turn through the front view, sitting, digging, chattering), shared with the fence squirrel
-    PoseSheet.cs                   test aid: PECKWORKS_SHEET=squirrel:<png> paints every squirrel pose big on one sheet and quits (a painter is judged there first, every pose at once, before it is watched moving)
+    PoseSheet.cs                   test aid: PECKWORKS_SHEET=squirrel:<png> (or coyote:, rabbit:) paints every pose big on one sheet and quits (a painter is judged there first, every pose at once, against reference pictures, before it is watched moving)
     MouseArt.cs, BirdArt.cs        how a field mouse and a small songbird are drawn, shared by the stories and the patch's life
     Happenings/                    eighteen small random events (a turkey, a raccoon, a pheasant), one class per file
 

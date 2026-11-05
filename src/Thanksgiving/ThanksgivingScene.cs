@@ -57,6 +57,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly TurkeyFlock _flock;           // the wild turkeys that live in the field
     private readonly DeerHerd _herd;               // the doe and her fawn at the far side of it
     private readonly FieldWork _work;              // the tractor baling the far lane, and the bales it leaves (FieldWork.cs)
+    private readonly Pack _pack;                   // the coyotes and the rabbits on the far lane (Pack.cs)
     private readonly StoryDirector _stories;       // the little scenes (the acorn caper, hide and seek, the fawn's apple, the mouse parade), one every minute or two
     private readonly Noticeboard _board;           // what is going on, for the residents' senses (Core/Minds/Senses.cs)
     private (Sense Kind, float X, float Y, float Reach, float At)? _testNotice;
@@ -145,6 +146,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _flock = new TurkeyFlock(_scenery, settings.TurkeyCount, _rng, _board);
         _herd = new DeerHerd(_scenery, settings.DeerCount, _rng, _board);
         _work = new FieldWork(_scenery, _rng, _board);
+        _pack = new Pack(_scenery, settings.CoyoteCount, 4, _rng, _board);
         _stories = new StoryDirector(_scenery, _happenings, _rng, _board, c => [new AcornCaper(c), new HideAndSeek(c), new FawnApple(c, _herd), new MouseParade(c)]);
         _life = new PatchLife(_scenery, settings.CritterCount, _rng, _board);
         string? notice = Environment.GetEnvironmentVariable("PECKWORKS_NOTICE");      // test aid: "Loud;0.5;0.72;0.8;3" posts that kind at (xf, yf) with reach in U at that second
@@ -437,6 +439,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _life.Lull = _stories.Playing;             // the patch's critters keep out of a story's way
         _herd.Update(dt);
         _work.Update(dt);
+        _pack.Update(dt);
         _life.Update(dt);
         _happenings.Update(elapsedSeconds);
     }
@@ -490,6 +493,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         //     The tractor and its bales first of all: the lane is the field's far edge, behind every deer and turkey.
         //     Then the deer: they stand nearer the lane than the turkeys wander.
         _work.Draw(fb);
+        _pack.Draw(fb);
         _herd.Draw(fb);
         _flock.Draw(fb);
 

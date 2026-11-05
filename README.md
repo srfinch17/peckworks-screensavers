@@ -594,6 +594,17 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   the hay wagon and picks them up as it passes, the heap on the wagon growing. The deer lift their
   heads as it goes by and the timid ones trot off; each bale it drops draws the turkeys over to
   scratch at the loose hay.
+- **A pack of coyotes, and the rabbits they hunt**, on the far lane at the very back of the field. The
+  rabbits are always there, tiny, sitting and grazing and hopping about. Every few minutes the pack
+  trots in: the coyotes roam, stop, sit, dig at the ground, and now and then one gives chase at a
+  gallop while a rabbit flees in long hops. Most chases fail; occasionally one is caught, and then the
+  catcher shakes it, drops it, and the whole pack plays with the carcass for a minute, pouncing on it,
+  tossing it in the air, tugging it between two of them, carrying it a few steps, before they trot off
+  with it. A tiny, horrifying thing way in the background, to reward the viewer who keeps watching. The
+  whole field knows the pack is through: the deer lift their heads and the timid trot off, the turkeys
+  hurry. Knob "Coyotes" (0 to 4; 0 keeps the rabbits).
+- A windbreak of small trees in autumn colour stands along the far edge of the field, where the hill
+  meets it: nearer than the hills' treeline, behind everything that moves on the field.
 - A white-tailed doe, her fawn and a buck with antlers graze at the far side of the field, lift
   their heads to look about, and move off a few steps at a time, the fawn trotting after her.
 - The turkeys stand on turkey legs: the drumstick up in the feathers, the hock (the joint that looks
@@ -633,9 +644,10 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   sniff, nibble at one, hide behind one and peek; birds get about by FLYING (a few hops at most): a
   burst off the ground, a low bounding flight across the patch, wings beating then shut into a dart
   and beating again, a flare onto the ground or a pumpkin's shoulder, where they peck and look about
-  on proper legs (a hock bent backward, a thin shank, long toes); the squirrel (a round-headed, big-eyed
-  one with a plume of a tail as big as itself, held up in a question mark when it sits and trailing in an
-  arc behind it when it bounds) bounds through, sits up,
+  on proper legs (a hock bent backward, a thin shank, long toes); the squirrel (drawn the way cute flat
+  vector squirrels are: a rust-red pear of a body with a cream front, a round head with a big eye and tall
+  tufted ears, and a smooth plume of a tail as tall as itself that hooks forward over its head when it
+  sits and streams in an S behind it when it bounds) bounds through, sits up,
   scratches at the earth and darts behind a pumpkin, and sinks into its run and sits up out of it
   through the crouch (never a one-frame pop); a mouse a squirrel bounds past bolts. Everything on the ground is hidden by the
   pumpkins nearer than it (a depth picture the painter makes), which is what puts them IN the patch.

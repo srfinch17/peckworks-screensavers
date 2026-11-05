@@ -243,6 +243,9 @@ internal sealed class Deer : Happening
             float x = _s.Width * (0.08f + 0.84f * (float)rng.NextDouble());
             if (MathF.Abs(x - farmX) < u * 0.20f || MathF.Abs(x - barnX) < u * 0.24f) continue;   // the buildings (and the silo) hide it
             if (MathF.Abs(x - scarecrowX) < u * 0.22f) continue;   // the scarecrow's head and scarf reach the ridge line: a doe standing behind them looked perched on its shoulder
+            bool behindTree = false;
+            foreach (var (at, r) in _s.FarTrees) if (MathF.Abs(x - at.X) < r + reach) behindTree = true;   // the windbreak's canopies would hide them
+            if (behindTree) continue;
             float footY = RidgeY(_s.FarRidge, x);
 
             // Far from the moon, measured to the middle of the animal.

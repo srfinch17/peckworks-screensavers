@@ -61,6 +61,7 @@ internal sealed class ThanksgivingScenery
 
     // ---- The field ----
     public required List<(PointF At, float R)> HayBales { get; init; } // each round bale: center and radius, standing on the field
+    public required List<(PointF At, float R)> FarTrees { get; init; } // the windbreak along the field's far edge: each canopy's centre and size (the ridge deer keep clear of them)
 
     // ---- The near ground and what stands on it ----
     public required float[] FencePosts { get; init; }                // the x of every fence post
@@ -173,6 +174,10 @@ internal static class ThanksgivingPainter
         float scarecrowX = farmFoot.X + u * 0.095f, scarecrowTall = u * 0.085f;
         float scarecrowFoot = Brushwork.RidgeYAt(nearRidge, scarecrowX) + u * 0.010f;
         PaintScarecrow(g, scarecrowX, scarecrowFoot, scarecrowTall, u);
+        // A windbreak of trees along the far edge of the field, where the hill meets it: nearer than the hills' treeline,
+        // farther than everything that moves on the field (his line: "another set of trees closer to the foreground but not
+        // in front of the highest branches"). Painted here, with the farm, so the lane's animals pass in front of them.
+        List<(PointF At, float R)> farTrees = PaintFarTrees(g, w, u, nearRidge, farmFoot.X, barnFoot.X, scarecrowX, rng);
         g.Flush();
         uint[] upToFarm = Brushwork.ToPixels(bmp);   // a second copy: "unchanged since here" = nothing stands in front of the farm (the scarecrow is part of it)
 
@@ -280,6 +285,7 @@ internal static class ThanksgivingPainter
             BarnLoft = new RectangleF(barnFoot.X - u * 0.009f, barnTop - u * 0.026f, u * 0.018f, u * 0.016f),
             BarnDoor = new RectangleF(barnFoot.X - barnW * 0.16f, barnFoot.Y - barnH * 0.72f, barnW * 0.32f, barnH * 0.72f),
             HayBales = bales,
+            FarTrees = farTrees,
             FencePosts = posts,
             ScarecrowFoot = new PointF(scarecrowX, scarecrowFoot), ScarecrowHeight = scarecrowTall,
             ScarecrowHead = new PointF(scarecrowX, scarecrowFoot - scarecrowTall * 0.80f),
@@ -669,6 +675,33 @@ internal static class ThanksgivingPainter
             bales.Add((new PointF(bx, footY - r), r));
         }
         return bales;
+    }
+
+    /// <summary>
+    /// The windbreak along the field's far edge: half a dozen trees of mixed colour standing on the line where the
+    /// nearer hill meets the field, their feet a touch below it so they stand ON the field's edge. They keep clear of
+    /// the farmhouse, the scarecrow and the barn, and stay short enough that their tops never reach the far ridge
+    /// where the silhouette deer walk. The maples' own trunk and canopy brushes, at a smaller size.
+    /// </summary>
+    private static List<(PointF At, float R)> PaintFarTrees(Graphics g, int w, float u, PointF[] nearRidge, float farmX, float barnX, float scarecrowX, Random rng)
+    {
+        var trees = new List<(PointF At, float R)>();
+        var oak = new BlossomPalette(Color.FromArgb(240, 196, 120, 40), Color.FromArgb(150, 70, 30), Color.FromArgb(246, 180, 70));
+        var maple = new BlossomPalette(Color.FromArgb(240, 204, 92, 30), Color.FromArgb(158, 38, 24), Color.FromArgb(250, 196, 60));
+        var gold = new BlossomPalette(Color.FromArgb(240, 222, 170, 50), Color.FromArgb(170, 110, 30), Color.FromArgb(252, 220, 110));
+        Color bark = Color.FromArgb(62, 44, 36);
+        (float X, float Lift, float R, int Kind)[] spots = [(0.055f, 0.070f, 0.052f, 0), (0.135f, 0.058f, 0.044f, 1), (0.205f, 0.066f, 0.048f, 2), (0.465f, 0.060f, 0.046f, 1), (0.755f, 0.068f, 0.050f, 0), (0.845f, 0.056f, 0.042f, 2)];
+        foreach (var s in spots)
+        {
+            float x = w * s.X;
+            if (MathF.Abs(x - farmX) < u * 0.16f || MathF.Abs(x - barnX) < u * 0.17f || MathF.Abs(x - scarecrowX) < u * 0.08f) continue;
+            float foot = Brushwork.RidgeYAt(nearRidge, x) + u * 0.014f;
+            float cy = foot - u * s.Lift, r = u * s.R * (0.9f + 0.2f * (float)rng.NextDouble());
+            Brushwork.Trunk(g, x, foot, cy, r, rng, bark);
+            Brushwork.Canopy(g, x, cy, r, u, rng, s.Kind == 0 ? oak : s.Kind == 1 ? maple : gold);
+            trees.Add((new PointF(x, cy), r));
+        }
+        return trees;
     }
 
     internal static void PaintBale(Graphics g, float x, float footY, float r, Random rng)

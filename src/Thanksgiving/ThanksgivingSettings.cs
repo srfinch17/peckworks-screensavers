@@ -10,7 +10,7 @@ namespace Thanksgiving;
 /// </summary>
 public sealed class ThanksgivingSettings : ScreensaverSettings
 {
-    private readonly IntSetting _density, _speed, _wind, _size, _geese, _turkeys, _deer, _critters, _surprises;
+    private readonly IntSetting _density, _speed, _wind, _size, _geese, _turkeys, _deer, _coyotes, _critters, _surprises;
 
     public ThanksgivingSettings() : base("Thanksgiving")
     {
@@ -21,6 +21,7 @@ public sealed class ThanksgivingSettings : ScreensaverSettings
         _geese = Add(nameof(GeeseCount), "Geese", 0, 15, 7);
         _turkeys = Add(nameof(TurkeyCount), "Turkeys", 0, 6, 3);
         _deer = Add(nameof(DeerCount), "Deer", 0, 3, 3);   // doe, fawn, buck (the buck is the third)
+        _coyotes = Add(nameof(CoyoteCount), "Coyotes", 0, 4, 3);   // the pack on the far lane (0 keeps the rabbits and loses the pack)
         _critters = Add(nameof(CritterCount), "Patch critters", 0, 12, 6);
         _surprises = Add(nameof(SurprisePercent), "Surprises", 0, 300, 100, "%");
     }
@@ -45,6 +46,7 @@ public sealed class ThanksgivingSettings : ScreensaverSettings
 
     /// <summary>How many deer live at the far side of the field: 1 a doe, 2 a doe and her fawn, 3 two does and a fawn. 0 = none.</summary>
     public int DeerCount => _deer.Value;
+    public int CoyoteCount => _coyotes.Value;
 
     /// <summary>How many small creatures (mice, birds, a squirrel) live in the pumpkin patch. 0 = none.</summary>
     public int CritterCount => _critters.Value;
