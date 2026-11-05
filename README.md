@@ -585,6 +585,16 @@ pumpkin patch, maples in full colour, and oak branches with the year's last leav
   few steps, stand and look about, and the tom fans his tail now and then.
 - A white-tailed doe and her fawn graze at the far side of the field, lift their heads to look
   about, and move off a few steps at a time, the fawn trotting after her.
+- **The acorn caper**, every minute or two on the near ground: a grey squirrel peeks out of the hollow
+  in the left maple's roots, hops out, picks an acorn from the pile under the oak branch, climbs its
+  tree to the fence rail, bounds along the rail (behind the corn shock), drops down, digs a hole with
+  the earth flying, buries the nut, pats the mound flat, looks round, and goes home up the tree. A
+  second squirrel comes head first down the right maple, sniffs its way along the rail, digs the nut
+  up and sits holding it. The first squirrel sees from its tree, freezes, races down and over, and
+  the two chatter at each other, tails lashing, then roll in a cloud of dust with tails and paws
+  sticking out of it. The acorn is flung out of the scuffle, and while they are still rolling a mouse
+  creeps out from the corn shock, sniffs it, takes it and scurries home. The dust settles; the two
+  squirrels sit, look at where it was, look at each other, and each goes back up its own tree.
 - Smoke drifts from the chimney, the windows' lamplight wanders, and the scarecrow's red scarf streams
   in the breeze.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the maples and the

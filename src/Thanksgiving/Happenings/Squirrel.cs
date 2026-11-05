@@ -111,15 +111,43 @@ internal sealed class Squirrel : Happening
 
     // ----------------------------------------------------------------- draw
 
-    /// <summary>The upper rail's height at x (the painter's own curve: straight between posts with a small sag).</summary>
-    private float RailAt(float x)
+    /// <summary>The upper rail's height at x (the painter's own curve: straight between posts with a small sag). Shared with the acorn caper.</summary>
+    internal static float RailAt(ThanksgivingScenery s, float x)
     {
-        float[] p = _s.FencePosts;
-        if (x <= p[0] || x >= p[^1]) return _s.RailY(x, 1);
+        float[] p = s.FencePosts;
+        if (x <= p[0] || x >= p[^1]) return s.RailY(x, 1);
         int i = 0;
         while (i + 2 < p.Length && p[i + 1] <= x) i++;
         float f = (x - p[i]) / (p[i + 1] - p[i]);
-        return _s.RailY(p[i], 1) + (_s.RailY(p[i + 1], 1) - _s.RailY(p[i], 1)) * f + _s.U * 0.004f * 4 * f * (1 - f) * 0.5f;
+        return s.RailY(p[i], 1) + (s.RailY(p[i + 1], 1) - s.RailY(p[i], 1)) * f + s.U * 0.004f * 4 * f * (1 - f) * 0.5f;
+    }
+
+    private float RailAt(float x) => RailAt(_s, x);
+
+    /// <summary>The same acorn the squirrel carries, alone on a small sheet (its middle at the sheet's centre), turned by "angDeg". For the caper's nut pile and the nut that gets away.</summary>
+    internal static Sprite PaintAcorn(float k, float angDeg)
+    {
+        int size = (int)(k * 0.22f) + 4;
+        return Sprite.Paint(size, size, g =>
+        {
+            g.TranslateTransform(size / 2f, size / 2f);
+            g.ScaleTransform(k, -k);
+            Acorn(g, P(0, 0), angDeg);
+        });
+    }
+
+    private static void Acorn(Graphics g, PointF at, float angDeg)
+    {
+        var st = g.Save();
+        g.TranslateTransform(at.X, at.Y);
+        g.RotateTransform(angDeg);
+        Ell(g, 0f, 0f, 0.075f, 0.058f, Color.FromArgb(150, 98, 46));
+        Ell(g, -0.018f, 0.012f, 0.03f, 0.02f, Color.FromArgb(200, 180, 128, 70));
+        using (var rim = new Pen(Color.FromArgb(160, 60, 34, 14), 0.012f))     // a dark rim, so it reads on ground of nearly its own colour
+            g.DrawEllipse(rim, -0.075f, -0.058f, 0.15f, 0.116f);
+        using (var cap = new SolidBrush(Color.FromArgb(84, 54, 28)))
+            g.FillPie(cap, -0.058f, -0.07f, 0.116f, 0.14f, 70, 220);       // the scaly cap on its end
+        g.Restore(st);
     }
 
     public override void Draw(FrameBuffer fb, float t)
@@ -195,36 +223,106 @@ internal sealed class Squirrel : Happening
     /// nib: how far the mouth has chewed (0 to 1). tail: which of four tail-flick poses. look: head tipped up.
     /// </summary>
     private Sprite Page(float phase, float sit, float nib, int tail, bool look) =>
-        Sprite.Paint(_w, _h, g =>
+        PaintPage(_k, _w, _h, _ox, _by, phase, sit, nib, tail, look, _bound / _k);
+
+    /// <summary>
+    /// Paints one page of the squirrel onto a sheet "w" by "h" pixels, the
+    /// feet's origin at "ox" across and "by" down, "k" pixels to the squirrel
+    /// unit (about its body length). Shared with the acorn caper that lives on
+    /// the near ground (AcornCaper.cs), which adds: "acorn" false for a
+    /// squirrel with nothing in its mouth or paws; "dig" 1 for the digging
+    /// pose (body low, nose to the ground, forepaws scrabbling by "digPhase",
+    /// 0 to 1 for one scrabble); and "rotate", degrees to turn the whole
+    /// picture about the feet's origin, so the run pages become a climb (-90
+    /// is head up the trunk, +90 head first down it).
+    /// </summary>
+    internal static Sprite PaintPage(float k, int w, int h, int ox, int by, float phase, float sit, float nib, int tail, bool look, float bound,
+        bool acorn = true, float dig = 0f, float digPhase = 0f, float rotate = 0f) =>
+        Sprite.Paint(w, h, g =>
         {
-            g.TranslateTransform(_ox, _by);
-            g.ScaleTransform(_k, -_k);                              // bird... squirrel units, y UP from the rail
-            Squirrel_(g, phase, sit, nib, tail, look, _bound / _k);
+            g.TranslateTransform(ox, by);
+            if (rotate != 0f) g.RotateTransform(rotate);
+            g.ScaleTransform(k, -k);                                // bird... squirrel units, y UP from the rail
+            Squirrel_(g, phase, sit, nib, tail, look, bound, acorn, dig, digPhase);
+        });
+
+    /// <summary>
+    /// The squirrel's head alone, poking out of a hole: for the caper's hollow
+    /// in the maple's roots. The sheet's origin (ox, by) is the middle of the
+    /// opening; the head sits a little above it with two paws on the lip, and
+    /// everything below the lip is left out (that part is inside the tree).
+    /// </summary>
+    internal static Sprite PaintPeek(float k, int w, int h, int ox, int by, float outBy, bool blink) =>
+        Sprite.Paint(w, h, g =>
+        {
+            g.TranslateTransform(ox, by);
+            g.ScaleTransform(k, -k);
+            using (var lipClip = new GraphicsPath())
+            {
+                lipClip.AddRectangle(new RectangleF(-2f, -0.02f, 4f, 3f));
+                g.SetClip(lipClip);                                 // nothing below the lip of the hollow
+            }
+            float rise = -0.30f + 0.42f * outBy;                    // how far the head has come up out of the dark
+            Head(g, P(0.02f, rise), -6f, 0f, false, blink);
+            Ell(g, -0.12f, rise - 0.12f, 0.045f, 0.035f, Limbs);    // two paws on the lip
+            Ell(g, 0.16f, rise - 0.12f, 0.045f, 0.035f, Limbs);
         });
 
     private static PointF P(float x, float y) => new(x, y);
     private static float Lerp(float a, float b, float t) => a + (b - a) * t;
     private static PointF Lerp(PointF a, PointF b, float t) => P(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t));
 
-    private static void Squirrel_(Graphics g, float phase, float sit, float nib, int tail, bool look, float bound)
+    private static void Ell(Graphics g, float cx, float cy, float rx, float ry, Color c, float tilt = 0)
     {
-        void Ell(float cx, float cy, float rx, float ry, Color c, float tilt = 0)
+        var st = g.Save();
+        g.TranslateTransform(cx, cy);
+        g.RotateTransform(tilt);
+        using var b = new SolidBrush(c);
+        g.FillEllipse(b, -rx, -ry, rx * 2, ry * 2);
+        g.Restore(st);
+    }
+
+    /// <summary>The head at "at", turned by "tilt" degrees (nose up is positive): an ear, the big round head, the muzzle, nose, mouth, eye and whiskers.</summary>
+    private static void Head(Graphics g, PointF at, float tilt, float nib, bool look, bool blink = false)
+    {
+        var st = g.Save();
+        g.TranslateTransform(at.X, at.Y);
+        g.RotateTransform(tilt);
+        Ell(g, -0.05f, 0.14f, 0.06f, 0.095f, Fur, -10f);                       // the ear
+        Ell(g, -0.05f, 0.13f, 0.03f, 0.06f, Color.FromArgb(200, 168, 150, 150), -10f);
+        using (var tuft = new Pen(FurDark, 0.02f) { StartCap = LineCap.Round }) g.DrawLine(tuft, -0.055f, 0.2f, -0.07f, 0.265f);
+        Ell(g, 0f, 0f, 0.185f, 0.165f, Fur);                                  // a big round head: the cute part
+        Ell(g, 0.10f, -0.05f, 0.115f, 0.09f, Color.FromArgb(235, 206, 200, 196)); // the paler muzzle and cheek
+        Ell(g, 0.19f, -0.015f, 0.032f, 0.026f, Color.FromArgb(40, 30, 34));      // the nose
+        // the mouth: open a little as it chews
+        using (var mouth = new Pen(Ink, 0.016f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            g.DrawLine(mouth, 0.12f, -0.08f - 0.012f * nib, 0.17f, -0.055f);
+        if (blink)
         {
-            var st = g.Save();
-            g.TranslateTransform(cx, cy);
-            g.RotateTransform(tilt);
-            using var b = new SolidBrush(c);
-            g.FillEllipse(b, -rx, -ry, rx * 2, ry * 2);
-            g.Restore(st);
+            using var lid = new Pen(Ink, 0.016f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawLine(lid, 0.035f, 0.045f, 0.115f, 0.045f);                   // the eye shut: one line
         }
+        else
+        {
+            Ell(g, 0.075f, 0.045f, 0.045f, 0.047f, Color.FromArgb(20, 16, 20));  // the eye, big and round
+            Ell(g, 0.088f, 0.06f, 0.014f, 0.014f, Color.White);                  // its glint
+        }
+        using (var wh = new Pen(Color.FromArgb(150, 230, 226, 230), 0.008f))
+            for (int i = -1; i <= 1; i++) g.DrawLine(wh, 0.17f, -0.04f, 0.30f, -0.03f + i * 0.04f);
+        g.Restore(st);
+    }
+
+    private static void Squirrel_(Graphics g, float phase, float sit, float nib, int tail, bool look, float bound, bool acorn, float dig, float digPhase)
+    {
         void Limb(PointF a, PointF b, float w, Color c)
         {
             using var pen = new Pen(c, w) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             g.DrawLine(pen, a, b);
         }
-        void Ell2(PointF c, float rx, float ry, Color col, float tilt = 0) => Ell(c.X, c.Y, rx, ry, col, tilt);
+        void Ell2(PointF c, float rx, float ry, Color col, float tilt = 0) => Ell(g, c.X, c.Y, rx, ry, col, tilt);
 
         float e = Smooth(sit);                                       // 0 running, 1 sitting up
+        float d = Smooth(dig);                                       // 0 as it is, 1 digging (body low, nose down)
 
         // ---- where is the body? ----
         // Running: the body leaps in an arc (the lift), stretched in the air's
@@ -238,19 +336,23 @@ internal sealed class Squirrel : Happening
         PointF hipSit = P(-0.12f, 0.24f);
         PointF chestSit = P(hipSit.X + 0.60f * MathF.Cos(77f * MathF.PI / 180f), hipSit.Y + 0.60f * MathF.Sin(77f * MathF.PI / 180f));
         PointF hip = Lerp(hipRun, hipSit, e), chest = Lerp(chestRun, chestSit, e);
+        // Digging: the rump stays up, the chest drops toward the ground, the nose goes down to the hole.
+        hip = Lerp(hip, P(-0.24f, 0.30f), d);
+        chest = Lerp(chest, P(0.28f, 0.21f), d);
         PointF mid = P((hip.X + chest.X) / 2, (hip.Y + chest.Y) / 2);
-        float arch = Lerp(0.07f * gather + 0.02f, 0.0f, e);
+        float arch = Lerp(0.07f * gather + 0.02f, 0.0f, e) + 0.06f * d;
         mid = P(mid.X - arch * 0.3f, mid.Y + arch);                  // the back humps up when the body gathers
 
         float nibDip = 0.034f * nib * e;
         float lookUp = look ? 1f : 0f;
         PointF head = P(chest.X + Lerp(0.29f, 0.07f, e) + 0.03f * lookUp, chest.Y + Lerp(0.07f, 0.22f, e) - nibDip + 0.04f * lookUp);
+        head = Lerp(head, P(chest.X + 0.22f, chest.Y - 0.04f), d);
 
         // ---- the tail first, behind the body ----
         {
-            float baseAng = Lerp(165f, 118f, e) + 8f * lookUp;
-            float curl = Lerp(-30f, -112f, e);
-            float flick = new[] { 0f, 14f, 30f, 14f }[tail] * e;
+            float baseAng = Lerp(Lerp(165f, 118f, e), 112f, d) + 8f * lookUp;
+            float curl = Lerp(Lerp(-30f, -112f, e), -118f, d);
+            float flick = new[] { 0f, 14f, 30f, 14f }[tail] * Math.Max(e, d);
             PointF root = P(hip.X - 0.10f, hip.Y + 0.06f);
             const int N = 9;
             float segLen = 1.12f / N;
@@ -311,7 +413,7 @@ internal sealed class Squirrel : Happening
             PointF end = P(knee.X + (foot.X - knee.X) * 0.999f, knee.Y + (foot.Y - knee.Y) * 0.999f);
             Limb(joint, knee, thick, col);
             Limb(knee, end, thick * 0.78f, col);
-            Ell(end.X + 0.03f, end.Y + 0.005f, 0.065f, 0.035f, col);   // the paw
+            Ell(g, end.X + 0.03f, end.Y + 0.005f, 0.065f, 0.035f, col);   // the paw
         }
 
         // Where the feet go. In a bound each pair spends the "contact" share of the cycle
@@ -336,10 +438,14 @@ internal sealed class Squirrel : Happening
         PointF pawL = P(acornAt.X - 0.07f, acornAt.Y - 0.03f), pawR = P(acornAt.X + 0.06f, acornAt.Y - 0.03f);
         PointF hindSit = P(hipSit.X + 0.12f, 0.03f);
         PointF shoulder = P(chest.X - 0.02f, chest.Y - 0.08f), haunch = P(hip.X + 0.03f, hip.Y - 0.08f);
+        // Digging: the forepaws scrabble at the ground ahead, one back as the other reaches, flinging earth behind; the hind feet stay planted.
+        float scrab = MathF.Sin(digPhase * MathF.Tau);
+        PointF digNear = P(0.50f + 0.09f * scrab, 0.02f + 0.06f * MathF.Max(0f, scrab));
+        PointF digFar = P(0.50f - 0.09f * scrab, 0.02f + 0.06f * MathF.Max(0f, -scrab));
 
         // The far legs first (darker), a half beat behind the near ones.
-        PointF farFront = Lerp(P(frontRun.X - 0.12f, Math.Max(0f, frontRun.Y)), pawR, e);
-        PointF farHind = Lerp(P(hindRun.X + 0.10f, hindRun.Y), P(hindSit.X - 0.05f, 0.02f), e);
+        PointF farFront = Lerp(Lerp(P(frontRun.X - 0.12f, Math.Max(0f, frontRun.Y)), pawR, e), digFar, d);
+        PointF farHind = Lerp(Lerp(P(hindRun.X + 0.10f, hindRun.Y), P(hindSit.X - 0.05f, 0.02f), e), P(0.02f, 0.0f), d);
         Leg(P(shoulder.X + 0.04f, shoulder.Y), farFront, false, FurDark, 0.075f);
         Leg(P(haunch.X + 0.03f, haunch.Y), farHind, true, FurDark, 0.09f);
 
@@ -354,51 +460,27 @@ internal sealed class Squirrel : Happening
             g.DrawCurve(dorsal, [P(hip.X - 0.08f, hip.Y + 0.15f), P(mid.X, mid.Y + 0.15f), P(chest.X - 0.05f, chest.Y + 0.13f)], 0.5f);   // a darker stripe down the back
 
         // ---- the head ----
-        float headTilt = Lerp(-4f, 8f, e) + 14f * (look ? 1 : 0) + 6f * gather * (1 - e);
-        {
-            var st = g.Save();
-            g.TranslateTransform(head.X, head.Y);
-            g.RotateTransform(headTilt);
-            Ell(-0.05f, 0.14f, 0.06f, 0.095f, Fur, -10f);                       // the ear
-            Ell(-0.05f, 0.13f, 0.03f, 0.06f, Color.FromArgb(200, 168, 150, 150), -10f);
-            using (var tuft = new Pen(FurDark, 0.02f) { StartCap = LineCap.Round }) g.DrawLine(tuft, -0.055f, 0.2f, -0.07f, 0.265f);
-            Ell(0f, 0f, 0.185f, 0.165f, Fur);                                  // a big round head: the cute part
-            Ell(0.10f, -0.05f, 0.115f, 0.09f, Color.FromArgb(235, 206, 200, 196)); // the paler muzzle and cheek
-            Ell(0.19f, -0.015f, 0.032f, 0.026f, Color.FromArgb(40, 30, 34));      // the nose
-            // the mouth: open a little as it chews
-            using (var mouth = new Pen(Ink, 0.016f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-                g.DrawLine(mouth, 0.12f, -0.08f - 0.012f * nib, 0.17f, -0.055f);
-            Ell(0.075f, 0.045f, 0.045f, 0.047f, Color.FromArgb(20, 16, 20));      // the eye, big and round
-            Ell(0.088f, 0.06f, 0.014f, 0.014f, Color.White);                      // its glint
-            using (var wh = new Pen(Color.FromArgb(150, 230, 226, 230), 0.008f))
-                for (int i = -1; i <= 1; i++) g.DrawLine(wh, 0.17f, -0.04f, 0.30f, -0.03f + i * 0.04f);
-            g.Restore(st);
-        }
+        float headTilt = Lerp(-4f, 8f, e) + 14f * (look ? 1 : 0) + 6f * gather * (1 - e) - 35f * d;
+        Head(g, head, headTilt, nib, look);
 
-        // ---- the acorn: in the mouth while running, in the paws when sitting ----
-        void Acorn(PointF at, float angDeg)
+        // ---- the acorn: in the mouth while running (and digging, the nut turned with the head), in the paws when sitting ----
+        if (acorn && e < 0.45f)
         {
-            var st = g.Save();
-            g.TranslateTransform(at.X, at.Y);
-            g.RotateTransform(angDeg);
-            Ell(0f, 0f, 0.075f, 0.058f, Color.FromArgb(150, 98, 46));
-            Ell(-0.018f, 0.012f, 0.03f, 0.02f, Color.FromArgb(200, 180, 128, 70));
-            using (var cap = new SolidBrush(Color.FromArgb(94, 64, 36)))
-                g.FillPie(cap, -0.058f, -0.07f, 0.116f, 0.14f, 70, 220);       // the scaly cap on its end
-            g.Restore(st);
+            float ca = MathF.Cos(headTilt * MathF.PI / 180f), sa = MathF.Sin(headTilt * MathF.PI / 180f);
+            const float mx = 0.21f, my = -0.03f;                                  // the mouth, from the head's middle, before the head turns
+            Acorn(g, P(head.X + mx * ca - my * sa, head.Y + mx * sa + my * ca), 8f + headTilt);
         }
-        if (e < 0.45f) Acorn(P(head.X + 0.23f, head.Y - 0.075f), 8f);
-        else Acorn(P(acornAt.X + 0.01f, acornAt.Y + 0.02f - 0.01f * nib), 20f + 25f * nib);
+        else if (acorn) Acorn(g, P(acornAt.X + 0.01f, acornAt.Y + 0.02f - 0.01f * nib), 20f + 25f * nib);
 
         // ---- the near legs, in front of the body ----
-        PointF nearFront = Lerp(frontRun, pawL, e);
-        PointF nearHind = Lerp(hindRun, hindSit, e);
-        if (e > 0.6f) Ell(hindSit.X + 0.10f, 0.03f, 0.15f, 0.05f, Fur);        // the long hind foot flat on the post
+        PointF nearFront = Lerp(Lerp(frontRun, pawL, e), digNear, d);
+        PointF nearHind = Lerp(Lerp(hindRun, hindSit, e), P(-0.08f, 0.0f), d);
+        if (e > 0.6f) Ell(g, hindSit.X + 0.10f, 0.03f, 0.15f, 0.05f, Fur);     // the long hind foot flat on the post
         Leg(shoulder, nearFront, false, Limbs, 0.08f);
         Leg(haunch, nearHind, true, Limbs, 0.095f);
-        if (e > 0.45f)
+        if (e > 0.45f && d < 0.5f)
         {
-            Ell2(pawL, 0.04f, 0.035f, Limbs);                                    // the little hands round the nut
+            Ell2(pawL, 0.04f, 0.035f, Limbs);                                    // the little hands (round the nut, if it has one)
             Ell2(pawR, 0.04f, 0.035f, Limbs);
         }
     }

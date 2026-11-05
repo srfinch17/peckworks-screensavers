@@ -99,7 +99,12 @@ public static class Brushwork
     /// whole thing leans slightly, and the lean is random, so a grove is not
     /// a row of identical posts. Thickness scales with the canopy's size (r).
     /// </summary>
-    public static void Trunk(Graphics g, float x, float baseY, float canopyY, float r, Random rng, Color? bark = null)
+    /// <summary>
+    /// Returns the trunk's line as three points: the foot, the fork where the
+    /// trunk splits (it leans a little, by the dice), and the end of the left
+    /// limb up in the canopy. Anything that climbs the tree follows them.
+    /// </summary>
+    public static PointF[] Trunk(Graphics g, float x, float baseY, float canopyY, float r, Random rng, Color? bark = null)
     {
         float lean = r * 0.15f * ((float)rng.NextDouble() * 2 - 1);
         var mid = new PointF(x + lean, baseY - (baseY - canopyY) * 0.6f);
@@ -109,8 +114,10 @@ public static class Brushwork
         using (var stem = new Pen(color, thick) { StartCap = LineCap.Round, EndCap = LineCap.Round })
             g.DrawLine(stem, new PointF(x, baseY), mid);
         using var limb = new Pen(color, thick * 0.65f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        g.DrawLine(limb, mid, new PointF(mid.X + lean - r * 0.25f, canopyY + r * 0.05f));
+        var leftLimb = new PointF(mid.X + lean - r * 0.25f, canopyY + r * 0.05f);
+        g.DrawLine(limb, mid, leftLimb);
         g.DrawLine(limb, mid, new PointF(mid.X + lean + r * 0.30f, canopyY - r * 0.05f));
+        return [new PointF(x, baseY), mid, leftLimb];
     }
 
     /// <summary>

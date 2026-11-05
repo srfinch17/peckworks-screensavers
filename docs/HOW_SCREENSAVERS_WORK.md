@@ -171,10 +171,11 @@ a fed koi was as hungry as before and went straight back for the next.
   Thanksgiving/                    falling maple leaves, a V of geese, chimney smoke, a scarecrow's scarf
     Program.cs                     Main(), plus the definition
     ThanksgivingScene.cs           backdrop + the geese + the smoke + the window lamplight + the scarf + the shared engine dropping leaves
-    ThanksgivingPainter.cs         paints the harvest dusk, the moon, the farmhouse and barn, the field, the fence, the scarecrow, the cornucopia, the pumpkins, the maples
+    ThanksgivingPainter.cs         paints the harvest dusk, the moon, the farmhouse and barn, the field, the fence, the scarecrow, the cornucopia, the pumpkins, the maples (one with a hollow in its roots)
     ThanksgivingSettings.cs        declares its knobs
     TurkeyFlock.cs                 the wild turkeys that live in the field: four doings and a timer each, the Turkey happening's pictures
     DeerHerd.cs                    the doe and fawn at the far side of the field: a body flip-book and a head flip-book stamped together, mirrored to face left
+    AcornCaper.cs                  the squirrels' story on the near ground (bury a nut, a thief, a scuffle, a mouse): a script of timed segments per actor, written fresh each cycle
     Happenings/                    nineteen small random events (a turkey, a tractor, a raccoon), one class per file
 
   CabinByStream/                   a cottage in a flowery meadow at dusk, aiming at a photograph's look
@@ -446,7 +447,12 @@ a little door, and a **director** (`Core/Happenings.cs`) is the clockwork that o
 every few seconds. The director shuffles the happenings like a deck of cards and deals from it,
 so you see them all before any repeats. Christmas, Sakura and Sakura Dusk each have their own deck of twenty, Thanksgiving nineteen, none repeated.
 Thanksgiving is the third saver in this mould (built 2026-11-04), and the quickest: the engine, the recipe and the two
-sister sets already existed, so the work was the backdrop, the facts, five live actors and the cast.
+sister sets already existed, so the work was the backdrop, the facts, five live actors and the cast. Its acorn
+caper (`AcornCaper.cs`) is a third kind of thing: not a happening (it lasts forty seconds and has four actors)
+and not a clockwork resident like the turkeys, but a SCRIPT. Each cycle rolls its dice once and writes every
+actor's whole part out as a list of timed segments (hop from here to there, run the rail, dig for so long);
+drawing a frame is then only "which segment is it, and how far through", which is the happenings' own
+"from t alone" rule with a longer t. It holds the director's ground claims while it plays.
 
 Each happening is one small class with one rule: it is told `t`, the number of seconds since it
 began, and works out the whole picture from that number alone. It keeps no notes from one frame

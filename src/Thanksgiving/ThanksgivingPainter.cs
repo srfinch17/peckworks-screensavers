@@ -23,6 +23,7 @@ internal sealed class ThanksgivingScenery
     public required bool[] OpenFromFarm { get; init; }               // stencil: true where nothing was painted after the farmhouse and barn (so: nothing stands in front of them)
     public required bool[] OpenField { get; init; }                  // stencil: true where nothing was painted after the harvested field and its bales (the tractor drives on the field, behind the scarecrow, the fence and the near ground)
     public required bool[] OpenOfBranches { get; init; }             // stencil: true where the corner branches did NOT paint (for things in front of everything but those branches)
+    public required bool[] OpenOfProps { get; init; }                // stencil: true where nothing was painted after the fence (a squirrel on the rail passes behind the corn shock and the maples)
     public required PointF[] FarRidge { get; init; }                 // the far hills' outline; ask Brushwork.RidgeYAt(FarRidge, x) for their height
     public required PointF[] NearRidge { get; init; }                // the nearer hills' outline, where the farm stands
     public required Bank Ground { get; init; }                       // the near ground; Ground.YAt(x) is its crest, the line it makes against the field
@@ -81,6 +82,11 @@ internal sealed class ThanksgivingScenery
     public required float CornucopiaLength { get; init; }
     public required List<(PointF At, float R)> Canopies { get; init; } // each maple's cloud of leaves: center and size
     public required List<PointF> CornerBranchSpots { get; init; }    // points on the corner branches' twigs and tips
+    public required (PointF At, float R) LeftMaple { get; init; }    // the inner maple on each side (canopy centre and size); its trunk stands at At.X. The squirrels' trees.
+    public required (PointF At, float R) RightMaple { get; init; }
+    public required PointF[] LeftTrunk { get; init; }                // each inner maple's trunk as a line to climb: [0] the foot on the ground, [1] the fork, [2] the end of a limb inside the canopy
+    public required PointF[] RightTrunk { get; init; }
+    public required (PointF At, float R) Hollow { get; init; }       // the hollow in the roots of the left maple: the centre of its dark opening and its half width. A squirrel lives in it.
 
     // ---- Live facts, set by the scene every frame before the happenings draw ----
     public PointF GeeseLead { get; set; }                            // where the lead goose is
@@ -174,6 +180,8 @@ internal static class ThanksgivingPainter
         PaintGrass(g, w, u, ground, rng);
 
         float[] posts = PaintFence(g, w, u, ground);
+        g.Flush();
+        uint[] upToFence = Brushwork.ToPixels(bmp);  // a fifth copy: for things on the fence's rail, behind the corn shock and the maples
 
         var cornucopiaMouth = new PointF(w * 0.215f, ground.YAt(w * 0.215f) + u * 0.055f);
         float hornLen = u * 0.11f;
@@ -190,7 +198,7 @@ internal static class ThanksgivingPainter
             pumpkins.Add(PaintPumpkin(g, w * p.X, ground.YAt(w * p.X) + u * p.Down, u * p.R));
         PaintGourds(g, w, u, ground);
 
-        var (leafSpots, canopies) = PaintMaples(g, w, u, ground, rng);
+        var (leafSpots, canopies, hollow, leftTrunk, rightTrunk) = PaintMaples(g, w, u, ground, rng);
 
         g.Flush();
         uint[] upToBranches = Brushwork.ToPixels(bmp);  // a fourth copy: "unchanged since here" = no corner branch in front
@@ -212,6 +220,7 @@ internal static class ThanksgivingPainter
             OpenFromFarm = Brushwork.Unchanged(upToFarm, pixels),
             OpenField = Brushwork.Unchanged(upToField, pixels),
             OpenOfBranches = Brushwork.Unchanged(upToBranches, pixels),
+            OpenOfProps = Brushwork.Unchanged(upToFence, pixels),
             FarRidge = farRidge, NearRidge = nearRidge, Ground = ground,
             FarmFoot = farmFoot, FarmWall = new SizeF(wallW, wallH),
             FarmWindows = FarmWindows(farmFoot.X, farmFoot.Y, u),
@@ -233,6 +242,7 @@ internal static class ThanksgivingPainter
             CornucopiaMouth = cornucopiaMouth, CornucopiaCenter = new PointF(cornucopiaMouth.X - hornLen * 0.45f, cornucopiaMouth.Y - hornLen * 0.22f),
             CornucopiaLength = hornLen,
             Canopies = canopies, CornerBranchSpots = cornerSpots,
+            LeftMaple = canopies[1], RightMaple = canopies[2], LeftTrunk = leftTrunk, RightTrunk = rightTrunk, Hollow = hollow,
         };
     }
 
@@ -974,7 +984,7 @@ internal static class ThanksgivingPainter
     /// inside the canopies, so the falling leaves can let go of the trees
     /// they belong to, and each canopy's center and size.
     /// </summary>
-    private static (List<PointF> LeafSpots, List<(PointF At, float R)> Canopies) PaintMaples(Graphics g, int w, float u, Bank ground, Random rng)
+    private static (List<PointF> LeafSpots, List<(PointF At, float R)> Canopies, (PointF At, float R) Hollow, PointF[] LeftTrunk, PointF[] RightTrunk) PaintMaples(Graphics g, int w, float u, Bank ground, Random rng)
     {
         var maple = new BlossomPalette(Color.FromArgb(240, 204, 92, 30), Color.FromArgb(158, 38, 24), Color.FromArgb(250, 196, 60));
         Color bark = Color.FromArgb(62, 44, 36);
@@ -984,8 +994,42 @@ internal static class ThanksgivingPainter
         [
             (0.03f, 0.17f, 0.15f), (0.12f, 0.13f, 0.11f), (0.90f, 0.14f, 0.12f), (0.98f, 0.17f, 0.14f),
         ];
-        foreach (var t in trees)
-            Brushwork.Trunk(g, w * t.X, ground.YAt(w * t.X) + u * 0.03f, ground.YAt(w * t.X) - u * t.Lift, u * t.R, rng, bark);
+        var trunks = new PointF[trees.Length][];
+        for (int i = 0; i < trees.Length; i++)
+        {
+            var t = trees[i];
+            trunks[i] = Brushwork.Trunk(g, w * t.X, ground.YAt(w * t.X) + u * 0.03f, ground.YAt(w * t.X) - u * t.Lift, u * t.R, rng, bark);
+        }
+
+        // The squirrel's home: the inner left maple's roots flare out at the
+        // foot, and between them is a dark hollow (the opening is painted as an
+        // arch, black at the back with a little bark lip). The caper's squirrel
+        // comes out of it and dives back in.
+        (PointF At, float R) hollow;
+        {
+            float hx = w * trees[1].X, foot = ground.YAt(hx) + u * 0.03f;
+            float hw = u * 0.013f, hh = u * 0.026f;
+            // Two roots, one each side, like knuckles pressed into the ground: a rounded hump that
+            // rises from the ground and meets the trunk, the lit side a shade paler.
+            using (var root = new SolidBrush(bark))
+            using (var paler = new SolidBrush(Color.FromArgb(82, 60, 48)))
+            {
+                g.FillEllipse(root, hx - u * 0.030f, foot - u * 0.030f, u * 0.036f, u * 0.040f);
+                g.FillEllipse(root, hx - u * 0.006f, foot - u * 0.030f, u * 0.036f, u * 0.040f);
+                g.FillEllipse(paler, hx - u * 0.027f, foot - u * 0.026f, u * 0.012f, u * 0.024f);
+                g.FillRectangle(root, hx - u * 0.030f, foot - u * 0.002f, u * 0.060f, u * 0.006f);   // the roots meet the ground on one line
+            }
+            // Between them the opening: an arch of warm dark, blacker at the bottom where no light reaches.
+            using (var dark = new SolidBrush(Color.FromArgb(44, 26, 16)))
+            using (var path = new GraphicsPath())
+            {
+                path.AddClosedCurve([new PointF(hx - hw, foot + u * 0.003f), new PointF(hx - hw * 0.92f, foot - hh * 0.6f), new PointF(hx, foot - hh), new PointF(hx + hw * 0.92f, foot - hh * 0.6f), new PointF(hx + hw, foot + u * 0.003f)], 0.35f);
+                g.FillPath(dark, path);
+            }
+            using (var deep = new SolidBrush(Color.FromArgb(16, 10, 8)))
+                g.FillEllipse(deep, hx - hw * 0.8f, foot - hh * 0.55f, hw * 1.6f, hh * 0.6f);
+            hollow = (new PointF(hx, foot - hh * 0.45f), hw);
+        }
 
         var spots = new List<PointF>();
         var canopies = new List<(PointF At, float R)>();
@@ -1000,7 +1044,7 @@ internal static class ThanksgivingPainter
                 if (spot.X >= 0 && spot.X < w) spots.Add(spot);
             }
         }
-        return (spots, canopies);
+        return (spots, canopies, hollow, trunks[1], trunks[2]);
     }
 
     /// <summary>

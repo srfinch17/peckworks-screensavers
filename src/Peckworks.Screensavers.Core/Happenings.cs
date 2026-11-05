@@ -253,6 +253,23 @@ public sealed class HappeningDirector
     /// fresh deck. A card that is merely waiting for its moment (Santa off
     /// screen) is not lost; it is in the fresh deck too.
     /// </summary>
+    /// <summary>
+    /// Claims held by the scene's OWN actors (a resident drama on the ground,
+    /// say), in the same comma-separated form as Happening.Claims. While it is
+    /// set, no happening that claims any of those props is dealt, exactly as
+    /// if a happening with those claims were running. The scene sets it when
+    /// its actors take the stage and clears it (null) when they leave.
+    /// </summary>
+    public string? SceneClaims { get; set; }
+
+    /// <summary>Is any happening that claims one of these props on right now? The scene asks before its own actors step on.</summary>
+    public bool Claimed(string claims)
+    {
+        foreach (var (who, _) in _running)
+            if (Happening.ClaimsClash(_made[who]!.Claims, claims)) return true;
+        return false;
+    }
+
     private int Deal()
     {
         if (_running.Count >= MaxAtOnce) return -1;
@@ -278,7 +295,7 @@ public sealed class HappeningDirector
                 if (_building && _made[who] == null) { waitingOnOthers = true; continue; }
                 Happening h = Built(who);
                 string? claim = h.Claims;
-                if (claim != null && _running.Any(r => Happening.ClaimsClash(_made[r.Who]!.Claims, claim))) { waitingOnOthers = true; continue; }
+                if (claim != null && (Happening.ClaimsClash(SceneClaims, claim) || _running.Any(r => Happening.ClaimsClash(_made[r.Who]!.Claims, claim)))) { waitingOnOthers = true; continue; }
                 if (!h.CanBegin) continue;                     // nothing to show right now: its card waits in the deck
                 _deck.RemoveAt(i);
                 return who;

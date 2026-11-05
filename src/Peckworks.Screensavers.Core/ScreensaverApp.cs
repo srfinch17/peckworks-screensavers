@@ -222,8 +222,11 @@ public static class ScreensaverApp
     /// something MOVES smoothly, so with PECKWORKS_FRAMES set to
     /// "folder;from;count" the snapshot also saves every frame from "from"
     /// seconds on, "count" of them, as numbered PNGs: a flip-book to compare
-    /// frame by frame (or to measure how much changes between frames). The
-    /// saving happens outside the timer, so the timing stays honest.
+    /// frame by frame (or to measure how much changes between frames). An
+    /// optional fourth part, "folder;from;count;step", keeps only every
+    /// step-th frame (step 30 is one picture every half second: a long story
+    /// on one contact sheet instead of thousands of files). The saving
+    /// happens outside the timer, so the timing stays honest.
     /// </summary>
     private static void SaveFrameIfAsked(FrameBuffer frame, double t)
     {
@@ -232,8 +235,9 @@ public static class ScreensaverApp
         string[] parts = ask.Split(';');
         double from = double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture);
         int count = int.Parse(parts[2]);
+        int step = parts.Length > 3 ? Math.Max(1, int.Parse(parts[3])) : 1;
         int n = (int)Math.Round((t - from) * 60);
-        if (t < from - 1e-9 || n >= count) return;
+        if (t < from - 1e-9 || n >= count || n % step != 0) return;
         Directory.CreateDirectory(parts[0]);
         using Bitmap bmp = frame.ToBitmap();
         bmp.Save(Path.Combine(parts[0], $"frame{n:D4}.png"), ImageFormat.Png);

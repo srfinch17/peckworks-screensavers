@@ -107,7 +107,10 @@ fixed to a prop) before writing one. They are the pattern.
     other. Halloween's ghost, hand, cat and pumpkin face all claim `"graveyard"`. When you add
     one, check it against EVERY existing one for a shared prop or place, not only the obvious
     pair. A happening may claim several things, comma separated (`"sun,costly"`); it then never
-    runs with anything that claims any one of them. Use that for COST too: give every happening
+    runs with anything that claims any one of them. A scene's OWN actors can hold claims the same
+    way: Thanksgiving's acorn caper sets `HappeningDirector.SceneClaims = "ground,fence,cornshock"`
+    while it plays (and asks `Claimed(...)` before it begins), so no turkey happening strolls
+    through the squirrels' scuffle. Use that for COST too: give every happening
     that is dear to draw at 4K one shared extra claim (`"costly"`), so at most one of them is
     ever on screen. (A single claim per happening let two dear ones that each held a different
     prop run together, and their costs added up.)

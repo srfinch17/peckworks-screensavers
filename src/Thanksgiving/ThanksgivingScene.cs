@@ -29,7 +29,12 @@ namespace Thanksgiving;
 ///     brightness like lamplight.
 ///   - The SCARF on the scarecrow: a flip-book of 24 pages of a red scarf
 ///     streaming in the wind, stamped at its knot.
-///   - The HAPPENINGS: twenty small surprises (a turkey strutting through, a
+///   - The RESIDENTS: the turkeys in the field (TurkeyFlock.cs), the doe and
+///     her fawn (DeerHerd.cs), and the ACORN CAPER (AcornCaper.cs): every
+///     minute or two a squirrel comes out of the hollow in the left maple's
+///     roots, buries a nut, a second squirrel digs it up, they fight over it
+///     in a cloud of dust, and a mouse walks off with it.
+///   - The HAPPENINGS: nineteen small surprises (a turkey strutting through, a
 ///     raccoon at the cornucopia, a tractor on the far field) that each come
 ///     on for a few seconds now and then. Each is one class in the Happenings
 ///     folder; a "director" from the engine (Core/Happenings.cs) decides
@@ -50,6 +55,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly int _geese;
     private readonly TurkeyFlock _flock;           // the wild turkeys that live in the field
     private readonly DeerHerd _herd;               // the doe and her fawn at the far side of it
+    private readonly AcornCaper _caper;            // the squirrels' story on the near ground, every minute or two
     private readonly int _geeseDir;                // +1 the V flies right, -1 left
     private readonly float[] _flapPhase;           // each goose's own place in the flap, so they are not all in step
     private readonly Sprite[] _smoke;              // four puff sizes, small to big
@@ -126,6 +132,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         // ---- The flock: wild turkeys living in the field (after the director, so its dice are untouched) ----
         _flock = new TurkeyFlock(_scenery, settings.TurkeyCount, _rng);
         _herd = new DeerHerd(_scenery, settings.DeerCount, _rng);
+        _caper = new AcornCaper(_scenery, _happenings, _rng);
     }
 
     // ==================================================================
@@ -272,6 +279,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _leaves.Update(dt);
         _flock.Update(dt);
         _herd.Update(dt);
+        _caper.Update(dt);                         // before the director: it holds the ground's claims while it plays
         _happenings.Update(elapsedSeconds);
     }
 
@@ -335,6 +343,11 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         double flutter = (_time * 4.2 * gust) % (Math.PI * 2);
         int scarfPage = (int)(flutter / (Math.PI * 2) * ScarfPages) % ScarfPages;
         _scarf[scarfPage].Draw(fb, (int)_scenery.ScarecrowNeck.X - 2, (int)_scenery.ScarecrowNeck.Y - _scarf[scarfPage].Height / 2);
+
+        // 6b. The acorn caper: the squirrels, the mouse and the dust on the
+        //     near ground and the rail, in front of the fence (and behind the
+        //     corn shock and the maples where the rail passes them).
+        _caper.Draw(fb);
 
         // 7. The NEAR happenings (layer 1): everything in front of the
         //    scenery and the geese, like the turkey on the ground.
