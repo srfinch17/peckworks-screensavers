@@ -40,7 +40,7 @@ namespace Thanksgiving;
 /// </summary>
 internal sealed class TurkeyFlock
 {
-    private enum Doing { Walk, Stand, Peck, Display, Alert, Hurry }
+    private enum Doing { Walk, Stand, Peck, Display, Alert, Hurry, Approach }   // Approach: walking over to something (a tom's call, a bale's loose hay) and doing what it came for
 
     private sealed class Bird
     {
@@ -58,6 +58,8 @@ internal sealed class TurkeyFlock
         public bool Turning;            // coming round to face the other way through the turn pages (never a mirror flip)
         public float TurnT;             // seconds into the turn; Dir flips at the middle
         public float Restless;          // seed for the slow drift of a standing bird's head
+        public float Goal;              // an approach's x: where it is walking to
+        public bool GoalFood;           // and whether there is something to peck at when it gets there
     }
 
     // 72 walk pages: at 24 the held head stepped 1.9 px a page under a body moving 1 px a frame, and buzzed.
@@ -141,7 +143,7 @@ internal sealed class TurkeyFlock
                 Timid = timid[i], Busy = busy[i],
                 Restless = (float)_rng.NextDouble() * 10,
             };
-            b.Senses = new Attention(timid[i], curious[i]) { Keen = 1.1f };
+            b.Senses = new Attention(timid[i], curious[i]) { Keen = 1.1f, Hungry = 0.5f + 0.5f * busy[i] };   // a turkey is always ready to eat: loose hay from the baler draws it over
             b.Pace = new Pace(Speed * u * 3f);              // leans into a walk over about a third of a second
             b.Mind.Begin(Doing.Stand, 1f + 3f * (float)_rng.NextDouble());
             _birds[i] = b;
@@ -185,8 +187,8 @@ internal sealed class TurkeyFlock
                 continue;
             }
 
-            // ---- the senses: what happened, and what this bird makes of it (never while already fleeing) ----
-            if (b.Mind.Doing != Doing.Hurry)
+            // ---- the senses: what happened, and what this bird makes of it (never while already fleeing, or on its way to something) ----
+            if (b.Mind.Doing is not (Doing.Hurry or Doing.Approach))
             {
                 Reaction r = b.Senses.Check(_board, new PointF(b.X, FootY(b)), b, out Notice cause);
                 if (r != Reaction.None) React(b, r, cause);
@@ -206,15 +208,35 @@ internal sealed class TurkeyFlock
                     b.Mind.End();
                 }
             }
-            if (b.Mind.Doing is Doing.Walk or Doing.Hurry)
+            if (b.Mind.Doing is Doing.Walk or Doing.Hurry or Doing.Approach)
             {
-                if (b.Mind.Over && !b.Pace.Braking && !b.Pace.Still) b.Pace.Brake(b.Pace.ToRestPage(Stride(b)));   // the timer ran out: ease onto the rest page
+                // An approach ends when the bird is a length and a bit from what it came for (or its patience runs out).
+                bool arrived = b.Mind.Doing == Doing.Approach && MathF.Abs(b.X - b.Goal) < 1.4f * _k[b.Size];
+                if ((b.Mind.Over || arrived) && !b.Pace.Braking && !b.Pace.Still) b.Pace.Brake(b.Pace.ToRestPage(Stride(b)));   // the timer ran out: ease onto the rest page
                 if (b.Pace.Still)
                 {
-                    // Stopped square: stand a moment, turning round if the walk ended at an edge.
-                    b.Mind.Begin(Doing.Stand, Organic.Jitter(_rng, 1.5f));
                     b.Clock = 0;
-                    if (b.X <= margin + 0.5f) BeginTurn(b, 1); else if (b.X >= _s.Width - margin - 0.5f) BeginTurn(b, -1);
+                    if (b.Mind.Doing == Doing.Approach && arrived && b.GoalFood)
+                    {
+                        // Here is the loose hay: a long burst of pecks.
+                        b.Mind.Begin(Doing.Peck, 0f);
+                        b.Strikes = 4 + _rng.Next(3);
+                        b.Hold = (3 + _rng.Next(4)) / 60f;
+                        b.Mind.Left = PeckFor(b) + Organic.Jitter(_rng, 0.5f);
+                        Log(b, i, "arrived: peck");
+                    }
+                    else if (b.Mind.Doing == Doing.Approach && arrived)
+                    {
+                        // Come to see the tom: stand by him, head up, and watch.
+                        b.Mind.Begin(Doing.Alert, 2f + 3f * b.Senses.Curious);
+                        Log(b, i, "arrived: watch");
+                    }
+                    else
+                    {
+                        // Stopped square: stand a moment, turning round if the walk ended at an edge.
+                        b.Mind.Begin(Doing.Stand, Organic.Jitter(_rng, 1.5f));
+                        if (b.X <= margin + 0.5f) BeginTurn(b, 1); else if (b.X >= _s.Width - margin - 0.5f) BeginTurn(b, -1);
+                    }
                 }
                 continue;
             }
@@ -229,7 +251,7 @@ internal sealed class TurkeyFlock
             {
                 case 0:
                     b.Mind.Begin(Doing.Display, FanOpen + FanHold + FanOpen);
-                    _board.Post(Sense.Friend, new PointF(b.X, FootY(b)), 0.5f * u, 0.8f, b);        // the hens look over
+                    _board.Post(Sense.Call, new PointF(b.X, FootY(b)), 0.6f * u, 0.9f, b);          // the hens look over, and the curious ones come to watch
                     break;
                 case 1:
                     b.Mind.Begin(Doing.Peck, 0f);
@@ -261,8 +283,15 @@ internal sealed class TurkeyFlock
             case Reaction.Look:
                 if (b.Mind.Doing is Doing.Stand or Doing.Peck) { b.Mind.Begin(Doing.Alert, 0.6f + 0.8f * b.Senses.Curious); b.Clock = 0; BeginTurn(b, toward); }
                 break;
-            case Reaction.Freeze:
             case Reaction.Approach:
+                // Over to it: a tom's call or loose hay. The turn comes first; the walk waits for it (Update skips the body while turning).
+                b.Goal = cause.At.X; b.GoalFood = cause.Kind == Sense.Food;
+                b.Mind.Begin(Doing.Approach, 7f);
+                b.Clock = 0;
+                b.Pace.Want = Speed * u;
+                BeginTurn(b, toward);
+                break;
+            case Reaction.Freeze:
                 if (!b.Pace.Still && !b.Pace.Braking) b.Pace.Brake(b.Pace.ToRestPage(Stride(b)));   // a walking bird stops square first (the walk pages play on until it is still)
                 b.Mind.Begin(Doing.Alert, 1.5f + 2.5f * b.Timid);
                 b.Clock = 0;
@@ -328,6 +357,7 @@ internal sealed class TurkeyFlock
             {
                 case Doing.Walk:
                 case Doing.Hurry:
+                case Doing.Approach:
                     page = _walk[z][d][0];
                     break;
                 case Doing.Peck:

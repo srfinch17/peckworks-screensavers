@@ -4,12 +4,11 @@ using Peckworks.Screensavers.Core;
 namespace Thanksgiving.Happenings;
 
 /// <summary>
-/// A raccoon waddles in from the left along the near ground to the
-/// cornucopia, stops with its nose over the fruit and sniffs, rears up on
-/// its haunches, takes an apple in its paws, glances all about with that
-/// guilty look (its masked face turns to us and back), startles into a little
-/// hop that turns it round, drops to all fours with the apple in its mouth
-/// and waddles back off to the left, the way it came.
+/// A raccoon waddles in from the left along the near ground to the first
+/// pumpkin behind the lane, stops with its nose at it and sniffs, rears up on
+/// its haunches, glances all about with that guilty look (its masked face
+/// turns to us and back), startles into a little hop that turns it round,
+/// drops to all fours and waddles back off to the left, the way it came.
 ///
 /// FEYNMAN VERSION: a flip-book. While it walks, the page is picked by HOW
 /// FAR it has gone (one full turn of 24 pages is one stride), so its feet
@@ -28,12 +27,9 @@ namespace Thanksgiving.Happenings;
 /// upright on its haunches: the same shapes, joined by a number between 0
 /// and 1 ("rise"), so the pages in between are real in-between poses.
 ///
-/// The apple in its paws is drawn right over the apple lying in the picture
-/// (the picture's apple cannot be taken away, and there are other fruit
-/// beside it, so one fewer is never missed). It stands on the walk line
-/// (WalkY), nearer than the horn, so it is drawn IN FRONT of the horn: the
-/// horn is behind its legs. Both directions are the same sticker turned
-/// over (Sprite.Draw's mirror), so a leftward walk needs no second set.
+/// It stands on the walk line (WalkY), nearer than the small pumpkins behind
+/// it, so it is drawn in front of them. Both directions are the same sticker
+/// turned over (Sprite.Draw's mirror), so a leftward walk needs no second set.
 /// </summary>
 internal sealed class Raccoon : Happening
 {
@@ -42,7 +38,7 @@ internal sealed class Raccoon : Happening
     private const float Ramp = 0.8f;             // seconds to slow into the stop, and to get going again
     private const float SniffFor = 1.7f, RiseFor = 0.8f, LookFor = 2.2f, HopFor = 0.30f, DropFor = 0.6f;
     private const float Stance = 0.62f;          // the share of a stride a foot is on the ground
-    private static readonly PointF AppleRel = new(0.66f, 0.12f);   // where the picture's apple lies from the raccoon's origin, in raccoon units
+    private static readonly PointF NoseRel = new(0.66f, 0.12f);    // where its nose comes down from the raccoon's origin, in raccoon units
 
     private static readonly Color Fur = Color.FromArgb(132, 122, 116);
     private static readonly Color FurDark = Color.FromArgb(84, 74, 72);
@@ -57,7 +53,7 @@ internal sealed class Raccoon : Happening
     private readonly ThanksgivingScenery _s;
     private readonly float _k;
     private readonly int _w, _h, _ox, _by;
-    private readonly Sprite[] _walk = new Sprite[WalkPages], _walkApple = new Sprite[WalkPages];
+    private readonly Sprite[] _walk = new Sprite[WalkPages];
     private readonly Sprite[] _sniff = new Sprite[SniffPages];
     private readonly Sprite _sniffA, _sniffB;
     private readonly Sprite[] _rise = new Sprite[RisePages], _drop = new Sprite[RisePages];
@@ -67,7 +63,7 @@ internal sealed class Raccoon : Happening
 
     public override float Seconds => _total;
     public override int Layer => 1;
-    public override string? Claims => "ground,cornucopia";
+    public override string? Claims => "ground,stageleft";
 
     public Raccoon(ThanksgivingScenery s)
     {
@@ -79,8 +75,17 @@ internal sealed class Raccoon : Happening
         _by = _h - 4;
 
         // ---- the timetable (the turkey's: full speed except while slowing, stopped, or getting going) ----
-        float apple = s.CornucopiaMouth.X + 0.3f * s.CornucopiaLength * 0.22f;       // the picture's first apple
-        _stopX = apple - AppleRel.X * _k;
+        // Its sniff: the foot of the nearest small pumpkin behind the lane to the left stage (the lane itself if there is none).
+        float sniff = s.StageLeft.X;
+        float best = float.MaxValue;
+        foreach (var (at, r) in s.Pumpkins)
+        {
+            float foot = at.Y + 0.8f * r;
+            if (foot >= s.WalkY(at.X) - 0.01f * s.U) continue;                        // in front of the lane: not this one
+            float d = MathF.Abs(at.X - s.StageLeft.X);
+            if (d < best) { best = d; sniff = at.X; }
+        }
+        _stopX = sniff - NoseRel.X * _k;
         _startX = -1.7f * _k;
         float dist = _stopX - _startX;
         _v0 = Cruise * s.U;
@@ -96,7 +101,6 @@ internal sealed class Raccoon : Happening
         for (int i = 0; i < WalkPages; i++)
         {
             _walk[i] = Page(i / (float)WalkPages, 0f, 0f, 0f, 1f, 0, st);
-            _walkApple[i] = Page(i / (float)WalkPages, 0f, 0f, 0f, 1f, 2, st);
         }
         float[] nose = [0.35f, 0.7f, 1f];
         for (int i = 0; i < SniffPages; i++) _sniff[i] = Page(0f, 0f, nose[i], 0f, 1f, 0, st);
@@ -105,11 +109,11 @@ internal sealed class Raccoon : Happening
         float[] rise = [0.08f, 0.25f, 0.45f, 0.65f, 0.85f, 1f];
         for (int i = 0; i < RisePages; i++)
         {
-            _rise[i] = Page(0f, rise[i], Math.Max(0f, 1f - rise[i] * 2.2f), 0f, 1f, 1, st);
-            _drop[i] = Page(0f, rise[i], 0f, 0f, rise[i] > 0.5f ? 0.3f : 1f, rise[i] >= 0.45f ? 1 : 2, st);   // the apple goes from paws to mouth on the way down
+            _rise[i] = Page(0f, rise[i], Math.Max(0f, 1f - rise[i] * 2.2f), 0f, 1f, 0, st);
+            _drop[i] = Page(0f, rise[i], 0f, 0f, rise[i] > 0.5f ? 0.3f : 1f, 0, st);   // down again, empty-pawed (there is no fruit to take since the cornucopia went)
         }
         float[] yaws = [1f, 0.5f, 0f, -0.5f, -1f];
-        for (int i = 0; i < YawPages; i++) _yaw[i] = Page(0f, 1f, 0f, 0f, yaws[i], 1, st);
+        for (int i = 0; i < YawPages; i++) _yaw[i] = Page(0f, 1f, 0f, 0f, yaws[i], 0, st);
     }
 
     // ----------------------------------------------------------------- timing
@@ -182,7 +186,7 @@ internal sealed class Raccoon : Happening
             float d = WalkedOut(t - tOut);
             x = _stopX - d;
             float cyc = d / _stride;
-            page = _walkApple[(int)MathF.Round((cyc - MathF.Floor(cyc)) * WalkPages) % WalkPages];
+            page = _walk[(int)MathF.Round((cyc - MathF.Floor(cyc)) * WalkPages) % WalkPages];
         }
 
         float y = _s.WalkY(x);
@@ -282,11 +286,11 @@ internal sealed class Raccoon : Happening
             Ell(foot.X + 0.025f, foot.Y + 0.015f, 0.07f, 0.04f, col);                    // the plantigrade paw (a raccoon walks on its whole hand)
         }
         PointF acornPaws;
-        // The apple, and the paws: the paws go from the ground by the apple to the chest as the body rises.
+        // The paws: from the ground by its nose to the chest as the body rises (the spot the apple lay in when there was a cornucopia; the paws' path is the same).
         PointF pawSit = P(head.X + 0.17f, head.Y - 0.20f);
-        PointF pawGround = P(AppleRel.X - 0.05f, AppleRel.Y - 0.02f);
+        PointF pawGround = P(NoseRel.X - 0.05f, NoseRel.Y - 0.02f);
         PointF pawTarget = Lerp(pawGround, pawSit, e);
-        acornPaws = P(Lerp(AppleRel.X, pawSit.X + 0.02f, e), Lerp(AppleRel.Y, pawSit.Y + 0.01f, e));
+        acornPaws = P(Lerp(NoseRel.X, pawSit.X + 0.02f, e), Lerp(NoseRel.Y, pawSit.Y + 0.01f, e));
 
         PointF nearHindW = WalkFoot(-0.28f, 0f), nearFrontW = WalkFoot(0.30f, 0.25f), farHindW = WalkFoot(-0.28f, 0.5f), farFrontW = WalkFoot(0.30f, 0.75f);
         PointF nearHindS = P(hipS.X + 0.26f, 0.035f), farHindS = P(hipS.X + 0.16f, 0.035f);

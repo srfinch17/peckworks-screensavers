@@ -3,7 +3,7 @@ using Peckworks.Screensavers.Core;
 namespace Thanksgiving;
 
 /// <summary>
-/// The fawn and the apple. An apple rolls out of the cornucopia, along the
+/// The fawn and the apple. An apple rolls in from beyond the left edge, along the
 /// ground, and its last bounce takes it up the bank and under the fence's
 /// lower rail into the field. The fawn at the far side notices, trots down
 /// to the fence, puts her head down through the rail, eats the apple in
@@ -23,14 +23,14 @@ namespace Thanksgiving;
 /// any nearer pumpkin; once over the crest it is drawn through the field
 /// stencil (the fence and the near ground are in front of it) and smaller,
 /// in four steps, as it goes further off.
-/// Claims: ground, cornucopia (the apple's own), field (the fawn walks it).
+/// Claims: ground, stageleft (the apple's own), field (the fawn walks it).
 /// </summary>
 internal sealed class FawnApple : Story
 {
     private const float AtFence = 0.93f;                   // the fawn's depth when she stands at the fence (1 would be the crest itself)
 
     public override string Name => "FawnApple";
-    public override string Claims => "ground,cornucopia,field";
+    public override string Claims => "ground,stageleft,field";
     public override bool CanBegin => _herd.FawnIndex >= 0;
 
     private readonly Cast _c;
@@ -51,11 +51,11 @@ internal sealed class FawnApple : Story
         var (fx, _, fh, fd) = _herd.Where(_fawn);
         _x0 = fx; _d0 = fd;
 
-        // The apple stops in the open stretch between the horn and the corn shock, then hops under the rail there.
+        // The apple stops in the open stretch left of the corn shock, then hops under the rail there.
         float shockEdge = _s.CornShockFoot.X - _s.CornShockHalfWidth - 2.0f * k;
-        float lo = Math.Max(_s.CornucopiaMouth.X + 2.5f * k, _s.Width * 0.30f), hi = Math.Min(_s.Width * 0.46f, shockEdge);
+        float lo = _s.Width * 0.30f, hi = Math.Min(_s.Width * 0.46f, shockEdge);
         float stopX = hi > lo ? lo + (hi - lo) * (float)rng.NextDouble() : (lo + hi) / 2;
-        _rollFor = 1.6f + 0.4f * (float)rng.NextDouble();
+        _rollFor = (stopX + 2.5f * k) / (0.22f * u) * (0.9f + 0.2f * (float)rng.NextDouble());   // from beyond the left edge at a rolling apple's pace (it used to start a tenth of the way in, at the horn)
         _appleX = stopX + 0.3f * k;
         _appleY = _herd.FeetYAt(_fawn, _appleX, AtFence);
         _inField = _rollFor + 0.45f;
@@ -108,14 +108,14 @@ internal sealed class FawnApple : Story
     public override void Draw(FrameBuffer fb, float t)
     {
         float k = _c.K;
-        float mouthX = _s.CornucopiaMouth.X, stopX = _appleX - 0.3f * k;
+        float mouthX = -2.5f * k, stopX = _appleX - 0.3f * k;                 // in from beyond the left edge
         float r0 = _c.Apple[0].Pages[0].Width * 0.33f;           // the full-size apple's radius, for its height off the ground and its turning
         float x, y, turn;
         int size = 0;
         bool field = false;
         if (t < _rollFor)
         {
-            // Rolling out of the horn and slowing to a stop: the distance covered eases out, so the wheel slows.
+            // Rolling in and slowing to a stop: the distance covered eases out, so the wheel slows.
             float p = t / _rollFor, q = 1 - (1 - p) * (1 - p);
             x = mouthX + (stopX - mouthX) * q;
             y = _s.WalkY(x) - r0;

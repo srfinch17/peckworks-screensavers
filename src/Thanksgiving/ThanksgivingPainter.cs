@@ -87,9 +87,7 @@ internal sealed class ThanksgivingScenery
     /// exactly the pumpkins whose feet are lower on the screen than its own, and shows in front of the rest.
     /// </summary>
     public byte Nearness(float y) => (byte)Math.Clamp(1 + 253 * (y - CrestMin) / (Height + 0.1f * U - CrestMin), 1, 254);
-    public required PointF CornucopiaMouth { get; init; }            // the open end of the horn (it faces right), on the ground
-    public required PointF CornucopiaCenter { get; init; }
-    public required float CornucopiaLength { get; init; }
+    public required PointF StageLeft { get; init; }                  // the open stretch of the walk line left of the middle: where an apple rolls in to, and the raccoon sniffs at a pumpkin
     public required List<(PointF At, float R)> Canopies { get; init; } // each maple's cloud of leaves: center and size
     public required List<PointF> CornerBranchSpots { get; init; }    // points on the corner branches' twigs and tips
     public required (PointF At, float R) LeftMaple { get; init; }    // the inner maple on each side (canopy centre and size); its trunk stands at At.X. The squirrels' trees.
@@ -108,7 +106,7 @@ internal sealed class ThanksgivingScenery
 /// a big peach harvest moon, two ranges of hills with a white farmhouse and a
 /// red barn on the nearer one, a reaped field in gold stripes with round hay
 /// bales, a rail fence along the near ground, a scarecrow, a corn shock, a
-/// pumpkin patch, a cornucopia spilling fruit, maples in full autumn colour
+/// pumpkin patch, maples in full autumn colour
 /// at both sides, and oak branches reaching in from the top corners.
 ///
 /// Like the Halloween and Christmas painters, this runs ONCE at startup (the
@@ -190,13 +188,11 @@ internal static class ThanksgivingPainter
         g.Flush();
         uint[] upToFence = Brushwork.ToPixels(bmp);  // a fifth copy: for things on the fence's rail, behind the corn shock and the maples
 
-        var cornucopiaMouth = new PointF(w * 0.215f, ground.YAt(w * 0.215f) + u * 0.055f);
-        float hornLen = u * 0.11f;
         var shockFoot = new PointF(w * 0.555f, ground.YAt(w * 0.555f) + u * 0.052f);
         float shockTall = u * 0.15f, shockHalf = u * 0.045f;
 
         // THE PUMPKIN PATCH covers the whole foreground, in two bands with a clear lane between them: small
-        // pumpkins BEHIND the walk line (painted now, so the horn, the shock and the maples stand in front of
+        // pumpkins BEHIND the walk line (painted now, so the shock and the maples stand in front of
         // them) and big ones IN FRONT of it along the bottom edge (painted after the maples, in front of their
         // trunks). Every pumpkin, gourd and leaf is painted a second time, flat, into a DEPTH picture, each in a
         // grey that says how near it is (its foot's height on the screen), so anything that moves on the
@@ -206,18 +202,17 @@ internal static class ThanksgivingPainter
         using var depthBmp = new Bitmap(w, h, PixelFormat.Format32bppRgb);
         using var gd = Graphics.FromImage(depthBmp);
         gd.SmoothingMode = SmoothingMode.None;
-        List<PatchItem> patch = PlanPatch(w, h, u, ground, rng, hollowX: w * 0.12f, stageRight: w * 0.60f, shockFoot.X, shockHalf, cornucopiaMouth.X, hornLen);
+        List<PatchItem> patch = PlanPatch(w, h, u, ground, rng, hollowX: w * 0.12f, stageRight: w * 0.60f, shockFoot.X, shockHalf);
         PaintVineRunners(g, patch, u);
         var pumpkins = new List<(PointF At, float R)>();
         (PointF At, float R) jack = default;
         foreach (PatchItem item in patch)
             if (!item.Front) PaintPatchItem(g, gd, item, u, NearnessOf(item.Foot.Y), pumpkins, ref jack);
 
-        // The horn and the shock stand ON the walk line: in the depth picture they are a hair nearer than it, so a
-        // mouse or a turkey at the walk line passes behind them (their silhouettes are read off the picture: what changed).
+        // The shock stands ON the walk line: in the depth picture it is a hair nearer than it, so a mouse or a turkey at
+        // the walk line passes behind it (its silhouette is read off the picture: what changed).
         g.Flush();
         uint[] beforeProps = Brushwork.ToPixels(bmp);
-        PaintCornucopia(g, cornucopiaMouth.X, cornucopiaMouth.Y, hornLen, u);
         PaintCornShock(g, shockFoot.X, shockFoot.Y, shockTall, shockHalf, rng);
         g.Flush();
         uint[] afterProps = Brushwork.ToPixels(bmp);
@@ -237,8 +232,8 @@ internal static class ThanksgivingPainter
         g.Flush();
         uint[] pixels = Brushwork.ToPixels(bmp);
 
-        // The depth picture, as bytes: the grey of each pumpkin, gourd and leaf; the horn's and the shock's silhouettes
-        // a hair nearer than the walk line; 0 where nothing on the near ground stands.
+        // The depth picture, as bytes: the grey of each pumpkin, gourd and leaf; the shock's silhouette a hair nearer
+        // than the walk line; 0 where nothing on the near ground stands.
         gd.Flush();
         uint[] depthPixels = Brushwork.ToPixels(depthBmp);
         var nearDepth = new byte[depthPixels.Length];
@@ -293,8 +288,7 @@ internal static class ThanksgivingPainter
             ScarecrowArmR = new PointF(scarecrowX + scarecrowTall * 0.30f, scarecrowFoot - scarecrowTall * 0.62f),
             CornShockFoot = shockFoot, CornShockTop = new PointF(shockFoot.X, shockFoot.Y - shockTall), CornShockHalfWidth = shockHalf,
             Pumpkins = pumpkins, Jack = jack, JackHoles = jackHoles, NearDepth = nearDepth, CrestMin = crestMin,
-            CornucopiaMouth = cornucopiaMouth, CornucopiaCenter = new PointF(cornucopiaMouth.X - hornLen * 0.45f, cornucopiaMouth.Y - hornLen * 0.22f),
-            CornucopiaLength = hornLen,
+            StageLeft = new PointF(w * 0.24f, ground.YAt(w * 0.24f) + u * 0.052f),
             Canopies = canopies, CornerBranchSpots = cornerSpots,
             LeftMaple = canopies[1], RightMaple = canopies[2], LeftTrunk = leftTrunk, RightTrunk = rightTrunk, Hollow = hollow,
         };
@@ -677,7 +671,7 @@ internal static class ThanksgivingPainter
         return bales;
     }
 
-    private static void PaintBale(Graphics g, float x, float footY, float r, Random rng)
+    internal static void PaintBale(Graphics g, float x, float footY, float r, Random rng)
     {
         float cy = footY - r;
         using (var shadow = new SolidBrush(Color.FromArgb(70, 80, 40, 20)))
@@ -739,81 +733,6 @@ internal static class ThanksgivingPainter
     }
 
     // ================================================================ things on the near ground
-
-    /// <summary>
-    /// A cornucopia lying on the ground with its mouth to the right, spilling
-    /// its harvest. The horn is a chain of rings: an ellipse every step along
-    /// a curved spine from the curled tip at the upper left to the wide mouth,
-    /// each ring a little bigger than the last and alternating two tones, so
-    /// the overlap reads as a woven, ridged horn (the first version was one
-    /// filled blob with a grid on it, which read as a sack). Then apples, a
-    /// pear, a bunch of grapes, an ear of corn and a small pumpkin tumbling
-    /// out of the mouth onto the grass.
-    /// </summary>
-    private static void PaintCornucopia(Graphics g, float mouthX, float mouthY, float len, float u)
-    {
-        float r = len * 0.26f;   // the mouth's radius
-        // A soft shadow under the horn.
-        using (var shadow = new SolidBrush(Color.FromArgb(60, 60, 30, 10)))
-            g.FillEllipse(shadow, mouthX - len * 1.0f, mouthY - r * 0.3f, len * 1.2f, r * 0.7f);
-
-        // The spine: t = 0 at the mouth, 1 at the tip. The horn runs left and curls up at the end.
-        PointF Spine(float t) => new(mouthX - len * 1.05f * t, mouthY - r * 1.0f - r * 0.3f * t - r * 1.9f * t * t * t);
-        float Radius(float t) => r * (1f - 0.82f * t);
-        Color deep = Color.FromArgb(118, 78, 42), lit = Color.FromArgb(176, 128, 72), rim = Color.FromArgb(206, 160, 98);
-        int rings = 22;
-        for (int i = rings; i >= 0; i--)                                     // tip first, so the mouth end lies on top
-        {
-            float t = i / (float)rings;
-            PointF c = Spine(t);
-            float rr = Radius(t);
-            using var fill = new SolidBrush(i % 2 == 0 ? lit : deep);
-            g.FillEllipse(fill, c.X - rr * 0.62f, c.Y - rr, rr * 1.24f, rr * 2);
-            using var edge = new Pen(rim, Math.Max(1f, u * 0.0012f));
-            g.DrawArc(edge, c.X - rr * 0.62f, c.Y - rr, rr * 1.24f, rr * 2, 250, 160);   // a lit rim on the upper left of each ring
-        }
-        // The mouth: the dark inside with a lit lip.
-        PointF m = Spine(0);
-        using (var inside = new SolidBrush(Color.FromArgb(54, 32, 20)))
-            g.FillEllipse(inside, m.X - r * 0.55f, m.Y - r * 0.92f, r * 1.1f, r * 1.84f);
-        using (var lip = new Pen(rim, Math.Max(1.5f, u * 0.0025f)))
-            g.DrawEllipse(lip, m.X - r * 0.62f, m.Y - r, r * 1.24f, r * 2);
-
-        // The spill. Every fruit is a circle or two with a highlight, scattered in front of and to the right of the mouth.
-        void Fruit(float cx, float cy, float fr, Color c, Color hi)
-        {
-            using var sh = new SolidBrush(Color.FromArgb(50, 60, 30, 10));
-            g.FillEllipse(sh, cx - fr, cy + fr * 0.6f, fr * 2.2f, fr * 0.6f);
-            using var b = new SolidBrush(c);
-            g.FillEllipse(b, cx - fr, cy - fr, fr * 2, fr * 2);
-            using var h = new SolidBrush(hi);
-            g.FillEllipse(h, cx - fr * 0.55f, cy - fr * 0.6f, fr * 0.5f, fr * 0.4f);
-        }
-        Color apple = Color.FromArgb(196, 40, 36), appleHi = Color.FromArgb(120, 255, 170, 150);
-        Fruit(mouthX + r * 0.3f, mouthY - r * 0.5f, r * 0.5f, apple, appleHi);
-        Fruit(mouthX + r * 1.2f, mouthY - r * 0.42f, r * 0.46f, Color.FromArgb(214, 150, 40), Color.FromArgb(120, 255, 230, 160));   // a golden apple
-        Fruit(mouthX + r * 2.1f, mouthY - r * 0.38f, r * 0.42f, apple, appleHi);
-        // A pear: a small circle on a bigger one.
-        Fruit(mouthX + r * 0.85f, mouthY - r * 1.2f, r * 0.40f, Color.FromArgb(190, 180, 70), Color.FromArgb(110, 255, 250, 180));
-        Fruit(mouthX + r * 0.9f, mouthY - r * 1.62f, r * 0.26f, Color.FromArgb(190, 180, 70), Color.FromArgb(0, 0, 0, 0));
-        // Grapes: a cluster of small purple circles.
-        using (var grape = new SolidBrush(Color.FromArgb(92, 44, 110)))
-            for (int row = 0; row < 3; row++)
-                for (int i = 0; i <= 2 - row; i++)
-                {
-                    float gx = mouthX + r * 1.75f + (i - (2 - row) / 2f) * r * 0.32f, gy = mouthY - r * 1.4f + row * r * 0.28f;
-                    g.FillEllipse(grape, gx - r * 0.17f, gy - r * 0.17f, r * 0.34f, r * 0.34f);
-                }
-        // An ear of corn: a yellow oval with a line of kernels and a husk leaf.
-        using (var husk = new SolidBrush(Color.FromArgb(150, 160, 70)))
-            g.FillEllipse(husk, mouthX + r * 2.4f, mouthY - r * 0.95f, r * 1.5f, r * 0.48f);
-        using (var corn = new SolidBrush(Color.FromArgb(240, 200, 70)))
-            g.FillEllipse(corn, mouthX + r * 2.2f, mouthY - r * 0.9f, r * 1.3f, r * 0.42f);
-        using (var kernel = new Pen(Color.FromArgb(120, 190, 140, 30), Math.Max(1f, u * 0.001f)))
-            g.DrawLine(kernel, mouthX + r * 2.3f, mouthY - r * 0.68f, mouthX + r * 3.4f, mouthY - r * 0.68f);
-        // A small pumpkin at the end of the spill.
-        PaintPumpkin(g, mouthX + r * 3.1f, mouthY + r * 0.1f, r * 0.5f);
-    }
 
     /// <summary>
     /// A scarecrow on a pole, arms out on a crossbar: a slouching plaid shirt
@@ -984,10 +903,10 @@ internal static class ThanksgivingPainter
     /// at least 0.04 U above it) they are small; in front of it, across the stage (left of "stageRight"), a
     /// pumpkin's TOP must stay below the line plus a little, so the story's actors are never hidden behind one
     /// (on the right there is no stage, so they may stand anywhere in front). Nothing stands near the hollow or
-    /// the nut pile, under the horn, or in the shock's foot. One pumpkin in the front band, fully on screen,
+    /// the nut pile, or in the shock's foot. One pumpkin in the front band, fully on screen,
     /// right of the middle, is the jack-o'-lantern.
     /// </summary>
-    private static List<PatchItem> PlanPatch(int w, int h, float u, Bank ground, Random rng, float hollowX, float stageRight, float shockX, float shockHalf, float hornX, float hornLen)
+    private static List<PatchItem> PlanPatch(int w, int h, float u, Bank ground, Random rng, float hollowX, float stageRight, float shockX, float shockHalf)
     {
         var items = new List<PatchItem>();
         float Walk(float x) => ground.YAt(Math.Clamp(x, 0, w - 1)) + u * 0.052f;
@@ -1002,7 +921,6 @@ internal static class ThanksgivingPainter
             if (front && x < stageRight && y - top < walk + 0.012f * u) return false;             // on the stage: the top stays under the lane
             if (front && y < walk + 0.02f * u) return false;
             if (!front && x > hollowX - 0.14f * u && x < hollowX + 0.07f * u) return false;      // the hollow and the nut pile
-            if (!front && x > hornX - hornLen * 1.2f - r && x < hornX + hornLen * 0.6f + r) return false;   // under the horn
             if (MathF.Abs(x - shockX) < shockHalf + r && MathF.Abs(y - Walk(shockX)) < 0.06f * u) return false;   // in the shock's foot
             return true;
         }

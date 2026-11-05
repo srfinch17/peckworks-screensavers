@@ -1,7 +1,7 @@
 # Adding happenings to a screensaver
 
 A **happening** is one small thing that occurs now and then in a scene: a shooting star, a ghost
-rising from a grave, a firework. Halloween and Thanksgiving have nineteen; Christmas, Sakura and Sakura Dusk have
+rising from a grave, a firework. Halloween has nineteen, Thanksgiving eighteen; Christmas, Sakura and Sakura Dusk have
 twenty each. This page is the recipe for adding more, to any of them or to another screensaver in
 this repo.
 

@@ -160,7 +160,7 @@ a fed koi was as hungry as before and went straight back for the next.
     HalloweenScene.cs              backdrop + candle flicker + bats + the shared engine dropping leaves
     HalloweenPainter.cs            paints the moon, haunted house, graveyard, pumpkins, trees
     HalloweenSettings.cs           declares its knobs
-    Happenings/                    nineteen small random events, one class per file
+    Happenings/                    nineteen small random events, one class per file (Halloween)
       Cast.cs                      the list of them all
       ShootingStar.cs, ...         each one: how long it lasts, and how it looks t seconds in
 
@@ -174,7 +174,9 @@ a fed koi was as hungry as before and went straight back for the next.
   Thanksgiving/                    falling maple leaves, a V of geese, chimney smoke, a scarecrow's scarf
     Program.cs                     Main(), plus the definition
     ThanksgivingScene.cs           backdrop + the geese + the smoke + the window lamplight + the scarf + the shared engine dropping leaves
-    ThanksgivingPainter.cs         paints the harvest dusk, the moon, the farmhouse and barn, the field, the fence, the scarecrow, the cornucopia, the pumpkins, the maples (one with a hollow in its roots)
+    ThanksgivingPainter.cs         paints the harvest dusk, the moon, the farmhouse and barn, the field, the fence, the scarecrow, the pumpkins, the maples (one with a hollow in its roots)
+    FieldWork.cs                   the tractor baling the far lane: a resident with a job (baling, hauling, away), the bales it leaves, the Loud and Food notices it pins
+    TractorArt.cs                  how the tractor, the round baler (with its tailgate) and the hay wagon (with a growing heap) are drawn, and the wheels turned by distance rolled
     ThanksgivingSettings.cs        declares its knobs
     TurkeyFlock.cs                 the wild turkeys that live in the field: four doings and a timer each, the Turkey happening's pictures
     DeerHerd.cs                    the doe and fawn at the far side of the field: a body flip-book and a head flip-book stamped together, mirrored to face left
@@ -186,7 +188,7 @@ a fed koi was as hungry as before and went straight back for the next.
     PatchLife.cs                   the mice, birds and squirrel that live in the patch: a Mind each from Core/Minds, steps by Ground.Step among the pumpkins' feet, drawn far to near against the depth picture
     SquirrelArt.cs                 how a squirrel is drawn and the poses it can take (the bound, a hop with its crouch and settle, a turn through the front view, sitting, digging, chattering), shared with the fence squirrel
     MouseArt.cs, BirdArt.cs        how a field mouse and a small songbird are drawn, shared by the stories and the patch's life
-    Happenings/                    nineteen small random events (a turkey, a tractor, a raccoon), one class per file
+    Happenings/                    eighteen small random events (a turkey, a raccoon, a pheasant), one class per file
 
   CabinByStream/                   a cottage in a flowery meadow at dusk, aiming at a photograph's look
     Program.cs                     Main(), plus the definition
@@ -455,7 +457,7 @@ well above the pines, so in practice it is only the corner branches that cover h
 ghost rising from a grave, a spider spinning a web, a snowman building itself. Think of a cuckoo clock: each happening is one bird behind
 a little door, and a **director** (`Core/Happenings.cs`) is the clockwork that opens one door
 every few seconds. The director shuffles the happenings like a deck of cards and deals from it,
-so you see them all before any repeats. Christmas, Sakura and Sakura Dusk each have their own deck of twenty, Thanksgiving nineteen, none repeated.
+so you see them all before any repeats. Christmas, Sakura and Sakura Dusk each have their own deck of twenty, Thanksgiving eighteen, none repeated.
 Thanksgiving is the third saver in this mould (built 2026-11-04), and the quickest: the engine, the recipe and the two
 sister sets already existed, so the work was the backdrop, the facts, five live actors and the cast. Its acorn
 caper (`AcornCaper.cs`) is a third kind of thing: not a happening (it lasts forty seconds and has four actors)

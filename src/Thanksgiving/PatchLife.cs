@@ -17,7 +17,7 @@ namespace Thanksgiving;
 /// hides more, a busy one never sits), ONE doing at a time with a timer, and
 /// weighted dice for what to do next when the timer runs out. The mind only
 /// chooses a goal; the steps are the kit's ground rules (Ground.Step): the
-/// patch is a surface with holes in it (every pumpkin's foot, the horn, the
+/// patch is a surface with holes in it (every pumpkin's foot, the
 /// shock), and a step into a hole slides round it. A mouse that a squirrel
 /// bounds past bolts (a startle with a cooldown, so it cannot bolt thirty
 /// times a second).
@@ -109,7 +109,7 @@ internal sealed class PatchLife
 
     // ================================================================ the world
 
-    /// <summary>Can a critter stand here? On the near ground, and not inside a pumpkin's foot, the horn, or the shock's foot.</summary>
+    /// <summary>Can a critter stand here? On the near ground, and not inside a pumpkin's foot or the shock's foot.</summary>
     private bool CanStand(float x, float y)
     {
         float u = _s.U;
@@ -123,7 +123,6 @@ internal sealed class PatchLife
         }
         float walk = _s.WalkY(x);
         if (MathF.Abs(x - _s.CornShockFoot.X) < _s.CornShockHalfWidth + 0.01f * u && MathF.Abs(y - walk) < 0.04f * u) return false;
-        if (x > _s.CornucopiaMouth.X - _s.CornucopiaLength * 1.15f && x < _s.CornucopiaMouth.X + _s.CornucopiaLength * 0.5f && MathF.Abs(y - _s.CornucopiaMouth.Y) < 0.05f * u) return false;
         return true;
     }
 

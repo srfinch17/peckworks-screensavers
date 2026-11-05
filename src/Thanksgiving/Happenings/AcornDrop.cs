@@ -65,7 +65,7 @@ internal sealed class AcornDrop : Happening
 
     public override float Seconds => Total;
     public override int Layer => 1;
-    public override string? Claims => "branches,cornucopia";   // its acorns can land by the horn, where an apple rolls
+    public override string? Claims => "branches,stageleft";   // its acorns can land on the left stage, where an apple rolls in
     public override bool CanBegin => _usable;
 
     public AcornDrop(ThanksgivingScenery s)

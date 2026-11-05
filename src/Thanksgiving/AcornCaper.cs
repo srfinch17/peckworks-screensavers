@@ -131,9 +131,9 @@ internal sealed class AcornCaper : Story
         PointF OnRail(float x) => _script.OnRail(x);
         PointF OnGround(float x) => _script.OnGround(x);
 
-        // The burying spot: in the open stretch between the cornucopia and the corn shock, clear of both.
+        // The burying spot: in the open stretch left of the corn shock, clear of it.
         float shockEdge = _s.CornShockFoot.X - _s.CornShockHalfWidth - 2.4f * k;
-        float lo = Math.Max(_s.CornucopiaMouth.X + 3.0f * k, _s.Width * 0.30f), hi = Math.Min(_s.Width * 0.46f, shockEdge);   // the face-off spreads 1.6 squirrels to the left of the spot: keep it off the fruit
+        float lo = _s.Width * 0.30f, hi = Math.Min(_s.Width * 0.46f, shockEdge);   // the face-off spreads 1.6 squirrels to the left of the spot: keep it off the fruit
         _spotX = hi > lo ? lo + (hi - lo) * (float)_rng.NextDouble() : (lo + hi) / 2;   // (a screen too narrow for the open stretch: the middle of what there is)
         _pileX = hx - 1.7f * k;
         _pileY = WalkY(_pileX);

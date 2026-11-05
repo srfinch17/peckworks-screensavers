@@ -26,7 +26,6 @@ internal static class ThanksgivingHappenings
         (nameof(PorchLight), () => new PorchLight(s)),
         (nameof(WindowSilhouettes), () => new WindowSilhouettes(s)),
         (nameof(BarnOwl), () => new BarnOwl(s)),
-        (nameof(Tractor), () => new Tractor(s)),
         (nameof(Deer), () => new Deer(s)),
         // ---- the near ground ----
         (nameof(Turkey), () => new Turkey(s)),
@@ -35,7 +34,7 @@ internal static class ThanksgivingHappenings
         (nameof(Raccoon), () => new Raccoon(s)),
         (nameof(Pheasant), () => new Pheasant(s)),
         (nameof(ScarecrowWink), () => new ScarecrowWink(s)),
-        // ---- the cornucopia and the corner branches ----
+        // ---- the left stage and the corner branches ----
         (nameof(AppleRoll), () => new AppleRoll(s)),
         (nameof(AcornDrop), () => new AcornDrop(s)),
         (nameof(Cardinal), () => new Cardinal(s)),

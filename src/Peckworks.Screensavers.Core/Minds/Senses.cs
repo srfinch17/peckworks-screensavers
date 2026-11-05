@@ -43,6 +43,8 @@ public enum Sense
     Food,
     /// <summary>One of its own kind doing something: a herd-mate's alarm, a flock-mate's display. Spreads a reaction through a group.</summary>
     Friend,
+    /// <summary>One of its own kind calling: a tom's display, a chirp from a perch. The curious come over, the rest look.</summary>
+    Call,
 }
 
 /// <summary>One thing that happened: what, where, how far it carries (pixels), how strong (0 to 1), who caused it, and when.</summary>
@@ -154,6 +156,7 @@ public sealed class Attention
                 Sense.Movement => strength * (0.4f + Timid) > 0.45f ? Reaction.Freeze : strength * (0.3f + Curious) > 0.15f ? Reaction.Look : Reaction.None,
                 Sense.Food => Hungry * strength > 0.25f ? Reaction.Approach : strength * Curious > 0.3f ? Reaction.Look : Reaction.None,
                 Sense.Friend => strength * (0.4f + Curious) > 0.25f ? Reaction.Look : Reaction.None,
+                Sense.Call => strength * (0.3f + Curious) > 0.55f ? Reaction.Approach : strength * (0.4f + Curious) > 0.25f ? Reaction.Look : Reaction.None,
                 _ => Reaction.None,
             };
             if (r == Reaction.None || Rank(r) <= floor) continue;

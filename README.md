@@ -527,7 +527,7 @@ trees, and bare branches clawing in from the top corners.
 - Bats flap across the sky in three sizes, swooping as they go.
 - The jack-o'-lanterns flicker like candles, and the skeleton waves.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the autumn trees.
-- Nineteen small **happenings** come and go at random, one every 5 to 12 seconds, shuffled like a
+- Eighteen small **happenings** come and go at random, one every 5 to 12 seconds, shuffled like a
   deck of cards so you see them all before any repeats:
 
   | Where | What happens |
@@ -574,7 +574,7 @@ Settings: amount of snow, fall speed, breeze, flake size, and how often a surpri
 
 Maple leaves drifting down over a farm at harvest dusk: a sky from plum to gold, a big peach harvest
 moon, a white farmhouse with lamplit windows and a smoking chimney, a red barn and silo, a reaped field
-with hay bales, a scarecrow in the garden beside the house, a split rail fence, a cornucopia spilling its fruit, a corn shock, a
+with hay bales, a scarecrow in the garden beside the house, a split rail fence, a corn shock, a
 pumpkin patch that covers the whole foreground (pumpkins of three tints, gourds and broad leaves joined
 by vine runners, one of them carved into a jack-o'-lantern with a candle guttering inside it, in homage
 to Halloween), maples in full colour, and oak branches with the year's last leaves in the top corners.
@@ -584,7 +584,16 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
 - A V of Canada geese crosses the sky, each goose on its own wingbeat, passing behind the corner
   branches.
 - A flock of wild turkeys lives in the field behind the fence: they peck at the stubble, wander a
-  few steps, stand and look about, and the tom fans his tail now and then.
+  few steps, stand and look about, and the tom fans his tail now and then; when he does, the
+  curious hens walk over and stand watching him, and a bale dropped by the baler draws them over
+  to scratch at the hay.
+- **The field is being worked.** An old red tractor with a lit headlamp drives slowly along the far
+  lane towing a round baler; every so often the baler's tailgate swings up and a finished bale rolls
+  out the back and is left standing on the field. It goes off one side, comes back the other way a
+  while later and bales the next row, and when half a dozen bales stand loose it comes back towing
+  the hay wagon and picks them up as it passes, the heap on the wagon growing. The deer lift their
+  heads as it goes by and the timid ones trot off; each bale it drops draws the turkeys over to
+  scratch at the loose hay.
 - A white-tailed doe, her fawn and a buck with antlers graze at the far side of the field, lift
   their heads to look about, and move off a few steps at a time, the fawn trotting after her.
 - The turkeys stand on turkey legs: the drumstick up in the feathers, the hock (the joint that looks
@@ -592,7 +601,7 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
 - **They have minds and senses.** The turkeys, the deer and the patch's small creatures run on the
   same shared kit as the koi pond's animals (Core/Minds): personality dials dealt at birth, one
   doing at a time, weighted dice for the next, and now SENSES. Whatever happens on the farm is
-  pinned on a noticeboard (the tractor is loud across the field, the raccoon a threat by the horn,
+  pinned on a noticeboard (the tractor is loud as it passes, the raccoon a threat on the near ground,
   a scuffle a noise, a squirrel bounding past a movement) and every animal makes its own sense of
   it by its nature: the bold look up, the timid freeze with the head high, the fawn turns and
   trots off, a bolting deer sets the whole herd looking, a mouse dives behind a pumpkin. They move
@@ -614,7 +623,7 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   beside it, sits up and looks about, sniffs along the pumpkin's foot and gives up, while the mouse's
   head rises in one carved eye, watching, and ducks; once the squirrel has gone it looks out of the other
   eye, creeps out of the mouth and scurries home. *The fawn and the apple*: an apple rolls out of the
-  cornucopia and its last bounce takes it under the fence rail into the field; the fawn trots down to
+  left edge of the picture and its last bounce takes it under the fence rail into the field; the fawn trots down to
   the fence, puts her head through the rail and eats it in three bites, then walks back to her mother.
   *The mouse parade*: four mice file across the patch with acorns in their mouths until a sparrow drops
   out of the maple and swoops low over the line; they scatter behind the nearest pumpkins, noses showing
@@ -633,15 +642,15 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   in the breeze.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the maples and the
   corner branches.
-- Nineteen small **happenings** come and go at random, as in Halloween and Christmas:
+- Eighteen small **happenings** come and go at random, as in Halloween and Christmas:
 
   | Where | What happens |
   |-------|--------------|
   | The sky | A shooting star. Stars join up into a turkey, a cornucopia, a maple leaf, a slice of pie or an acorn. Harvest fireworks. A gust whirls a swirl of leaves across. A hawk soars in slow circles. |
   | The farm | The porch light comes on and moths gather. Silhouettes pass the farmhouse windows, one carrying the bird to the table. A barn owl flies out of the loft. |
-  | The field | An old tractor with a lit headlamp pulls a hay wagon along the lane. A doe and her fawn, half the time led by a buck, come up over the far ridge: tiny silhouettes, about fifteen pixels at 1080p, because the far ridge is the farthest thing in the picture. |
-  | The near ground | A wild turkey struts through, stops, fans its tail, gobbles and struts on. A squirrel bounds along the fence rail and sits up with an acorn. A crow lands on the scarecrow and caws. A raccoon raids the cornucopia and makes off with an apple. A pheasant bursts out of the corn shock. The scarecrow blinks and winks. |
-  | The props | An apple rolls out of the cornucopia. Acorns patter down from the oak branch. A cardinal lands on a twig and sings. |
+  | The field | A doe and her fawn, half the time led by a buck, come up over the far ridge: tiny silhouettes, about fifteen pixels at 1080p, because the far ridge is the farthest thing in the picture. |
+  | The near ground | A wild turkey struts through, stops, fans its tail, gobbles and struts on. A squirrel bounds along the fence rail and sits up with an acorn. A crow lands on the scarecrow and caws. A raccoon comes sniffing at the pumpkins, rears up for a guilty look about, and waddles off. A pheasant bursts out of the corn shock. The scarecrow blinks and winks. |
+  | The props | An apple comes bounding in from beyond the left edge. Acorns patter down from the oak branch. A cardinal lands on a twig and sings. |
 
 Settings: number of leaves, fall speed, breeze, leaf size, number of geese, number of turkeys in
 the field, number of deer (a doe, a doe and fawn, or a doe, fawn and buck; three by default), and how often a surprise

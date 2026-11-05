@@ -4,7 +4,7 @@ using Peckworks.Screensavers.Core;
 namespace Thanksgiving.Happenings;
 
 /// <summary>
-/// An apple pops out of the cornucopia's mouth, hops, lands, bounces once,
+/// An apple comes bounding in from beyond the left edge (dropped by someone out of the picture), hops, lands, bounces once,
 /// rolls off to the right along the ground, slows to a stop, rocks to and fro
 /// a few times as it settles, rests a moment, and fades away.
 ///
@@ -55,18 +55,15 @@ internal sealed class AppleRoll : Happening
 
     public override float Seconds => Total;
     public override int Layer => 1;
-    public override string? Claims => "cornucopia";
+    public override string? Claims => "stageleft";
 
     public AppleRoll(ThanksgivingScenery s)
     {
         _s = s;
         _r = Math.Max(3f, s.U * 0.015f);
         _size = (int)(_r * 3.8f) + 4;
-        float spillR = s.CornucopiaLength * 0.22f;              // the horn's mouth radius, as the painter works it out
-        _x0 = s.CornucopiaMouth.X - spillR * 0.15f;
-        // The apple's centre starts in the middle of the horn's mouth; the resting centre is a radius above the walking line.
-        float restY = s.WalkY(_x0) - _r;
-        _y0h = Math.Max(0f, restY - (s.CornucopiaMouth.Y - spillR));
+        _x0 = -2.5f * _r;                                        // from just beyond the left edge, on the ground
+        _y0h = 0f;
 
         // Flight times from the sums: up and down under gravity (the landing speed is worked from the start height too).
         float g = Gravity * s.U, vy = HopUp * s.U;
@@ -158,7 +155,7 @@ internal sealed class AppleRoll : Happening
         _shadow.DrawCentered(fb, x, groundY - _r * 0.05f, Math.Min(1f, shadowOp));
 
         int page = (int)MathF.Round(((angle / MathF.Tau) % 1f + 1f) % 1f * Pages) % Pages;
-        // Against the near ground's depth picture: it rolls out from behind the horn's rim and passes behind any pumpkin nearer than its spot.
+        // Against the near ground's depth picture: it passes behind any pumpkin nearer than its spot.
         _page[_colour][page].Draw(fb, (int)MathF.Round(x) - _size / 2, (int)MathF.Round(cy) - _size / 2, opacity, null, false, _s.NearDepth, _s.Nearness(groundY));
     }
 
