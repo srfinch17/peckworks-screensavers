@@ -585,8 +585,10 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   branches.
 - A flock of wild turkeys lives in the field behind the fence: they peck at the stubble, wander a
   few steps, stand and look about, and the tom fans his tail now and then.
-- A white-tailed doe and her fawn graze at the far side of the field, lift their heads to look
-  about, and move off a few steps at a time, the fawn trotting after her.
+- A white-tailed doe, her fawn and a buck with antlers graze at the far side of the field, lift
+  their heads to look about, and move off a few steps at a time, the fawn trotting after her.
+- The turkeys stand on turkey legs: the drumstick up in the feathers, the hock (the joint that looks
+  like a backward knee, really the ankle) just under the belly, a thin pinkish shank and long toes.
 - **They have minds and senses.** The turkeys, the deer and the patch's small creatures run on the
   same shared kit as the koi pond's animals (Core/Minds): personality dials dealt at birth, one
   doing at a time, weighted dice for the next, and now SENSES. Whatever happens on the farm is
@@ -619,9 +621,12 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   past the edges, while the sparrow sits on a pumpkin and looks about, then fall back into line.
 - **The patch's own life**: field mice, juncos and sparrows and a squirrel live among the pumpkins,
   each with a small mind of its own (the koi pond's shared kit). Mice scurry between the pumpkins,
-  sniff, nibble at one, hide behind one and peek; birds hop and peck, fly up to sit on a pumpkin's
-  shoulder and look about; the squirrel bounds through, sits up, scratches at the earth and darts
-  behind a pumpkin; a mouse a squirrel bounds past bolts. Everything on the ground is hidden by the
+  sniff, nibble at one, hide behind one and peek; birds get about by FLYING (a few hops at most): a
+  burst off the ground, a low bounding flight across the patch, wings beating then shut into a dart
+  and beating again, a flare onto the ground or a pumpkin's shoulder, where they peck and look about
+  on proper legs (a hock bent backward, a thin shank, long toes); the squirrel bounds through, sits up,
+  scratches at the earth and darts behind a pumpkin, and sinks into its run and sits up out of it
+  through the crouch (never a one-frame pop); a mouse a squirrel bounds past bolts. Everything on the ground is hidden by the
   pumpkins nearer than it (a depth picture the painter makes), which is what puts them IN the patch.
   Knob "Patch critters" (0 to 12, default 6); they keep out of the way while a scene plays.
 - Smoke drifts from the chimney, the windows' lamplight wanders, and the scarecrow's red scarf streams
@@ -634,12 +639,12 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   |-------|--------------|
   | The sky | A shooting star. Stars join up into a turkey, a cornucopia, a maple leaf, a slice of pie or an acorn. Harvest fireworks. A gust whirls a swirl of leaves across. A hawk soars in slow circles. |
   | The farm | The porch light comes on and moths gather. Silhouettes pass the farmhouse windows, one carrying the bird to the table. A barn owl flies out of the loft. |
-  | The field | An old tractor with a lit headlamp pulls a hay wagon along the lane. A doe and her fawn come up over the far ridge. |
+  | The field | An old tractor with a lit headlamp pulls a hay wagon along the lane. A doe and her fawn, half the time led by a buck, come up over the far ridge: tiny silhouettes, about fifteen pixels at 1080p, because the far ridge is the farthest thing in the picture. |
   | The near ground | A wild turkey struts through, stops, fans its tail, gobbles and struts on. A squirrel bounds along the fence rail and sits up with an acorn. A crow lands on the scarecrow and caws. A raccoon raids the cornucopia and makes off with an apple. A pheasant bursts out of the corn shock. The scarecrow blinks and winks. |
   | The props | An apple rolls out of the cornucopia. Acorns patter down from the oak branch. A cardinal lands on a twig and sings. |
 
 Settings: number of leaves, fall speed, breeze, leaf size, number of geese, number of turkeys in
-the field, number of deer (a doe, a doe and fawn, or two does and a fawn), and how often a surprise
+the field, number of deer (a doe, a doe and fawn, or a doe, fawn and buck; three by default), and how often a surprise
 happens (0 turns them off).
 
 Halloween, Christmas and Thanksgiving are built from the same shared pieces as the Sakura pair (the

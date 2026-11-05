@@ -5,9 +5,12 @@ using Peckworks.Screensavers.Core.Sakura;
 namespace Thanksgiving.Happenings;
 
 /// <summary>
-/// A doe and her fawn walk up over the far ridge against the sunset glow, stand
-/// side by side, graze (heads down, a little nibbling, heads up), look up
-/// together at something far away, and walk back down out of sight.
+/// A doe and her fawn (half the time led by a buck with antlers) walk up over
+/// the far ridge against the sunset glow, stand side by side, graze (heads
+/// down, a little nibbling, heads up), look up together at something far away,
+/// and walk back down out of sight. They are SMALL: the far ridge is the
+/// farthest thing in the picture, so a deer there is about fifteen pixels
+/// tall at 1080p (at four times that they were "a hundred feet tall").
 ///
 /// It is the Christmas reindeer's trick. Both are dark silhouettes with a thin
 /// warm rim of sunset light (dark on the gold sky would be fine, but a pale rim
@@ -47,14 +50,15 @@ internal sealed class Deer : Happening
     private sealed class Animal
     {
         public int H, BodyW, HeadS, BodyOx, BodyOy;
+        public bool Buck;                                                               // antlers
         public readonly Sprite[] Body = new Sprite[Walk], Head = new Sprite[Heads];
     }
 
     private readonly ThanksgivingScenery _s;
-    private readonly Animal _doe = new(), _fawn = new();
-    private bool _ok, _facingLeft;
+    private readonly Animal _buck = new() { Buck = true }, _doe = new(), _fawn = new();
+    private bool _ok, _facingLeft, _withBuck;
     private float _x0, _dir;
-    private float _seconds = RiseFor + StandFor + DownFor + Lag;
+    private float _seconds = RiseFor + StandFor + DownFor + 2 * Lag;
 
     public override float Seconds => _seconds;
     public override string? Claims => "ridge";
@@ -65,8 +69,12 @@ internal sealed class Deer : Happening
     public Deer(ThanksgivingScenery s)
     {
         _s = s;
-        Make(_doe, Math.Max(20, (int)(s.U * 0.058f)));
-        Make(_fawn, Math.Max(13, (int)(s.U * 0.038f)));
+        // THE SIZE IS THE DISTANCE. The far ridge is the farthest thing in the picture, behind the hills the farmhouse and
+        // barn stand on, and a deer is a sixth of a house tall; at 0.058 U (half the house's height, on a ridge beyond it)
+        // these were "literally a hundred feet tall". A deer up there is about 0.015 U: fifteen pixels at 1080p.
+        Make(_buck, Math.Max(9, (int)(s.U * 0.019f)));
+        Make(_doe, Math.Max(8, (int)(s.U * 0.015f)));
+        Make(_fawn, Math.Max(6, (int)(s.U * 0.010f)));
     }
 
     private static void Make(Animal a, int h)
@@ -75,7 +83,7 @@ internal sealed class Deer : Happening
         a.BodyW = (int)(1.15f * h) + 4;
         a.BodyOx = a.BodyW / 2;
         a.BodyOy = (int)(0.99f * h) + 1;
-        a.HeadS = (int)(1.0f * h) + 4;
+        a.HeadS = (int)(1.3f * h) + 4;                                                  // 1.3: room above the skull for a buck's antlers
         for (int i = 0; i < Walk; i++)
         {
             int pose = i;
@@ -91,9 +99,9 @@ internal sealed class Deer : Happening
             int pg = j;
             a.Head[j] = Sprite.Paint(a.HeadS, a.HeadS, g =>
             {
-                g.TranslateTransform(a.HeadS / 2f, a.HeadS / 2f);
+                g.TranslateTransform(a.HeadS / 2f, a.HeadS * 0.58f);                    // the root a little below the middle: the alert head and antlers reach up, the grazing head down
                 g.ScaleTransform(h, -h);
-                PaintHead(g, pg / (float)(Heads - 1), h);
+                PaintHead(g, pg / (float)(Heads - 1), h, a.Buck);
             });
         }
     }
@@ -156,7 +164,7 @@ internal sealed class Deer : Happening
     }
 
     /// <summary>The neck and head on a sheet whose middle is the neck's root. f: 0 = head up and alert, 1 = nose down at the grass.</summary>
-    private static void PaintHead(Graphics g, float f, int h)
+    private static void PaintHead(Graphics g, float f, int h, bool buck)
     {
         float a = (22f + 140f * f) * MathF.PI / 180f;                              // the neck's angle from straight up, forward
         float ha = (80f + 92f * f) * MathF.PI / 180f;                              // the head's axis: forward when alert, pointing down when grazing
@@ -179,6 +187,7 @@ internal sealed class Deer : Happening
             // In this turned frame +x is the way the nose points.
             g.FillEllipse(brush, -0.11f - grow * 0.5f, -0.065f - grow * 0.5f, 0.22f + grow, 0.13f + grow);
             g.FillPolygon(brush, [P(0.04f, 0.0f), P(0.17f, 0.04f), P(0.20f, -0.01f), P(0.16f, -0.05f), P(0.04f, -0.06f)]);
+            if (buck) Antlers(g, col, MathF.Max(0.03f, 1.1f / h) + grow, 1.5f);          // on the skull, in this same turned frame; half again as big as life, or at fifteen pixels they are a two-pixel bump
             g.Restore(st);
             // Two big ears: back from the head, standing up at an angle whatever the head is doing.
             foreach (float spread in new[] { -0.28f, 0.34f })
@@ -194,6 +203,25 @@ internal sealed class Deer : Happening
         });
     }
 
+    /// <summary>
+    /// A buck's antlers, in the head's own frame (+x the way the nose points, +y up off the skull): two main beams that
+    /// rise from the back of the skull, sweep back, then curve forward, each with two tines pointing forward and up. The
+    /// far antler is drawn a little behind the near one, so the pair reads as a pair. In silhouette at fifteen pixels the
+    /// shape is what counts: the beams must lean BACK then curl FORWARD, the way a white-tail's do.
+    /// </summary>
+    internal static void Antlers(Graphics g, Color col, float w, float scale = 1f)
+    {
+        using var pen = new Pen(col, w) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        PointF S(float x, float y) => P(x * scale, 0.04f + (y - 0.04f) * scale);                // scaled about the skull top
+        foreach (float dx in (float[])[0.05f, -0.03f])
+        {
+            g.DrawBezier(pen, S(dx - 0.06f, 0.05f), S(dx - 0.14f, 0.18f), S(dx - 0.10f, 0.30f), S(dx + 0.02f, 0.34f));   // the main beam: back, then curling forward
+            g.DrawLine(pen, S(dx - 0.11f, 0.16f), S(dx - 0.02f, 0.24f));                         // a tine, forward and up
+            g.DrawLine(pen, S(dx - 0.11f, 0.26f), S(dx - 0.04f, 0.33f));                         // a second, higher
+            g.DrawLine(pen, S(dx - 0.07f, 0.08f), S(dx - 0.01f, 0.12f));                         // the brow tine, short
+        }
+    }
+
     // ----------------------------------------------------------------- where
 
     /// <summary>The ridge's height at x, read straight between its corners (exactly what the painter filled).</summary>
@@ -205,9 +233,10 @@ internal sealed class Deer : Happening
         _seconds = 0.2f;                                                           // "nothing to show", unless a good place turns up
         _facingLeft = rng.Next(2) == 0;
         _dir = _facingLeft ? -1 : 1;
+        _withBuck = rng.Next(2) == 0;                                              // half the showings a buck leads the doe and fawn over
 
         float u = _s.U, hd = _doe.H;
-        float reach = hd * 1.7f;                                                   // the stretch of ridge the pair uses either side of the standing place
+        float reach = hd * 2.6f;                                                   // the stretch of ridge the group uses either side of the standing place
         float farmX = _s.FarmFoot.X, barnX = _s.BarnFoot.X, scarecrowX = _s.ScarecrowFoot.X;
         for (int tries = 0; tries < 120; tries++)
         {
@@ -232,7 +261,7 @@ internal sealed class Deer : Happening
 
             _x0 = x;
             _ok = true;
-            _seconds = RiseFor + StandFor + DownFor + Lag;
+            _seconds = RiseFor + StandFor + DownFor + (_withBuck ? 2 * Lag : Lag);
             return;
         }
     }
@@ -252,8 +281,11 @@ internal sealed class Deer : Happening
     public override void Draw(FrameBuffer fb, float t)
     {
         if (!_ok) return;
-        DrawOne(fb, _doe, t, _x0);
-        DrawOne(fb, _fawn, t - Lag, _x0 - _dir * _doe.H * 0.85f);
+        // The buck (when he is there) leads, the doe a lag behind him, the fawn a lag behind her; each a body back.
+        float lead = _withBuck ? Lag : 0f;
+        if (_withBuck) DrawOne(fb, _buck, t, _x0 + _dir * _doe.H * 1.0f);
+        DrawOne(fb, _doe, t - lead, _x0);
+        DrawOne(fb, _fawn, t - lead - Lag, _x0 - _dir * _doe.H * 0.85f);
     }
 
     /// <summary>One animal, on its own clock "t" (the fawn's is Lag seconds behind the doe's).</summary>
@@ -301,6 +333,6 @@ internal sealed class Deer : Happening
 
         // The neck and head, anchored on the neck's root, which rides on the body.
         float rx = x + _dir * NeckX * a.H, ry = top + a.BodyOy - NeckY * a.H;
-        a.Head[hp].Draw(fb, (int)MathF.Round(rx - a.HeadS / 2f), (int)MathF.Round(ry - a.HeadS / 2f), 1f, _s.OpenSky, mirror);
+        a.Head[hp].Draw(fb, (int)MathF.Round(rx - a.HeadS / 2f), (int)MathF.Round(ry - a.HeadS * 0.58f), 1f, _s.OpenSky, mirror);
     }
 }

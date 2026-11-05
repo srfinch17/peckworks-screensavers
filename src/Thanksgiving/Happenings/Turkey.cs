@@ -48,7 +48,8 @@ internal sealed class Turkey : Happening
     private const float GobbleAt = 1.4f, GobbleFor = 0.7f;   // when in the display the gobble happens, and how long it takes
     private const int WalkPages = 72, TransPages = 8, QuiverPages = 4, GobblePages = 6;   // 72: at 24 the held head stepped 1.9 px a page under a body moving 1 px a frame, and buzzed
     private const float Reach = 0.11f;          // how far each foot travels in front of and behind the hip (turkey lengths)
-    private const float Legs = 0.17f;           // each leg bone
+    private const float Thigh = 0.21f;          // the hidden upper bone, hip to hock (the drumstick, inside the feathers)
+    private const float Shank = 0.24f;          // the bare shank, hock to foot
     private const int Feathers = 13;            // in the tail
 
     private static readonly Color Bronze = Color.FromArgb(92, 58, 34);
@@ -62,8 +63,8 @@ internal sealed class Turkey : Happening
     private static readonly Color HeadPale = Color.FromArgb(132, 158, 206);
     private static readonly Color Wattle = Color.FromArgb(206, 40, 44);
     private static readonly Color Beak = Color.FromArgb(224, 204, 150);
-    private static readonly Color LegNear = Color.FromArgb(86, 56, 40);
-    private static readonly Color LegFar = Color.FromArgb(60, 40, 30);
+    private static readonly Color LegNear = Color.FromArgb(182, 132, 122);    // a turkey's bare shank is pinkish grey, not feather brown
+    private static readonly Color LegFar = Color.FromArgb(128, 90, 84);
 
     private readonly ThanksgivingScenery _s;
     private readonly float _k;                  // pixels in one "turkey length" unit; all the drawing below is in those units
@@ -316,29 +317,39 @@ internal sealed class Turkey : Happening
         // dark lid on a pot); a few lighter scallops along the lower edge are the breast feathers' tips. In the display it swells.
         g.Restore(bodyState);
         // The far leg goes behind the body: legs are NOT pitched (they stand on the ground whatever the body does).
-        void Leg(float hx, float phi, Color c)
+        //
+        // THE LEG, A TURKEY'S AND NOT A PERSON'S. What shows under a turkey is not a thigh and a shin like ours. The
+        // thigh (the drumstick) and the true knee are up inside the feathers. What hangs below the body is the bare
+        // SHANK, thin and pinkish grey, and at its top the HOCK, the joint that looks like a knee bent the wrong way:
+        // it is really the ankle, and it points BACKWARD. So: a hip up inside the body, an upper bone down and back
+        // to the hock just under the belly (drawn thick in the body's bronze, the feathered drumstick, most of it
+        // hidden behind the body), then the thin bare shank down and forward to the foot, and long toes. The first
+        // version put the hip on the belly line with two equal dark bones in full view AND bent the joint forward
+        // (the IK took the wrong one of its two answers): a person's leg, "people wearing turkey costumes".
+        void Leg(float hx, float phi, Color shank, Color drumstick)
         {
             // Foot path: slide back along the ground (half the stride), then swing forward through the air.
             float u = ((phi % MathF.Tau) + MathF.Tau) % MathF.Tau;
             float fx, lift;
             if (u < MathF.PI) { fx = 1 - 2 * u / MathF.PI; lift = 0; }
             else { float q = (u - MathF.PI) / MathF.PI; fx = -1 + 2 * Smooth(q); lift = 0.07f * MathF.Sin(q * MathF.PI); }
-            PointF hipP = P(hx, hip);
+            PointF hipP = P(hx + 0.06f, hip + 0.10f);                       // up inside the body, a little forward of its middle
             PointF foot = P(hx + Reach * legs * fx, lift * legs);
-            // Two-bone IK: where does the ankle go so two bones of length Legs span hip to foot? A bird's ankle points backward.
+            // Two-bone IK with unequal bones: the law of cosines gives the angle at the hip between the straight line to
+            // the foot and the upper bone; swinging the upper bone BACK of that line (minus, not plus) puts the hock behind.
             float dx = foot.X - hipP.X, dy = foot.Y - hipP.Y;
-            float d = MathF.Min(MathF.Sqrt(dx * dx + dy * dy), 2 * Legs - 0.002f);
-            float alpha = MathF.Acos(Math.Clamp(d / (2 * Legs), -1, 1));
-            float theta = MathF.Atan2(dy, dx) + alpha;
-            PointF ankle = P(hipP.X + Legs * MathF.Cos(theta), hipP.Y + Legs * MathF.Sin(theta));
-            Limb(hipP, ankle, 0.06f, c);
-            Limb(ankle, foot, 0.045f, c);
-            // Three toes forward, fanned, and a short one back.
-            foreach (float spread in (float[])[-0.05f, 0f, 0.05f])
-                Limb(foot, P(foot.X + 0.10f, foot.Y + spread + 0.01f), 0.025f, c);
-            Limb(foot, P(foot.X - 0.045f, foot.Y + 0.005f), 0.022f, c);
+            float d = MathF.Min(MathF.Sqrt(dx * dx + dy * dy), Thigh + Shank - 0.002f);
+            float cosA = Math.Clamp((Thigh * Thigh + d * d - Shank * Shank) / (2 * Thigh * d), -1f, 1f);
+            float theta = MathF.Atan2(dy, dx) - MathF.Acos(cosA);
+            PointF hock = P(hipP.X + Thigh * MathF.Cos(theta), hipP.Y + Thigh * MathF.Sin(theta));
+            Limb(hipP, hock, 0.11f, drumstick);                              // the feathered drumstick, showing only where it bulges under the belly
+            Limb(hock, foot, 0.032f, shank);                                 // the bare shank
+            // Three long toes forward, fanned, and a short one back.
+            foreach (float spread in (float[])[-0.045f, 0f, 0.045f])
+                Limb(foot, P(foot.X + 0.13f, foot.Y + spread + 0.008f), 0.024f, shank);
+            Limb(foot, P(foot.X - 0.05f, foot.Y + 0.004f), 0.02f, shank);
         }
-        Leg(0.02f, phase + MathF.PI, LegFar);
+        Leg(0.02f, phase + MathF.PI, LegFar, Dark);
 
         bodyState = g.Save();                                                                   // a saved state is spent once it is restored: save again for the body's turn
         g.TranslateTransform(hipPivot.X, hipPivot.Y);
@@ -402,6 +413,6 @@ internal sealed class Turkey : Happening
             g.DrawBezier(snood, P(head.X + 0.07f, head.Y + 0.03f), P(head.X + 0.12f, head.Y + 0.035f), P(head.X + 0.13f, head.Y - 0.01f), P(head.X + 0.11f, head.Y - 0.035f));   // the snood: a small curl over the beak
         Ellipse(head.X + 0.028f, head.Y + 0.016f, 0.013f, 0.013f, Black);                        // the eye
 
-        Leg(-0.02f, phase, LegNear);
+        Leg(-0.02f, phase, LegNear, Bronze);
     }
 }

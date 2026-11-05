@@ -69,6 +69,7 @@ internal sealed class DeerHerd
         public float TurnT;
         public int TurnWhenSettled;                         // a turn owed once the stop has settled (a wall, the fawn facing her mother's way), or 0
         public bool Fawn;
+        public bool Buck;                                   // the third deer: bigger, with antlers
         public float X, Depth;
         public int Dir;
         public Doing Doing;
@@ -155,6 +156,7 @@ internal sealed class DeerHerd
     private static readonly Color Nose = Color.FromArgb(32, 26, 26);
     private static readonly Color EarIn = Color.FromArgb(190, 140, 120);
     private static readonly Color EarEdge = Color.FromArgb(70, 44, 32);
+    private static readonly Color Bone = Color.FromArgb(214, 194, 160);     // the buck's antlers
 
     private readonly ThanksgivingScenery _s;
     private readonly Random _rng;
@@ -176,8 +178,8 @@ internal sealed class DeerHerd
         float[] timid = Traits.Deal(_rng, Math.Max(1, count)), curious = Traits.Deal(_rng, Math.Max(1, count));
         for (int i = 0; i < count; i++)
         {
-            bool fawn = i == 1;                             // the second deer is the fawn; a third is another doe
-            var a = new Animal { Fawn = fawn, Dir = dir, Depth = 0.18f + 0.10f * (float)_rng.NextDouble() + (fawn ? 0.06f : 0f) };
+            bool fawn = i == 1, buck = i == 2;              // the second deer is the fawn; the third a buck with antlers (his line: "some deer should have antlers")
+            var a = new Animal { Fawn = fawn, Buck = buck, Dir = dir, Depth = 0.18f + 0.10f * (float)_rng.NextDouble() + (fawn ? 0.06f : 0f) };
             a.X = x0 - dir * (i == 0 ? 0 : (fawn ? s.U * 0.09f : s.U * 0.22f));
             a.Doing = _test == "walk" ? Doing.Walk : Doing.Graze;
             a.Gait = _test == "walk" ? Gait.Walking : Gait.Settled;
@@ -189,7 +191,7 @@ internal sealed class DeerHerd
             a.Pace = new Pace(Speed * s.U * 2.5f);                           // leans into a walk over about half a second
             if (_test == "walk") a.Pace.Want = Speed * s.U;
             a.Restless = (float)_rng.NextDouble() * 10;
-            Make(a, Math.Max(14, (int)(s.U * (fawn ? 0.048f : 0.078f))));
+            Make(a, Math.Max(14, (int)(s.U * (fawn ? 0.048f : buck ? 0.086f : 0.078f))));
             _deer[i] = a;
         }
     }
@@ -264,7 +266,7 @@ internal sealed class DeerHerd
                 {
                     g.TranslateTransform(a.HeadS / 2f, a.HeadS * HeadRootF);
                     g.ScaleTransform(h, -h);
-                    PaintHead(g, f, kk, a.Fawn, h);
+                    PaintHead(g, f, kk, a.Fawn, a.Buck, h);
                 });
             }
             for (int t = 0; t < TurnPages; t++)
@@ -274,7 +276,7 @@ internal sealed class DeerHerd
                 {
                     g.TranslateTransform(a.HeadS / 2f, a.HeadS * HeadRootF);
                     g.ScaleTransform(h * sq, -h);
-                    PaintHead(g, f, 0, a.Fawn, h);
+                    PaintHead(g, f, 0, a.Fawn, a.Buck, h);
                 });
             }
         }
@@ -402,7 +404,7 @@ internal sealed class DeerHerd
     /// The neck and head on a sheet whose origin is the neck's root. f: 0 = head up and alert, 1 = nose down in the
     /// stubble. kind: 0 jaw closed, 1 jaw open (chewing), 2 the near ear flicked back.
     /// </summary>
-    private static void PaintHead(Graphics g, float f, int kind, bool fawn, int h)
+    private static void PaintHead(Graphics g, float f, int kind, bool fawn, bool buck, int h)
     {
         float pw = MathF.Max(0.01f, 1.0f / h);
         Color coat = fawn ? TanFawn : Tan, coatDark = fawn ? TanFawnDark : TanDark;
@@ -449,6 +451,13 @@ internal sealed class DeerHerd
         g.TranslateTransform(headMid.X, headMid.Y);
         g.RotateTransform(90f - ha * 180f / MathF.PI);
         float ml = fawn ? 0.19f : 0.25f;                                   // a fawn's face is shorter
+        if (buck)
+        {
+            // The antlers first, so the skull covers their roots: the ridge deer's shape (Happenings/Deer.cs), in bone
+            // over a darker edge so they stand off the coat and the dusk field alike.
+            Happenings.Deer.Antlers(g, EarEdge, MathF.Max(0.05f, 2.4f / h), 0.85f);
+            Happenings.Deer.Antlers(g, Bone, MathF.Max(0.03f, 1.4f / h), 0.85f);
+        }
         using (var skull = new SolidBrush(coat)) g.FillEllipse(skull, -0.13f, -0.085f, 0.26f, 0.17f);
         using (var muzzle = new SolidBrush(coat))
         using (var mp = new GraphicsPath())

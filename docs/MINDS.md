@@ -523,8 +523,11 @@ still; `Organic.Jitter` spreads every timer so nothing happens on a metronome. `
 two sums a group needs: where a follower belongs behind its leader, and the push from neighbours
 standing too close.
 
-**Instruments.** `PECKWORKS_MINDLOG=<file>` makes Thanksgiving's flock and herd write every
-frame's speed and every roll and reaction; the kit's `tg_mindlog.py` reads it back as the
+**Instruments.** `PECKWORKS_MINDLOG=<file>` makes Thanksgiving's flock, herd and patch critters write every
+frame's place, speed and doing, and every roll and reaction (the patch's clock counts from the first frame,
+not from its sheets being ready: a log that started when the build finished ran 0.4 s early and put a flying
+bird on a sheet where the pixels showed it still standing); the kit's `followlog.py` crops a strip that
+follows one actor by its own logged place, and `tg_mindlog.py` reads it back as the
 largest frame-to-frame speed step per animal (a toy's is its whole speed; a deer's is 2 px/s a
 frame at a 54 px/s walk) and the reactions in time order. `PECKWORKS_NOTICE=Kind;xf;yf;reachU;at`
 pins one notice at a chosen second, for watching the whole field react to it on a sheet.

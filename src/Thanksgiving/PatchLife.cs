@@ -36,6 +36,7 @@ internal sealed class PatchLife
     private sealed class Critter
     {
         public Kind Kind;
+        public int Id;                              // its number at birth (the list is sorted by depth to draw, so an index is not a name)
         public int Look;                            // which bird
         public float X, Y;                          // the feet, pixels
         public float Heading;                       // radians, screen (y down)
@@ -51,17 +52,25 @@ internal sealed class PatchLife
         public int Perched = -1;                    // the pumpkin it sits on
         public float FlyFrom, FlyTo, FlyY0, FlyY1, FlyFor;   // a flight's arc
         public int Refused;                         // frames in a row the ground refused
+        public bool WasDown;                        // a squirrel: on all fours last frame (running, hiding, digging), or sitting up
+        public float Blend;                         // seconds left of its blend through the crouch pages between the two
+        public bool Sinking;                        // the blend's direction: sinking from the sit into the run, or rising out of it
     }
+
+    private const float BlendFor = 0.15f;           // a squirrel drops into its run, or sits up out of it, over nine frames (it used to pop in one)
+    private const int RisePages = 6;
 
     private struct Sheet { public Sprite[] Pages; public int W, H, Ox, By; }
 
     private readonly ThanksgivingScenery _s;
     private readonly Random _rng;
     private readonly Noticeboard _board;
+    private readonly StreamWriter? _log;          // PECKWORKS_MINDLOG: every critter's place and doing each frame (the birds' flights are judged from it)
+    private double _time;
     private readonly List<Critter> _all = new();
     private readonly float _k, _m, _b;
     private readonly Ground.Solid _ground;
-    private Sheet _mouseRun, _mouseStill, _sqRun, _sqLook, _sqDig;
+    private Sheet _mouseRun, _mouseStill, _sqRun, _sqLook, _sqDig, _sqRise;
     private Sheet[] _sqSit = new Sheet[4];
     private Sheet[] _bird = new Sheet[2], _birdLook = new Sheet[2], _birdPeck = new Sheet[2], _birdHop = new Sheet[2];
     private Sheet[] _birdFlyKind = new Sheet[2];
@@ -71,6 +80,7 @@ internal sealed class PatchLife
     {
         _s = s;
         _board = board;
+        _log = MindLog.Open();
         _rng = new Random(sceneRng.Next());         // its own dice
         _k = Math.Max(9f, s.U * 0.055f);
         _m = _k * 0.55f;
@@ -87,7 +97,7 @@ internal sealed class PatchLife
 
     private void Add(Kind kind, float timid, float busy, float curious)
     {
-        var c = new Critter { Kind = kind, Timid = timid, Busy = busy, Look = _rng.Next(2), Dir = _rng.Next(2) == 0 ? 1 : -1 };
+        var c = new Critter { Kind = kind, Id = _all.Count, Timid = timid, Busy = busy, Look = _rng.Next(2), Dir = _rng.Next(2) == 0 ? 1 : -1 };
         PointF at = RandomSpot(0, _s.Width, 40);
         c.X = at.X; c.Y = at.Y;
         // Small things in the grass feel less of the world (Keen under 1); a mouse is timid by nature, a squirrel bold.
@@ -163,9 +173,10 @@ internal sealed class PatchLife
         for (int t = 0; t < 4; t++) { int tl = t; _sqSit[t] = Make(1, w, h, ox, by, _ => SquirrelArt.Page(SquirrelArt.Sit(1f, tl, false, false), k, w, h, ox, by)); }
         _sqLook = Make(1, w, h, ox, by, _ => SquirrelArt.Page(SquirrelArt.Sit(1f, 0, true, false), k, w, h, ox, by));
         _sqDig = Make(8, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Dig(i / 8f), k, w, h, ox, by));
+        _sqRise = Make(RisePages, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Sit(0.2f + 0.8f * i / (RisePages - 1), 0, false, false), k, w, h, ox, by));   // the crouch (page 0) up to the sit (the last)
 
         float b = _b;
-        int bw = (int)(1.6f * b) + 4, bh = (int)(1.1f * b) + 4, box = (int)(0.9f * b) + 2, bby = bh - 2;
+        int bw = (int)(1.6f * b) + 4, bh = (int)(1.3f * b) + 4, box = (int)(0.9f * b) + 2, bby = bh - 2;   // 1.3 tall: the bird stands on legs now, and a hop lifts it a tenth more
         for (int kind = 0; kind < 2; kind++)
         {
             int kk = kind;
@@ -173,7 +184,7 @@ internal sealed class PatchLife
             _birdLook[kind] = Make(1, bw, bh, box, bby, _ => BirdArt.Page(BirdArt.Pose.Look, kk, b, bw, bh, box, bby));
             _birdPeck[kind] = Make(1, bw, bh, box, bby, _ => BirdArt.Page(BirdArt.Pose.Peck, kk, b, bw, bh, box, bby));
             _birdHop[kind] = Make(3, bw, bh, box, bby, i => BirdArt.Page(i == 0 ? BirdArt.Pose.HopCrouch : i == 1 ? BirdArt.Pose.HopUp : BirdArt.Pose.HopLand, kk, b, bw, bh, box, bby));
-            _birdFlyKind[kind] = Make(6, bw, bh, box, bby, i => BirdArt.Page(BirdArt.Pose.Fly, kk, b, bw, bh, box, bby, i));
+            _birdFlyKind[kind] = Make(7, bw, bh, box, bby, i => BirdArt.Page(BirdArt.Pose.Fly, kk, b, bw, bh, box, bby, i < 6 ? i : -1));   // six beating pages and the fold
         }
     }
 
@@ -181,12 +192,15 @@ internal sealed class PatchLife
 
     public void Update(float dt)
     {
+        _time += dt;                                // counted from the first frame, not from the sheets being ready: the log's clock is the frame dump's (the build took 0.4 s and every logged second was 0.4 s early)
         if (!_ready) return;
-        foreach (Critter c in _all)
+        for (int i = 0; i < _all.Count; i++)
         {
+            Critter c = _all[i];
             c.Mind.Tick(dt);
             c.Senses.Tick(dt);
             c.Clock += dt;
+            _log?.WriteLine($"{_time,8:F3} {c.Kind.ToString().ToLowerInvariant()}{c.Id} frame x {c.X:F1} y {c.Y:F1} v {c.Pace.Speed:F2} {c.Mind.Doing}");
             // A squirrel on the move is a thing the mice and birds notice: it tells the board every third of a second.
             if (c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Go or Doing.Bolt && c.Clock >= c.NextPost)
             {
@@ -203,6 +217,14 @@ internal sealed class PatchLife
             }
             Act(c, dt);
             if (c.Mind.Over) Decide(c);
+            // A squirrel never pops from its sit into a bound or back (one frame from upright to stretched flat was the
+            // patch's one real jump): the moment its doing changes class (down on all fours, or sitting up) it plays a
+            // short blend through the crouch pages, sinking into the run or rising out of it. The pace is still easing
+            // in those frames, so the sink plays nearly on the spot.
+            bool down = c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Hide or Doing.Dig;
+            if (c.Kind == Kind.Squirrel && down != c.WasDown) { c.Blend = BlendFor; c.Sinking = down; }
+            c.WasDown = down;
+            if (c.Blend > 0) c.Blend -= dt;
         }
     }
 
@@ -252,10 +274,12 @@ internal sealed class PatchLife
             }
             case Kind.Bird:
             {
-                // Faces: hop somewhere, peck, look about, fly to a pumpkin's top, fly to another spot on the ground.
+                // Faces: a hop or two, peck, look about, fly to a pumpkin's top, fly to another spot on the ground.
+                // A songbird in a patch gets about by FLYING (his line: "they need to look like they're flying around
+                // instead of hopping around"): the flights are the heavy faces, a hop is a few steps at most.
                 bool perched = c.Perched >= 0;
-                int face = Dice.Pick(_rng, [perched ? 0f : 0.5f + 0.5f * c.Busy, perched ? 0f : 0.45f, 0.35f, perched ? 0.1f : 0.25f + 0.3f * c.Timid, perched ? 0.45f : 0.15f]);
-                if (face == 0) { c.Goal = RandomSpot(c.X - 0.15f * u, c.X + 0.15f * u, 30); c.Mind.Begin(Doing.Go, 4f); c.Travelled = 0; }
+                int face = Dice.Pick(_rng, [perched ? 0f : 0.15f + 0.15f * c.Busy, perched ? 0f : 0.45f, 0.35f, perched ? 0.15f : 0.3f + 0.3f * c.Timid, perched ? 0.6f : 0.45f + 0.4f * c.Busy]);
+                if (face == 0) { c.Goal = RandomSpot(c.X - 0.06f * u, c.X + 0.06f * u, 30); c.Mind.Begin(Doing.Go, 1.5f); c.Travelled = 0; }
                 else if (face == 1) c.Mind.Begin(Doing.Peck, 0.6f + 1.4f * (float)_rng.NextDouble());
                 else if (face == 2) c.Mind.Begin(perched ? Doing.Perch : Doing.Still, 1f + 3f * (float)_rng.NextDouble());
                 else if (face == 3) BeginFly(c, PerchNear(c.X, 0.35f * u));
@@ -296,13 +320,42 @@ internal sealed class PatchLife
         }
         else
         {
-            to = RandomSpot(c.X - 0.5f * u, c.X + 0.5f * u, 30);
+            // Anywhere across the patch (it used to be within half a U, a hop's worth), at least a few lengths away so
+            // every flight is a flight and not a flutter on the spot.
+            to = RandomSpot(c.X - 1.1f * u, c.X + 1.1f * u, 30);
+            for (int i = 0; i < 10 && MathF.Abs(to.X - c.X) < 6f * _b; i++) to = RandomSpot(c.X - 1.1f * u, c.X + 1.1f * u, 30);
             c.Perched = -1;
         }
         c.FlyFrom = c.X; c.FlyTo = to.X; c.FlyY0 = c.Y; c.FlyY1 = to.Y;
-        c.FlyFor = Math.Max(0.5f, MathF.Abs(to.X - c.X) / (0.45f * u) + 0.3f);
+        c.FlyFor = Math.Max(0.6f, MathF.Abs(to.X - c.X) / (0.55f * u) + 0.4f);
         c.Dir = to.X >= c.X ? 1 : -1;
+        c.Clock = 0;                                                    // the wing pages count from the take-off
         c.Mind.Begin(Doing.Fly, c.FlyFor);
+    }
+
+    /// <summary>
+    /// Where along its flight a bird is, 0 to 1 of the distance, from 0 to 1 of the time: a burst off the ground, a
+    /// steady middle, and a flare that slows into the landing (a straight line in time arrived at full speed and
+    /// stopped dead). In words: fast at first, easing to a stop.
+    /// </summary>
+    private static float FlightAlong(float t) => t < 0.7f ? t / 0.85f : 1f - (1f - t) * (1f - t) / 0.85f / 0.6f;   // full speed for 0.7 of the time, then slowing evenly to the landing (the two halves meet at 0.824)
+
+    /// <summary>
+    /// How high a flight is at t: a hump over the ground plus the bounding of a small bird's flight, which is a few
+    /// beats then a fold, and each fold is a little dip, a bounce along the path (a smooth arc with wings beating all
+    /// the way is a toy on a string).
+    /// </summary>
+    private float FlightHeight(Critter c, float t, float u)
+    {
+        float span = MathF.Abs(c.FlyTo - c.FlyFrom);
+        // A patch bird flies LOW, a few lengths up, higher the farther it goes, never above the fence line's height
+        // (0.12 U plus 0.22 of the span sent a sparrow up past the barn roof).
+        float hump = MathF.Min(0.16f * u, 0.05f * u + 0.09f * span) * 4 * t * (1 - t);
+        // The bound: two a second, in step with the fold the drawing makes (the last fifth of each half second): the bird
+        // drops through the fold and climbs again on the first beats, a dip of half a length, absent at take-off and landing.
+        float q = ((c.Clock % 0.5f) / 0.5f + 0.25f) % 1f;
+        float dip = q < 0.4f ? 0.5f * _b * MathF.Sin(q / 0.4f * MathF.PI) : 0f;
+        return hump - dip * 4 * t * (1 - t);
     }
 
     /// <summary>What the doing does this frame: a step toward the goal, a flight along its arc, or nothing.</summary>
@@ -347,9 +400,9 @@ internal sealed class PatchLife
             }
             case Doing.Fly:
             {
-                float p = Math.Clamp(1f - c.Mind.Left / c.FlyFor, 0f, 1f);
+                float p = FlightAlong(Math.Clamp(1f - c.Mind.Left / c.FlyFor, 0f, 1f));
                 c.X = c.FlyFrom + (c.FlyTo - c.FlyFrom) * p;
-                c.Y = c.FlyY0 + (c.FlyY1 - c.FlyY0) * p - (0.18f * u + 0.1f * MathF.Abs(c.FlyTo - c.FlyFrom)) * 4 * p * (1 - p);
+                c.Y = c.FlyY0 + (c.FlyY1 - c.FlyY0) * p - FlightHeight(c, p, u);
                 if (c.Mind.Over) { c.X = c.FlyTo; c.Y = c.FlyY1; c.Mind.Begin(c.Perched >= 0 ? Doing.Perch : Doing.Still, 1f + 3f * (float)_rng.NextDouble()); c.Clock = 0; }
                 break;
             }
@@ -395,7 +448,14 @@ internal sealed class PatchLife
                 {
                     int kind = c.Look;
                     if (c.Mind.Doing == Doing.Fly)
-                        Stamp(fb, _birdFlyKind[kind], _birdFlyKind[kind].Pages[(int)(c.Clock * 24) % 6], c, c.Y);
+                    {
+                        // Bounding flight: the wings beat for most of each half second (four beats a second, six pages a
+                        // beat) and shut for the last fifth of it, the dip in FlightHeight; never shut in the first or
+                        // last third of a second (the take-off and the flare are all beating).
+                        float t = c.Clock, left = c.Mind.Left;
+                        bool fold = (t % 0.5f) > 0.4f && t > 0.33f && left > 0.33f;
+                        Stamp(fb, _birdFlyKind[kind], _birdFlyKind[kind].Pages[fold ? 6 : (int)(t * 24) % 6], c, c.Y);
+                    }
                     else if (c.Mind.Doing is Doing.Go or Doing.Bolt)
                     {
                         // Hops: four a second, each a small arc; crouch, up, land.
@@ -415,7 +475,13 @@ internal sealed class PatchLife
                 }
                 default:
                 {
-                    if (c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Hide)
+                    if (c.Blend > 0)
+                    {
+                        float f = Math.Clamp(c.Blend / BlendFor, 0f, 1f);                    // 1 at the start of the blend, 0 at its end
+                        float upright = c.Sinking ? f : 1f - f;
+                        Stamp(fb, _sqRise, _sqRise.Pages[(int)(upright * (RisePages - 0.01f))], c, c.Y);
+                    }
+                    else if (c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Hide)
                     {
                         float cyc = c.Travelled / (2.2f * _k);
                         Stamp(fb, _sqRun, _sqRun.Pages[(int)((cyc - MathF.Floor(cyc)) * 16) % 16], c, c.Y);

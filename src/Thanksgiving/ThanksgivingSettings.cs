@@ -20,7 +20,7 @@ public sealed class ThanksgivingSettings : ScreensaverSettings
         _size = Add(nameof(LeafSizePercent), "Leaf size", 50, 200, 100, "%");
         _geese = Add(nameof(GeeseCount), "Geese", 0, 15, 7);
         _turkeys = Add(nameof(TurkeyCount), "Turkeys", 0, 6, 3);
-        _deer = Add(nameof(DeerCount), "Deer", 0, 3, 2);
+        _deer = Add(nameof(DeerCount), "Deer", 0, 3, 3);   // doe, fawn, buck (the buck is the third)
         _critters = Add(nameof(CritterCount), "Patch critters", 0, 12, 6);
         _surprises = Add(nameof(SurprisePercent), "Surprises", 0, 300, 100, "%");
     }

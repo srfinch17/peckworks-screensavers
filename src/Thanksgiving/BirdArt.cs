@@ -16,7 +16,7 @@ internal static class BirdArt
 
     private static PointF P(float x, float y) => new(x, y);
 
-    /// <summary>One page on a sheet "w" by "h" pixels, "b" pixels to the bird unit, the feet's origin at (ox, by). "wing" is the flight page (0 to 5) for Pose.Fly.</summary>
+    /// <summary>One page on a sheet "w" by "h" pixels, "b" pixels to the bird unit, the feet's origin at (ox, by). "wing" is the flight page (0 to 5) for Pose.Fly; -1 is the wings shut, the fold of a bounding flight.</summary>
     public static Sprite Page(Pose pose, int kind, float b, int w, int h, int ox, int by, int wing = 0) =>
         Sprite.Paint(w, h, g =>
         {
@@ -41,30 +41,47 @@ internal static class BirdArt
         }
 
         bool flying = pose == Pose.Fly;
-        float lift = pose == Pose.HopUp ? 0.10f : pose == Pose.HopCrouch ? -0.06f : pose == Pose.HopLand ? -0.04f : flying ? 0.0f : 0f;
-        float tilt = pose == Pose.Peck ? -28f : pose == Pose.Look ? 6f : pose == Pose.HopUp ? 10f : flying ? 4f : 0f;
-        var body = P(0f, 0.34f + lift);
+        bool folded = flying && wing < 0;                                                        // the bounding flight's fold: wings shut, the bird a dart
+        float lift = pose == Pose.HopUp ? 0.10f : pose == Pose.HopCrouch ? -0.08f : pose == Pose.HopLand ? -0.04f : 0f;
+        float tilt = pose == Pose.Peck ? -34f : pose == Pose.Look ? 6f : pose == Pose.HopUp ? 10f : folded ? -6f : flying ? 4f : 0f;
+        // The body sits a fifth of a length clear of the ground on its legs (it used to sit at 0.34 with a 0.27 half-height,
+        // so the belly was 0.07 off the ground and the legs 0.03 long: a bird with no feet at any size this patch draws it).
+        var body = P(0f, 0.46f + lift);
 
-        // The legs first (behind the body): two thin lines to the ground, tucked up in flight and shortened mid-hop.
+        // The legs first (behind the body): a songbird's leg is like the turkey's, a hidden thigh up in the feathers, the
+        // HOCK (really the ankle) bent BACKWARD just under the belly, then a thin bare shank down to long toes. Two bones
+        // reach from a hip inside the body to the foot; the law of cosines puts the hock behind the straight line.
+        // Tucked up out of sight in flight.
         if (!flying)
         {
-            float legLen = pose == Pose.HopUp ? 0.14f : pose == Pose.HopCrouch ? 0.10f : 0.18f;
-            using var leg = new Pen(Color.FromArgb(120, 90, 70), 0.035f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            foreach (float lx in (float[])[0.02f, 0.14f])
+            const float thigh = 0.18f, shank = 0.22f;
+            using var leg = new Pen(Color.FromArgb(188, 148, 128), 0.05f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            using var toe = new Pen(Color.FromArgb(188, 148, 128), 0.035f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            // Where the feet are for this pose: under the bird standing, forward on a landing, back and dangling mid-hop.
+            (float fx, float fy) = pose switch { Pose.HopUp => (-0.06f, 0.10f), Pose.HopLand => (0.12f, 0f), Pose.Peck => (0.10f, 0f), _ => (0.04f, 0f) };
+            foreach (float lx in (float[])[0f, 0.10f])
             {
-                g.DrawLine(leg, lx, body.Y - 0.12f, lx + 0.02f, body.Y - 0.12f - legLen);
-                g.DrawLine(leg, lx + 0.02f, body.Y - 0.12f - legLen, lx + 0.12f, body.Y - 0.12f - legLen);      // the foot forward
-                g.DrawLine(leg, lx + 0.02f, body.Y - 0.12f - legLen, lx - 0.05f, body.Y - 0.12f - legLen);      // and the hind toe
+                PointF hip = P(lx - 0.02f, body.Y - 0.08f), foot = P(lx + fx, fy);
+                float dx = foot.X - hip.X, dy = foot.Y - hip.Y;
+                float d = MathF.Min(MathF.Sqrt(dx * dx + dy * dy), thigh + shank - 0.002f);
+                float cosA = Math.Clamp((thigh * thigh + d * d - shank * shank) / (2 * thigh * d), -1f, 1f);
+                float theta = MathF.Atan2(dy, dx) - MathF.Acos(cosA);                               // minus: the hock swings back
+                PointF hock = P(hip.X + thigh * MathF.Cos(theta), hip.Y + thigh * MathF.Sin(theta));
+                g.DrawLine(leg, hip, hock);
+                g.DrawLine(leg, hock, foot);
+                g.DrawLine(toe, foot, P(foot.X + 0.12f, foot.Y + 0.005f));                       // the toes forward
+                g.DrawLine(toe, foot, P(foot.X + 0.10f, foot.Y + 0.035f));                       // a second toe, fanned
+                g.DrawLine(toe, foot, P(foot.X - 0.06f, foot.Y + 0.004f));                       // and the hind toe
             }
         }
         var st2 = g.Save();
         g.TranslateTransform(body.X, body.Y);
         g.RotateTransform(tilt);
         // The far wing in flight, behind the body.
-        float beat = flying ? MathF.Sin(wing / 6f * MathF.Tau) : 0f;
+        float beat = flying && !folded ? MathF.Sin(wing / 6f * MathF.Tau) : 0f;
         void Wing(float sx, float sy, float scale, Color c)
         {
-            if (!flying) { Ell(sx - 0.08f, sy + 0.02f, 0.30f * scale, 0.11f * scale, c, -8f); return; }   // folded along the side
+            if (!flying || folded) { Ell(sx - 0.08f, sy + 0.02f, 0.30f * scale, 0.11f * scale, c, -8f); return; }   // folded along the side (standing, or the dart of a bounding flight)
             PointF shoulder = P(sx, sy), tip = P(sx - 0.25f, sy + 0.62f * beat * scale), back = P(sx - 0.55f, sy + 0.30f * beat * scale);
             using var br = new SolidBrush(c);
             using var path = new GraphicsPath();
