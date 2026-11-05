@@ -574,7 +574,8 @@ Settings: amount of snow, fall speed, breeze, flake size, and how often a surpri
 
 Maple leaves drifting down over a farm at harvest dusk: a sky from plum to gold, a big peach harvest
 moon, a white farmhouse with lamplit windows and a smoking chimney, a red barn and silo, a reaped field
-with hay bales, a scarecrow in the garden beside the house, a split rail fence, a corn shock, a
+with hay bales, a scarecrow in the garden beside the house and a small apple orchard past it, two
+rows of round green trees hung with red apples and windfalls in the grass, a split rail fence, a corn shock, a
 pumpkin patch that covers the whole foreground (pumpkins of three tints, gourds and broad leaves joined
 by vine runners, one of them carved into a jack-o'-lantern with a candle guttering inside it, in homage
 to Halloween), maples in full colour, and oak branches with the year's last leaves in the top corners.
@@ -595,7 +596,8 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   lane towing a round baler; every so often the baler's tailgate swings up and a finished bale rolls
   out the back and is left standing on the field. It goes off one side, comes back the other way a
   while later and bales the next row, and when half a dozen bales stand loose it comes back towing
-  the hay wagon and picks them up as it passes, the heap on the wagon growing. The deer lift their
+  the hay wagon and picks them up as it passes: as the wagon's tail clears a bale the loader swings it
+  up whole onto the bed, and the stack grows three, two and one. The deer lift their
   heads as it goes by and the timid ones trot off; each bale it drops draws the turkeys over to
   scratch at the loose hay.
 - **A pack of coyotes, and the rabbits they hunt**, on the far lane at the very back of the field. The

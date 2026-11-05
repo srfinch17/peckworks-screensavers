@@ -27,7 +27,13 @@ internal static class TractorArt
     public const float SheetLen = 5.35f, SheetTall = 1.75f;                         // the sheet, in units
     // Where things are, in units from the sheet's left, for a machine heading right.
     public const float RearX = 3.55f, FrontX = 4.95f, StackX = 4.78f, LampX = 5.20f;   // the tractor's wheels, stack and lamp
-    public const float CartX0 = 0.60f, CartX1 = 2.05f, BedX = 1.30f;                // the wagon's wheels and the middle of its bed
+    public const float CartX0 = 0.60f, CartX1 = 2.05f, BedX0 = 0.05f;               // the wagon's wheels, and the trailing end of its bed (where the loader takes a bale)
+    /// <summary>
+    /// Where the bales sit on the wagon, in units from the sheet's left and UP from the ground, filled in this order: a
+    /// pyramid of three on the bed's rail (0.98), two nestled on them, one on top. A bale is 0.9 units across, so a row
+    /// sits 0.78 (0.9 times the root of three over two) above the one below. FieldWork stamps its own bale picture here.
+    /// </summary>
+    public static readonly (float X, float Y)[] BaleSlots = [(0.50f, 0.98f), (1.30f, 0.98f), (2.10f, 0.98f), (0.90f, 1.76f), (1.70f, 1.76f), (1.30f, 2.54f)];
     public const float BalerWheelX = 2.45f, BalerRearX = 1.72f;                     // the baler's axle, and where a finished bale comes out
     public const float RearR = 0.50f, FrontR = 0.28f, CartR = 0.30f, BalerR = 0.30f;   // wheel radii, in units
 
@@ -36,8 +42,6 @@ internal static class TractorArt
     private static readonly Color RedLit = Color.FromArgb(214, 76, 56);
     private static readonly Color Wood = Color.FromArgb(106, 74, 46);
     private static readonly Color WoodLit = Color.FromArgb(142, 102, 62);
-    private static readonly Color Hay = Color.FromArgb(222, 176, 74);
-    private static readonly Color HayDark = Color.FromArgb(168, 118, 44);
     private static readonly Color Green = Color.FromArgb(78, 112, 62);
     private static readonly Color GreenLit = Color.FromArgb(108, 146, 86);
     private static readonly Color GreenDark = Color.FromArgb(52, 78, 42);
@@ -113,25 +117,11 @@ internal static class TractorArt
             g.FillEllipse(lens, k.P(LampX, 0.80f).X - T * 0.07f, k.P(LampX, 0.80f).Y - T * 0.07f, T * 0.14f, T * 0.14f);
     });
 
-    /// <summary>The hay wagon (no wheels) on the shared sheet: a plank bed with slats and a heap of hay on it, "heap" 0 (empty) to 3 (piled high).</summary>
-    public static Sprite Wagon(float T, bool flip, int heap) => OnSheet(T, flip, k =>
+    /// <summary>The hay wagon (no wheels) on the shared sheet: an empty plank bed with slats. The bales it carries are not here: FieldWork stamps them in BaleSlots as they are loaded.</summary>
+    public static Sprite Wagon(float T, bool flip) => OnSheet(T, flip, k =>
     {
         var g = k.G;
-        if (heap > 0)
-        {
-            float h = 0.16f * heap;                                                     // how high the heap stands above the bed's rail
-            using var hay = new SolidBrush(Hay);
-            PointF[] mound = [k.P(0.10f, 0.92f), k.P(0.20f, 0.92f + h * 0.55f), k.P(0.60f, 0.92f + h * 0.95f), k.P(1.10f, 0.92f + h), k.P(1.60f, 0.92f + h * 0.95f), k.P(2.10f, 0.92f + h * 0.75f), k.P(2.45f, 0.92f + h * 0.3f), k.P(2.50f, 0.92f)];
-            g.FillClosedCurve(hay, mound, FillMode.Winding, 0.5f);
-            g.DrawClosedCurve(k.Ink, mound, 0.5f, FillMode.Winding);
-            using var straw = new Pen(HayDark, Math.Max(1f, T * 0.035f));
-            for (int i = 0; i < 3 * heap; i++)                                         // a few strokes of straw across the heap
-            {
-                float x = 0.35f + 0.22f * i;
-                g.DrawLine(straw, k.P(x, 0.96f + 0.05f * (i % 3)), k.P(x + 0.16f, 0.96f + h * 0.6f + 0.05f * ((i + 1) % 3)));
-            }
-        }
-        k.Box(Wood, k.R(0.05f, 0.42f, 2.55f, 0.98f));
+        k.Box(Wood, k.R(BedX0, 0.42f, 2.55f, 0.98f));
         using (var slat = new Pen(WoodLit, Math.Max(1f, T * 0.045f)))
             for (int i = 1; i < 6; i++) g.DrawLine(slat, k.P(0.05f + 0.42f * i, 0.46f), k.P(0.05f + 0.42f * i, 0.94f));
     });
@@ -160,7 +150,12 @@ internal static class TractorArt
         var st = g.Save();
         PointF hinge = new(c.X, c.Y - ry);
         g.TranslateTransform(hinge.X, hinge.Y);
-        g.RotateTransform(flip ? 70f * open : -70f * open);                         // up and over, the way the sheet faces
+        // Up and BACK, away from the tractor: for the right-heading sheet the gate is the left half, so its foot swings
+        // left and up, which is a clockwise turn on screen (GDI's angles run clockwise because y points down). The
+        // flipped sheet is mirrored by OnSheet's ScaleTransform, and a mirror reverses every turn with it, so the SAME
+        // angle serves both ways. It used to flip the sign as well, which cancelled the mirror: heading right the gate
+        // swung down into the drum ("the hay baler seems to open the wrong way").
+        g.RotateTransform(70f * open);
         g.TranslateTransform(-hinge.X, -hinge.Y);
         using (var path = new GraphicsPath())
         {

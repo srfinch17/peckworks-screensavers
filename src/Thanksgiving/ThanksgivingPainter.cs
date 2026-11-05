@@ -187,10 +187,14 @@ internal static class ThanksgivingPainter
         float scarecrowX = farmFoot.X + u * 0.095f, scarecrowTall = u * 0.028f;
         float scarecrowFoot = Brushwork.RidgeYAt(nearRidge, scarecrowX) + u * 0.010f;
         PaintScarecrow(g, scarecrowX, scarecrowFoot, scarecrowTall, u);
+        // An apple orchard on the hill past the scarecrow, at the house's scale (his line: "give me something around the
+        // house, like an apple orchard or some other farm stuff"). Painted with the farm, so the field's animals pass in front.
+        float orchardX = scarecrowX + u * 0.105f, orchardHalf = u * 0.070f;
+        PaintOrchard(g, u, nearRidge, orchardX, orchardHalf, rng);
         // A windbreak of trees along the far edge of the field, where the hill meets it: nearer than the hills' treeline,
         // farther than everything that moves on the field (his line: "another set of trees closer to the foreground but not
         // in front of the highest branches"). Painted here, with the farm, so the lane's animals pass in front of them.
-        List<(PointF At, float R)> farTrees = PaintFarTrees(g, w, u, nearRidge, farmFoot.X, barnFoot.X, scarecrowX, rng);
+        List<(PointF At, float R)> farTrees = PaintFarTrees(g, w, u, nearRidge, farmFoot.X, barnFoot.X, scarecrowX, orchardX, orchardHalf, rng);
         g.Flush();
         uint[] upToFarm = Brushwork.ToPixels(bmp);   // a second copy: "unchanged since here" = nothing stands in front of the farm (the scarecrow is part of it)
 
@@ -696,7 +700,7 @@ internal static class ThanksgivingPainter
     /// the farmhouse, the scarecrow and the barn, and stay short enough that their tops never reach the far ridge
     /// where the silhouette deer walk. The maples' own trunk and canopy brushes, at a smaller size.
     /// </summary>
-    private static List<(PointF At, float R)> PaintFarTrees(Graphics g, int w, float u, PointF[] nearRidge, float farmX, float barnX, float scarecrowX, Random rng)
+    private static List<(PointF At, float R)> PaintFarTrees(Graphics g, int w, float u, PointF[] nearRidge, float farmX, float barnX, float scarecrowX, float orchardX, float orchardHalf, Random rng)
     {
         var trees = new List<(PointF At, float R)>();
         var oak = new BlossomPalette(Color.FromArgb(240, 196, 120, 40), Color.FromArgb(150, 70, 30), Color.FromArgb(246, 180, 70));
@@ -707,7 +711,7 @@ internal static class ThanksgivingPainter
         foreach (var s in spots)
         {
             float x = w * s.X;
-            if (MathF.Abs(x - farmX) < u * 0.16f || MathF.Abs(x - barnX) < u * 0.17f || MathF.Abs(x - scarecrowX) < u * 0.08f) continue;
+            if (MathF.Abs(x - farmX) < u * 0.16f || MathF.Abs(x - barnX) < u * 0.17f || MathF.Abs(x - scarecrowX) < u * 0.08f || MathF.Abs(x - orchardX) < orchardHalf + u * 0.06f) continue;
             float foot = Brushwork.RidgeYAt(nearRidge, x) + u * 0.014f;
             float cy = foot - u * s.Lift, r = u * s.R * (0.9f + 0.2f * (float)rng.NextDouble());
             Brushwork.Trunk(g, x, foot, cy, r, rng, bark);
@@ -715,6 +719,51 @@ internal static class ThanksgivingPainter
             trees.Add((new PointF(x, cy), r));
         }
         return trees;
+    }
+
+    /// <summary>
+    /// The orchard beside the farmhouse: two rows of small apple trees on the hill past the scarecrow, the back row a
+    /// little higher up and smaller, each a round green canopy (the maples' own brush, in apple-leaf greens) hung with
+    /// red apples, and a few windfalls in the grass under it. At the house's scale (0.0154 U a metre) a 3.5 m tree is
+    /// 0.054 U tall. The trees' middles are "cx" across "half" either side; the far trees keep clear of that stretch.
+    /// </summary>
+    private static void PaintOrchard(Graphics g, float u, PointF[] nearRidge, float cx, float half, Random rng)
+    {
+        var leaf = new BlossomPalette(Color.FromArgb(240, 104, 136, 58), Color.FromArgb(56, 84, 38), Color.FromArgb(160, 186, 86));
+        Color bark = Color.FromArgb(70, 50, 38), apple = Color.FromArgb(198, 44, 38), shine = Color.FromArgb(240, 120, 100), windfall = Color.FromArgb(170, 50, 40);
+        using var appleBrush = new SolidBrush(apple);
+        using var shineBrush = new SolidBrush(shine);
+        using var fallBrush = new SolidBrush(windfall);
+        // Back row first (farther up the hill, so the front row stands in front of it): two trees in the gaps between
+        // the front row's three. "lift" is how far up the hill the row stands, "scale" how much smaller it is drawn.
+        float spacing = half * 2 / 3f;
+        foreach (var (lift, scale, count, first) in new[] { (0.022f, 0.82f, 2, 1f), (0f, 1f, 3, 0.5f) })
+        {
+            for (int i = 0; i < count; i++)
+            {
+                float x = cx - half + spacing * (i + first);
+                float r = u * 0.024f * scale * (0.92f + 0.16f * (float)rng.NextDouble());
+                float foot = Brushwork.RidgeYAt(nearRidge, x) + u * 0.012f - u * lift;
+                float cy = foot - u * 0.030f * scale;
+                Brushwork.Trunk(g, x, foot, cy, r, rng, bark);
+                Brushwork.Canopy(g, x, cy, r, u, rng, leaf);
+                // The apples: a dozen specks scattered through the canopy's lower two thirds, each with a glint.
+                float ar = Math.Max(1f, r * 0.11f);
+                for (int k = 0; k < 12; k++)
+                {
+                    double a = rng.NextDouble() * Math.PI * 2, d = 0.25 + 0.6 * rng.NextDouble();
+                    float ax = x + (float)(Math.Cos(a) * d) * r, ay = cy + (float)(Math.Abs(Math.Sin(a)) * d) * r * 0.9f - r * 0.15f;
+                    g.FillEllipse(appleBrush, ax - ar, ay - ar, ar * 2, ar * 2);
+                    g.FillEllipse(shineBrush, ax - ar * 0.45f, ay - ar * 0.55f, ar * 0.6f, ar * 0.5f);
+                }
+                // Windfalls in the grass under the tree.
+                for (int k = 0; k < 4; k++)
+                {
+                    float fx = x + r * (1.4f * (float)rng.NextDouble() - 0.7f), fy = foot - u * 0.002f + u * 0.004f * (float)rng.NextDouble();
+                    g.FillEllipse(fallBrush, fx - ar * 0.8f, fy - ar * 0.8f, ar * 1.6f, ar * 1.6f);
+                }
+            }
+        }
     }
 
     internal static void PaintBale(Graphics g, float x, float footY, float r, Random rng)

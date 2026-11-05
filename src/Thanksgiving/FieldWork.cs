@@ -10,8 +10,10 @@ namespace Thanksgiving;
 /// field. The tractor goes off one side, comes back the other way after a
 /// while, and bales the next row. When half a dozen bales stand loose it
 /// comes back towing the hay wagon instead and picks them up as it passes:
-/// each bale vanishes under the wagon's bed and the heap on the wagon grows.
-/// Then it is back to baling. His line: "there should be a tractor out in
+/// as the wagon's tail clears a bale, the loader swings it up WHOLE and sets
+/// it on the bed, and the stack grows three, two and one. Then it is back to
+/// baling. (It used to turn each bale back into a heap of loose hay: "it's
+/// gotta pick up the entire bale".) His line: "there should be a tractor out in
 /// the field making the bales, slowly driving around with bales coming out
 /// when they're done in the baling machine".
 ///
@@ -55,7 +57,8 @@ internal sealed class FieldWork
     private readonly int _len, _tall, _gy;
     private readonly Sprite[] _tractor = new Sprite[2];           // [0] heads right, [1] heads left
     private readonly Sprite[][] _baler = new Sprite[2][];         // [dir][gate page]
-    private readonly Sprite[][] _wagon = new Sprite[2][];         // [dir][heap 0 to 3]
+    private readonly Sprite[] _wagon = new Sprite[2];             // [0] heads right, [1] heads left; its bales are stamped on separately
+    private const float LiftFor = 0.9f;             // seconds a bale takes from the ground to its slot on the wagon
     private readonly Sprite[] _rear = new Sprite[TractorArt.WheelPages], _front = new Sprite[TractorArt.WheelPages], _small = new Sprite[TractorArt.WheelPages];
     private readonly Sprite _lamp, _puff, _bale;
     private readonly float _baleR;
@@ -68,7 +71,8 @@ internal sealed class FieldWork
     private float _gateT = -1f;                     // seconds into the tailgate's swing, -1 shut
     private bool _dropped;                          // this swing's bale is out
     private readonly List<float> _bales = new();    // loose bales on the lane, by their x
-    private int _loaded;                            // bales on the wagon this haul
+    private int _loaded;                            // bales on the wagon this haul, filling TractorArt.BaleSlots in order
+    private float _liftX, _liftT = -1f;             // a bale on its way up: where it stood, and seconds into the lift (-1 none)
     private double _time;
 
     public FieldWork(ThanksgivingScenery s, Random sceneRng, Noticeboard board)
@@ -86,8 +90,7 @@ internal sealed class FieldWork
             _tractor[d] = TractorArt.Tractor(_t, flip);
             _baler[d] = new Sprite[GatePages];
             for (int i = 0; i < GatePages; i++) _baler[d][i] = TractorArt.Baler(_t, flip, i / (float)(GatePages - 1));
-            _wagon[d] = new Sprite[4];
-            for (int i = 0; i < 4; i++) _wagon[d][i] = TractorArt.Wagon(_t, flip, i);
+            _wagon[d] = TractorArt.Wagon(_t, flip);
         }
         for (int i = 0; i < TractorArt.WheelPages; i++)
         {
@@ -131,7 +134,7 @@ internal sealed class FieldWork
                     _left = !_left;
                     _job = _bales.Count >= BaleCap ? Job.Hauling : Job.Baling;
                     _x = _left ? _s.Width : -_len;
-                    _rolled = 0; _clock = 0; _loaded = 0; _gateT = -1f; _dropped = false;
+                    _rolled = 0; _clock = 0; _loaded = 0; _gateT = -1f; _dropped = false; _liftT = -1f;
                     _nextBale = Organic.Jitter(_rng, BaleEvery * 0.7f);
                     _nextLoud = 0;
                     Log($"on, {_job}, {(_left ? "left" : "right")}, {_bales.Count} loose");
@@ -172,10 +175,20 @@ internal sealed class FieldWork
                 }
                 else
                 {
-                    // Hauling: a bale the wagon's bed passes over is lifted on (it vanishes under the bed; the heap grows).
-                    float bed = AlongX(TractorArt.BedX);
-                    for (int i = _bales.Count - 1; i >= 0; i--)
-                        if (MathF.Abs(_bales[i] - bed) < 0.25f * _t) { _bales.RemoveAt(i); _loaded++; Log($"loaded {_loaded}"); }
+                    // Hauling: as the wagon's tail clears a loose bale, the loader takes it off the ground and swings it whole
+                    // up onto the bed, into the next slot of the stack (LiftFor seconds; drawn in Draw). One at a time: the
+                    // bales stand about eleven tractor units apart, so the next is never due before this one is down.
+                    if (_liftT >= 0f)
+                    {
+                        _liftT += dt;
+                        if (_liftT >= LiftFor) { _liftT = -1f; _loaded++; Log($"loaded {_loaded}"); }
+                    }
+                    else if (_loaded < TractorArt.BaleSlots.Length)
+                    {
+                        float tail = AlongX(TractorArt.BedX0);
+                        for (int i = _bales.Count - 1; i >= 0; i--)
+                            if (MathF.Abs(_bales[i] - tail) < 0.25f * _t) { _liftX = _bales[i]; _bales.RemoveAt(i); _liftT = 0f; Log($"lifting bale at {_liftX:F0}"); break; }
+                    }
                 }
                 if ((_left && _x + _len < 0) || (!_left && _x > _s.Width))
                 {
@@ -190,11 +203,14 @@ internal sealed class FieldWork
 
     private void Log(string what) => _log?.WriteLine($"{_time,8:F2} tractor {what}");
 
+    /// <summary>One bale, its foot (the bottom of the picture) at footY and its middle at cx.</summary>
+    private void StampBale(FrameBuffer fb, float cx, float footY) =>
+        _bale.Draw(fb, (int)MathF.Round(cx - _bale.Width / 2f), (int)MathF.Round(footY) - _bale.Height + 2, 1f, _stencil);
+
     /// <summary>The loose bales (behind everything on the field), then the machine if it is on.</summary>
     public void Draw(FrameBuffer fb)
     {
-        foreach (float bx in _bales)
-            _bale.Draw(fb, (int)MathF.Round(bx - _bale.Width / 2f), (int)MathF.Round(GroundAt(bx)) - _bale.Height + 2, 1f, _stencil);
+        foreach (float bx in _bales) StampBale(fb, bx, GroundAt(bx));
         if (_job == Job.Away || !OnScreen) return;
 
         int d = _left ? 1 : 0;
@@ -227,13 +243,24 @@ internal sealed class FieldWork
             {
                 float out_ = (_gateT - BaleOutAt * 0.4f) / (BaleOutAt * 0.6f);
                 float bx = AlongX(TractorArt.BalerRearX + 0.5f - 0.5f * out_) - Dir * _baleR * 0.6f * out_;
-                _bale.Draw(fb, (int)MathF.Round(bx - _bale.Width / 2f), (int)MathF.Round(GroundAt(bx) - _baleR * 0.9f * (1 - out_)) - _bale.Height + 2, 1f, _stencil);
+                StampBale(fb, bx, GroundAt(bx) - _baleR * 0.9f * (1 - out_));
             }
         }
         else
         {
-            int heap = _loaded == 0 ? 0 : Math.Min(3, 1 + (_loaded - 1) * 3 / BaleCap);
-            _wagon[d][heap].Draw(fb, left, top - shake, 1f, _stencil);
+            // The wagon, the bales already stacked on it (they tremble with the body), then the one on its way up: it
+            // leaves the ground where it stood, rises over the rail in an arc and settles into its slot, which is
+            // moving with the wagon, so it glides forward as it climbs. Smoothstep, so it neither jerks off nor thuds on.
+            _wagon[d].Draw(fb, left, top - shake, 1f, _stencil);
+            for (int i = 0; i < _loaded; i++)
+                StampBale(fb, AlongX(TractorArt.BaleSlots[i].X), ground - TractorArt.BaleSlots[i].Y * _t - shake);
+            if (_liftT >= 0f)
+            {
+                var slot = TractorArt.BaleSlots[Math.Min(_loaded, TractorArt.BaleSlots.Length - 1)];
+                float s = Math.Clamp(_liftT / LiftFor, 0f, 1f), ease = s * s * (3f - 2f * s);
+                float fromY = GroundAt(_liftX), toY = ground - slot.Y * _t - shake;
+                StampBale(fb, _liftX + (AlongX(slot.X) - _liftX) * ease, fromY + (toY - fromY) * ease - 0.45f * _t * MathF.Sin(MathF.PI * s));
+            }
         }
         _tractor[d].Draw(fb, left, top - shake, 1f, _stencil);
 

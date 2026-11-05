@@ -178,7 +178,7 @@ a fed koi was as hungry as before and went straight back for the next.
     Pack.cs                        the coyotes and the rabbits on the far lane: minds, the chase, the catch, a minute's play with the carcass, the leave; Threat notices as they pass
     CoyoteArt.cs, RabbitArt.cs     how a coyote and a cottontail are drawn and the poses they take (trot, gallop, sit, dig, carry, shake, pounce, pull; sit, graze, hop, flee, dead, limp)
     FieldWork.cs                   the tractor baling the far lane: a resident with a job (baling, hauling, away), the bales it leaves, the Loud and Food notices it pins
-    TractorArt.cs                  how the tractor, the round baler (with its tailgate) and the hay wagon (with a growing heap) are drawn, and the wheels turned by distance rolled
+    TractorArt.cs                  how the tractor, the round baler (with its tailgate, which swings up and back) and the empty hay wagon are drawn, where the bales stack on it (BaleSlots), and the wheels turned by distance rolled
     ThanksgivingSettings.cs        declares its knobs
     TurkeyFlock.cs                 the wild turkeys that live in the field: four doings and a timer each, the Turkey happening's pictures
     DeerHerd.cs                    the doe and fawn at the far side of the field: a body flip-book and a head flip-book stamped together, mirrored to face left
