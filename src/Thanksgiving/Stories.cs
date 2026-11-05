@@ -59,7 +59,7 @@ internal struct Sheet
 internal sealed class Cast
 {
     // 48 run pages: at 16, a 132 px bound at 4.9 px a frame put the planted paw 5 px forward and back again every page (the animator's "creep").
-    public const int RunPages = 48, HopPages = 10, TurnPages = 3, RisePages = 5, DigPages = 8, MousePages = 8, CloudPages = 12, PeekPages = 4, AirPages = 8, MountPages = 4, ApplePages = 8, DazedPages = 8, LimbTurns = 8;
+    public const int RunPages = 48, HopPages = 10, TurnPages = 3, RisePages = 5, DigPages = 8, MousePages = 8, CloudPages = 12, PeekPages = 4, AirPages = 8, MountPages = 4, ApplePages = 8, DazedPages = 24, LimbTurns = 8;   // 24 dazed pages: at 8 the slow loll held each page nine frames and stepped
     public const float BoundLen = 2.2f;                 // the bound the run pages are painted at, in squirrel units: every run and climb is paged at it
     public const float Speed = 0.27f;                  // bounding, U per second (the fence squirrel's own pace)
     public const float ClimbSpeed = 0.34f;             // up a trunk: faster than on the ground, in body lengths a second
@@ -623,29 +623,33 @@ internal sealed class Script
         return t0 + dur;
     }
 
-    /// <summary>Pitching up onto the bark at the foot of a climb. The pages face right; arriving facing left, the squirrel turns first.</summary>
+    /// <summary>
+    /// Pitching up onto the bark at the foot of a climb. The pages face right; arriving facing left, the squirrel turns
+    /// first (sitting up) and sinks back to the crouch before it mounts (the turn's upright sit straight into the
+    /// mount's stretched leap was a 25 px jump of the head in one frame).
+    /// </summary>
     public static float MountUp(List<Seg> track, float t0, PointF at, int facing, bool acorn)
     {
-        if (facing < 0) t0 = Turn(track, t0, at, 1, acorn);
+        if (facing < 0) { t0 = Turn(track, t0, at, 1, acorn); t0 = Rise(track, t0, at, 1, acorn, -1); }
         Add(track, Kind.Mount, t0, Cast.MountFor, at, at, 1, acorn, up: true);
         return t0 + Cast.MountFor;
     }
 
-    /// <summary>Coming off the bark onto the rail after a head-up climb (facing right); a Turn follows if the next move goes left.</summary>
+    /// <summary>Coming off the bark onto the rail after a head-up climb (facing right, crouched); if the next move goes left it rises to a sit, turns, and the hop that follows starts from the sit.</summary>
     public static float Dismount(List<Seg> track, float t0, PointF at, int nextDir, bool acorn)
     {
         Add(track, Kind.Mount, t0, Cast.MountFor, at, at, 1, acorn, up: false);
         t0 += Cast.MountFor;
-        if (nextDir < 0) t0 = Turn(track, t0, at, -1, acorn);
+        if (nextDir < 0) { t0 = Rise(track, t0, at, 1, acorn); t0 = Turn(track, t0, at, -1, acorn); }
         return t0;
     }
 
-    /// <summary>The end of a head-first descent: the body pitches from head-down to level and ends facing LEFT (a hop straight out of the descent snapped it round 180 degrees); a Turn follows if the next move goes right.</summary>
+    /// <summary>The end of a head-first descent: the body pitches from head-down to level and ends facing LEFT, crouched (a hop straight out of the descent snapped it round 180 degrees); if the next move goes right it rises to a sit and turns.</summary>
     public static float DismountDown(List<Seg> track, float t0, PointF at, int nextDir, bool acorn)
     {
         Add(track, Kind.Mount, t0, Cast.MountFor, at, at, -1, acorn, up: false, p0: 1f);
         t0 += Cast.MountFor;
-        if (nextDir > 0) t0 = Turn(track, t0, at, 1, acorn);
+        if (nextDir > 0) { t0 = Rise(track, t0, at, -1, acorn); t0 = Turn(track, t0, at, 1, acorn); }
         return t0;
     }
 

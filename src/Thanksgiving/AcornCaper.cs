@@ -217,6 +217,9 @@ internal sealed class AcornCaper : Story
         Add(A, Kind.Run, t, 0.22f, OnGround(_spotX - 1.6f * k), OnGround(cloudX - 0.5f * k), 1, p0: 1.4f * k, p1: 1f);
         Add(B, Kind.Run, t, 0.22f, OnGround(_spotX + 0.5f * k), OnGround(cloudX + 0.5f * k), -1, true, p0: 1.4f * k, p1: 1f);
         t += 0.22f;
+        // Both stay drawn under the dust for a few frames more (their raised tails reached past the cloud's first pages and vanished uncovered).
+        Add(A, Kind.Run, t, 0.15f, OnGround(cloudX - 0.5f * k), OnGround(cloudX - 0.5f * k), 1, p0: 1.4f * k);
+        Add(B, Kind.Run, t, 0.15f, OnGround(cloudX + 0.5f * k), OnGround(cloudX + 0.5f * k), -1, true, p0: 1.4f * k);
         float fracasFor = 3.8f;
         Add(C, Kind.Fracas, t - 0.085f, fracasFor + 0.085f, OnGround(cloudX), OnGround(cloudX), 1, p0: 0.05f, p1: 0.45f);
         _flingAt = t + 0.8f;

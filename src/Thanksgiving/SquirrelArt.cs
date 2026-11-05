@@ -125,6 +125,9 @@ internal static class SquirrelArt
         return q;
     }
 
+    /// <summary>Where the hands rest in a sit without the nut: on the thighs, within the forelimb's reach.</summary>
+    private static readonly PointF SitHandNear = P(0.12f, 0.30f), SitHandFar = P(0.18f, 0.28f);
+
     /// <summary>Sitting up. "upright" 0 is a crouch on all fours, 1 fully up. tail: 0 calm, up to 3 lashed. look: head tipped up.</summary>
     public static Pose Sit(float upright = 1f, int tail = 0, bool look = false, bool paws = true)
     {
@@ -139,9 +142,10 @@ internal static class SquirrelArt
         q.Head = P(q.Chest.X + Lerp(0.29f, 0.07f, e) + 0.03f * lookUp, q.Chest.Y + Lerp(0.07f, 0.22f, e) + 0.04f * lookUp);
         q.HeadTilt = Lerp(-4f, 8f, e) + 14f * lookUp;
         // Sitting up with the paws held to the chest (paws true) the forefeet are drawn as the paws; with them down they rest on the
-        // ground just in front of the hind feet. (Placed at chest height out front with paws false, the two-bone legs pulled straight
-        // and every no-nut sit, turn and daze pointed a rod.)
-        q.NearFore = Lerp(P(0.52f, 0f), paws ? P(0.50f, 0.55f) : P(0.30f, 0.0f), e); q.FarFore = Lerp(P(0.40f, 0f), paws ? P(0.60f, 0.55f) : P(0.24f, 0.0f), e);
+        // thighs, within the two bones' reach of the shoulder (0.42). (At chest height out front the legs pulled straight and every
+        // no-nut sit, turn and daze pointed a rod; on the ground in front of the hind feet they were out of reach and drew a
+        // straight diagonal with the hand 20 px short of the ground.)
+        q.NearFore = Lerp(P(0.52f, 0f), paws ? P(0.50f, 0.55f) : SitHandNear, e); q.FarFore = Lerp(P(0.40f, 0f), paws ? P(0.60f, 0.55f) : SitHandFar, e);
         q.NearHind = Lerp(P(-0.02f, 0f), P(0.0f, 0.03f), e); q.FarHind = Lerp(P(0.08f, 0f), P(-0.05f, 0.02f), e);
         q.HindFlat = e > 0.6f; q.PawsUp = paws && e > 0.45f;
         q.TailBase = Lerp(165f, 118f, e) + 8f * lookUp;
@@ -177,7 +181,9 @@ internal static class SquirrelArt
     {
         const float C = HopCrouch, Pu = HopPush, F = HopFlight, L = HopLand;
         Pose q;
-        if (k < C) { q = Sit(1f); float c = k / C; q.BodyScale = 1 - 0.15f * c; q.Hip = P(q.Hip.X, q.Hip.Y - 0.05f * c); q.Chest = P(q.Chest.X - 0.08f * c, q.Chest.Y - 0.12f * c); q.Head = P(q.Head.X - 0.06f * c, q.Head.Y - 0.12f * c); q.TailBase -= 20f * c; q.PawsUp = false; q.NearFore = P(0.36f, 0.02f); q.FarFore = P(0.30f, 0.02f); }
+        // The crouch: the paws stay at the chest (with the nut) for its first half, then come down to tuck under the chin, where the
+        // push's swing begins (on the ground out front they were a straight rod, and the nut jumped to the mouth on the crouch's first frame).
+        if (k < C) { q = Sit(1f); float c = k / C; q.BodyScale = 1 - 0.15f * c; q.Hip = P(q.Hip.X, q.Hip.Y - 0.05f * c); q.Chest = P(q.Chest.X - 0.08f * c, q.Chest.Y - 0.12f * c); q.Head = P(q.Head.X - 0.06f * c, q.Head.Y - 0.12f * c); q.TailBase -= 20f * c; q.PawsUp = c < 0.5f; q.NearFore = Lerp(SitHandNear, P(0.14f, 0.18f), c); q.FarFore = Lerp(SitHandFar, P(0.10f, 0.20f), c); }
         else if (k < Pu) { float c = (k - C) / (Pu - C); q = Bound(0.47f, 2.2f); q.BodyScale = 1.05f + 0.15f * c; q.Hip = P(q.Hip.X, 0.26f + 0.08f * c); q.NearHind = P(-0.30f - 0.1f * c, 0f); q.FarHind = P(-0.22f - 0.1f * c, 0f); q.TailBase = 150f - 30f * c; q.TailCurl = -60f; }
         else if (k < F) { float c = (k - Pu) / (F - Pu); q = Bound(0.74f + 0.2f * c, 2.2f); q.BodyScale = Lerp(1.15f, 0.95f, Smooth(c)); q.Hip = P(q.Hip.X, 0.31f); q.Chest = P(q.Chest.X, 0.30f + 0.1f * (1 - c)); q.Head = P(q.Chest.X + 0.28f, q.Chest.Y + 0.08f); }
         else if (k < L) { float c = (k - F) / (L - F); q = Bound(0.08f, 2.2f); q.BodyScale = 1 - 0.12f * MathF.Sin(MathF.PI * c); q.Hump = 0.10f * c; q.NearFore = P(0.50f, 0f); q.FarFore = P(0.42f, 0f); q.NearHind = P(-0.10f + 0.1f * c, 0.06f * (1 - c)); q.FarHind = P(-0.02f + 0.1f * c, 0.04f * (1 - c)); }

@@ -183,7 +183,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
                 // sliver when it is level and pointing at us. (The first version pushed the trailing edge down, so a
                 // raised wing was a tall wedge: a plank.)
                 // The wing rises high but does not drop far: a downstroke that hung the wing below the belly read as a leg.
-                float upY = up > 0 ? up : 0.32f * up, handY = hand > 0 ? hand : 0.32f * hand;   // at 0.55 the TIP still dropped 0.58 below the shoulder and hung under the belly as a lobe
+                float upY = up > 0 ? up : 0.42f * up, handY = hand > 0 ? hand : 0.42f * hand;   // at 0.55 the TIP dropped 0.58 below the shoulder and hung under the belly as a lobe; at 0.32 the downstroke hid in the flank
                 PointF shoulder = P(sx, sy);
                 PointF wrist = P(sx - 0.06f, sy - 0.48f * upY * scale);
                 PointF tip = P(sx - 0.16f - 0.12f * rising, sy - 0.48f * upY * scale - 0.58f * handY * scale * (1 - 0.25f * rising));
