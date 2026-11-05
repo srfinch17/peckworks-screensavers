@@ -168,7 +168,7 @@ internal sealed class PatchLife
 
         float k = _k;
         int w = (int)(2.55f * k) + 6, h = (int)(1.9f * k) + 6, ox = (int)(1.75f * k) + 3, by = h - 4;
-        _sqRun = Make(16, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Bound(i / 16f, 2.2f), k, w, h, ox, by));
+        _sqRun = Make(32, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Bound(i / 32f, 2.2f), k, w, h, ox, by));   // 32: at 16 a bound 2.2 lengths long stepped the tail a seventh of a wave a page
         for (int t = 0; t < 4; t++) { int tl = t; _sqSit[t] = Make(1, w, h, ox, by, _ => SquirrelArt.Page(SquirrelArt.Sit(1f, tl, false, false), k, w, h, ox, by)); }
         _sqLook = Make(1, w, h, ox, by, _ => SquirrelArt.Page(SquirrelArt.Sit(1f, 0, true, false), k, w, h, ox, by));
         _sqDig = Make(8, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Dig(i / 8f), k, w, h, ox, by));
@@ -483,7 +483,7 @@ internal sealed class PatchLife
                     else if (c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Hide)
                     {
                         float cyc = c.Travelled / (2.2f * _k);
-                        Stamp(fb, _sqRun, _sqRun.Pages[(int)((cyc - MathF.Floor(cyc)) * 16) % 16], c, c.Y);
+                        Stamp(fb, _sqRun, _sqRun.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], c, c.Y);
                     }
                     else if (c.Mind.Doing == Doing.Dig)
                         Stamp(fb, _sqDig, _sqDig.Pages[(int)(c.Clock * 3.2f * 8) % 8], c, c.Y);

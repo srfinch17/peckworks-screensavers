@@ -34,6 +34,7 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        if (PoseSheet.TryWrite()) return;              // test aid: PECKWORKS_SHEET=squirrel:<png> writes a sheet of every squirrel pose and quits
         ScreensaverApp.Run(args, new ThanksgivingScreensaver());
     }
 }

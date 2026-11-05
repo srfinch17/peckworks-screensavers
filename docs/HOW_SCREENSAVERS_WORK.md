@@ -187,6 +187,7 @@ a fed koi was as hungry as before and went straight back for the next.
     MouseParade.cs                 the fourth: four mice with acorns scattered by a swooping sparrow, hiding behind the pumpkins by depth
     PatchLife.cs                   the mice, birds and squirrel that live in the patch: a Mind each from Core/Minds, steps by Ground.Step among the pumpkins' feet, drawn far to near against the depth picture
     SquirrelArt.cs                 how a squirrel is drawn and the poses it can take (the bound, a hop with its crouch and settle, a turn through the front view, sitting, digging, chattering), shared with the fence squirrel
+    PoseSheet.cs                   test aid: PECKWORKS_SHEET=squirrel:<png> paints every squirrel pose big on one sheet and quits (a painter is judged there first, every pose at once, before it is watched moving)
     MouseArt.cs, BirdArt.cs        how a field mouse and a small songbird are drawn, shared by the stories and the patch's life
     Happenings/                    eighteen small random events (a turkey, a raccoon, a pheasant), one class per file
 

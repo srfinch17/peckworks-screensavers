@@ -633,7 +633,9 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   sniff, nibble at one, hide behind one and peek; birds get about by FLYING (a few hops at most): a
   burst off the ground, a low bounding flight across the patch, wings beating then shut into a dart
   and beating again, a flare onto the ground or a pumpkin's shoulder, where they peck and look about
-  on proper legs (a hock bent backward, a thin shank, long toes); the squirrel bounds through, sits up,
+  on proper legs (a hock bent backward, a thin shank, long toes); the squirrel (a round-headed, big-eyed
+  one with a plume of a tail as big as itself, held up in a question mark when it sits and trailing in an
+  arc behind it when it bounds) bounds through, sits up,
   scratches at the earth and darts behind a pumpkin, and sinks into its run and sits up out of it
   through the crouch (never a one-frame pop); a mouse a squirrel bounds past bolts. Everything on the ground is hidden by the
   pumpkins nearer than it (a depth picture the painter makes), which is what puts them IN the patch.
