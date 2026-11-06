@@ -31,7 +31,10 @@ namespace Thanksgiving;
 internal sealed class PatchLife
 {
     private enum Kind { Mouse, Bird, Squirrel }
-    private enum Doing { Go, Still, Nibble, Hide, Peck, Fly, Perch, Dig, Bolt }
+    // Fetch: going to a loose nut. Carry: taking a nut somewhere to bury it. Bury: digging it in. Eat: sitting up with it,
+    // chewing. Raid: going to another squirrel's stash (then Dig to open it). Chase: the stash's owner running at the
+    // thief. Leave: a visiting squirrel bounding off the way it came.
+    private enum Doing { Go, Still, Nibble, Hide, Peck, Fly, Perch, Dig, Bolt, Fetch, Carry, Bury, Eat, Raid, Chase, Leave }
 
     private sealed class Critter
     {
@@ -57,6 +60,12 @@ internal sealed class PatchLife
         public float TurnT;                         // seconds into that
         public float Blend;                         // seconds left of its blend through the crouch pages between the two
         public bool Sinking;                        // the blend's direction: sinking from the sit into the run, or rising out of it
+        public NutField.Nut? Nut;                   // the nut a squirrel is carrying (in its mouth on the move, in its paws sitting)
+        public NutField.Nut? Target;                // the nut it is going for: a loose one to fetch, or a stash to raid
+        public int ChaseId = -1;                    // the thief an owner is running at (a critter's Id)
+        public bool Visitor;                        // a squirrel that came in for the frenzy and leaves when the nuts are gone
+        public int EntrySide;                       // which edge a visitor came in from (-1 left, +1 right)
+        public bool Done;                           // a visitor that has left: dropped from the list after the frame
     }
 
     private const float BlendFor = 0.15f;           // a squirrel drops into its run, or sits up out of it, over nine frames (it used to pop in one)
@@ -73,28 +82,32 @@ internal sealed class PatchLife
     private readonly List<Critter> _all = new();
     private readonly float _k, _m, _b;
     private readonly Ground.Solid _ground;
-    private Sheet _mouseRun, _mouseStill, _sqRun, _sqLook, _sqDig, _sqRise, _sqTurn;
+    private readonly NutField _nuts;                // the acorns on the ground (Nuts.cs)
+    private Sheet _mouseRun, _mouseStill, _sqRun, _sqLook, _sqDig, _sqRise, _sqTurn, _sqRunNut, _sqEat;   // RunNut: bounding with a nut in the mouth; Eat: sitting up chewing one, four pages
     private Sheet[] _sqSit = new Sheet[4];
     private Sheet[] _bird = new Sheet[2], _birdLook = new Sheet[2], _birdPeck = new Sheet[2], _birdHop = new Sheet[2];
     private Sheet[] _birdFlyKind = new Sheet[2];
     private volatile bool _ready;
 
-    public PatchLife(ThanksgivingScenery s, int count, Random sceneRng, Noticeboard board)
+    public PatchLife(ThanksgivingScenery s, int count, Random sceneRng, Noticeboard board, NutField nuts)
     {
         _s = s;
         _board = board;
+        _nuts = nuts;
         _log = MindLog.Open();
         _rng = new Random(sceneRng.Next());         // its own dice
         _k = Math.Max(9f, s.U * 0.030f);   // the near ground's scale: a pumpkin of 0.4 m is about 0.05 U, so a squirrel of 0.25 m is 0.030 U (at 0.055 it was "too big"), a mouse 0.55 of that, a sparrow 0.020
         _m = _k * 0.55f;
         _b = Math.Max(7f, s.U * 0.020f);
         _ground = CanStand;                         // made once: a new delegate every frame is garbage
+        _nuts.CanStand = _ground;                   // a nut lands only where a critter could stand
         int mice = (count + 1) / 2, birds = count / 3, squirrels = Math.Max(0, count - mice - birds);
         float[] timid = Traits.Deal(_rng, Math.Max(1, count)), busy = Traits.Deal(_rng, Math.Max(1, count)), curious = Traits.Deal(_rng, Math.Max(1, count));
         int n = 0;
         for (int i = 0; i < mice; i++) { Add(Kind.Mouse, timid[n], busy[n], curious[n]); n++; }
         for (int i = 0; i < birds; i++) { Add(Kind.Bird, timid[n], busy[n], curious[n]); n++; }
         for (int i = 0; i < squirrels; i++) { Add(Kind.Squirrel, timid[n], busy[n], curious[n]); n++; }
+        _nextId = _all.Count;                       // the residents took 0 to count-1; visitors count on from there
         Task.Run(() => { try { Build(); } catch { _ready = false; return; } _ready = true; });
     }
 
@@ -108,6 +121,36 @@ internal sealed class PatchLife
         c.Pace = new Pace(0.9f * _s.U);             // gathers speed over about a quarter of a second
         c.Mind.Begin(Doing.Still, 0.5f + 3f * (float)_rng.NextDouble());
         _all.Add(c);
+    }
+
+    private int _nextId;                            // ids outlive the list (visitors come and go), so a name is never reused for the owner of a stash
+
+    /// <summary>
+    /// THE FRENZY (his rule: "every so often like 10 nuts will fall at once and a bunch of squirrels will go into a
+    /// frenzy to grab them"): the gust has shaken the nuts loose (NutField.Shake), and three or four squirrels come
+    /// bounding in from the edges along the walk line to join the patch's own. They are ordinary critters with the
+    /// Visitor flag: the same mind, the same dice; and when there is nothing loose left to fetch and nothing in their
+    /// mouths, Decide sends them off the way they came (Leave), and the patch is quiet again. Never more than five
+    /// squirrels on the ground at once.
+    /// </summary>
+    public void Frenzy()
+    {
+        int squirrels = 0;
+        foreach (Critter c in _all) if (c.Kind == Kind.Squirrel && !c.Done) squirrels++;
+        int bring = Math.Min(4, Math.Max(0, 5 - squirrels));
+        float[] timid = Traits.Deal(_rng, Math.Max(1, bring)), busy = Traits.Deal(_rng, Math.Max(1, bring)), curious = Traits.Deal(_rng, Math.Max(1, bring));
+        for (int i = 0; i < bring; i++)
+        {
+            int side = i % 2 == 0 ? -1 : 1;
+            var c = new Critter { Kind = Kind.Squirrel, Id = _nextId++, Timid = timid[i], Busy = busy[i], Dir = -side, Visitor = true, EntrySide = side };
+            c.X = side < 0 ? -0.018f * _s.Width : 1.018f * _s.Width;        // just off the edge, inside the ground's own margin (CanStand allows 0.02 W): from two lengths out every line in was refused at its first step
+            c.Y = _s.WalkY(Math.Clamp(c.X, 0, _s.Width - 1)) + _s.U * (0.01f + 0.04f * (float)_rng.NextDouble());
+            c.Senses = new Attention(0.5f * c.Timid, curious[i]) { Keen = 0.8f };
+            c.Pace = new Pace(0.9f * _s.U);
+            c.Mind.Begin(Doing.Still, 2.5f + 0.7f * i);                      // the nuts take three to five seconds to come down; they arrive as the first ones land, one after another
+            _all.Add(c);
+        }
+        _log?.WriteLine($"{_time,8:F2} frenzy: {bring} squirrels come in");
     }
 
     // ================================================================ the world
@@ -220,6 +263,8 @@ internal sealed class PatchLife
         _sqDig = Make(8, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Dig(i / 8f), k, w, h, ox, by));
         _sqRise = Make(RisePages, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Sit(0.2f + 0.8f * i / (RisePages - 1), 0, false, false), k, w, h, ox, by));   // the crouch (page 0) up to the sit (the last)
         _sqTurn = Make(TurnPages, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Turn(0.15f + 0.175f * i), k, w, h, ox, by));   // sitting, coming round: 0.15, 0.325, 0.5 (the front view); played back again mirrored
+        _sqRunNut = Make(32, w, h, ox, by, i => { var q = SquirrelArt.Bound(i / 32f, 2.2f); q.Acorn = 1; return SquirrelArt.Page(q, k, w, h, ox, by); });   // the bound with a nut in its mouth
+        _sqEat = Make(4, w, h, ox, by, i => { var q = SquirrelArt.Sit(1f, 0, false, true); q.Acorn = 2; q.Nib = i / 3f; return SquirrelArt.Page(q, k, w, h, ox, by); });   // sitting up with the nut in its paws, chewing
 
         float b = _b;
         int bw = (int)(1.6f * b) + 4, bh = (int)(1.3f * b) + 4, box = (int)(0.9f * b) + 2, bby = bh - 2;   // 1.3 tall: the bird stands on legs now, and a hop lifts it a tenth more
@@ -248,17 +293,22 @@ internal sealed class PatchLife
             c.Clock += dt;
             _log?.WriteLine($"{_time,8:F3} {c.Kind.ToString().ToLowerInvariant()}{c.Id} frame x {c.X:F1} y {c.Y:F1} v {c.Pace.Speed:F2} {c.Mind.Doing}");
             // A squirrel on the move is a thing the mice and birds notice: it tells the board every third of a second.
-            if (c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Go or Doing.Bolt && c.Clock >= c.NextPost)
+            if (c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Fetch or Doing.Carry or Doing.Raid or Doing.Chase or Doing.Leave && c.Clock >= c.NextPost)
             {
                 _board.Post(Sense.Movement, new PointF(c.X, c.Y), 0.14f * _s.U, 0.9f, c);
                 c.NextPost = c.Clock + 0.33f;
             }
             // The senses: a mouse bolts from a squirrel or a scuffle, freezes at a noise; a bird flies up; a squirrel sits up and looks.
-            if (c.Mind.Doing is not (Doing.Bolt or Doing.Fly))
+            if (c.Mind.Doing is not (Doing.Bolt or Doing.Fly or Doing.Chase or Doing.Leave))
             {
                 Reaction r = c.Senses.Check(_board, new PointF(c.X, c.Y), c, out Notice cause);
-                if (r == Reaction.Flee) Startle(c, cause.At);
-                else if (r == Reaction.Freeze) { c.Pace.Halt(); c.Mind.Begin(c.Kind == Kind.Squirrel && c.Perched < 0 ? Doing.Still : Doing.Still, 1f + 1.5f * c.Timid); c.Clock = 0; }
+                // A squirrel busy with a nut (chewing, burying, digging one up) is not put off its work by a noise or a passing
+                // squirrel: it only looks that way. (Every freeze restarted the meal: one squirrel chewed one nut for 31 s
+                // through a frenzy bounding round it.)
+                bool busyWithNut = c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Eat or Doing.Bury or Doing.Dig;
+                if (r == Reaction.Flee && !busyWithNut) Startle(c, cause.At);
+                else if (r is Reaction.Flee or Reaction.Freeze && busyWithNut) { if (MathF.Abs(MathF.Cos(c.Heading)) > 0.2f || c.Mind.Doing == Doing.Eat) c.Dir = cause.At.X >= c.X ? 1 : -1; }
+                else if (r == Reaction.Freeze) { c.Pace.Halt(); c.Mind.Begin(Doing.Still, 1f + 1.5f * c.Timid); c.Clock = 0; }
                 else if (r == Reaction.Look && c.Mind.Doing is Doing.Still or Doing.Peck or Doing.Perch) { c.Clock = 1.1f; c.Mind.Left = Math.Max(c.Mind.Left, 0.8f); if (c.Kind != Kind.Bird) c.Dir = cause.At.X >= c.X ? 1 : -1; }
             }
             if (c.Turning)
@@ -277,11 +327,102 @@ internal sealed class PatchLife
             // patch's one real jump): the moment its doing changes class (down on all fours, or sitting up) it plays a
             // short blend through the crouch pages, sinking into the run or rising out of it. The pace is still easing
             // in those frames, so the sink plays nearly on the spot.
-            bool down = c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Hide or Doing.Dig;
+            bool down = c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Hide or Doing.Dig or Doing.Fetch or Doing.Carry or Doing.Bury or Doing.Raid or Doing.Chase or Doing.Leave;
             if (c.Kind == Kind.Squirrel && down != c.WasDown) { c.Blend = BlendFor; c.Sinking = down; }
             c.WasDown = down;
             if (c.Blend > 0) c.Blend -= dt;
         }
+        _all.RemoveAll(c => c.Done);                // the visitors that have left
+    }
+
+    /// <summary>The nearest live critter with this id, or null.</summary>
+    private Critter? ById(int id)
+    {
+        foreach (Critter c in _all) if (c.Id == id && !c.Done) return c;
+        return null;
+    }
+
+    /// <summary>
+    /// What a squirrel does about nuts, asked first in Decide. True when it chose something. In order: finish what the
+    /// timer just ended (a bury, a meal, a raid's dig); with a nut in its mouth, eat it or carry it off to bury; with a
+    /// loose nut in reach, fetch it (a visitor sees the whole patch, a resident a little less); with another's stash
+    /// near and a bold roll, raid it; a visitor with nothing left to do leaves.
+    /// </summary>
+    private bool DecideNuts(Critter c)
+    {
+        float u = _s.U;
+        PointF me = new(c.X, c.Y);
+        switch (c.Mind.Doing)
+        {
+            case Doing.Bury when c.Nut != null:
+                _nuts.Bury(c.Nut, Math.Clamp(c.X + c.Dir * 0.35f * _k, 0.01f * _s.Width, 0.99f * _s.Width), c.Y, c.Id);   // on screen: one was buried at x 1921 of 1920
+                _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} buries a nut at {c.X:F0},{c.Y:F0}");
+                c.Nut = null;
+                c.Mind.Begin(Doing.Still, 0.8f + 1.2f * (float)_rng.NextDouble());   // sits up and looks about: was anyone watching
+                c.Clock = 0;
+                return true;
+            case Doing.Eat when c.Nut != null:
+                _nuts.Eat(c.Nut); c.Nut = null;
+                _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} ate a nut");
+                break;
+            case Doing.Dig when c.Target != null:
+            {
+                NutField.Nut dug = c.Target; c.Target = null;
+                if (dug.State != NutField.State.Buried) break;                    // someone else got there first
+                int owner = dug.Owner;
+                _nuts.Take(dug); c.Nut = dug;
+                _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} digs up squirrel{owner}'s stash at {c.X:F0},{c.Y:F0}");
+                // The owner, if it is about and not too far, comes running; the thief bolts with the nut.
+                Critter? o = ById(owner);
+                if (o != null && o.Kind == Kind.Squirrel && o.Mind.Doing is not (Doing.Chase or Doing.Bolt) && MathF.Abs(o.X - c.X) < 1.2f * u)
+                {
+                    o.ChaseId = c.Id; o.Goal = me; o.Mind.Begin(Doing.Chase, 5f); o.Clock = 0; o.Turning = false; Head(o);
+                    _log?.WriteLine($"{_time,8:F2} squirrel{o.Id} comes running at squirrel{c.Id}");
+                    PointF? run = Ground.FleeRun(_ground, me, new PointF(o.X, o.Y), _m * 0.5f, 0.4f * u, 0.08f * u);
+                    c.Goal = run ?? RandomSpot(c.X - 0.3f * u, c.X + 0.3f * u, 20, c.Y, 0.05f * u, 3f * _k, me) ?? me;
+                    c.Mind.Begin(Doing.Bolt, 2.5f); c.Travelled = 0; c.Clock = 0; Head(c);
+                    return true;
+                }
+                break;
+            }
+        }
+        if (c.Nut != null)
+        {
+            // Eat it here, or carry it off a little way and bury it (the eating weighs a touch more: a stash needs a thief to pay off).
+            if (_rng.NextDouble() < 0.5)
+            {
+                c.Mind.Begin(Doing.Eat, 4f + 4f * (float)_rng.NextDouble()); c.Clock = 0;
+                return true;
+            }
+            PointF? spot = RandomSpot(c.X - 0.35f * u, c.X + 0.35f * u, 30, c.Y, 0.05f * u, 2.5f * _k, me);
+            if (spot == null) { c.Mind.Begin(Doing.Eat, 4f + 4f * (float)_rng.NextDouble()); c.Clock = 0; return true; }
+            c.Goal = spot.Value; c.Mind.Begin(Doing.Carry, 8f); c.Travelled = 0; Head(c);
+            return true;
+        }
+        NutField.Nut? loose = _nuts.NearestLoose(me, c.Visitor ? 1.6f * u : 0.8f * u);
+        if (loose != null && Ground.LineClear(_ground, me, new PointF(loose.X, loose.Y), 2f))
+        {
+            c.Target = loose; c.Goal = new PointF(loose.X, loose.Y); c.Mind.Begin(Doing.Fetch, 8f); c.Travelled = 0; Head(c);
+            return true;
+        }
+        NutField.Nut? stash = _nuts.NearestStash(c.Id, me, 0.35f * u);
+        if (stash != null && _rng.NextDouble() < 0.25 + 0.5 * (1 - c.Timid) && Ground.LineClear(_ground, me, new PointF(stash.X, stash.Y), 2f))
+        {
+            c.Target = stash; c.Goal = new PointF(stash.X, stash.Y); c.Mind.Begin(Doing.Raid, 8f); c.Travelled = 0; Head(c);
+            _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} goes for squirrel{stash.Owner}'s stash");
+            return true;
+        }
+        if (c.Visitor && _nuts.LooseCount == 0 && _nuts.FallingCount == 0)
+        {
+            if (_rng.NextDouble() < 0.4) { c.Mind.Begin(Doing.Still, 1f + 2f * (float)_rng.NextDouble()); return true; }   // lingers a moment first: sits up, looks about
+            float edge = c.EntrySide < 0 ? -0.015f * _s.Width : 1.015f * _s.Width;
+            PointF? off = RandomSpot(edge - 0.004f * _s.Width, edge + 0.004f * _s.Width, 20, c.Y, 0.05f * u, 0f, me);
+            if (off == null) { c.Mind.Begin(Doing.Still, 1f); return true; }
+            c.Goal = off.Value; c.Mind.Begin(Doing.Leave, 12f); c.Travelled = 0; Head(c);
+            _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} leaves");
+            return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -328,6 +469,9 @@ internal sealed class PatchLife
     {
         float u = _s.U;
         c.Clock = 0;
+        // The nuts come before the lull: a squirrel with a nut in its mouth or one in reach goes on with it while a story
+        // plays (the frenzy is his ask; lulled, the visitors hid behind pumpkins for the whole story and never fetched one).
+        if (c.Kind == Kind.Squirrel && DecideNuts(c)) return;
         if (Lull)
         {
             if (c.Kind == Kind.Bird) c.Mind.Begin(c.Perched >= 0 ? Doing.Perch : _rng.Next(3) == 0 ? Doing.Peck : Doing.Still, 2f + 2f * (float)_rng.NextDouble());
@@ -454,20 +598,51 @@ internal sealed class PatchLife
             case Doing.Bolt:
             case Doing.Nibble:
             case Doing.Hide:
+            case Doing.Fetch:
+            case Doing.Carry:
+            case Doing.Raid:
+            case Doing.Chase:
+            case Doing.Leave:
             {
+                if (c.Mind.Doing == Doing.Chase)
+                {
+                    // The owner runs at the thief, wherever the thief is now; it gives up when close (the thief has bolted on) or when the timer ends.
+                    Critter? thief = ById(c.ChaseId);
+                    if (thief == null) { c.Pace.Halt(); c.Mind.Begin(Doing.Still, 1f); c.Clock = 0; return; }
+                    c.Goal = new PointF(thief.X, thief.Y);
+                }
                 float dx = c.Goal.X - c.X, dy = c.Goal.Y - c.Y;
                 float dist = MathF.Sqrt(dx * dx + dy * dy);
-                float arrive = c.Kind == Kind.Bird ? 0.2f * _b : 0.25f * _m;
+                float arrive = c.Kind == Kind.Bird ? 0.2f * _b : c.Mind.Doing == Doing.Chase ? 1.5f * _k : c.Mind.Doing is Doing.Fetch or Doing.Raid ? 0.5f * _k : 0.25f * _m;
                 if (dist < arrive)
                 {
-                    // Arrived: a scurry ends in a sniff; a nibble and a hide stay put until the timer.
+                    // Arrived: a scurry ends in a sniff; a nibble and a hide stay put until the timer; a fetch takes the nut;
+                    // a carry turns into the burying; a raid into the digging up; a chase ends with the owner sitting up,
+                    // and a leaving visitor is gone.
                     c.Pace.Halt();
-                    if (c.Mind.Doing is Doing.Go or Doing.Bolt) { c.Mind.Begin(Doing.Still, c.Kind == Kind.Bird ? 0.5f : 0.4f + 0.8f * (float)_rng.NextDouble()); c.Clock = 0; }
-                    else if (c.Mind.Left > 4f) c.Mind.Left = 2f + 3f * (float)_rng.NextDouble();
+                    switch (c.Mind.Doing)
+                    {
+                        case Doing.Fetch:
+                            if (c.Target != null && c.Target.State == NutField.State.Loose) { _nuts.Take(c.Target); c.Nut = c.Target; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} picks up a nut at {c.X:F0},{c.Y:F0}"); }
+                            c.Target = null;
+                            c.Mind.Begin(Doing.Still, 0.4f + 0.4f * (float)_rng.NextDouble()); c.Clock = 0;   // sits up with it, then Decide: eat or bury
+                            break;
+                        case Doing.Carry: c.Mind.Begin(Doing.Bury, 1.4f + 0.6f * (float)_rng.NextDouble()); c.Clock = 0; break;
+                        case Doing.Raid: c.Mind.Begin(Doing.Dig, 1.0f + 0.5f * (float)_rng.NextDouble()); c.Clock = 0; break;   // Decide finishes the raid when the dig's timer ends
+                        case Doing.Chase: c.Mind.Begin(Doing.Still, 1.5f); c.Clock = 0; c.ChaseId = -1; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} gives up the chase"); break;
+                        case Doing.Leave: c.Done = true; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} gone"); break;
+                        case Doing.Go: case Doing.Bolt: c.Mind.Begin(Doing.Still, c.Kind == Kind.Bird ? 0.5f : 0.4f + 0.8f * (float)_rng.NextDouble()); c.Clock = 0; break;
+                        default: if (c.Mind.Left > 4f) c.Mind.Left = 2f + 3f * (float)_rng.NextDouble(); break;
+                    }
                     return;
                 }
                 // The pace eases toward the doing's speed and slows into the goal (Mover.cs); the heading turns at a rate, easing as it settles.
-                float speed = c.Kind switch { Kind.Mouse => c.Mind.Doing == Doing.Bolt ? 0.30f : 0.19f, Kind.Bird => 0.12f, _ => c.Mind.Doing == Doing.Bolt ? 0.32f : 0.24f } * u;
+                float speed = c.Kind switch
+                {
+                    Kind.Mouse => c.Mind.Doing == Doing.Bolt ? 0.30f : 0.19f,
+                    Kind.Bird => 0.12f,
+                    _ => c.Mind.Doing switch { Doing.Bolt => 0.32f, Doing.Chase => 0.34f, Doing.Fetch => 0.28f, Doing.Leave => 0.26f, _ => 0.24f },
+                } * u;
                 c.Pace.Want = Math.Min(speed, MathF.Max(0.25f * speed, dist * 4f));
                 float want = MathF.Atan2(dy, dx);
                 c.Heading = Turn.Toward(c.Heading, want, 7f, dt);
@@ -588,13 +763,18 @@ internal sealed class PatchLife
                         float upright = c.Sinking ? f : 1f - f;
                         Stamp(fb, _sqRise, _sqRise.Pages[(int)(upright * (RisePages - 0.01f))], c, c.Y);
                     }
-                    else if (c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Hide)
+                    else if (c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Hide or Doing.Fetch or Doing.Carry or Doing.Raid or Doing.Chase or Doing.Leave)
                     {
                         float cyc = c.Travelled / (2.2f * _k);
-                        Stamp(fb, _sqRun, _sqRun.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], c, c.Y);
+                        Sheet run = c.Nut != null ? _sqRunNut : _sqRun;                 // with a nut it bounds with the nut in its mouth
+                        Stamp(fb, run, run.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], c, c.Y);
                     }
-                    else if (c.Mind.Doing == Doing.Dig)
+                    else if (c.Mind.Doing is Doing.Dig or Doing.Bury)
                         Stamp(fb, _sqDig, _sqDig.Pages[(int)(c.Clock * 3.2f * 8) % 8], c, c.Y);
+                    else if (c.Mind.Doing == Doing.Eat)
+                        Stamp(fb, _sqEat, _sqEat.Pages[new[] { 0, 1, 2, 3, 2, 1 }[(int)(c.Clock * 9f) % 6]], c, c.Y);   // chewing: the nut dips to the mouth and back, a beat and a half a second
+                    else if (c.Nut != null)
+                        Stamp(fb, _sqEat, _sqEat.Pages[0], c, c.Y);                     // sitting up holding it
                     else
                     {
                         float ft = c.Clock % 1.5f;

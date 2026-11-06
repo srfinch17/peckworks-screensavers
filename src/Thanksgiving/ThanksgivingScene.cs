@@ -62,6 +62,8 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly Noticeboard _board;           // what is going on, for the residents' senses (Core/Minds/Senses.cs)
     private (Sense Kind, float X, float Y, float Reach, float At)? _testNotice;
     private readonly PatchLife _life;              // the mice, birds and squirrel that live in the pumpkin patch
+    private readonly NutField _nuts;               // the acorns on the ground (Nuts.cs): the squirrels' business
+    private readonly bool _frenzyTest;
     private readonly int _geeseDir;                // +1 the V flies right, -1 left
     private readonly float[] _flapPhase;           // each goose's own place in the flap, so they are not all in step
     private readonly Sprite[] _smoke;              // four puff sizes, small to big
@@ -167,7 +169,10 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _work = new FieldWork(_scenery, _rng, _board);
         _pack = new Pack(_scenery, settings.CoyoteCount, 4, _rng, _board);
         _stories = new StoryDirector(_scenery, _happenings, _rng, _board, c => [new AcornCaper(c), new HideAndSeek(c), new FawnApple(c, _herd), new MouseParade(c)]);
-        _life = new PatchLife(_scenery, settings.CritterCount, _rng, _board);
+        _nuts = new NutField(_scenery, _rng, _board);
+        _scenery.Nuts = _nuts;                     // the AcornDrop happening drops into it
+        _life = new PatchLife(_scenery, settings.CritterCount, _rng, _board, _nuts);
+        _frenzyTest = Environment.GetEnvironmentVariable("PECKWORKS_NUTS") == "frenzy";   // test aid: the gust's shake and the frenzy at 5 s, once
         string? notice = Environment.GetEnvironmentVariable("PECKWORKS_NOTICE");      // test aid: "Loud;0.5;0.72;0.8;3" posts that kind at (xf, yf) with reach in U at that second
         if (!string.IsNullOrEmpty(notice))
         {
@@ -513,6 +518,8 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _herd.Update(dt);
         _work.Update(dt);
         _pack.Update(dt);
+        _nuts.Update(dt);
+        if (_frenzyTest && _time >= 5.0 && _time - dt < 5.0) { _nuts.Shake(12); _life.Frenzy(); }
         _life.Update(dt);
         _happenings.Update(elapsedSeconds);
     }
@@ -539,6 +546,8 @@ internal sealed class ThanksgivingScene : IScreensaverScene
             case "Squirrel": _board.Post(Sense.Movement, s.LeftTrunk[0], 0.3f * u, 0.5f, h); break;
             case "AppleRoll": _board.Post(Sense.Food, s.StageLeft, 0.4f * u, 0.8f, h); break;
             case "AcornDrop": _board.Post(Sense.Food, new PointF(s.Hollow.At.X - 1.7f * Math.Max(9f, u * 0.030f), s.WalkY(s.Hollow.At.X)), 0.3f * u, 0.7f, h); break;
+            // THE GUST IS WHAT KNOCKS THE NUTS LOOSE (his rule): a dozen let go of the branches, and the squirrels' frenzy begins.
+            case "LeafGust": _nuts.Shake(10 + _rng.Next(5)); _life.Frenzy(); break;
         }
     }
 
@@ -629,6 +638,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         }
 
         // 6a2. The patch's own life: mice, birds and a squirrel among the pumpkins, each hidden by the pumpkins nearer than it.
+        _nuts.Draw(fb);                            // the acorns on the ground and any still falling, before the critters that go for them
         _life.Draw(fb);
 
         // 6b. The little scenes (Stories.cs): the squirrels, the mice, the dust, an apple on the

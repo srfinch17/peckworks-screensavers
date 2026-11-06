@@ -187,7 +187,8 @@ a fed koi was as hungry as before and went straight back for the next.
     HideAndSeek.cs                 the second: a mouse hides from the squirrel inside the jack-o'-lantern (drawn through the painter's stencil of its carved holes)
     FawnApple.cs                   the third: an apple rolls under the fence and the fawn comes to eat it (the herd LENDS the fawn: DeerHerd.Lend, Drive, Chew, Release)
     MouseParade.cs                 the fourth: four mice with acorns scattered by a swooping sparrow, hiding behind the pumpkins by depth
-    PatchLife.cs                   the mice, birds and squirrel that live in the patch: a Mind each from Core/Minds, steps by Ground.Step among the pumpkins' feet, drawn far to near against the depth picture
+    PatchLife.cs                   the mice, birds and squirrel that live in the patch: a Mind each from Core/Minds, steps by Ground.Step among the pumpkins' feet, drawn far to near against the depth picture; the squirrels' nut doings (fetch, eat, bury, raid, chase) and the gust's frenzy of visiting squirrels
+    Nuts.cs                        the acorns on the ground (NutField): each nut falling, loose, carried, buried (a stash with an owner) or gone; the AcornDrop happening and the gust add to it, the squirrels take from it
     SquirrelArt.cs                 how a squirrel is drawn and the poses it can take (the bound, a hop with its crouch and settle, a turn through the front view, sitting, digging, chattering), shared with the fence squirrel
     PoseSheet.cs                   test aid: PECKWORKS_SHEET=squirrel:<png> (or coyote:, rabbit:) paints every pose big on one sheet and quits (a painter is judged there first, every pose at once, against reference pictures, before it is watched moving)
     MouseArt.cs, BirdArt.cs        how a field mouse and a small songbird are drawn, shared by the stories and the patch's life

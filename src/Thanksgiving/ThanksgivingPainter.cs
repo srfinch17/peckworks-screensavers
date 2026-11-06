@@ -112,6 +112,7 @@ internal sealed class ThanksgivingScenery
     public required (PointF At, float R) Hollow { get; init; }       // the hollow in the roots of the left maple: the centre of its dark opening and its half width. A squirrel lives in it.
 
     // ---- Live facts, set by the scene every frame before the happenings draw ----
+    public NutField? Nuts { get; set; }                              // the acorns on the near ground (Nuts.cs): the AcornDrop happening adds to it, the squirrels take from it
     public PointF GeeseLead { get; set; }                            // where the lead goose is
     public bool GeeseOnScreen { get; set; }                          // false while the V is on its off-screen pause
 }

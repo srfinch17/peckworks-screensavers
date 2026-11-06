@@ -661,6 +661,13 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   through the crouch (never a one-frame pop); a mouse a squirrel bounds past bolts. Everything on the ground is hidden by the
   pumpkins nearer than it (a depth picture the painter makes), which is what puts them IN the patch.
   Knob "Patch critters" (0 to 12, default 6); they keep out of the way while a scene plays.
+- **The nuts stay on the ground.** Every acorn that falls from the oak branches lies where it landed
+  until a squirrel comes for it; the squirrel sits up and eats it, or carries it off a little way, digs
+  it in and pats the mound flat, and that stash is its own. A squirrel that finds another's stash may dig
+  it up, and if the owner is about it comes running while the thief bolts with the nut. When the strong
+  gust blows through it shakes a dozen nuts loose at once and three or four more squirrels come bounding
+  in from the edges for the frenzy: fetching, eating, burying, raiding and chasing; when nothing is left
+  loose they leave the way they came and the patch is quiet again.
 - The windmill's wheel turns and the washing on the line flaps, both swelling and easing with the same gusts
   as the scarf (each a flip-book, the page read off a phase that only ever runs forward).
 - Smoke drifts from the chimney, the windows' lamplight wanders, and the scarecrow's red scarf streams
@@ -675,7 +682,7 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   | The farm | The porch light comes on and moths gather. Silhouettes pass the farmhouse windows, one carrying the bird to the table. A barn owl flies out of the loft. A wild turkey flaps in low over the hill, lands on a silo cap and roosts there a while, looking about and preening, before it drops off and flies away. |
   | The field | A doe and her fawn, half the time led by a buck, come up over the far ridge: tiny silhouettes, about fifteen pixels at 1080p, because the far ridge is the farthest thing in the picture. |
   | The near ground | A wild turkey struts through, stops, fans its tail, gobbles and struts on. A squirrel bounds along the fence rail and sits up with an acorn. A crow lands on the scarecrow and caws. A raccoon comes sniffing at the pumpkins, rears up for a guilty look about, and waddles off. A pheasant bursts out of the corn shock. The scarecrow blinks and winks. |
-  | The props | An apple comes bounding in from beyond the left edge. Acorns patter down from the oak branch. A cardinal lands on a twig and sings. |
+  | The props | An apple comes bounding in from beyond the left edge. Acorns patter down from the oak branch and stay on the ground for the squirrels. A cardinal lands on a twig and sings. |
 
 Settings: number of leaves, fall speed, breeze, leaf size, number of geese, number of turkeys in
 the field, number of deer (a doe, a doe and fawn, or a doe, fawn and buck; three by default), and how often a surprise

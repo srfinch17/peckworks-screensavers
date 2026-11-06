@@ -63,10 +63,10 @@ internal sealed class AcornDrop : Happening
     private Nut[] _nuts = [];
     private bool _usable;
 
-    public override float Seconds => Total;
+    public override float Seconds => _s.Nuts != null ? 2f : Total;   // with a nut field the fall is the field's; this showing is only the letting go
     public override int Layer => 1;
     public override string? Claims => "branches,stageleft";   // its acorns can land on the left stage, where an apple rolls in
-    public override bool CanBegin => _usable;
+    public override bool CanBegin => _usable && (_s.Nuts == null || _s.Nuts.HasRoom);
 
     public AcornDrop(ThanksgivingScenery s)
     {
@@ -119,6 +119,14 @@ internal sealed class AcornDrop : Happening
         Take(_clear);
         Take(_other);
         if (chosen.Count == 0) { _nuts = []; return; }
+        // With the nut field on the ground (Nuts.cs) the acorns are ITS: they fall by the same sum there and then
+        // stay on the ground for the squirrels. This showing draws nothing itself.
+        if (_s.Nuts != null)
+        {
+            for (int i = 0; i < chosen.Count; i++) _s.Nuts.Drop(chosen[i], 0.1f + i * 0.85f + 0.3f * (float)rng.NextDouble());
+            _nuts = [];
+            return;
+        }
 
         _nuts = new Nut[chosen.Count];
         for (int i = 0; i < _nuts.Length; i++)
@@ -193,12 +201,13 @@ internal sealed class AcornDrop : Happening
 
     // ----------------------------------------------------------------- paint
 
-    /// <summary>One acorn turned by "turn" radians, cap up at 0. The sprite's centre is the acorn's middle.</summary>
-    private Sprite PaintAcorn(float turn) =>
-        Sprite.Paint(_size, _size, g =>
+    private Sprite PaintAcorn(float turn) => PaintAcorn(_a, _size, turn);
+
+    /// <summary>One acorn "a" half-widths wide on a sheet "size" square, turned by "turn" radians, cap up at 0. The sprite's centre is the acorn's middle. (Shared with the nut field.)</summary>
+    internal static Sprite PaintAcorn(float a, int size, float turn) =>
+        Sprite.Paint(size, size, g =>
         {
-            float a = _a;
-            g.TranslateTransform(_size / 2f, _size / 2f);
+            g.TranslateTransform(size / 2f, size / 2f);
             g.RotateTransform(turn * 180f / MathF.PI);
             g.TranslateTransform(0, -0.1f * a);
 
