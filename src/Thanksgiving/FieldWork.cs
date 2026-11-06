@@ -62,7 +62,7 @@ internal sealed class FieldWork
     private readonly Sprite[] _rear = new Sprite[TractorArt.WheelPages], _front = new Sprite[TractorArt.WheelPages], _small = new Sprite[TractorArt.WheelPages];
     private readonly Sprite _lamp, _puff, _bale;
     private readonly float _baleR;
-    private const int GatePages = 6;
+    private const int GatePages = 12;               // the tailgate's swing: at 6 pages a 70 degree swing in 0.45 s stepped 14 degrees a page
 
     private Job _job = Job.Away;
     private bool _left;                             // this pass heads left
@@ -94,8 +94,8 @@ internal sealed class FieldWork
         }
         for (int i = 0; i < TractorArt.WheelPages; i++)
         {
-            _rear[i] = TractorArt.Wheel(TractorArt.RearR * _t, i, Color.FromArgb(206, 64, 46), true);
-            _front[i] = TractorArt.Wheel(TractorArt.FrontR * _t, i, Color.FromArgb(206, 64, 46), false);
+            _rear[i] = TractorArt.Wheel(TractorArt.RearR * _t, i, TractorArt.Spoke, true);
+            _front[i] = TractorArt.Wheel(TractorArt.FrontR * _t, i, TractorArt.Spoke, false);
             _small[i] = TractorArt.Wheel(TractorArt.CartR * _t, i, Color.FromArgb(206, 160, 98), false);
         }
         _lamp = Sprite.Glow(Math.Max(3, (int)(s.U * 0.020f)), Color.FromArgb(255, 226, 150));

@@ -69,6 +69,7 @@ internal sealed class ThanksgivingScenery
     public required SizeF BarnWall { get; init; }                    // its wall's width and height (the roof rises 0.045 U above the wall)
     public required RectangleF BarnLoft { get; init; }               // the loft window, high in the gable
     public required RectangleF BarnDoor { get; init; }
+    public required List<(PointF At, float R)> SiloTops { get; init; }  // the three silos' caps: the apex of each, and the tube's half width (a turkey roosts on one)
 
     // ---- The field ----
     public required List<(PointF At, float R)> HayBales { get; init; } // each round bale: center and radius, standing on the field
@@ -178,7 +179,7 @@ internal static class ThanksgivingPainter
         var farmFoot = new PointF(w * 0.31f, Brushwork.RidgeYAt(nearRidge, w * 0.31f) + u * 0.012f);
         PaintFarmhouse(g, farmFoot.X, farmFoot.Y, u);
         var barnFoot = new PointF(w * 0.60f, Brushwork.RidgeYAt(nearRidge, w * 0.60f) + u * 0.012f);
-        PaintBarn(g, barnFoot.X, barnFoot.Y, u);
+        List<(PointF At, float R)> siloTops = PaintBarn(g, barnFoot.X, barnFoot.Y, u);
         // The scarecrow stands in the garden beside the farmhouse, on the same hill, at the house's scale (his line:
         // "put the scarecrow back by the house. not in the middle of a cut hay field"). Painted with the farm, before the
         // field copy, so everything that moves on the field passes in front of it as it should for a thing behind the field.
@@ -301,6 +302,7 @@ internal static class ThanksgivingPainter
             BarnFoot = barnFoot, BarnWall = new SizeF(barnW, barnH),
             BarnLoft = new RectangleF(barnFoot.X - u * 0.009f, barnTop - u * 0.026f, u * 0.018f, u * 0.016f),
             BarnDoor = new RectangleF(barnFoot.X - barnW * 0.16f, barnFoot.Y - barnH * 0.72f, barnW * 0.32f, barnH * 0.72f),
+            SiloTops = siloTops,
             HayBales = bales,
             FarTrees = farTrees,
             FencePosts = posts,
@@ -553,25 +555,40 @@ internal static class ThanksgivingPainter
     /// the eaves, the big door with its white X, a hayloft door above it, the
     /// lit loft window up in the gable, and a weathervane on the ridge.
     /// </summary>
-    private static void PaintBarn(Graphics g, float x, float footY, float u)
+    private static List<(PointF At, float R)> PaintBarn(Graphics g, float x, float footY, float u)
     {
         float barnW = u * 0.13f, barnH = u * 0.06f, top = footY - barnH;
         Color red = Color.FromArgb(150, 44, 36), redDark = Color.FromArgb(118, 34, 30), roof = Color.FromArgb(74, 40, 36), roofLit = Color.FromArgb(96, 54, 48);
         Color trim = Color.FromArgb(228, 214, 196);
 
-        // ---- The silo, standing beside the right wall ----
-        float sw = u * 0.034f, sh = u * 0.118f, sx = x + barnW * 0.5f + sw * 0.52f;
-        using (var shadow = new SolidBrush(Color.FromArgb(70, 50, 24, 16)))
-            g.FillEllipse(shadow, sx - sw * 0.8f, footY - sw * 0.16f, sw * 1.8f, sw * 0.4f);
-        using (var silo = new LinearGradientBrush(new PointF(sx - sw / 2, 0), new PointF(sx + sw / 2, 0), Color.FromArgb(214, 204, 188), Color.FromArgb(132, 120, 108)))
-            g.FillRectangle(silo, sx - sw / 2, footY - sh, sw, sh + u * 0.004f);
-        using (var hoop = new Pen(Color.FromArgb(90, 70, 58, 50), Math.Max(1f, u * 0.0015f)))
-            for (int i = 1; i <= 5; i++)
-                g.DrawLine(hoop, sx - sw / 2, footY - sh * i / 6f, sx + sw / 2, footY - sh * i / 6f);
-        using (var dome = new LinearGradientBrush(new PointF(sx - sw / 2, 0), new PointF(sx + sw / 2, 0), Color.FromArgb(150, 136, 124), Color.FromArgb(96, 86, 80)))
-            g.FillPie(dome, sx - sw / 2, footY - sh - sw * 0.55f, sw, sw * 1.1f, 180, 180);        // the domed cap: the top half of an ellipse
-        using (var hatch = new SolidBrush(Color.FromArgb(70, 58, 52)))
-            g.FillRectangle(hatch, sx - sw * 0.14f, footY - sh + sw * 0.25f, sw * 0.28f, sw * 0.32f);
+        // ---- The silos (his line: "some silos"): a tall one standing behind the barn's right corner, the old one against
+        //      the wall in front of it, and a squat grain bin with a cone roof past them. Each is a tube shaded round, hoops
+        //      down its side, a cap, a hatch and a shadow at its foot. Painted back to front, so each nearer one covers the
+        //      last. The tops are handed to the scene: a turkey roosts on one now and then (Happenings/SiloRoost.cs). ----
+        var tops = new List<(PointF At, float R)>();
+        float sw0 = u * 0.034f, sx0 = x + barnW * 0.5f + sw0 * 0.52f;
+        void Silo(float sx, float sw, float sh, bool cone)
+        {
+            using (var shadow = new SolidBrush(Color.FromArgb(70, 50, 24, 16)))
+                g.FillEllipse(shadow, sx - sw * 0.8f, footY - sw * 0.16f, sw * 1.8f, sw * 0.4f);
+            using (var silo = new LinearGradientBrush(new PointF(sx - sw / 2, 0), new PointF(sx + sw / 2, 0), Color.FromArgb(214, 204, 188), Color.FromArgb(132, 120, 108)))
+                g.FillRectangle(silo, sx - sw / 2, footY - sh, sw, sh + u * 0.004f);
+            using (var hoop = new Pen(Color.FromArgb(90, 70, 58, 50), Math.Max(1f, u * 0.0015f)))
+                for (int i = 1; i <= 5; i++)
+                    g.DrawLine(hoop, sx - sw / 2, footY - sh * i / 6f, sx + sw / 2, footY - sh * i / 6f);
+            float capTall = sw * 0.55f;
+            using (var cap = new LinearGradientBrush(new PointF(sx - sw / 2, 0), new PointF(sx + sw / 2, 0), Color.FromArgb(150, 136, 124), Color.FromArgb(96, 86, 80)))
+            {
+                if (cone) g.FillPolygon(cap, [new PointF(sx - sw * 0.56f, footY - sh), new PointF(sx, footY - sh - capTall), new PointF(sx + sw * 0.56f, footY - sh)]);   // the bin's cone, a hair wider than the tube
+                else g.FillPie(cap, sx - sw / 2, footY - sh - capTall, sw, capTall * 2, 180, 180);                                                                    // the domed cap: the top half of an ellipse
+            }
+            using (var hatch = new SolidBrush(Color.FromArgb(70, 58, 52)))
+                g.FillRectangle(hatch, sx - sw * 0.14f, footY - sh + sw * 0.25f, sw * 0.28f, sw * 0.32f);
+            tops.Add((new PointF(sx, footY - sh - capTall), sw * 0.5f));
+        }
+        Silo(sx0 + u * 0.030f, u * 0.028f, u * 0.152f, false);     // the tall one, behind
+        Silo(sx0, sw0, u * 0.118f, false);                          // the old one, against the wall
+        Silo(sx0 + u * 0.064f, u * 0.042f, u * 0.068f, true);      // the grain bin
 
         // ---- The barn ----
         using (var wall = new SolidBrush(red))
@@ -636,6 +653,7 @@ internal static class ThanksgivingPainter
             g.DrawRectangle(frame, loft.X, loft.Y, loft.Width, loft.Height);
         using var bar = new Pen(Color.FromArgb(90, 40, 34), Math.Max(1f, u * 0.0015f));
         g.DrawLine(bar, loft.X + loft.Width / 2, loft.Y, loft.X + loft.Width / 2, loft.Bottom);
+        return tops;
     }
 
     /// <summary>
@@ -711,7 +729,7 @@ internal static class ThanksgivingPainter
         foreach (var s in spots)
         {
             float x = w * s.X;
-            if (MathF.Abs(x - farmX) < u * 0.16f || MathF.Abs(x - barnX) < u * 0.17f || MathF.Abs(x - scarecrowX) < u * 0.08f || MathF.Abs(x - orchardX) < orchardHalf + u * 0.06f) continue;
+            if (MathF.Abs(x - farmX) < u * 0.16f || MathF.Abs(x - barnX) < u * 0.21f || MathF.Abs(x - scarecrowX) < u * 0.08f || MathF.Abs(x - orchardX) < orchardHalf + u * 0.06f) continue;
             float foot = Brushwork.RidgeYAt(nearRidge, x) + u * 0.014f;
             float cy = foot - u * s.Lift, r = u * s.R * (0.9f + 0.2f * (float)rng.NextDouble());
             Brushwork.Trunk(g, x, foot, cy, r, rng, bark);
@@ -722,18 +740,16 @@ internal static class ThanksgivingPainter
     }
 
     /// <summary>
-    /// The orchard beside the farmhouse: two rows of small apple trees on the hill past the scarecrow, the back row a
-    /// little higher up and smaller, each a round green canopy (the maples' own brush, in apple-leaf greens) hung with
-    /// red apples, and a few windfalls in the grass under it. At the house's scale (0.0154 U a metre) a 3.5 m tree is
-    /// 0.054 U tall. The trees' middles are "cx" across "half" either side; the far trees keep clear of that stretch.
+    /// The orchard beside the farmhouse: two rows of small trees in rows on the hill past the scarecrow, the back row a
+    /// little higher up and smaller, each a round canopy (the maples' own brush) in its own autumn orange: the fruit is
+    /// long picked and the leaves have turned (his line: "orange fall colored leaves too because it's fall. no fruit").
+    /// At the house's scale (0.0154 U a metre) a 3.5 m tree is 0.054 U tall. The trees' middles are "cx" across "half"
+    /// either side; the far trees keep clear of that stretch.
     /// </summary>
     private static void PaintOrchard(Graphics g, float u, PointF[] nearRidge, float cx, float half, Random rng)
     {
-        var leaf = new BlossomPalette(Color.FromArgb(240, 104, 136, 58), Color.FromArgb(56, 84, 38), Color.FromArgb(160, 186, 86));
-        Color bark = Color.FromArgb(70, 50, 38), apple = Color.FromArgb(198, 44, 38), shine = Color.FromArgb(240, 120, 100), windfall = Color.FromArgb(170, 50, 40);
-        using var appleBrush = new SolidBrush(apple);
-        using var shineBrush = new SolidBrush(shine);
-        using var fallBrush = new SolidBrush(windfall);
+        var leaf = new BlossomPalette(Color.FromArgb(240, 222, 128, 44), Color.FromArgb(162, 70, 30), Color.FromArgb(248, 184, 84));
+        Color bark = Color.FromArgb(70, 50, 38);
         // Back row first (farther up the hill, so the front row stands in front of it): two trees in the gaps between
         // the front row's three. "lift" is how far up the hill the row stands, "scale" how much smaller it is drawn.
         float spacing = half * 2 / 3f;
@@ -747,21 +763,6 @@ internal static class ThanksgivingPainter
                 float cy = foot - u * 0.030f * scale;
                 Brushwork.Trunk(g, x, foot, cy, r, rng, bark);
                 Brushwork.Canopy(g, x, cy, r, u, rng, leaf);
-                // The apples: a dozen specks scattered through the canopy's lower two thirds, each with a glint.
-                float ar = Math.Max(1f, r * 0.11f);
-                for (int k = 0; k < 12; k++)
-                {
-                    double a = rng.NextDouble() * Math.PI * 2, d = 0.25 + 0.6 * rng.NextDouble();
-                    float ax = x + (float)(Math.Cos(a) * d) * r, ay = cy + (float)(Math.Abs(Math.Sin(a)) * d) * r * 0.9f - r * 0.15f;
-                    g.FillEllipse(appleBrush, ax - ar, ay - ar, ar * 2, ar * 2);
-                    g.FillEllipse(shineBrush, ax - ar * 0.45f, ay - ar * 0.55f, ar * 0.6f, ar * 0.5f);
-                }
-                // Windfalls in the grass under the tree.
-                for (int k = 0; k < 4; k++)
-                {
-                    float fx = x + r * (1.4f * (float)rng.NextDouble() - 0.7f), fy = foot - u * 0.002f + u * 0.004f * (float)rng.NextDouble();
-                    g.FillEllipse(fallBrush, fx - ar * 0.8f, fy - ar * 0.8f, ar * 1.6f, ar * 1.6f);
-                }
             }
         }
     }
@@ -1178,7 +1179,7 @@ internal static class ThanksgivingPainter
         float gy = footY - r * 0.1f;
         if (kind == 1)
         {
-            using (var green = new SolidBrush(flat ?? Color.FromArgb(120, 150, 60)))
+            using (var green = new SolidBrush(flat ?? Color.FromArgb(116, 136, 70)))   // softened: the patch's hard greens read too bright against the autumn ("the primaries are a bit too bright")
             {
                 g.FillEllipse(green, x - r * 1.3f, gy - r * 1.1f, r * 2.6f, r * 1.3f);
                 g.FillEllipse(green, x - r * 0.8f, gy - r * 1.8f, r * 1.4f, r * 1.2f);
@@ -1209,7 +1210,7 @@ internal static class ThanksgivingPainter
         g.TranslateTransform(x, y);
         g.RotateTransform(turn);
         g.ScaleTransform(1f, 0.55f);                                   // lying flat on the ground, seen from a low angle
-        using (var leaf = new SolidBrush(flat ?? Color.FromArgb(84, 116, 46)))
+        using (var leaf = new SolidBrush(flat ?? Color.FromArgb(90, 112, 58)))        // softened with the gourd's green
         using (var path = new GraphicsPath())
         {
             path.AddClosedCurve([new PointF(0, -r * 0.1f), new PointF(r * 0.55f, -r * 0.7f), new PointF(r, -r * 0.2f), new PointF(r * 0.8f, r * 0.5f), new PointF(0, r),
@@ -1218,7 +1219,7 @@ internal static class ThanksgivingPainter
         }
         if (flat == null)
         {
-            using var vein = new Pen(Color.FromArgb(110, 150, 70), Math.Max(1f, r * 0.08f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            using var vein = new Pen(Color.FromArgb(114, 140, 80), Math.Max(1f, r * 0.08f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             g.DrawLine(vein, 0, -r * 0.1f, 0, r * 0.85f);
             g.DrawLine(vein, 0, r * 0.3f, r * 0.5f, -r * 0.1f);
             g.DrawLine(vein, 0, r * 0.3f, -r * 0.5f, -r * 0.1f);

@@ -101,7 +101,7 @@ internal sealed class PatchLife
     private void Add(Kind kind, float timid, float busy, float curious)
     {
         var c = new Critter { Kind = kind, Id = _all.Count, Timid = timid, Busy = busy, Look = _rng.Next(2), Dir = _rng.Next(2) == 0 ? 1 : -1 };
-        PointF at = RandomSpot(0, _s.Width, 40);
+        PointF at = RandomSpot(0, _s.Width, 40) ?? new PointF(_s.Width * 0.5f, _s.WalkY(_s.Width * 0.5f));
         c.X = at.X; c.Y = at.Y;
         // Small things in the grass feel less of the world (Keen under 1); a mouse is timid by nature, a squirrel bold.
         c.Senses = new Attention(kind == Kind.Mouse ? 0.5f + 0.5f * timid : kind == Kind.Squirrel ? 0.5f * timid : timid, curious) { Keen = kind == Kind.Bird ? 1f : 0.8f };
@@ -129,8 +129,15 @@ internal sealed class PatchLife
         return true;
     }
 
-    /// <summary>A spot a critter can stand on, between x0 and x1; given a row (yNear, within yReach) it keeps to that row, and given minDx it is at least that far from the range's middle.</summary>
-    private PointF RandomSpot(float x0, float x1, int tries, float? yNear = null, float yReach = 0f, float minDx = 0f)
+    /// <summary>
+    /// A spot a critter can stand on, between x0 and x1; given a row (yNear, within yReach) it keeps to that row, and
+    /// given minDx it is at least that far from the range's middle. Given "from" (where the critter stands) the straight
+    /// line there must be clear too, tested every two pixels, the way the step probe will test it: a goal straight behind
+    /// a pumpkin was refused at the pumpkin (the step rule slides round a thing only when the heading is well off the
+    /// goal, and a critter walking straight at its goal has no side to slide to), and one squirrel in a pocket between
+    /// pumpkins drew five such goals in a row and sat refused for twelve seconds. Null when nothing can be reached.
+    /// </summary>
+    private PointF? RandomSpot(float x0, float x1, int tries, float? yNear = null, float yReach = 0f, float minDx = 0f, PointF? from = null)
     {
         float u = _s.U, xm = (x0 + x1) / 2;
         for (int i = 0; i < tries; i++)
@@ -141,21 +148,53 @@ internal sealed class PatchLife
             float y = yNear is float yc
                 ? Math.Clamp(yc + yReach * (float)(_rng.NextDouble() * 2 - 1), crest + 0.012f * u, _s.Height + 0.04f * u)
                 : crest + 0.012f * u + (_s.Height + 0.04f * u - crest - 0.012f * u) * (float)_rng.NextDouble();
-            if (CanStand(x, y)) return new PointF(x, y);
+            if (!CanStand(x, y)) continue;
+            if (from is PointF f && !Ground.LineClear(_ground, f, new PointF(x, y), 2f)) continue;
+            return new PointF(x, y);
         }
-        return new PointF(_s.Width * 0.5f, _s.WalkY(_s.Width * 0.5f));
+        return null;
     }
 
-    /// <summary>A spot just behind a pumpkin (a hair above its foot, within its width): the depth picture then hides most of the critter there.</summary>
-    private PointF? BehindPumpkin(float nearX, float within)
+    /// <summary>
+    /// A spot just behind a pumpkin (above its foot, within its width): the depth picture then hides most of the critter
+    /// there. The pumpkin is on the critter's OWN ROW (its foot within a little of the critter's y) so the way there is
+    /// along the patch, and the spot is tested the way a step is tested, with a clear line to it from where the critter
+    /// stands. (The first version put the spot a pixel above the pumpkin's keep-out box, on any row: the step probe,
+    /// which looks a few pixels ahead, refused every approach, and the squirrel hung frozen mid-bound at the box's edge
+    /// for a third of a second, sat, and tried again, for 46 of 120 seconds on one seed.)
+    /// </summary>
+    private PointF? BehindPumpkin(PointF from, float within)
     {
         var picks = new List<(PointF At, float R)>();
         foreach (var p in _s.Pumpkins)
-            if (MathF.Abs(p.At.X - nearX) < within && p.R > _m * 0.8f) picks.Add(p);
-        if (picks.Count == 0) return null;
-        var (at, r) = picks[_rng.Next(picks.Count)];
-        float foot = at.Y + 0.8f * r;
-        return new PointF(at.X + r * 0.5f * (float)(_rng.NextDouble() - 0.5), foot - 0.40f * r);
+            if (MathF.Abs(p.At.X - from.X) < within && p.R > _m * 0.8f && MathF.Abs(p.At.Y + 0.8f * p.R - from.Y) < 0.08f * _s.U) picks.Add(p);
+        for (int tries = 0; tries < 6 && picks.Count > 0; tries++)
+        {
+            var (at, r) = picks[_rng.Next(picks.Count)];
+            float foot = at.Y + 0.8f * r;
+            var spot = new PointF(at.X + r * 0.5f * (float)(_rng.NextDouble() - 0.5), foot - 0.55f * r);
+            if (CanStand(spot.X, spot.Y) && Ground.LineClear(_ground, from, spot, 2f)) return spot;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// A spot beside a pumpkin to nibble at, on the critter's row: at the pumpkin's foot, just outside its keep-out box
+    /// on the near side, nose to the rind. (The old spot was below the foot, inside the box: every nibble was refused.)
+    /// </summary>
+    private PointF? BesidePumpkin(PointF from, float within)
+    {
+        var picks = new List<(PointF At, float R)>();
+        foreach (var p in _s.Pumpkins)
+            if (MathF.Abs(p.At.X - from.X) < within && p.R > _m * 0.8f && MathF.Abs(p.At.Y + 0.8f * p.R - from.Y) < 0.08f * _s.U) picks.Add(p);
+        for (int tries = 0; tries < 6 && picks.Count > 0; tries++)
+        {
+            var (at, r) = picks[_rng.Next(picks.Count)];
+            float side = from.X < at.X ? -1f : 1f;
+            var spot = new PointF(at.X + side * (1.05f * r + 0.3f * _m), at.Y + 0.8f * r + 0.1f * r);
+            if (CanStand(spot.X, spot.Y) && Ground.LineClear(_ground, from, spot, 2f)) return spot;
+        }
+        return null;
     }
 
     // ================================================================ painting (once)
@@ -245,13 +284,36 @@ internal sealed class PatchLife
         }
     }
 
+    /// <summary>
+    /// Faces a critter at its new goal before it sets off, when it is standing still: a stopped animal turns to where
+    /// it is going and then goes. (Left to the steering, it set off on its OLD heading and swung round in a curve at
+    /// 7 radians a second, a squirrel bounding in an arc up the screen from a dig and then stopping to turn.) A
+    /// squirrel whose goal is behind it plays its turn on the spot first (Update holds the doing's clock meanwhile); a
+    /// mouse at thirteen pixels just faces the other way. A moving critter is left to the steering's turn rate.
+    /// </summary>
+    private void Head(Critter c)
+    {
+        if (c.Pace.Speed > 0.02f * _s.U) return;
+        float dx = c.Goal.X - c.X, dy = c.Goal.Y - c.Y;
+        if (dx * dx + dy * dy < 1f) return;
+        c.Heading = MathF.Atan2(dy, dx);
+        if (MathF.Abs(MathF.Cos(c.Heading)) <= 0.2f) return;
+        int dir = MathF.Cos(c.Heading) > 0 ? 1 : -1;
+        if (dir == c.Dir) return;
+        if (c.Kind == Kind.Squirrel) { c.Turning = true; c.TurnT = 0; }
+        else c.Dir = dir;
+    }
+
     private void Startle(Critter c, PointF from)
     {
         if (c.Kind == Kind.Bird) { BeginFly(c, null); return; }
         PointF? run = Ground.FleeRun(_ground, new PointF(c.X, c.Y), from, _m * 0.5f, 0.25f * _s.U, 0.06f * _s.U);
-        c.Goal = run ?? RandomSpot(c.X - 0.3f * _s.U, c.X + 0.3f * _s.U, 20);
+        PointF? goal = run ?? RandomSpot(c.X - 0.3f * _s.U, c.X + 0.3f * _s.U, 20, c.Y, 0.06f * _s.U, 0f, new PointF(c.X, c.Y));
+        if (goal == null) { c.Pace.Halt(); c.Mind.Begin(Doing.Still, 1f); c.Clock = 0; return; }   // nowhere to run: it freezes
+        c.Goal = goal.Value;
         c.Mind.Begin(Doing.Bolt, 2.5f);
         c.Travelled = 0;
+        Head(c);
     }
 
     /// <summary>The dice: what next, by kind, dials and what is at hand.</summary>
@@ -271,10 +333,11 @@ internal sealed class PatchLife
             if (c.Kind == Kind.Bird) c.Mind.Begin(c.Perched >= 0 ? Doing.Perch : _rng.Next(3) == 0 ? Doing.Peck : Doing.Still, 2f + 2f * (float)_rng.NextDouble());
             else
             {
-                PointF? g = BehindPumpkin(c.X, 0.4f * u);
+                PointF? g = BehindPumpkin(new PointF(c.X, c.Y), 0.4f * u);
                 if (g == null) c.Mind.Begin(Doing.Still, 2f);
                 else { c.Goal = g.Value; c.Mind.Begin(Doing.Hide, 5f + 3f * (float)_rng.NextDouble()); c.Travelled = 0; }
             }
+            Head(c);
             return;
         }
         switch (c.Kind)
@@ -282,11 +345,12 @@ internal sealed class PatchLife
             case Kind.Mouse:
             {
                 // Faces: scurry somewhere, sniff, nibble a pumpkin, hide behind one.
-                int face = Dice.Pick(_rng, [0.5f + 0.6f * c.Busy, 0.35f, 0.25f + 0.2f * (1 - c.Timid), 0.15f + 0.5f * c.Timid]);
-                if (face == 0) { c.Goal = RandomSpot(c.X - 0.3f * u, c.X + 0.3f * u, 30, c.Y, 0.06f * u, 3f * _m); c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0; }
+                // (A hide weighed up to 0.65 and lasted eight seconds: the mice were behind the pumpkins half the time.)
+                int face = Dice.Pick(_rng, [0.5f + 0.6f * c.Busy, 0.35f, 0.25f + 0.2f * (1 - c.Timid), 0.08f + 0.25f * c.Timid]);
+                if (face == 0) { PointF? g = RandomSpot(c.X - 0.3f * u, c.X + 0.3f * u, 30, c.Y, 0.035f * u, 3f * _m, new PointF(c.X, c.Y)); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0; }   // the row's reach is 0.035 U: at 0.06 a scurry three lengths along and two down was mostly down
                 else if (face == 1) c.Mind.Begin(Doing.Still, 0.4f + 1.2f * (float)_rng.NextDouble());
-                else if (face == 2) { PointF? g = BehindPumpkin(c.X, 0.3f * u); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = new PointF(g.Value.X, g.Value.Y + 0.5f * _m + 0.3f * _m); c.Mind.Begin(Doing.Nibble, 6f); c.Travelled = 0; }
-                else { PointF? g = BehindPumpkin(c.X, 0.35f * u); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Hide, 8f); c.Travelled = 0; }
+                else if (face == 2) { PointF? g = BesidePumpkin(new PointF(c.X, c.Y), 0.3f * u); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Nibble, 6f); c.Travelled = 0; }
+                else { PointF? g = BehindPumpkin(new PointF(c.X, c.Y), 0.35f * u); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Hide, 4f); c.Travelled = 0; }
                 break;
             }
             case Kind.Bird:
@@ -296,7 +360,7 @@ internal sealed class PatchLife
                 // instead of hopping around"): the flights are the heavy faces, a hop is a few steps at most.
                 bool perched = c.Perched >= 0;
                 int face = Dice.Pick(_rng, [perched ? 0f : 0.15f + 0.15f * c.Busy, perched ? 0f : 0.45f, 0.35f, perched ? 0.15f : 0.3f + 0.3f * c.Timid, perched ? 0.6f : 0.45f + 0.4f * c.Busy]);
-                if (face == 0) { c.Goal = RandomSpot(c.X - 0.06f * u, c.X + 0.06f * u, 30); c.Mind.Begin(Doing.Go, 1.5f); c.Travelled = 0; }
+                if (face == 0) { PointF? g = RandomSpot(c.X - 0.06f * u, c.X + 0.06f * u, 30, from: new PointF(c.X, c.Y)); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Go, 1.5f); c.Travelled = 0; }
                 else if (face == 1) c.Mind.Begin(Doing.Peck, 0.6f + 1.4f * (float)_rng.NextDouble());
                 else if (face == 2) c.Mind.Begin(perched ? Doing.Perch : Doing.Still, 1f + 3f * (float)_rng.NextDouble());
                 else if (face == 3) BeginFly(c, PerchNear(c.X, 0.35f * u));
@@ -306,16 +370,18 @@ internal sealed class PatchLife
             default:
             {
                 // Faces: bound somewhere, sit and look, scratch at the earth, dart behind a pumpkin.
-                int face = Dice.Pick(_rng, [0.5f + 0.5f * c.Busy, 0.4f, 0.25f, 0.1f + 0.4f * c.Timid]);
+                // (A hide weighed up to 0.5 and lasted six seconds: on one seed the squirrel was out of sight 67 of 120 s.)
+                int face = Dice.Pick(_rng, [0.5f + 0.5f * c.Busy, 0.4f, 0.25f, 0.05f + 0.2f * c.Timid]);
                 // A bound goes ALONG the patch: the goal stays within a little of its own row (a goal straight up or down the
                 // screen sent a side-view animal sliding on the spot, the "90 degree turns"), and at least a few lengths off.
-                if (face == 0) { c.Goal = RandomSpot(c.X - 0.45f * u, c.X + 0.45f * u, 30, c.Y, 0.05f * u, 4f * _k); c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0; }
+                if (face == 0) { PointF? g = RandomSpot(c.X - 0.45f * u, c.X + 0.45f * u, 30, c.Y, 0.05f * u, 4f * _k, new PointF(c.X, c.Y)); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0; }
                 else if (face == 1) c.Mind.Begin(Doing.Still, 1f + 3f * (float)_rng.NextDouble());
                 else if (face == 2) c.Mind.Begin(Doing.Dig, 1f + 1.5f * (float)_rng.NextDouble());
-                else { PointF? g = BehindPumpkin(c.X, 0.4f * u); if (g == null) { c.Mind.Begin(Doing.Still, 1f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Hide, 6f); c.Travelled = 0; }
+                else { PointF? g = BehindPumpkin(new PointF(c.X, c.Y), 0.4f * u); if (g == null) { c.Mind.Begin(Doing.Still, 1f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Hide, 3f); c.Travelled = 0; }
                 break;
             }
         }
+        if (c.Mind.Doing is Doing.Go or Doing.Nibble or Doing.Hide) Head(c);
     }
 
     /// <summary>A pumpkin top near x to sit on: its index, or -1.</summary>
@@ -341,8 +407,9 @@ internal sealed class PatchLife
         {
             // Anywhere across the patch (it used to be within half a U, a hop's worth), at least a few lengths away so
             // every flight is a flight and not a flutter on the spot.
-            to = RandomSpot(c.X - 1.1f * u, c.X + 1.1f * u, 30);
-            for (int i = 0; i < 10 && MathF.Abs(to.X - c.X) < 6f * _b; i++) to = RandomSpot(c.X - 1.1f * u, c.X + 1.1f * u, 30);
+            PointF fallback = new(c.X, c.Y);
+            to = RandomSpot(c.X - 1.1f * u, c.X + 1.1f * u, 30) ?? fallback;
+            for (int i = 0; i < 10 && MathF.Abs(to.X - c.X) < 6f * _b; i++) to = RandomSpot(c.X - 1.1f * u, c.X + 1.1f * u, 30) ?? fallback;
             c.Perched = -1;
         }
         c.FlyFrom = c.X; c.FlyTo = to.X; c.FlyY0 = c.Y; c.FlyY1 = to.Y;
@@ -409,7 +476,10 @@ internal sealed class PatchLife
                 if (step <= 0f) return;
                 float x = c.X, y = c.Y, hd = c.Heading;
                 var stepped = Ground.Step(_ground, ref x, ref y, ref hd, step, err);
-                if (stepped == Ground.Stepped.Refused) { if (++c.Refused > 20) { c.Pace.Halt(); c.Mind.Begin(Doing.Still, 0.5f); c.Refused = 0; } return; }
+                // A refused step is a jam, not a pause: after a few frames the doing is dropped and the critter sits (its goal
+                // was behind something the step test will not cross). Six frames, not twenty: at twenty the run page hung
+                // frozen mid-bound for a third of a second each time.
+                if (stepped == Ground.Stepped.Refused) { if (++c.Refused > 6) { c.Pace.Halt(); c.Mind.Begin(Doing.Still, 0.5f); c.Refused = 0; _log?.WriteLine($"{_time,8:F3} {c.Kind.ToString().ToLowerInvariant()}{c.Id} refused at {c.X:F0},{c.Y:F0} going to {c.Goal.X:F0},{c.Goal.Y:F0}"); } return; }
                 c.Refused = 0;
                 c.X = x; c.Y = y; c.Heading = hd;
                 c.Travelled += step;

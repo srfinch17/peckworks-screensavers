@@ -573,9 +573,10 @@ Settings: amount of snow, fall speed, breeze, flake size, and how often a surpri
 ## Thanksgiving
 
 Maple leaves drifting down over a farm at harvest dusk: a sky from plum to gold, a big peach harvest
-moon, a white farmhouse with lamplit windows and a smoking chimney, a red barn and silo, a reaped field
-with hay bales, a scarecrow in the garden beside the house and a small apple orchard past it, two
-rows of round green trees hung with red apples and windfalls in the grass, a split rail fence, a corn shock, a
+moon, a white farmhouse with lamplit windows and a smoking chimney, a red barn with three silos (a tall
+one behind its corner, the old one against the wall, and a squat grain bin with a cone roof), a reaped field
+with hay bales, a scarecrow in the garden beside the house and a small orchard past it, two rows of round
+trees in their own autumn orange (the fruit long picked), a split rail fence, a corn shock, a
 pumpkin patch that covers the whole foreground (pumpkins of three tints, gourds and broad leaves joined
 by vine runners, one of them carved into a jack-o'-lantern with a candle guttering inside it, in homage
 to Halloween), maples in full colour, and oak branches with the year's last leaves in the top corners.
@@ -593,7 +594,7 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   height or length, so a deer is half a tractor wheel tall and a rabbit a tenth of a tractor long,
   wherever it stands.
 - **The field is being worked.** An old red tractor with a lit headlamp drives slowly along the far
-  lane towing a round baler; every so often the baler's tailgate swings up and a finished bale rolls
+  lane towing a round baler on its drawbar; every so often the baler's tailgate swings up and a finished bale rolls
   out the back and is left standing on the field. It goes off one side, comes back the other way a
   while later and bales the next row, and when half a dozen bales stand loose it comes back towing
   the hay wagon and picks them up as it passes: as the wagon's tail clears a bale the loader swings it
@@ -662,12 +663,12 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   in the breeze.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the maples and the
   corner branches.
-- Eighteen small **happenings** come and go at random, as in Halloween and Christmas:
+- Nineteen small **happenings** come and go at random, as in Halloween and Christmas:
 
   | Where | What happens |
   |-------|--------------|
   | The sky | A shooting star. Stars join up into a turkey, a cornucopia, a maple leaf, a slice of pie or an acorn. Harvest fireworks. A gust whirls a swirl of leaves across. A hawk soars in slow circles. |
-  | The farm | The porch light comes on and moths gather. Silhouettes pass the farmhouse windows, one carrying the bird to the table. A barn owl flies out of the loft. |
+  | The farm | The porch light comes on and moths gather. Silhouettes pass the farmhouse windows, one carrying the bird to the table. A barn owl flies out of the loft. A wild turkey flaps in low over the hill, lands on a silo cap and roosts there a while, looking about and preening, before it drops off and flies away. |
   | The field | A doe and her fawn, half the time led by a buck, come up over the far ridge: tiny silhouettes, about fifteen pixels at 1080p, because the far ridge is the farthest thing in the picture. |
   | The near ground | A wild turkey struts through, stops, fans its tail, gobbles and struts on. A squirrel bounds along the fence rail and sits up with an acorn. A crow lands on the scarecrow and caws. A raccoon comes sniffing at the pumpkins, rears up for a guilty look about, and waddles off. A pheasant bursts out of the corn shock. The scarecrow blinks and winks. |
   | The props | An apple comes bounding in from beyond the left edge. Acorns patter down from the oak branch. A cardinal lands on a twig and sings. |

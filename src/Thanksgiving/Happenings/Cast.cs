@@ -26,6 +26,7 @@ internal static class ThanksgivingHappenings
         (nameof(PorchLight), () => new PorchLight(s)),
         (nameof(WindowSilhouettes), () => new WindowSilhouettes(s)),
         (nameof(BarnOwl), () => new BarnOwl(s)),
+        (nameof(SiloRoost), () => new SiloRoost(s)),
         (nameof(Deer), () => new Deer(s)),
         // ---- the near ground ----
         (nameof(Turkey), () => new Turkey(s)),

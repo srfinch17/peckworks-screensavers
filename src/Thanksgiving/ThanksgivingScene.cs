@@ -459,6 +459,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
             case "Fireworks": _board.Post(Sense.Loud, new PointF(s.Width * 0.5f, s.Height * 0.25f), 1.6f * u, 0.75f, h); break;
             case "Raccoon": _board.Post(Sense.Threat, s.StageLeft, 0.5f * u, 1f, h); break;
             case "BarnOwl": _board.Post(Sense.Threat, new PointF(s.BarnFoot.X, s.BarnFoot.Y - s.BarnWall.Height), 0.7f * u, 0.6f, h); break;
+            case "SiloRoost": if (s.SiloTops.Count > 0) _board.Post(Sense.Movement, s.SiloTops[0].At, 0.5f * u, 0.5f, h); break;   // a turkey flapping onto a silo: the flock below glances up
             case "Crow": _board.Post(Sense.Movement, s.ScarecrowHead, 0.45f * u, 0.8f, h); break;
             case "Pheasant": _board.Post(Sense.Movement, s.CornShockTop, 0.4f * u, 0.8f, h); break;
             case "Turkey": _board.Post(Sense.Movement, new PointF(s.Width * 0.5f, s.WalkY(s.Width * 0.5f)), 0.35f * u, 0.5f, h); break;

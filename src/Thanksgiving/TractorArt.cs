@@ -34,17 +34,20 @@ internal static class TractorArt
     /// sits 0.78 (0.9 times the root of three over two) above the one below. FieldWork stamps its own bale picture here.
     /// </summary>
     public static readonly (float X, float Y)[] BaleSlots = [(0.50f, 0.98f), (1.30f, 0.98f), (2.10f, 0.98f), (0.90f, 1.76f), (1.70f, 1.76f), (1.30f, 2.54f)];
-    public const float BalerWheelX = 2.45f, BalerRearX = 1.72f;                     // the baler's axle, and where a finished bale comes out
+    public const float BalerWheelX = 2.00f, BalerRearX = 1.27f;                     // the baler's axle, and where a finished bale comes out (the drum sits round 2.05: at 2.5 it was pressed into the rear wheel, "there is a hitch there")
     public const float RearR = 0.50f, FrontR = 0.28f, CartR = 0.30f, BalerR = 0.30f;   // wheel radii, in units
 
+    // The paint is old and dusty: every red and green is pulled a little toward grey (his line: "the non fall color
+    // primaries are a bit too bright"; the baler had been a fresh showroom green against the autumn field).
     private static readonly Color Ink = Color.FromArgb(58, 30, 24);
-    private static readonly Color Red = Color.FromArgb(178, 44, 34);
-    private static readonly Color RedLit = Color.FromArgb(214, 76, 56);
+    private static readonly Color Red = Color.FromArgb(166, 60, 48);
+    private static readonly Color RedLit = Color.FromArgb(196, 96, 78);
     private static readonly Color Wood = Color.FromArgb(106, 74, 46);
     private static readonly Color WoodLit = Color.FromArgb(142, 102, 62);
-    private static readonly Color Green = Color.FromArgb(78, 112, 62);
-    private static readonly Color GreenLit = Color.FromArgb(108, 146, 86);
-    private static readonly Color GreenDark = Color.FromArgb(52, 78, 42);
+    private static readonly Color Green = Color.FromArgb(86, 104, 72);
+    private static readonly Color GreenLit = Color.FromArgb(112, 132, 96);
+    private static readonly Color GreenDark = Color.FromArgb(58, 72, 50);
+    public static readonly Color Spoke = Color.FromArgb(184, 84, 66);              // the tractor's wheel spokes (FieldWork paints the wheels)
 
     /// <summary>A sheet 5.35 by 1.75 units, with the ground line two pixels up from its bottom.</summary>
     public static (int Len, int Tall, int GroundY) Sheet(float T) => ((int)(SheetLen * T) + 2, (int)(SheetTall * T) + 3, (int)(SheetTall * T) + 1);
@@ -98,6 +101,7 @@ internal static class TractorArt
         var g = k.G;
         g.DrawLine(k.Ink, k.P(2.55f, 0.40f), k.P(3.35f, 0.40f));                     // the tongue to whatever is towed
         k.Box(Color.FromArgb(70, 46, 36), k.R(3.40f, 0.34f, 5.00f, 0.58f));          // chassis between the wheels
+        k.Box(Color.FromArgb(50, 36, 30), k.R(3.30f, 0.28f, 3.44f, 0.50f));          // the hitch: the drawbar's clevis the tongue pins into
         k.Poly(Red, k.P(4.00f, 0.58f), k.P(4.00f, 1.00f), k.P(4.55f, 1.02f), k.P(5.12f, 0.92f), k.P(5.18f, 0.62f), k.P(5.05f, 0.58f));   // the hood
         using (var shine = new Pen(RedLit, Math.Max(1f, T * 0.05f))) g.DrawLine(shine, k.P(4.10f, 0.94f), k.P(5.00f, 0.88f));
         k.Box(Color.FromArgb(214, 196, 150), k.R(5.12f, 0.64f, 5.20f, 0.90f));        // the grille at the nose
@@ -134,10 +138,12 @@ internal static class TractorArt
     public static Sprite Baler(float T, bool flip, float open) => OnSheet(T, flip, k =>
     {
         var g = k.G;
-        PointF c = k.P(2.50f, 0.98f);
+        // The drum's middle is 2.05: its front edge (2.83) clears the tractor's rear wheel (3.05) by a hand's breadth, so
+        // the frame bar between them reads as the drawbar it is hitched by. (At 2.5 the drum overlapped the wheel.)
+        PointF c = k.P(2.05f, 0.98f);
         float rx = 0.78f * T, ry = 0.62f * T;
-        k.Box(Color.FromArgb(70, 46, 36), k.R(1.95f, 0.30f, 3.35f, 0.42f));          // the frame, axle to hitch
-        k.Poly(GreenDark, k.P(3.05f, 0.42f), k.P(3.30f, 0.42f), k.P(3.30f, 0.22f), k.P(3.05f, 0.18f));   // the pickup teeth, low at the front
+        k.Box(Color.FromArgb(70, 46, 36), k.R(1.50f, 0.30f, 3.35f, 0.42f));          // the frame, axle to hitch
+        k.Poly(GreenDark, k.P(2.70f, 0.42f), k.P(2.95f, 0.42f), k.P(2.95f, 0.22f), k.P(2.70f, 0.18f));   // the pickup teeth, low at the front
         // The front half of the drum: the right half of an ellipse, fixed.
         using (var path = new GraphicsPath())
         {
@@ -165,6 +171,6 @@ internal static class TractorArt
             g.FillPath(b, path); g.DrawPath(k.Ink, path);
         }
         g.Restore(st);
-        using (var band = new Pen(GreenDark, Math.Max(1f, T * 0.05f))) g.DrawLine(band, k.P(2.50f, 0.36f), k.P(2.50f, 1.60f));   // the seam between the halves
+        using (var band = new Pen(GreenDark, Math.Max(1f, T * 0.05f))) g.DrawLine(band, k.P(2.05f, 0.36f), k.P(2.05f, 1.60f));   // the seam between the halves
     });
 }
