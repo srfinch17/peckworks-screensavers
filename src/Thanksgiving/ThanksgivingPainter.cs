@@ -70,6 +70,8 @@ internal sealed class ThanksgivingScenery
     public required RectangleF BarnLoft { get; init; }               // the loft window, high in the gable
     public required RectangleF BarnDoor { get; init; }
     public required List<(PointF At, float R)> SiloTops { get; init; }  // the three silos' caps: the apex of each, and the tube's half width (a turkey roosts on one)
+    public required (PointF Hub, float R) Windmill { get; init; }       // the water-pump windmill left of the barn: the wheel's hub and radius (the scene turns the wheel)
+    public required (PointF A, PointF B) Clothesline { get; init; }     // the clothesline left of the farmhouse: the line's two ends (the scene hangs the washing)
 
     // ---- The field ----
     public required List<(PointF At, float R)> HayBales { get; init; } // each round bale: center and radius, standing on the field
@@ -178,7 +180,13 @@ internal static class ThanksgivingPainter
         // (After the field's floor: a foot that is below the horizon stands on the field, not under it.)
         var farmFoot = new PointF(w * 0.31f, Brushwork.RidgeYAt(nearRidge, w * 0.31f) + u * 0.012f);
         PaintFarmhouse(g, farmFoot.X, farmFoot.Y, u);
+        // A clothesline in the yard left of the house, the washing on it left out (the scene hangs the cloth, which
+        // moves in the breeze); and a steel water-pump windmill left of the barn (the scene turns its wheel).
+        float lineX0 = farmFoot.X - u * 0.112f, lineX1 = farmFoot.X - u * 0.072f;
+        (PointF A, PointF B) clothesline = PaintClothesline(g, lineX0, lineX1, Brushwork.RidgeYAt(nearRidge, (lineX0 + lineX1) / 2) + u * 0.012f, u);
         var barnFoot = new PointF(w * 0.60f, Brushwork.RidgeYAt(nearRidge, w * 0.60f) + u * 0.012f);
+        float millX = barnFoot.X - u * 0.125f;
+        (PointF Hub, float R) windmill = PaintWindmill(g, millX, Brushwork.RidgeYAt(nearRidge, millX) + u * 0.012f, u);
         List<(PointF At, float R)> siloTops = PaintBarn(g, barnFoot.X, barnFoot.Y, u);
         // The scarecrow stands in the garden beside the farmhouse, on the same hill, at the house's scale (his line:
         // "put the scarecrow back by the house. not in the middle of a cut hay field"). Painted with the farm, before the
@@ -303,6 +311,7 @@ internal static class ThanksgivingPainter
             BarnLoft = new RectangleF(barnFoot.X - u * 0.009f, barnTop - u * 0.026f, u * 0.018f, u * 0.016f),
             BarnDoor = new RectangleF(barnFoot.X - barnW * 0.16f, barnFoot.Y - barnH * 0.72f, barnW * 0.32f, barnH * 0.72f),
             SiloTops = siloTops,
+            Windmill = windmill, Clothesline = clothesline,
             HayBales = bales,
             FarTrees = farTrees,
             FencePosts = posts,
@@ -511,6 +520,69 @@ internal static class ThanksgivingPainter
                     g.DrawLine(rail, bx, ry, bx, footY - u * 0.004f);
             }
         }
+    }
+
+    /// <summary>
+    /// A clothesline between two T-posts in the yard, the line sagging a little between them. Returns the line's ends,
+    /// where the scene hangs the washing (the cloth moves, so it is the scene's to stamp, not the backdrop's).
+    /// </summary>
+    private static (PointF A, PointF B) PaintClothesline(Graphics g, float x0, float x1, float footY, float u)
+    {
+        float tall = u * 0.026f, arm = u * 0.006f;
+        Color wood = Color.FromArgb(96, 74, 56);
+        using (var post = new Pen(wood, Math.Max(1f, u * 0.0025f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            foreach (float px in new[] { x0, x1 })
+            {
+                g.DrawLine(post, px, footY, px, footY - tall);
+                g.DrawLine(post, px - arm, footY - tall, px + arm, footY - tall);         // the crossbar of the T
+            }
+        var a = new PointF(x0, footY - tall + u * 0.001f);
+        var b = new PointF(x1, footY - tall + u * 0.001f);
+        using (var line = new Pen(Color.FromArgb(200, 190, 176), Math.Max(1f, u * 0.0010f)))
+            g.DrawBezier(line, a.X, a.Y, (a.X + b.X) / 2, a.Y + u * 0.003f, (a.X + b.X) / 2, a.Y + u * 0.003f, b.X, b.Y);
+        return (a, b);
+    }
+
+    /// <summary>
+    /// A steel water-pump windmill: a lattice tower tapering to a platform, a tail vane turned downwind, and the hub of
+    /// the wheel. The wheel itself is not here: it turns, so the scene paints its pages and stamps one each frame at the
+    /// hub this returns. About 8 m tall at the barn's scale (0.0108 U a metre), the wheel 1.5 m across.
+    /// </summary>
+    private static (PointF Hub, float R) PaintWindmill(Graphics g, float x, float footY, float u)
+    {
+        float tall = u * 0.086f, baseHalf = u * 0.012f, topHalf = u * 0.0035f, top = footY - tall;
+        Color steel = Color.FromArgb(118, 112, 104), dark = Color.FromArgb(78, 72, 66);
+        using (var shadow = new SolidBrush(Color.FromArgb(60, 50, 24, 16)))
+            g.FillEllipse(shadow, x - baseHalf * 1.3f, footY - u * 0.003f, baseHalf * 2.6f, u * 0.007f);
+        using (var leg = new Pen(steel, Math.Max(1f, u * 0.0016f)))
+        using (var brace = new Pen(Color.FromArgb(150, 118, 112, 104), Math.Max(1f, u * 0.0009f)))
+        {
+            g.DrawLine(leg, x - baseHalf, footY, x - topHalf, top);
+            g.DrawLine(leg, x + baseHalf, footY, x + topHalf, top);
+            g.DrawLine(leg, x - baseHalf * 0.35f, footY, x - topHalf * 0.3f, top);        // the back legs, seen between the front pair
+            g.DrawLine(leg, x + baseHalf * 0.35f, footY, x + topHalf * 0.3f, top);
+            // Cross braces up the tower, each X between the legs' width at that height.
+            int rungs = 6;
+            for (int i = 0; i < rungs; i++)
+            {
+                float t0 = i / (float)rungs, t1 = (i + 1) / (float)rungs;
+                float y0 = footY - tall * t0, y1 = footY - tall * t1;
+                float h0 = baseHalf + (topHalf - baseHalf) * t0, h1 = baseHalf + (topHalf - baseHalf) * t1;
+                g.DrawLine(brace, x - h0, y0, x + h1, y1);
+                g.DrawLine(brace, x + h0, y0, x - h1, y1);
+                g.DrawLine(brace, x - h1, y1, x + h1, y1);
+            }
+        }
+        // The platform, the tail vane (a plate on a boom, swung downwind, to the right), and the hub.
+        using (var plate = new SolidBrush(dark))
+        {
+            g.FillRectangle(plate, x - topHalf * 2.2f, top - u * 0.002f, topHalf * 4.4f, u * 0.002f);
+            float boom = u * 0.012f, vaneY = top - u * 0.006f;
+            using (var boomPen = new Pen(dark, Math.Max(1f, u * 0.0012f))) g.DrawLine(boomPen, x, vaneY, x + boom, vaneY);
+            g.FillPolygon(plate, [new PointF(x + boom * 0.7f, vaneY - u * 0.005f), new PointF(x + boom * 1.35f, vaneY - u * 0.004f), new PointF(x + boom * 1.35f, vaneY + u * 0.004f), new PointF(x + boom * 0.7f, vaneY + u * 0.005f)]);
+        }
+        var hub = new PointF(x - u * 0.0015f, top - u * 0.006f);
+        return (hub, u * 0.016f);
     }
 
     /// <summary>
@@ -1261,15 +1333,29 @@ internal static class ThanksgivingPainter
         {
             float hx = w * trees[1].X, foot = ground.YAt(hx) + u * 0.03f;
             float hw = u * 0.013f, hh = u * 0.026f;
-            // Two roots, one each side, like knuckles pressed into the ground: a rounded hump that
-            // rises from the ground and meets the trunk, the lit side a shade paler.
+            // The trunk's foot flares into a buttress: the bark widens on both sides in one smooth concave sweep down
+            // to the ground and runs on out along it as tapered roots, the way a maple's roots show above the turf.
+            // (The first version was two round humps side by side on the ground, which read as something else
+            // entirely: "big testicles sitting on the ground".)
+            float halfTrunk = u * 0.008f;
             using (var root = new SolidBrush(bark))
             using (var paler = new SolidBrush(Color.FromArgb(82, 60, 48)))
+            using (var flare = new GraphicsPath())
+            using (var rootPen = new Pen(bark, Math.Max(1.5f, u * 0.0045f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
             {
-                g.FillEllipse(root, hx - u * 0.030f, foot - u * 0.030f, u * 0.036f, u * 0.040f);
-                g.FillEllipse(root, hx - u * 0.006f, foot - u * 0.030f, u * 0.036f, u * 0.040f);
-                g.FillEllipse(paler, hx - u * 0.027f, foot - u * 0.026f, u * 0.012f, u * 0.024f);
-                g.FillRectangle(root, hx - u * 0.030f, foot - u * 0.002f, u * 0.060f, u * 0.006f);   // the roots meet the ground on one line
+                flare.AddClosedCurve([
+                    new PointF(hx - halfTrunk, foot - u * 0.060f), new PointF(hx - halfTrunk * 1.3f, foot - u * 0.036f),
+                    new PointF(hx - u * 0.020f, foot - u * 0.013f), new PointF(hx - u * 0.038f, foot + u * 0.002f),
+                    new PointF(hx + u * 0.038f, foot + u * 0.002f), new PointF(hx + u * 0.020f, foot - u * 0.013f),
+                    new PointF(hx + halfTrunk * 1.3f, foot - u * 0.036f), new PointF(hx + halfTrunk, foot - u * 0.060f)], 0.35f);
+                g.FillPath(root, flare);
+                // The roots running out along the ground: each a tapering stroke that dips into the turf, two each way.
+                foreach (var (side, drop, len) in new[] { (-1f, 0.000f, 0.075f), (-1f, 0.005f, 0.050f), (1f, 0.001f, 0.068f), (1f, 0.006f, 0.046f) })
+                {
+                    float x0 = hx + side * u * 0.028f, x1 = hx + side * u * (0.028f + len);
+                    g.DrawBezier(rootPen, x0, foot - u * 0.005f, hx + side * u * (0.028f + len * 0.4f), foot - u * 0.009f, hx + side * u * (0.028f + len * 0.8f), foot + u * drop, x1, foot + u * (0.003f + drop));
+                }
+                g.FillEllipse(paler, hx - u * 0.018f, foot - u * 0.030f, u * 0.007f, u * 0.026f);   // the lit flank, a shade paler
             }
             // Between them the opening: an arch of warm dark, blacker at the bottom where no light reaches.
             using (var dark = new SolidBrush(Color.FromArgb(44, 26, 16)))

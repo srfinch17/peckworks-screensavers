@@ -573,8 +573,10 @@ Settings: amount of snow, fall speed, breeze, flake size, and how often a surpri
 ## Thanksgiving
 
 Maple leaves drifting down over a farm at harvest dusk: a sky from plum to gold, a big peach harvest
-moon, a white farmhouse with lamplit windows and a smoking chimney, a red barn with three silos (a tall
-one behind its corner, the old one against the wall, and a squat grain bin with a cone roof), a reaped field
+moon, a white farmhouse with lamplit windows and a smoking chimney, a clothesline in its yard with the
+washing left out and flapping, a red barn with three silos (a tall one behind its corner, the old one
+against the wall, and a squat grain bin with a cone roof) and a steel water-pump windmill whose wheel
+turns with the gusts, a reaped field
 with hay bales, a scarecrow in the garden beside the house and a small orchard past it, two rows of round
 trees in their own autumn orange (the fruit long picked), a split rail fence, a corn shock, a
 pumpkin patch that covers the whole foreground (pumpkins of three tints, gourds and broad leaves joined
@@ -659,15 +661,17 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   through the crouch (never a one-frame pop); a mouse a squirrel bounds past bolts. Everything on the ground is hidden by the
   pumpkins nearer than it (a depth picture the painter makes), which is what puts them IN the patch.
   Knob "Patch critters" (0 to 12, default 6); they keep out of the way while a scene plays.
+- The windmill's wheel turns and the washing on the line flaps, both swelling and easing with the same gusts
+  as the scarf (each a flip-book, the page read off a phase that only ever runs forward).
 - Smoke drifts from the chimney, the windows' lamplight wanders, and the scarecrow's red scarf streams
   in the breeze.
 - The leaves are the Sakura petal engine with a leaf outline, and they let go of the maples and the
   corner branches.
-- Nineteen small **happenings** come and go at random, as in Halloween and Christmas:
+- Twenty small **happenings** come and go at random, as in Halloween and Christmas:
 
   | Where | What happens |
   |-------|--------------|
-  | The sky | A shooting star. Stars join up into a turkey, a cornucopia, a maple leaf, a slice of pie or an acorn. Harvest fireworks. A gust whirls a swirl of leaves across. A hawk soars in slow circles. |
+  | The sky | A shooting star. Stars join up into a turkey, a cornucopia, a maple leaf, a slice of pie or an acorn. Harvest fireworks. A gust whirls a swirl of leaves across. A hawk soars in slow circles. A murmuration of starlings wheels over the far hills, the cloud stretching, folding and turning over itself, and fades away. |
   | The farm | The porch light comes on and moths gather. Silhouettes pass the farmhouse windows, one carrying the bird to the table. A barn owl flies out of the loft. A wild turkey flaps in low over the hill, lands on a silo cap and roosts there a while, looking about and preening, before it drops off and flies away. |
   | The field | A doe and her fawn, half the time led by a buck, come up over the far ridge: tiny silhouettes, about fifteen pixels at 1080p, because the far ridge is the farthest thing in the picture. |
   | The near ground | A wild turkey struts through, stops, fans its tail, gobbles and struts on. A squirrel bounds along the fence rail and sits up with an acorn. A crow lands on the scarecrow and caws. A raccoon comes sniffing at the pumpkins, rears up for a guilty look about, and waddles off. A pheasant bursts out of the corn shock. The scarecrow blinks and winks. |

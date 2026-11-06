@@ -71,6 +71,12 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly float[] _starPhase, _starSpeed;
     private readonly float[] _windowPhase;
     private readonly Sprite[] _scarf;
+    private const int RotorPages = 12, LaundryPages = 24;
+    private readonly Sprite[] _rotor;              // the windmill's wheel: twelve sails, so the picture repeats every 30 degrees; one page per 2.5
+    private readonly Sprite[][] _laundry;          // [item][page]: the washing on the clothesline, each cloth at 24 phases of its flap
+    private readonly (float Along, float W, float H, Color C)[] _washing =   // where along the line each hangs, its size in U, its colour
+        [(0.22f, 0.024f, 0.028f, Color.FromArgb(236, 230, 220)), (0.54f, 0.013f, 0.019f, Color.FromArgb(96, 124, 168)), (0.80f, 0.011f, 0.015f, Color.FromArgb(226, 206, 170))];
+    private double _rotorPhase;                    // the wheel's turns, wrapped at one (its own clock, added up each frame like the scarf's)
     private readonly HappeningDirector _happenings;
     private readonly float _u;
     private readonly int _w, _h;
@@ -134,6 +140,19 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _scarf = new Sprite[ScarfPages];
         for (int i = 0; i < ScarfPages; i++)
             _scarf[i] = PaintScarf(_scenery.ScarecrowHeight, i * MathF.Tau / ScarfPages);
+
+        // ---- The windmill's wheel: twelve pages, 2.5 degrees apart ----
+        _rotor = new Sprite[RotorPages];
+        for (int i = 0; i < RotorPages; i++)
+            _rotor[i] = PaintRotor(_scenery.Windmill.R, i * 30f / RotorPages);
+        // ---- The washing: a sheet, a shirt and a pillowcase, each at 24 phases of its flap ----
+        _laundry = new Sprite[_washing.Length][];
+        for (int k = 0; k < _washing.Length; k++)
+        {
+            _laundry[k] = new Sprite[LaundryPages];
+            for (int i = 0; i < LaundryPages; i++)
+                _laundry[k][i] = PaintLaundry(_u * _washing[k].W, _u * _washing[k].H, _washing[k].C, i * MathF.Tau / LaundryPages);
+        }
 
         // ---- The happenings: hand the director the cast list and how often to deal ----
         _happenings = new HappeningDirector(ThanksgivingHappenings.Cast(_scenery), _rng, settings.SurprisePercent / 100f);
@@ -303,6 +322,59 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     /// </summary>
     private const float ScarfOxF = 0.14f, ScarfOyF = 0.42f, ScarfWF = 0.66f, ScarfHF = 0.72f;   // the sheet, and the knot's place on it, in scarecrow heights
 
+    /// <summary>
+    /// One page of the windmill's wheel, turned "deg" degrees: a rim, twelve sails (thin wedges from near the hub to
+    /// the rim, every other one a shade lighter, the way the curved sails catch the dusk) and the hub. Twelve sails
+    /// means the wheel looks the same every 30 degrees, so twelve pages 2.5 degrees apart are a whole turn.
+    /// </summary>
+    private static Sprite PaintRotor(float r, float deg)
+    {
+        int size = (int)(r * 2) + 4;
+        return Sprite.Paint(size, size, g =>
+        {
+            float c = size / 2f;
+            Color steel = Color.FromArgb(132, 126, 118), lit = Color.FromArgb(172, 166, 156), dark = Color.FromArgb(78, 72, 66);
+            using (var rim = new Pen(steel, Math.Max(1f, r * 0.07f))) g.DrawEllipse(rim, c - r, c - r, r * 2, r * 2);
+            for (int k = 0; k < 12; k++)
+            {
+                float a = (deg + k * 30f) * MathF.PI / 180f, ca = MathF.Cos(a), sa = MathF.Sin(a);
+                float wTip = r * 0.16f, wRoot = r * 0.04f;
+                PointF root = new(c + ca * r * 0.18f, c + sa * r * 0.18f), tip = new(c + ca * r * 0.96f, c + sa * r * 0.96f);
+                using var sail = new SolidBrush(k % 2 == 0 ? steel : lit);
+                g.FillPolygon(sail, [
+                    new PointF(root.X - sa * wRoot, root.Y + ca * wRoot), new PointF(tip.X - sa * wTip, tip.Y + ca * wTip),
+                    new PointF(tip.X + sa * wTip * 0.4f, tip.Y - ca * wTip * 0.4f), new PointF(root.X + sa * wRoot, root.Y - ca * wRoot)]);
+            }
+            using (var hub = new SolidBrush(dark)) g.FillEllipse(hub, c - r * 0.14f, c - r * 0.14f, r * 0.28f, r * 0.28f);
+        });
+    }
+
+    /// <summary>
+    /// One page of a cloth pegged to the clothesline, "w" wide and "h" long in pixels, at "phase" of its flap: the top
+    /// edge is pinned (two dark pegs), the body swings downwind (to the right) more the farther down it hangs, with a
+    /// wave running down it and the hem rippling. The sheet is the cloth's width plus room for the swing.
+    /// </summary>
+    private static Sprite PaintLaundry(float w, float h, Color colour, float phase)
+    {
+        float sway = w * 0.55f;
+        int sw = (int)(w + sway) + 4, sh = (int)h + 4;
+        return Sprite.Paint(sw, sh, g =>
+        {
+            const int N = 12;
+            var pts = new List<PointF>();
+            float Swing(float s) => sway * MathF.Pow(s, 1.5f) * (0.55f + 0.45f * MathF.Sin(phase - 2.4f * s));
+            for (int i = 0; i <= N; i++) { float s = i / (float)N; pts.Add(new PointF(2 + Swing(s), 2 + s * h)); }                         // down the left edge
+            for (int i = 1; i < N; i++) { float x = i / (float)N; pts.Add(new PointF(2 + Swing(1f) + x * w, 2 + h + w * 0.05f * MathF.Sin(phase * 1.3f - 5f * x))); }   // along the rippling hem
+            for (int i = N; i >= 0; i--) { float s = i / (float)N; pts.Add(new PointF(2 + w + Swing(s), 2 + s * h)); }                      // up the right edge
+            using (var cloth = new SolidBrush(colour)) g.FillPolygon(cloth, pts.ToArray());
+            using var shade = new SolidBrush(Color.FromArgb(40, 40, 30, 30));
+            g.FillPolygon(shade, [new PointF(2 + w * 0.55f, 2), new PointF(2 + w, 2), new PointF(2 + w + Swing(1f), 2 + h), new PointF(2 + w * 0.55f + Swing(1f), 2 + h)]);   // the downwind half in shadow, a fold
+            using var peg = new SolidBrush(Color.FromArgb(90, 70, 56));
+            g.FillRectangle(peg, 2 + w * 0.12f, 0, Math.Max(1f, w * 0.06f), 3);
+            g.FillRectangle(peg, 2 + w * 0.82f, 0, Math.Max(1f, w * 0.06f), 3);
+        });
+    }
+
     private static Sprite PaintScarf(float tall, float phase)
     {
         int w = (int)(tall * ScarfWF) + 4, h = (int)(tall * ScarfHF) + 4;
@@ -430,6 +502,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         // moves forward.
         double gust = 0.95 + 0.30 * Math.Sin(_time * 0.37) + 0.10 * Math.Sin(_time * 1.13);
         _scarfPhase = (_scarfPhase + dt * Math.PI * 2 * 2.1 * gust) % (Math.PI * 2);
+        _rotorPhase = (_rotorPhase + dt * 0.5 * gust) % 1.0;   // the wheel: about half a turn a second, swelling and easing with the same gusts
         _leaves.Update(dt);
         _board.Tick(dt);
         if (_testNotice is { } tn && _time >= tn.At && _time - dt < tn.At)
@@ -524,6 +597,22 @@ internal sealed class ThanksgivingScene : IScreensaverScene
             float p = _windowPhase[^1];
             float lamp = 0.30f + 0.08f * (float)Math.Sin(_time * 2.3 + p) + 0.05f * (float)Math.Sin(_time * 7.1 + p * 2);
             _loftGlow.DrawCentered(fb, loft.X + loft.Width / 2, loft.Y + loft.Height / 2, lamp);
+        }
+
+        // 5a. The windmill's wheel at its hub, and the washing on the line, both in the breeze: the wheel's page is
+        //     read off its own added-up phase; each cloth flaps on the scarf's clock, a little out of step with the next.
+        {
+            double turn = _rotorPhase * RotorPages;
+            _rotor[(int)((turn - Math.Floor(turn)) * RotorPages) % RotorPages].DrawCentered(fb, _scenery.Windmill.Hub.X, _scenery.Windmill.Hub.Y, 1f, _scenery.OpenFromFarm);
+            var (la, lb) = _scenery.Clothesline;
+            for (int k = 0; k < _washing.Length; k++)
+            {
+                float s = _washing[k].Along;
+                float ax = la.X + (lb.X - la.X) * s, ay = la.Y + _u * 0.003f * 3f * s * (1 - s);   // on the line, which sags as the painter's bezier does
+                int page = (int)(((_scarfPhase / (Math.PI * 2)) + k * 0.37) % 1.0 * LaundryPages) % LaundryPages;
+                Sprite cloth = _laundry[k][page];
+                cloth.Draw(fb, (int)MathF.Round(ax - _u * _washing[k].W / 2f) - 2, (int)MathF.Round(ay) - 1, 1f, _scenery.OpenFromFarm);
+            }
         }
 
         // 6. The scarf: the page is picked from its own clock (see Update), so
