@@ -110,6 +110,7 @@ internal sealed class ThanksgivingScenery
     public required PointF[] LeftTrunk { get; init; }                // each inner maple's trunk as a line to climb: [0] the foot on the ground, [1] the fork, [2] the end of a limb inside the canopy
     public required PointF[] RightTrunk { get; init; }
     public required (PointF At, float R) Hollow { get; init; }       // the hollow in the roots of the left maple: the centre of its dark opening and its half width. A squirrel lives in it.
+    public required List<(PointF At, float R)> TreeHoles { get; init; }   // a hole up each inner maple's trunk (the centre of its dark opening and its half width), [0] on the left trunk, [1] on the right: where the patch squirrels den
 
     // ---- Live facts, set by the scene every frame before the happenings draw ----
     public NutField? Nuts { get; set; }                              // the acorns on the near ground (Nuts.cs): the AcornDrop happening adds to it, the squirrels take from it
@@ -249,7 +250,7 @@ internal static class ThanksgivingPainter
         g.Flush();
         uint[] afterProps = Brushwork.ToPixels(bmp);
 
-        var (leafSpots, canopies, hollow, leftTrunk, rightTrunk) = PaintMaples(g, w, u, ground, rng);
+        var (leafSpots, canopies, hollow, leftTrunk, rightTrunk, treeHoles) = PaintMaples(g, w, u, ground, rng);
 
         foreach (PatchItem item in patch)
             if (item.Front) PaintPatchItem(g, gd, item, u, NearnessOf(item.Foot.Y), pumpkins, ref jack);
@@ -325,7 +326,7 @@ internal static class ThanksgivingPainter
             Pumpkins = pumpkins, Jack = jack, JackHoles = jackHoles, NearDepth = nearDepth, CrestMin = crestMin,
             StageLeft = new PointF(w * 0.24f, ground.YAt(w * 0.24f) + u * 0.052f),
             Canopies = canopies, CornerBranchSpots = cornerSpots,
-            LeftMaple = canopies[1], RightMaple = canopies[2], LeftTrunk = leftTrunk, RightTrunk = rightTrunk, Hollow = hollow,
+            LeftMaple = canopies[1], RightMaple = canopies[2], LeftTrunk = leftTrunk, RightTrunk = rightTrunk, Hollow = hollow, TreeHoles = treeHoles,
         };
     }
 
@@ -1310,15 +1311,17 @@ internal static class ThanksgivingPainter
     /// inside the canopies, so the falling leaves can let go of the trees
     /// they belong to, and each canopy's center and size.
     /// </summary>
-    private static (List<PointF> LeafSpots, List<(PointF At, float R)> Canopies, (PointF At, float R) Hollow, PointF[] LeftTrunk, PointF[] RightTrunk) PaintMaples(Graphics g, int w, float u, Bank ground, Random rng)
+    private static (List<PointF> LeafSpots, List<(PointF At, float R)> Canopies, (PointF At, float R) Hollow, PointF[] LeftTrunk, PointF[] RightTrunk, List<(PointF At, float R)> TreeHoles) PaintMaples(Graphics g, int w, float u, Bank ground, Random rng)
     {
         var maple = new BlossomPalette(Color.FromArgb(240, 204, 92, 30), Color.FromArgb(158, 38, 24), Color.FromArgb(250, 196, 60));
         Color bark = Color.FromArgb(62, 44, 36);
 
-        // (X as a fraction of the width, canopy center height above the ground in u, canopy size in u)
+        // (X as a fraction of the width, canopy center height above the ground in u, canopy size in u). The inner pair
+        // are the squirrels' trees (his ask: "slightly bigger trees with holes they can hide in"): taller and fuller
+        // than the outer pair, on a thick trunk with a hole up it.
         (float X, float Lift, float R)[] trees =
         [
-            (0.03f, 0.17f, 0.15f), (0.12f, 0.13f, 0.11f), (0.90f, 0.14f, 0.12f), (0.98f, 0.17f, 0.14f),
+            (0.03f, 0.17f, 0.15f), (0.12f, 0.20f, 0.135f), (0.90f, 0.21f, 0.145f), (0.98f, 0.17f, 0.14f),
         ];
         var trunks = new PointF[trees.Length][];
         for (int i = 0; i < trees.Length; i++)
@@ -1327,39 +1330,63 @@ internal static class ThanksgivingPainter
             trunks[i] = Brushwork.Trunk(g, w * t.X, ground.YAt(w * t.X) + u * 0.03f, ground.YAt(w * t.X) - u * t.Lift, u * t.R, rng, bark);
         }
 
-        // The squirrel's home: the inner left maple's roots flare out at the
-        // foot, and between them is a dark hollow (the opening is painted as an
-        // arch, black at the back with a little bark lip). The caper's squirrel
-        // comes out of it and dives back in.
-        (PointF At, float R) hollow;
+        // The inner maples' trunks: a thick tapered bole from the foot up to the fork, over the thin stem the brush
+        // drew (the brush sizes its stem from the canopy, a sapling's width; a trunk with a hole in it needs girth).
+        // Lit on the left flank, the way the moon lights everything here.
+        float HalfAt(float f) => u * (0.019f - 0.008f * f);                     // half the trunk's width, f 0 at the foot to 1 at the fork
+        foreach (int i in new[] { 1, 2 })
         {
-            float hx = w * trees[1].X, foot = ground.YAt(hx) + u * 0.03f;
-            float hw = u * 0.013f, hh = u * 0.026f;
-            // The trunk's foot flares into a buttress: the bark widens on both sides in one smooth concave sweep down
-            // to the ground and runs on out along it as tapered roots, the way a maple's roots show above the turf.
-            // (The first version was two round humps side by side on the ground, which read as something else
-            // entirely: "big testicles sitting on the ground".)
-            float halfTrunk = u * 0.008f;
+            PointF foot = trunks[i][0], fork = trunks[i][1];
+            using var bole = new SolidBrush(bark);
+            using var lit = new SolidBrush(Color.FromArgb(82, 60, 48));
+            using var path = new GraphicsPath();
+            path.AddClosedCurve([
+                new PointF(foot.X - HalfAt(0f), foot.Y + u * 0.002f), new PointF(foot.X + (fork.X - foot.X) * 0.5f - HalfAt(0.5f), foot.Y + (fork.Y - foot.Y) * 0.5f),
+                new PointF(fork.X - HalfAt(1f), fork.Y), new PointF(fork.X + HalfAt(1f), fork.Y),
+                new PointF(foot.X + (fork.X - foot.X) * 0.5f + HalfAt(0.5f), foot.Y + (fork.Y - foot.Y) * 0.5f), new PointF(foot.X + HalfAt(0f), foot.Y + u * 0.002f)], 0.2f);
+            g.FillPath(bole, path);
+            // The lit flank: a narrow paler strip up the left side.
+            using var strip = new GraphicsPath();
+            strip.AddClosedCurve([
+                new PointF(foot.X - HalfAt(0f) * 0.85f, foot.Y - u * 0.01f), new PointF(foot.X + (fork.X - foot.X) * 0.5f - HalfAt(0.5f) * 0.85f, foot.Y + (fork.Y - foot.Y) * 0.5f),
+                new PointF(fork.X - HalfAt(1f) * 0.8f, fork.Y + u * 0.01f), new PointF(fork.X - HalfAt(1f) * 0.45f, fork.Y + u * 0.01f),
+                new PointF(foot.X + (fork.X - foot.X) * 0.5f - HalfAt(0.5f) * 0.5f, foot.Y + (fork.Y - foot.Y) * 0.5f), new PointF(foot.X - HalfAt(0f) * 0.5f, foot.Y - u * 0.01f)], 0.2f);
+            g.FillPath(lit, strip);
+        }
+
+        // Each inner maple's foot flares into a buttress: the bark widens on both sides in one smooth concave sweep
+        // down to the ground and runs on out along it as tapered roots, the way a maple's roots show above the turf.
+        // (The first version was two round humps side by side on the ground, which read as something else
+        // entirely: "big testicles sitting on the ground".) The left one has the squirrel's hollow between its roots:
+        // the opening is painted as an arch, black at the back with a little bark lip. The caper's squirrel comes out
+        // of it and dives back in.
+        (PointF At, float R) hollow = default;
+        foreach (int i in new[] { 1, 2 })
+        {
+            float hx = w * trees[i].X, foot = ground.YAt(hx) + u * 0.03f;
+            float halfTrunk = HalfAt(0f) * 0.9f;
             using (var root = new SolidBrush(bark))
             using (var paler = new SolidBrush(Color.FromArgb(82, 60, 48)))
             using (var flare = new GraphicsPath())
             using (var rootPen = new Pen(bark, Math.Max(1.5f, u * 0.0045f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
             {
                 flare.AddClosedCurve([
-                    new PointF(hx - halfTrunk, foot - u * 0.060f), new PointF(hx - halfTrunk * 1.3f, foot - u * 0.036f),
-                    new PointF(hx - u * 0.020f, foot - u * 0.013f), new PointF(hx - u * 0.038f, foot + u * 0.002f),
-                    new PointF(hx + u * 0.038f, foot + u * 0.002f), new PointF(hx + u * 0.020f, foot - u * 0.013f),
-                    new PointF(hx + halfTrunk * 1.3f, foot - u * 0.036f), new PointF(hx + halfTrunk, foot - u * 0.060f)], 0.35f);
+                    new PointF(hx - halfTrunk, foot - u * 0.060f), new PointF(hx - halfTrunk * 1.2f, foot - u * 0.036f),
+                    new PointF(hx - u * 0.028f, foot - u * 0.013f), new PointF(hx - u * 0.044f, foot + u * 0.002f),
+                    new PointF(hx + u * 0.044f, foot + u * 0.002f), new PointF(hx + u * 0.028f, foot - u * 0.013f),
+                    new PointF(hx + halfTrunk * 1.2f, foot - u * 0.036f), new PointF(hx + halfTrunk, foot - u * 0.060f)], 0.35f);
                 g.FillPath(root, flare);
                 // The roots running out along the ground: each a tapering stroke that dips into the turf, two each way.
                 foreach (var (side, drop, len) in new[] { (-1f, 0.000f, 0.075f), (-1f, 0.005f, 0.050f), (1f, 0.001f, 0.068f), (1f, 0.006f, 0.046f) })
                 {
-                    float x0 = hx + side * u * 0.028f, x1 = hx + side * u * (0.028f + len);
-                    g.DrawBezier(rootPen, x0, foot - u * 0.005f, hx + side * u * (0.028f + len * 0.4f), foot - u * 0.009f, hx + side * u * (0.028f + len * 0.8f), foot + u * drop, x1, foot + u * (0.003f + drop));
+                    float x0 = hx + side * u * 0.034f, x1 = hx + side * u * (0.034f + len);
+                    g.DrawBezier(rootPen, x0, foot - u * 0.005f, hx + side * u * (0.034f + len * 0.4f), foot - u * 0.009f, hx + side * u * (0.034f + len * 0.8f), foot + u * drop, x1, foot + u * (0.003f + drop));
                 }
-                g.FillEllipse(paler, hx - u * 0.018f, foot - u * 0.030f, u * 0.007f, u * 0.026f);   // the lit flank, a shade paler
+                g.FillEllipse(paler, hx - u * 0.022f, foot - u * 0.030f, u * 0.007f, u * 0.026f);   // the lit flank, a shade paler
             }
-            // Between them the opening: an arch of warm dark, blacker at the bottom where no light reaches.
+            if (i != 1) continue;
+            float hw = u * 0.013f, hh = u * 0.026f;
+            // Between the roots the opening: an arch of warm dark, blacker at the bottom where no light reaches.
             using (var dark = new SolidBrush(Color.FromArgb(44, 26, 16)))
             using (var path = new GraphicsPath())
             {
@@ -1369,6 +1396,26 @@ internal static class ThanksgivingPainter
             using (var deep = new SolidBrush(Color.FromArgb(16, 10, 8)))
                 g.FillEllipse(deep, hx - hw * 0.8f, foot - hh * 0.55f, hw * 1.6f, hh * 0.6f);
             hollow = (new PointF(hx, foot - hh * 0.45f), hw);
+        }
+
+        // The holes: one up each inner trunk, a little below the fork, where the squirrels den. A tall dark oval with a
+        // raised lip of bark round it (paler on top where the moon catches it, darker below) and a black heart.
+        var treeHoles = new List<(PointF At, float R)>();
+        foreach (int i in new[] { 1, 2 })
+        {
+            PointF foot = trunks[i][0], fork = trunks[i][1];
+            float f = 0.6f;                                                      // six tenths of the way up to the fork
+            var at = new PointF(foot.X + (fork.X - foot.X) * f, foot.Y + (fork.Y - foot.Y) * f);
+            float hw = u * 0.0085f, hh = u * 0.012f;
+            using (var lipTop = new SolidBrush(Color.FromArgb(96, 72, 56)))
+                g.FillEllipse(lipTop, at.X - hw * 1.35f, at.Y - hh * 1.3f, hw * 2.7f, hh * 2.5f);
+            using (var lipLow = new SolidBrush(Color.FromArgb(48, 32, 26)))
+                g.FillEllipse(lipLow, at.X - hw * 1.3f, at.Y - hh * 1.05f, hw * 2.6f, hh * 2.35f);
+            using (var dark = new SolidBrush(Color.FromArgb(34, 20, 14)))
+                g.FillEllipse(dark, at.X - hw, at.Y - hh, hw * 2, hh * 2);
+            using (var deep = new SolidBrush(Color.FromArgb(12, 8, 6)))
+                g.FillEllipse(deep, at.X - hw * 0.7f, at.Y - hh * 0.55f, hw * 1.4f, hh * 1.3f);
+            treeHoles.Add((at, hw));
         }
 
         var spots = new List<PointF>();
@@ -1384,7 +1431,7 @@ internal static class ThanksgivingPainter
                 if (spot.X >= 0 && spot.X < w) spots.Add(spot);
             }
         }
-        return (spots, canopies, hollow, trunks[1], trunks[2]);
+        return (spots, canopies, hollow, trunks[1], trunks[2], treeHoles);
     }
 
     /// <summary>

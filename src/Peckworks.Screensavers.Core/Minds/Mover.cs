@@ -68,6 +68,9 @@ public sealed class Pace
     /// <summary>Stops at once (a startle has no run-down).</summary>
     public void Halt() { Speed = 0f; Want = 0f; _braking = false; }
 
+    /// <summary>Sets the speed outright: a turn that kept its momentum hands the pace back the speed it comes out at.</summary>
+    public void Resume(float speed) { Speed = MathF.Max(0f, speed); _braking = false; }
+
     /// <summary>Eases the speed and advances the odometer. Returns how far it moved this frame (units), for the animal to move its body by.</summary>
     public float Tick(float dt)
     {

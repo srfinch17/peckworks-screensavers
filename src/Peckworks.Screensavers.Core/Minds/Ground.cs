@@ -74,6 +74,34 @@ public static class Ground
         return Stepped.Refused;
     }
 
+    /// <summary>
+    /// Like Step, but a thing straight AHEAD is gone round, never refused: when the way ahead is not ground it tries
+    /// 30 and 60 degrees off, the goal's side of the heading first and then the other, and takes the first that is
+    /// ground (no further round: a side-view animal stepping 90 degrees off slides up or down the screen on the spot). Step's rule (slide only when the goal is well off the heading) is right for a shore,
+    /// where straight ahead is the water and there is nothing round it; among obstacles on open ground (pumpkins in a
+    /// patch) the animal running straight at one has a side to go round on, and refusing left it hung at the pumpkin.
+    /// The heading is turned to the step actually taken; the caller's own turning brings it back toward the goal next
+    /// frame, so the path round the thing is a curve, not a corner.
+    /// </summary>
+    public static Stepped StepRound(Solid ground, ref float x, ref float y, ref float heading, float step, float turnErr)
+    {
+        float probe = MathF.Max(step, 2f), ox = x, oy = y;
+        bool Ahead(float a)
+        {
+            float ca = MathF.Cos(a), sa = MathF.Sin(a);
+            return ground(ox + ca * probe, oy + sa * probe) && ground(ox + ca * probe * 2, oy + sa * probe * 2);
+        }
+        if (Ahead(heading)) { x += MathF.Cos(heading) * step; y += MathF.Sin(heading) * step; return Stepped.Forward; }
+        float first = turnErr >= 0 ? 1f : -1f;
+        for (int k = 1; k <= 2; k++)
+            foreach (float side in new[] { first, -first })
+            {
+                float a = heading + side * 0.52f * k;
+                if (Ahead(a)) { x += MathF.Cos(a) * step; y += MathF.Sin(a) * step; heading = MathF.IEEERemainder(a, MathF.Tau); return Stepped.Slid; }
+            }
+        return Stepped.Refused;
+    }
+
     /// <summary>Is the straight line from a to b all ground, tested about every "every" units (the way the animal can actually walk it)?</summary>
     public static bool LineClear(Solid ground, PointF a, PointF b, float every)
     {

@@ -648,7 +648,7 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   *The mouse parade*: four mice file across the patch with acorns in their mouths until a sparrow drops
   out of the maple and swoops low over the line; they scatter behind the nearest pumpkins, noses showing
   past the edges, while the sparrow sits on a pumpkin and looks about, then fall back into line.
-- **The patch's own life**: field mice, juncos and sparrows and a squirrel live among the pumpkins,
+- **The patch's own life**: field mice, juncos and sparrows and two squirrels live among the pumpkins,
   each with a small mind of its own (the koi pond's shared kit). Mice scurry between the pumpkins,
   sniff, nibble at one, hide behind one and peek; birds get about by FLYING (a few hops at most): a
   burst off the ground, a low bounding flight across the patch, wings beating then shut into a dart
@@ -657,12 +657,24 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   vector squirrels are: a rust-red pear of a body with a cream front, a round head with a big eye and tall
   tufted ears, and a smooth plume of a tail as tall as itself that hooks forward over its head when it
   sits and streams in an S behind it when it bounds) bounds through, sits up,
-  scratches at the earth and darts behind a pumpkin, and sinks into its run and sits up out of it
+  scratches at the earth, and sinks into its run and sits up out of it
   through the crouch (never a one-frame pop); its bounds pulse (fastest in flight, slowest as it lands and
   gathers), every stop is a slow-in to the sit, a long run may pull up midway to sit and look before going
   on, and the head comes up into a look over a few pages; a mouse a squirrel bounds past bolts. Everything on the ground is hidden by the
   pumpkins nearer than it (a depth picture the painter makes), which is what puts them IN the patch.
   Knob "Patch critters" (0 to 12, default 6); they keep out of the way while a scene plays.
+- **The squirrels are individuals.** Each wears its own coat (red, grey or fox squirrel) at its own size, and
+  rolls four dials at birth: timid, busy, curious, playful. A playful one runs out and curls straight back at
+  speed for the fun of it, hops up onto a pumpkin to sit on its top and look about, and romps after the other
+  squirrel, which bolts a little way and is chased again, a few legs of the game, and then both sit up. A
+  timid one flicks its tail more and dens more. A squirrel never hides behind a pumpkin: it hides in a TREE.
+  The two inner maples are big old trees with a hole up each trunk; the squirrel runs to the foot, pitches up
+  onto the bark, climbs head-up and goes into the hole tail last, stays a while out of sight, puts its head
+  out for a look, comes head-first down the trunk and drops off onto the ground. On the move it never flips:
+  a step into a pumpkin's foot goes round it on the open side, and a change of direction is a curl (the front
+  end plants, the back end comes round it with the tail whipped over, through the front view and off the other
+  way, momentum kept); from a standstill it rises, turns through a front view that is the same picture both
+  ways round, and sinks into its run.
 - **The nuts stay on the ground.** Every acorn that falls from the oak branches lies where it landed
   until a squirrel comes for it; the squirrel sits up and eats it, or carries it off a little way, digs
   it in and pats the mound flat, and that stash is its own. A squirrel that finds another's stash may dig

@@ -174,7 +174,7 @@ a fed koi was as hungry as before and went straight back for the next.
   Thanksgiving/                    falling maple leaves, a V of geese, chimney smoke, a scarecrow's scarf
     Program.cs                     Main(), plus the definition
     ThanksgivingScene.cs           backdrop + the geese + the smoke + the window lamplight + the scarf + the shared engine dropping leaves
-    ThanksgivingPainter.cs         paints the harvest dusk, the moon, the farmhouse and barn, the field, the fence, the scarecrow, the pumpkins, the maples (one with a hollow in its roots)
+    ThanksgivingPainter.cs         paints the harvest dusk, the moon, the farmhouse and barn, the field, the fence, the scarecrow, the pumpkins, the maples (the inner two big, with thick trunks, a hole up each for the squirrels to den in, and a hollow in the left one's roots)
     Pack.cs                        the coyotes and the rabbits on the far lane: minds, the chase, the catch, a minute's play with the carcass, the leave; Threat notices as they pass
     CoyoteArt.cs, RabbitArt.cs     how a coyote and a cottontail are drawn and the poses they take (trot, gallop, sit, dig, carry, shake, pounce, pull; sit, graze, hop, flee, dead, limp)
     FieldWork.cs                   the tractor baling the far lane: a resident with a job (baling, hauling, away), the bales it leaves, the Loud and Food notices it pins
@@ -187,9 +187,9 @@ a fed koi was as hungry as before and went straight back for the next.
     HideAndSeek.cs                 the second: a mouse hides from the squirrel inside the jack-o'-lantern (drawn through the painter's stencil of its carved holes)
     FawnApple.cs                   the third: an apple rolls under the fence and the fawn comes to eat it (the herd LENDS the fawn: DeerHerd.Lend, Drive, Chew, Release)
     MouseParade.cs                 the fourth: four mice with acorns scattered by a swooping sparrow, hiding behind the pumpkins by depth
-    PatchLife.cs                   the mice, birds and squirrel that live in the patch: a Mind each from Core/Minds, steps by Ground.Step among the pumpkins' feet, drawn far to near against the depth picture; the squirrels' nut doings (fetch, eat, bury, raid, chase) and the gust's frenzy of visiting squirrels
+    PatchLife.cs                   the mice, birds and squirrels that live in the patch: a Mind each from Core/Minds, steps by Ground.StepRound among the pumpkins' feet, drawn far to near against the depth picture; the squirrels' nut doings (fetch, eat, bury, raid, chase), the gust's frenzy of visiting squirrels, their coats and dials, the running curl turn, the tree den (mount, climb, den, descend, dismount through a stencil), the pumpkin perch and the romp
     Nuts.cs                        the acorns on the ground (NutField): each nut falling, loose, carried, buried (a stash with an owner) or gone; the AcornDrop happening and the gust add to it, the squirrels take from it
-    SquirrelArt.cs                 how a squirrel is drawn and the poses it can take (the bound, a hop with its crouch and settle, a turn through the front view, sitting, digging, chattering), shared with the fence squirrel
+    SquirrelArt.cs                 how a squirrel is drawn and the poses it can take (the bound, a hop with its crouch and settle, a sitting turn through a symmetric front view, the running curl, sitting, digging, chattering) in one of three coats, shared with the fence squirrel
     PoseSheet.cs                   test aid: PECKWORKS_SHEET=squirrel:<png> (or coyote:, rabbit:) paints every pose big on one sheet and quits (a painter is judged there first, every pose at once, against reference pictures, before it is watched moving)
     MouseArt.cs, BirdArt.cs        how a field mouse and a small songbird are drawn, shared by the stories and the patch's life
     Happenings/                    eighteen small random events (a turkey, a raccoon, a pheasant), one class per file

@@ -39,6 +39,18 @@ internal static class SquirrelArt
     public static readonly Color LimbNear = Color.FromArgb(206, 108, 46);
     public static readonly Color LimbFar = Color.FromArgb(158, 74, 32);
 
+    /// <summary>
+    /// A squirrel's colours (his ask: "give them some variations and personalities"). Red is the tawny one above;
+    /// Grey an eastern grey, pale-bellied; Fox a fox squirrel, darker rust with a cinnamon front.
+    /// </summary>
+    public sealed record Coat(Color Fur, Color FurDark, Color Belly, Color TailDark, Color TailMain, Color TailLight)
+    {
+        public static readonly Coat Red = new(SquirrelArt.Fur, SquirrelArt.FurDark, SquirrelArt.Belly, SquirrelArt.TailDark, SquirrelArt.TailMain, SquirrelArt.TailLight);
+        public static readonly Coat Grey = new(Color.FromArgb(138, 130, 120), Color.FromArgb(96, 88, 80), Color.FromArgb(238, 234, 226), Color.FromArgb(86, 80, 74), Color.FromArgb(150, 142, 132), Color.FromArgb(206, 200, 190));
+        public static readonly Coat Fox = new(Color.FromArgb(172, 86, 40), Color.FromArgb(122, 56, 26), Color.FromArgb(236, 196, 140), Color.FromArgb(118, 52, 24), Color.FromArgb(182, 96, 44), Color.FromArgb(222, 150, 86));
+        public static readonly Coat[] All = [Red, Grey, Fox];
+    }
+
     /// <summary>One pose. Positions in squirrel units from the feet's origin; angles in degrees.</summary>
     public sealed class Pose
     {
@@ -57,6 +69,7 @@ internal static class SquirrelArt
         public float Nib;                          // the mouth chewing, 0 to 1
         public float BodyScale = 1f;               // squash (under 1) or stretch (over 1) of the body along its length
         public float Rotate;                       // the whole picture turned about the feet's origin (degrees): -90 is head up a trunk
+        public Coat Coat = Coat.Red;               // its colours
     }
 
     private static PointF P(float x, float y) => new(x, y);
@@ -206,7 +219,40 @@ internal static class SquirrelArt
         Pose q = Sit(1f, 0, false, paws);
         q.HeadTurn = f;
         q.BodyScale = 1f - 0.45f * f;                                       // the body narrows as it comes round
-        q.TailBase = 100f - 10f * f; q.TailCurl = -170f + 60f * f; q.TailS = 80f - 30f * f;
+        // At the front view the picture is MIRROR-SYMMETRIC: hip, chest and head on the middle line, the tail straight up
+        // behind, the feet either side. The caller draws the second half of the turn as the first half mirrored, and a
+        // symmetric middle page is the same picture both ways, so the flip is invisible. (With the tail curled to one
+        // side at the middle, the plume jumped across the body in one frame: "the abrupt flipping".)
+        q.Hip = P(Lerp(q.Hip.X, 0f, f), q.Hip.Y); q.Chest = P(Lerp(q.Chest.X, 0f, f), q.Chest.Y); q.Head = P(Lerp(q.Head.X, 0f, f), q.Head.Y);
+        q.NearHind = P(Lerp(q.NearHind.X, 0.06f, f), q.NearHind.Y); q.FarHind = P(Lerp(q.FarHind.X, -0.10f, f), q.FarHind.Y);
+        q.TailBase = 100f - 10f * f; q.TailCurl = Lerp(-170f, 0f, Smooth(f)); q.TailS = 80f * (1f - f);
+        return q;
+    }
+
+    /// <summary>
+    /// A RUNNING turn, on all fours (his ask: "maybe make it curl as it flips or something. some kind of transition
+    /// animation instead of an abrupt 180degree flip"): k 0 is the profile, bounding; 0.5 the front view, the body
+    /// bunched low over the planted forepaws with the head come round to face us and the tail whipped up and over;
+    /// the caller mirrors from 0.5 on. The real move: a squirrel checks, plants its forefeet, swings its hindquarters
+    /// round them with the tail lashing the other way for balance, and is off the way it came. In words: the
+    /// front end stops, the back end comes round it.
+    /// </summary>
+    public static Pose Curl(float k)
+    {
+        float f = 1f - MathF.Abs(k - 0.5f) * 2f;                           // 0 profile, 1 front
+        float e = Smooth(f);
+        Pose q = Bound(0.22f, 2.2f);                                        // the gather: low over the forepaws
+        q.HeadTurn = f;
+        q.BodyScale = 1f - 0.5f * e;                                        // foreshortened as it comes round
+        q.Hump = 0.08f + 0.14f * e;                                         // bunched
+        q.Hip = P(Lerp(q.Hip.X, 0f, e), q.Hip.Y + 0.04f * e); q.Chest = P(Lerp(q.Chest.X, 0f, e), q.Chest.Y - 0.02f * e);
+        q.Head = P(Lerp(q.Head.X, 0f, e), q.Head.Y - 0.02f * e); q.HeadTilt = Lerp(q.HeadTilt, 4f, e);
+        q.NearFore = P(Lerp(q.NearFore.X, 0.10f, e), 0f); q.FarFore = P(Lerp(q.FarFore.X, -0.10f, e), 0f);
+        q.NearHind = P(Lerp(q.NearHind.X, 0.14f, e), 0f); q.FarHind = P(Lerp(q.FarHind.X, -0.14f, e), 0f);
+        // The tail: from streaming behind, up and over to straight up at the front view, with a lash that is largest a
+        // third of the way round and gone at the middle (the middle page must mirror into itself).
+        q.TailBase = Lerp(150f, 95f, e); q.TailCurl = Lerp(-45f, 0f, e); q.TailS = 25f * (1f - e);
+        q.TailWave = 0f; q.TailFlick = 28f * MathF.Sin(MathF.PI * Math.Clamp(k * 2f, 0f, 1f));
         return q;
     }
 
@@ -269,6 +315,7 @@ internal static class SquirrelArt
     /// </summary>
     public static void Paint(Graphics g, Pose q)
     {
+        Color Fur = q.Coat.Fur, FurDark = q.Coat.FurDark, Belly = q.Coat.Belly, TailDark = q.Coat.TailDark, TailMain = q.Coat.TailMain, TailLight = q.Coat.TailLight;   // the coat's colours shadow the red statics
         void Blob(PointF[] pts, Color c, float tension = 0.5f)
         {
             using var path = new GraphicsPath();
@@ -295,7 +342,7 @@ internal static class SquirrelArt
 
         // ---- the tail first, behind everything ----
         {
-            PointF root = P(hip.X - 0.14f, hip.Y + 0.02f);
+            PointF root = P(hip.X - 0.14f * (1f - front), hip.Y + 0.02f);   // on the middle line at the front view (symmetric, see Turn)
             const int N = 16;
             float segLen = 1.25f / N;
             var spine = new PointF[N + 1];
@@ -380,7 +427,7 @@ internal static class SquirrelArt
             Blob([P(foot.X - 0.04f, foot.Y), P(foot.X - 0.03f, foot.Y + 0.05f), P(foot.X + 0.10f, foot.Y + 0.045f), P(foot.X + 0.17f, foot.Y + 0.02f), P(foot.X + 0.17f, foot.Y - 0.005f)], c, 0.3f);
         }
         PointF shoulder = P(chest.X + 0.02f, chest.Y - 0.02f), haunch = P(hip.X + 0.02f, hip.Y - 0.04f);
-        PointF pawL = P(q.Head.X + 0.04f, q.Head.Y - 0.22f), pawR = P(q.Head.X + 0.16f, q.Head.Y - 0.22f);
+        PointF pawL = P(q.Head.X + Lerp(0.04f, -0.07f, front), q.Head.Y - 0.22f), pawR = P(q.Head.X + Lerp(0.16f, 0.07f, front), q.Head.Y - 0.22f);   // either side of the chin at the front view
         if (front < 0.5f)
         {
             Arm(P(shoulder.X + 0.03f, shoulder.Y), q.PawsUp ? pawR : q.FarFore, FurDark, 0.075f);
