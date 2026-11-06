@@ -580,8 +580,8 @@ turns with the gusts, a reaped field
 with hay bales, a scarecrow in the garden beside the house and a small orchard past it, two rows of round
 trees in their own autumn orange (the fruit long picked), a split rail fence, a corn shock, a
 pumpkin patch that covers the whole foreground (pumpkins of three tints, gourds and broad leaves joined
-by vine runners, one of them carved into a jack-o'-lantern with a candle guttering inside it, in homage
-to Halloween), maples in full colour, and oak branches with the year's last leaves in the top corners.
+by vine runners, one small one at the back carved into a jack-o'-lantern with a candle guttering inside it,
+in homage to Halloween and kept subtle), maples in full colour, and oak branches with the year's last leaves in the top corners.
 
 ![Thanksgiving](docs/images/thanksgiving.png)
 
@@ -658,7 +658,9 @@ to Halloween), maples in full colour, and oak branches with the year's last leav
   tufted ears, and a smooth plume of a tail as tall as itself that hooks forward over its head when it
   sits and streams in an S behind it when it bounds) bounds through, sits up,
   scratches at the earth and darts behind a pumpkin, and sinks into its run and sits up out of it
-  through the crouch (never a one-frame pop); a mouse a squirrel bounds past bolts. Everything on the ground is hidden by the
+  through the crouch (never a one-frame pop); its bounds pulse (fastest in flight, slowest as it lands and
+  gathers), every stop is a slow-in to the sit, a long run may pull up midway to sit and look before going
+  on, and the head comes up into a look over a few pages; a mouse a squirrel bounds past bolts. Everything on the ground is hidden by the
   pumpkins nearer than it (a depth picture the painter makes), which is what puts them IN the patch.
   Knob "Patch critters" (0 to 12, default 6); they keep out of the way while a scene plays.
 - **The nuts stay on the ground.** Every acorn that falls from the oak branches lies where it landed

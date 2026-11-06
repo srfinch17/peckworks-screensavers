@@ -1131,14 +1131,15 @@ internal static class ThanksgivingPainter
             items.Add(new PatchItem { Foot = new PointF(x, y), R = r, Kind = 3, Front = front, Turn = (float)(rng.NextDouble() * 360) });
             leavesPlaced++;
         }
-        // The jack-o'-lantern: the front-band pumpkin nearest x = 0.66 w that is whole on the screen; made if there is none.
+        // The jack-o'-lantern: a BACK-band pumpkin (behind the walk line, among the small ones: "its supposed to be subtle")
+        // nearest x = 0.66 w; made if there is none.
         PatchItem? best = null;
         foreach (PatchItem o in items)
-            if (o.Kind == 0 && o.Front && o.Foot.Y <= h - 0.005f * u && o.Foot.X > 0.50f * w && o.Foot.X < 0.85f * w && o.R > 0.035f * u
+            if (o.Kind == 0 && !o.Front && o.Foot.X > 0.50f * w && o.Foot.X < 0.85f * w && o.R > 0.026f * u
                 && (best == null || MathF.Abs(o.Foot.X - 0.66f * w) < MathF.Abs(best.Foot.X - 0.66f * w))) best = o;
         if (best == null)
         {
-            best = new PatchItem { Foot = new PointF(0.66f * w, h - 0.02f * u), R = 0.052f * u, Kind = 0, Front = true, Tint = 0 };
+            best = new PatchItem { Foot = new PointF(0.66f * w, Walk(0.66f * w) - 0.03f * u), R = 0.034f * u, Kind = 0, Front = false, Tint = 0 };
             items.RemoveAll(o => o.Kind != 3 && MathF.Abs(o.Foot.X - best.Foot.X) < (o.R + best.R) * 1.15f && MathF.Abs(o.Foot.Y - best.Foot.Y) < (o.R + best.R) * 0.9f);
             items.Add(best);
         }

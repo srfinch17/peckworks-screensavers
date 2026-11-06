@@ -66,6 +66,8 @@ internal sealed class PatchLife
         public bool Visitor;                        // a squirrel that came in for the frenzy and leaves when the nuts are gone
         public int EntrySide;                       // which edge a visitor came in from (-1 left, +1 right)
         public bool Done;                           // a visitor that has left: dropped from the list after the frame
+        public float PauseAt;                       // a squirrel's planned stop-start: the Travelled at which it sits up for a moment mid-run (0 none)
+        public PointF? Resume;                      // the goal it goes on to after that pause
     }
 
     private const float BlendFor = 0.15f;           // a squirrel drops into its run, or sits up out of it, over nine frames (it used to pop in one)
@@ -84,6 +86,7 @@ internal sealed class PatchLife
     private readonly Ground.Solid _ground;
     private readonly NutField _nuts;                // the acorns on the ground (Nuts.cs)
     private Sheet _mouseRun, _mouseStill, _sqRun, _sqLook, _sqDig, _sqRise, _sqTurn, _sqRunNut, _sqEat;   // RunNut: bounding with a nut in the mouth; Eat: sitting up chewing one, four pages
+    private const int LookPages = 4;                // Look: the head coming up into the look over four pages (page 0 the plain sit, page 3 the full look); it used to snap
     private Sheet[] _sqSit = new Sheet[4];
     private Sheet[] _bird = new Sheet[2], _birdLook = new Sheet[2], _birdPeck = new Sheet[2], _birdHop = new Sheet[2];
     private Sheet[] _birdFlyKind = new Sheet[2];
@@ -259,7 +262,15 @@ internal sealed class PatchLife
         int w = (int)(2.55f * k) + 6, h = (int)(1.9f * k) + 6, ox = (int)(1.75f * k) + 3, by = h - 4;
         _sqRun = Make(32, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Bound(i / 32f, 2.2f), k, w, h, ox, by));   // 32: at 16 a bound 2.2 lengths long stepped the tail a seventh of a wave a page
         for (int t = 0; t < 4; t++) { int tl = t; _sqSit[t] = Make(1, w, h, ox, by, _ => SquirrelArt.Page(SquirrelArt.Sit(1f, tl, false, false), k, w, h, ox, by)); }
-        _sqLook = Make(1, w, h, ox, by, _ => SquirrelArt.Page(SquirrelArt.Sit(1f, 0, true, false), k, w, h, ox, by));
+        _sqLook = Make(LookPages, w, h, ox, by, i =>
+        {
+            // Between the sit and the look: the head, its tilt and the tail's root eased between the two poses.
+            float f = i / (LookPages - 1f); f = f * f * (3f - 2f * f);
+            SquirrelArt.Pose a = SquirrelArt.Sit(1f, 0, false, false), b = SquirrelArt.Sit(1f, 0, true, false);
+            a.Head = new PointF(a.Head.X + (b.Head.X - a.Head.X) * f, a.Head.Y + (b.Head.Y - a.Head.Y) * f);
+            a.HeadTilt += (b.HeadTilt - a.HeadTilt) * f; a.TailBase += (b.TailBase - a.TailBase) * f;
+            return SquirrelArt.Page(a, k, w, h, ox, by);
+        });
         _sqDig = Make(8, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Dig(i / 8f), k, w, h, ox, by));
         _sqRise = Make(RisePages, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Sit(0.2f + 0.8f * i / (RisePages - 1), 0, false, false), k, w, h, ox, by));   // the crouch (page 0) up to the sit (the last)
         _sqTurn = Make(TurnPages, w, h, ox, by, i => SquirrelArt.Page(SquirrelArt.Turn(0.15f + 0.175f * i), k, w, h, ox, by));   // sitting, coming round: 0.15, 0.325, 0.5 (the front view); played back again mirrored
@@ -469,6 +480,12 @@ internal sealed class PatchLife
     {
         float u = _s.U;
         c.Clock = 0;
+        if (c.Resume is PointF back)
+        {
+            // Going on after a stop-start pause: the same goal, the page cycle carrying on from where it stood.
+            c.Resume = null; c.Goal = back; c.Mind.Begin(Doing.Go, 6f); Head(c);
+            return;
+        }
         // The nuts come before the lull: a squirrel with a nut in its mouth or one in reach goes on with it while a story
         // plays (the frenzy is his ask; lulled, the visitors hid behind pumpkins for the whole story and never fetched one).
         if (c.Kind == Kind.Squirrel && DecideNuts(c)) return;
@@ -518,7 +535,15 @@ internal sealed class PatchLife
                 int face = Dice.Pick(_rng, [0.5f + 0.5f * c.Busy, 0.4f, 0.25f, 0.05f + 0.2f * c.Timid]);
                 // A bound goes ALONG the patch: the goal stays within a little of its own row (a goal straight up or down the
                 // screen sent a side-view animal sliding on the spot, the "90 degree turns"), and at least a few lengths off.
-                if (face == 0) { PointF? g = RandomSpot(c.X - 0.45f * u, c.X + 0.45f * u, 30, c.Y, 0.05f * u, 4f * _k, new PointF(c.X, c.Y)); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0; }
+                if (face == 0)
+                {
+                    PointF? g = RandomSpot(c.X - 0.45f * u, c.X + 0.45f * u, 30, c.Y, 0.05f * u, 4f * _k, new PointF(c.X, c.Y));
+                    if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; }
+                    c.Goal = g.Value; c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0;
+                    // A long run is a stop-start one, four times in ten: it pulls up somewhere in the middle third, sits up, looks, goes on.
+                    float far = MathF.Abs(g.Value.X - c.X);
+                    c.PauseAt = far > 7f * _k && _rng.NextDouble() < 0.4 ? far * (0.35f + 0.3f * (float)_rng.NextDouble()) : 0f;
+                }
                 else if (face == 1) c.Mind.Begin(Doing.Still, 1f + 3f * (float)_rng.NextDouble());
                 else if (face == 2) c.Mind.Begin(Doing.Dig, 1f + 1.5f * (float)_rng.NextDouble());
                 else { PointF? g = BehindPumpkin(new PointF(c.X, c.Y), 0.4f * u); if (g == null) { c.Mind.Begin(Doing.Still, 1f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Hide, 3f); c.Travelled = 0; }
@@ -643,12 +668,30 @@ internal sealed class PatchLife
                     Kind.Bird => 0.12f,
                     _ => c.Mind.Doing switch { Doing.Bolt => 0.32f, Doing.Chase => 0.34f, Doing.Fetch => 0.28f, Doing.Leave => 0.26f, _ => 0.24f },
                 } * u;
-                c.Pace.Want = Math.Min(speed, MathF.Max(0.25f * speed, dist * 4f));
+                // The slow-in: the wanted speed falls with the distance left (2.5 a second: from a squirrel's full pace it begins
+                // easing about three lengths out, and arrives at a quarter pace; at 4 it braked in the last length and the stop was a halt).
+                c.Pace.Want = Math.Min(speed, MathF.Max(0.12f * speed, dist * 2.5f));   // the floor 0.12: at 0.25 the last two lengths were a creep at one speed, not an ease
                 float want = MathF.Atan2(dy, dx);
                 c.Heading = Turn.Toward(c.Heading, want, 7f, dt);
                 float err = MathF.IEEERemainder(want - c.Heading, MathF.Tau);
                 float step = c.Pace.Tick(dt);
                 if (step <= 0f) return;
+                if (c.Kind == Kind.Squirrel)
+                {
+                    // A bound PULSES: the body is fastest in flight (0.5 to 0.9 of the bound's page cycle) and slowest as it
+                    // lands and gathers over the forepaws; one speed all the way round was a glide. The pulse averages one,
+                    // so the pace's number is still the squirrel's speed; the page cycle follows the pulsed distance, so the
+                    // pictures and the motion agree. (Mice patter too fast for the eye to read a pulse.)
+                    float p = c.Travelled / (2.2f * _k); p -= MathF.Floor(p);
+                    step *= 0.55f + 0.45f * (1f + MathF.Sin(MathF.Tau * (p - 0.35f)));
+                    // The stop-start: at the planned point of a long run it pulls up, sits and looks about, then goes on (Decide).
+                    // Not a halt: the goal becomes a spot two lengths ahead, so the slow-in brings it to the sit (a halt here was a 5 px step to nothing).
+                    if (c.PauseAt > 0f && c.Travelled >= c.PauseAt && dist > 3f * _k && c.Mind.Doing == Doing.Go)
+                    {
+                        c.PauseAt = 0f; c.Resume = c.Goal;
+                        c.Goal = new PointF(c.X + MathF.Cos(c.Heading) * 2f * _k, c.Y + MathF.Sin(c.Heading) * 2f * _k);
+                    }
+                }
                 float x = c.X, y = c.Y, hd = c.Heading;
                 var stepped = Ground.Step(_ground, ref x, ref y, ref hd, step, err);
                 // A refused step is a jam, not a pause: after a few frames the doing is dropped and the critter sits (its goal
@@ -779,9 +822,11 @@ internal sealed class PatchLife
                     {
                         float ft = c.Clock % 1.5f;
                         int tail = ft < 0.4f ? new[] { 1, 2, 3, 2, 1 }[Math.Min(4, (int)(ft / 0.4f * 5))] : 0;
-                        bool look = ((int)(c.Clock / 1.3f)) % 3 == 1;
-                        Sheet sh = look ? _sqLook : _sqSit[tail];
-                        Stamp(fb, sh, sh.Pages[0], c, c.Y);
+                        // Every 3.9 s it looks up for 1.3 s: the head rises into the look over 0.2 s and comes down over 0.2 s.
+                        float lt = c.Clock % 3.9f;
+                        float look = lt < 1.3f || lt >= 2.6f ? 0f : Math.Min(1f, Math.Min((lt - 1.3f) / 0.2f, (2.6f - lt) / 0.2f));
+                        if (look > 0f) Stamp(fb, _sqLook, _sqLook.Pages[Math.Min(LookPages - 1, (int)MathF.Round(look * (LookPages - 1)))], c, c.Y);
+                        else Stamp(fb, _sqSit[tail], _sqSit[tail].Pages[0], c, c.Y);
                     }
                     break;
                 }
