@@ -3,37 +3,42 @@ using Peckworks.Screensavers.Core;
 namespace Thanksgiving.Happenings;
 
 /// <summary>
-/// A murmuration: a few hundred starlings wheeling over the far hills at
-/// dusk as one cloud, the cloud stretching, folding, turning over itself and
-/// drifting, the way they do before they settle to roost. It fades in from
-/// nothing, wheels for most of a minute, and fades away.
+/// A murmuration: a few hundred blackbirds wheeling over the far hills at
+/// dusk as one flock, a long thin ribbon that streams along its way, bends,
+/// folds with a wave running down it, bunches up and thins out, and turns
+/// as its path turns, the way they do before they settle to roost. It fades
+/// in from nothing, flies for most of a minute, and fades away.
 ///
-/// FEYNMAN VERSION: no bird steers. Each bird keeps a fixed place inside a
-/// ball (an offset rolled once, in Begin). The BALL is what moves: its centre
-/// drifts on a path made of slow sines, it turns about its centre, and it is
-/// squashed and stretched by two more slow sines (long and thin one moment,
-/// round the next, the way a real flock pulses), and a ripple runs through
-/// it (each bird's offset wobbles by a sine of time and of where it is in
-/// the ball, so a wave seems to pass through the flock). Add those up and
-/// the eye reads one living shape, which is all a murmuration is from a
-/// mile off. Every bird is one dark dot, two pixels, stamped at its place;
-/// nothing is painted per frame.
+/// FEYNMAN VERSION: no bird steers. The FLOCK is a ribbon that follows a
+/// path: the ribbon's middle moves along a curve made of slow sines, and the
+/// ribbon always lies ALONG the way it is going (its long axis is the path's
+/// direction at that moment), so when the path bends the whole flock swings
+/// round into the new heading, which is what the eye reads as a turn. Each
+/// bird keeps a place in the ribbon (how far along, how far across, rolled
+/// once in Begin, most of them near the middle line), and that place drifts
+/// a little with time (birds overtaking each other). On top of that three
+/// things move through the ribbon as waves: a bend (the ribbon curves into
+/// a banana, swinging from one side to the other), a fold (a wave running
+/// down its length, so it ripples like a flag), and a density wave (the
+/// birds bunch and spread along it, a pulse travelling through the flock).
+/// Each bird is a dark dot that flicks between two sizes on its own beat,
+/// the twinkle a distant flock has. (The first version was a ball of dots
+/// turning about its centre: "a ball of points that rotates".)
 ///
 /// It is drawn through the painter's OpenFromFarm stencil (in front of the
 /// hills, the farm and the far trees, behind everything on the field), and
-/// lives over the far hills between the house and the barn, high enough to
-/// be sky and low enough to read as birds and not stars.
+/// lives over the far hills between the house and the barn.
 /// </summary>
 internal sealed class Murmuration : Happening
 {
-    private const int Birds = 260;
-    private const float Total = 46f;
+    private const int Birds = 280;
+    private const float Total = 50f;
 
     private readonly ThanksgivingScenery _s;
-    private readonly Sprite _dot;
-    private readonly float[] _ox = new float[Birds], _oy = new float[Birds], _ph = new float[Birds];
+    private readonly Sprite _small, _big;
+    private readonly float[] _along = new float[Birds], _across = new float[Birds], _ph = new float[Birds], _flap = new float[Birds];
     private PointF _c0;
-    private float _r, _p1, _p2, _p3, _p4;
+    private float _ax, _ay, _p1, _p2, _p3, _p4, _p5;
 
     public override float Seconds => Total;
     public override string? Claims => "sky";
@@ -41,29 +46,40 @@ internal sealed class Murmuration : Happening
     public Murmuration(ThanksgivingScenery s)
     {
         _s = s;
-        int d = Math.Max(2, (int)(s.U * 0.0016f));
-        _dot = Sprite.Paint(d + 1, d + 1, g =>
-        {
-            using var b = new SolidBrush(Color.FromArgb(220, 34, 26, 34));
-            g.FillEllipse(b, 0, 0, d, d);
-        });
+        int d = Math.Max(2, (int)(s.U * 0.0014f));
+        Sprite Dot(int size) => Sprite.Paint(size + 1, size + 1, g => { using var b = new SolidBrush(Color.FromArgb(230, 30, 24, 32)); g.FillEllipse(b, 0, 0, size, size); });
+        _small = Dot(d);
+        _big = Dot(d + 1);
     }
 
     public override void Begin(Random rng)
     {
         float W = _s.Width, H = _s.Height, U = _s.U;
-        // Over the far hills, in the gap between the farmhouse and the barn, a little above the ridge.
-        _c0 = new PointF(W * (0.40f + 0.12f * rng.NextSingle()), H * (0.47f + 0.06f * rng.NextSingle()));
-        _r = U * (0.045f + 0.015f * rng.NextSingle());
-        _p1 = rng.NextSingle() * MathF.Tau; _p2 = rng.NextSingle() * MathF.Tau; _p3 = rng.NextSingle() * MathF.Tau; _p4 = rng.NextSingle() * MathF.Tau;
-        // The birds' places in the ball: denser toward the middle (the square root of a uniform roll is a disc's
-        // even spread; its 0.7 power leans the spread inward), thinner at the edge, each with its own ripple phase.
+        // Over the far hills between the farmhouse and the barn, a little above the ridge; the path's sweep in x and y.
+        _c0 = new PointF(W * (0.42f + 0.10f * rng.NextSingle()), H * (0.46f + 0.05f * rng.NextSingle()));
+        _ax = U * (0.14f + 0.06f * rng.NextSingle());
+        _ay = U * (0.035f + 0.02f * rng.NextSingle());
+        _p1 = rng.NextSingle() * MathF.Tau; _p2 = rng.NextSingle() * MathF.Tau; _p3 = rng.NextSingle() * MathF.Tau; _p4 = rng.NextSingle() * MathF.Tau; _p5 = rng.NextSingle() * MathF.Tau;
         for (int i = 0; i < Birds; i++)
         {
-            float a = rng.NextSingle() * MathF.Tau, rr = MathF.Pow(rng.NextSingle(), 0.7f);
-            _ox[i] = MathF.Cos(a) * rr; _oy[i] = MathF.Sin(a) * rr * 0.75f;
+            // Along the ribbon evenly (-1 to 1); across it clustered on the middle line (the sum of two rolls, a tent shape).
+            _along[i] = rng.NextSingle() * 2f - 1f;
+            _across[i] = (rng.NextSingle() + rng.NextSingle() - 1f);
             _ph[i] = rng.NextSingle() * MathF.Tau;
+            _flap[i] = rng.NextSingle() * MathF.Tau;
         }
+    }
+
+    /// <summary>The ribbon's middle at t, and its heading (the path's direction, from the sines' own rates).</summary>
+    private (float X, float Y, float Hx, float Hy) Path(float t)
+    {
+        const float w1 = 0.19f, w2 = 0.47f, w3 = 0.15f, w4 = 0.53f;
+        float x = _c0.X + _ax * MathF.Sin(w1 * t + _p1) + 0.35f * _ax * MathF.Sin(w2 * t + _p2);
+        float y = _c0.Y + _ay * MathF.Sin(w3 * t + _p3) + 0.4f * _ay * MathF.Sin(w4 * t + _p4);
+        float dx = _ax * w1 * MathF.Cos(w1 * t + _p1) + 0.35f * _ax * w2 * MathF.Cos(w2 * t + _p2);
+        float dy = _ay * w3 * MathF.Cos(w3 * t + _p3) + 0.4f * _ay * w4 * MathF.Cos(w4 * t + _p4);
+        float l = MathF.Max(1e-3f, MathF.Sqrt(dx * dx + dy * dy));
+        return (x, y, dx / l, dy / l);
     }
 
     public override void Draw(FrameBuffer fb, float t)
@@ -71,18 +87,24 @@ internal sealed class Murmuration : Happening
         float fade = Fade(t, Total, 4f, 4f);
         if (fade <= 0.01f) return;
         float U = _s.U;
-        // The ball's centre drifts; the ball turns, stretches and pulses; a ripple runs through it.
-        float cx = _c0.X + U * (0.10f * MathF.Sin(0.21f * t + _p1) + 0.04f * MathF.Sin(0.53f * t + _p2));
-        float cy = _c0.Y + U * (0.030f * MathF.Sin(0.17f * t + _p3) + 0.012f * MathF.Sin(0.61f * t + _p4));
-        float turn = 0.45f * t + 0.6f * MathF.Sin(0.3f * t + _p2);
-        float sx = 1f + 0.55f * MathF.Sin(0.37f * t + _p3), sy = 1f - 0.35f * MathF.Sin(0.29f * t + _p4);
-        float ct = MathF.Cos(turn), st = MathF.Sin(turn);
+        var (cx, cy, hx, hy) = Path(t);
+        float nx = -hy, ny = hx;                                                        // across the ribbon
+        // The ribbon's length and width breathe slowly; it bends from side to side; a fold runs down it; the birds bunch in a travelling wave.
+        float len = U * (0.075f + 0.03f * MathF.Sin(0.23f * t + _p5));
+        float wid = U * (0.016f + 0.008f * MathF.Sin(0.31f * t + _p2));
+        float bend = U * 0.03f * MathF.Sin(0.27f * t + _p3);
+        float foldPhase = 1.6f * t, bunchPhase = 1.1f * t;
         for (int i = 0; i < Birds; i++)
         {
-            float ripple = 0.14f * MathF.Sin(2.4f * t + 3.5f * _ox[i] + _ph[i]);
-            float x = _ox[i] * sx + ripple, y = _oy[i] * sy + 0.5f * ripple;
-            float px = cx + _r * (x * ct - y * st), py = cy + _r * (x * st + y * ct);
-            _dot.DrawCentered(fb, px, py, fade, _s.OpenFromFarm);
+            float a = _along[i] + 0.12f * MathF.Sin(0.5f * t + _ph[i]);                 // drifting along: overtaking
+            a += 0.10f * MathF.Sin(MathF.PI * 1.5f * a - bunchPhase);                      // the density wave
+            if (a > 1f) a -= 2f; else if (a < -1f) a += 2f;
+            float b = _across[i] * (1f - 0.5f * a * a);                                   // the ribbon tapers toward its ends
+            float across = b * wid + bend * a * a + 0.6f * wid * MathF.Sin(3.1f * a + foldPhase + 0.3f * _ph[i]);   // the banana, and the flag's fold
+            float along = a * len;
+            float px = cx + hx * along + nx * across, py = cy + hy * along + ny * across;
+            Sprite dot = MathF.Sin(9f * t + _flap[i]) > 0.35f ? _big : _small;           // the flicker of wings catching the light
+            dot.DrawCentered(fb, px, py, fade, _s.OpenFromFarm);
         }
     }
 }
