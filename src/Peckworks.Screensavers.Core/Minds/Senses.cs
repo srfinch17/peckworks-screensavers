@@ -80,6 +80,19 @@ public sealed class Noticeboard
     /// <summary>Everything pinned right now (oldest first).</summary>
     public IReadOnlyList<Notice> Live => _live;
 
+    /// <summary>The nearest notice of a kind within "within" of "me" (by distance, not reach), or null: for an animal that listens for one thing (a dog for a threat).</summary>
+    public Notice? Nearest(Sense kind, PointF me, float within)
+    {
+        Notice? best = null; float bestD = within;
+        foreach (Notice n in _live)
+        {
+            if (n.Kind != kind) continue;
+            float dx = n.At.X - me.X, dy = n.At.Y - me.Y, d = MathF.Sqrt(dx * dx + dy * dy);
+            if (d < bestD) { best = n; bestD = d; }
+        }
+        return best;
+    }
+
     /// <summary>Drops everything (a scene reset).</summary>
     public void Clear() => _live.Clear();
 }

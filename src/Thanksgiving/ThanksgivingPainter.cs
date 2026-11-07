@@ -63,6 +63,16 @@ internal sealed class ThanksgivingScenery
     public required RectangleF FarmDoor { get; init; }
     public required PointF PorchLight { get; init; }                 // the lamp beside the door, under the porch roof
     public required PointF ChimneyTop { get; init; }                 // where the smoke comes out
+    // ---- The yard and the stock on the hill (FarmYard.cs lives here). Every pen is (X0, X1, Back, Front): its left and right edge and the y of its back line and its front line; an animal stands between the two. ----
+    public required PointF[] Road { get; init; }                     // the dirt road's middle line, porch to barn door, left to right
+    public required PointF Doghouse { get; init; }                   // the doghouse's foot (its doorway's middle is here; 0.024 U wide, 0.014 U to the eaves)
+    public required (PointF At, float Rx, float Ry) Pond { get; init; }   // the pond on the far slope: centre and half sizes
+    public required (float X0, float X1, float Back, float Front) Paddock { get; init; }   // the horses', past the silos
+    public required (float X0, float X1, float Back, float Front) PigPen { get; init; }    // the pigs', between the orchard and the windmill
+    public required (float X0, float X1, float Back, float Front) Pasture { get; init; }   // the cows', among the trees left of the house (no fence)
+    public required (float X0, float X1, float Back, float Front) HenYard { get; init; }   // the hens', round the scarecrow between the porch and the doghouse
+    /// <summary>How many U a metre is on the farm's hill (the house is 0.0154 U a metre: 7 m to its eaves); the stock and the dog are sized from it.</summary>
+    public float HillMetresToU => 0.0154f;
 
     // ---- The barn and silo (on the near hills, right of middle) ----
     public required PointF BarnFoot { get; init; }                   // the middle of the barn's base
@@ -181,12 +191,19 @@ internal static class ThanksgivingPainter
         // The farm stands on the nearer hills, each building's foot a touch below the ridge line so it sits ON the hill.
         // (After the field's floor: a foot that is below the horizon stands on the field, not under it.)
         var farmFoot = new PointF(w * 0.31f, Brushwork.RidgeYAt(nearRidge, w * 0.31f) + u * 0.012f);
+        var barnFoot = new PointF(w * 0.60f, Brushwork.RidgeYAt(nearRidge, w * 0.60f) + u * 0.012f);
+        // The road first: the buildings' feet cover its ends. Then the pond, up on the far slope past the barn.
+        PointF[] road = PaintRoad(g, farmFoot, barnFoot, nearRidge, u);
+        var pond = (At: new PointF(w * 0.745f, Brushwork.RidgeYAt(nearRidge, w * 0.745f) - u * 0.044f), Rx: u * 0.055f, Ry: u * 0.013f);   // on the far slope above the paddock (at 0.865 w the right maple hid it)
+        PaintPond(g, pond.At, pond.Rx, pond.Ry, u);
         PaintFarmhouse(g, farmFoot.X, farmFoot.Y, u);
+        // The dog's house in the yard right of the porch, past the scarecrow's garden; the hens' yard is between them.
+        var doghouse = new PointF(farmFoot.X + u * 0.135f, Brushwork.RidgeYAt(nearRidge, farmFoot.X + u * 0.135f) + u * 0.016f);
+        PaintDoghouse(g, doghouse, u);
         // A clothesline in the yard left of the house, the washing on it left out (the scene hangs the cloth, which
         // moves in the breeze); and a steel water-pump windmill left of the barn (the scene turns its wheel).
-        float lineX0 = farmFoot.X - u * 0.112f, lineX1 = farmFoot.X - u * 0.072f;
+        float lineX0 = farmFoot.X - u * 0.175f, lineX1 = farmFoot.X - u * 0.125f;   // clear of the porch (the house is 0.16 U wide now, the porch a little more)
         (PointF A, PointF B) clothesline = PaintClothesline(g, lineX0, lineX1, Brushwork.RidgeYAt(nearRidge, (lineX0 + lineX1) / 2) + u * 0.012f, u);
-        var barnFoot = new PointF(w * 0.60f, Brushwork.RidgeYAt(nearRidge, w * 0.60f) + u * 0.012f);
         float millX = barnFoot.X - u * 0.125f;
         (PointF Hub, float R) windmill = PaintWindmill(g, millX, Brushwork.RidgeYAt(nearRidge, millX) + u * 0.012f, u);
         List<(PointF At, float R)> siloTops = PaintBarn(g, barnFoot.X, barnFoot.Y, u);
@@ -202,10 +219,22 @@ internal static class ThanksgivingPainter
         // house, like an apple orchard or some other farm stuff"). Painted with the farm, so the field's animals pass in front.
         float orchardX = scarecrowX + u * 0.105f, orchardHalf = u * 0.070f;
         PaintOrchard(g, u, nearRidge, orchardX, orchardHalf, rng);
+        // The stock (his ask: "horses, cows, pigs, chickens"): a horse paddock on the hill past the silos, a pig pen between
+        // the orchard and the windmill, the cows' pasture among the trees left of the house. The back rails and boards are
+        // painted here; the front ones are stamped over the animals each frame (FarmYard.cs). Each pen's floor is the band
+        // between its back line and its front line.
+        Color railWood = Color.FromArgb(150, 132, 104);
+        float paddockX0 = barnFoot.X + u * 0.18f, paddockX1 = barnFoot.X + u * 0.31f;
+        float paddockBack = Brushwork.RidgeYAt(nearRidge, (paddockX0 + paddockX1) / 2) + u * 0.012f, paddockFront = paddockBack + u * 0.016f;
+        PaintRails(g, paddockX0, paddockX1, paddockBack, u, railWood);
+        float penX0 = orchardX + orchardHalf + u * 0.012f, penX1 = millX - u * 0.016f;
+        float penBack = Brushwork.RidgeYAt(nearRidge, (penX0 + penX1) / 2) + u * 0.012f, penFront = penBack + u * 0.014f;
+        PaintPigPen(g, penX0, penX1, penBack, penFront, u);
+        float pastureX0 = w * 0.09f, pastureX1 = farmFoot.X - u * 0.13f;
         // A windbreak of trees along the far edge of the field, where the hill meets it: nearer than the hills' treeline,
         // farther than everything that moves on the field (his line: "another set of trees closer to the foreground but not
         // in front of the highest branches"). Painted here, with the farm, so the lane's animals pass in front of them.
-        List<(PointF At, float R)> farTrees = PaintFarTrees(g, w, u, nearRidge, farmFoot.X, barnFoot.X, scarecrowX, orchardX, orchardHalf, rng);
+        List<(PointF At, float R)> farTrees = PaintFarTrees(g, w, u, nearRidge, farmFoot.X, barnFoot.X, scarecrowX, orchardX, orchardHalf, pond.At.X, pond.Rx, paddockX0, paddockX1, rng);
         g.Flush();
         uint[] upToFarm = Brushwork.ToPixels(bmp);   // a second copy: "unchanged since here" = nothing stands in front of the farm (the scarecrow is part of it)
 
@@ -292,7 +321,7 @@ internal static class ThanksgivingPainter
                 }
         }
 
-        float wallW = u * 0.12f, wallH = u * 0.058f, farmTop = farmFoot.Y - wallH;
+        var (wallW, wallH) = FarmWallSize(u); float farmTop = farmFoot.Y - wallH;
         float barnW = u * 0.13f, barnH = u * 0.06f, barnTop = barnFoot.Y - barnH;
         return new ThanksgivingScenery
         {
@@ -306,9 +335,13 @@ internal static class ThanksgivingPainter
             FarRidge = farRidge, NearRidge = nearRidge, Ground = ground,
             FarmFoot = farmFoot, FarmWall = new SizeF(wallW, wallH),
             FarmWindows = FarmWindows(farmFoot.X, farmFoot.Y, u),
-            FarmDoor = new RectangleF(farmFoot.X + wallW * 0.02f, farmFoot.Y - wallH * 0.62f, u * 0.014f, wallH * 0.62f),
-            PorchLight = new PointF(farmFoot.X + wallW * 0.02f + u * 0.020f, farmFoot.Y - wallH * 0.52f),
-            ChimneyTop = new PointF(farmFoot.X - wallW * 0.30f, farmTop - u * 0.072f),
+            FarmDoor = FarmDoorRect(farmFoot.X, farmFoot.Y, u),
+            PorchLight = FarmPorchLight(farmFoot.X, farmFoot.Y, u),
+            ChimneyTop = new PointF(farmFoot.X - wallW * 0.38f, farmTop - u * 0.080f),
+            Road = road, Doghouse = doghouse, Pond = pond,
+            Paddock = (paddockX0, paddockX1, paddockBack, paddockFront), PigPen = (penX0, penX1, penBack, penFront),
+            Pasture = (pastureX0, pastureX1, Brushwork.RidgeYAt(nearRidge, (pastureX0 + pastureX1) / 2) + u * 0.014f, Brushwork.RidgeYAt(nearRidge, (pastureX0 + pastureX1) / 2) + u * 0.030f),
+            HenYard = (farmFoot.X + u * 0.085f, farmFoot.X + u * 0.125f, Brushwork.RidgeYAt(nearRidge, scarecrowX) + u * 0.012f, Brushwork.RidgeYAt(nearRidge, scarecrowX) + u * 0.024f),
             BarnFoot = barnFoot, BarnWall = new SizeF(barnW, barnH),
             BarnLoft = new RectangleF(barnFoot.X - u * 0.009f, barnTop - u * 0.026f, u * 0.018f, u * 0.016f),
             BarnDoor = new RectangleF(barnFoot.X - barnW * 0.16f, barnFoot.Y - barnH * 0.72f, barnW * 0.32f, barnH * 0.72f),
@@ -448,80 +481,227 @@ internal static class ThanksgivingPainter
     /// warm windows (two downstairs, one up in the gable). Each lit window
     /// gets a small soft glow underneath it so it reads as light, not paint.
     /// </summary>
+    /// <summary>The farmhouse's wall: 0.16 U wide, 0.082 U tall (two storeys at 0.0154 U a metre: a 10 m wide, 5.3 m wall).</summary>
+    internal static (float W, float H) FarmWallSize(float u) => (u * 0.16f, u * 0.082f);
+
+    /// <summary>
+    /// A traditional two-storey farmhouse (his ask: "bigger, more traditional"): white clapboard, a side-gabled roof with a
+    /// cross gable over the front door and a window in it, two brick chimneys, five windows with dark green shutters, a
+    /// full-width porch on turned posts with a railing and three steps up to the door, a stone foundation, and the porch
+    /// lamp beside the door. Everything is painted from the wall's size (FarmWallSize) so the facts the scene uses (the
+    /// windows, the door, the chimney top) stay on the drawing.
+    /// </summary>
     private static void PaintFarmhouse(Graphics g, float x, float footY, float u)
     {
-        float wallW = u * 0.12f, wallH = u * 0.058f, top = footY - wallH;
-        Color white = Color.FromArgb(232, 220, 200), shade = Color.FromArgb(196, 178, 156), roof = Color.FromArgb(66, 48, 46);
+        var (wallW, wallH) = FarmWallSize(u);
+        float top = footY - wallH;
+        Color white = Color.FromArgb(232, 220, 200), shade = Color.FromArgb(200, 184, 160), roof = Color.FromArgb(66, 48, 46), roofLit = Color.FromArgb(88, 66, 62);
+        Color shutter = Color.FromArgb(52, 78, 58), brick = Color.FromArgb(120, 70, 56), stone = Color.FromArgb(132, 118, 102);
+        float ridgeY = top - u * 0.040f, gablePeak = top - u * 0.062f;
 
-        // Chimney first: the roof covers its foot.
-        using (var brick = new SolidBrush(Color.FromArgb(120, 70, 56)))
-            g.FillRectangle(brick, x - wallW * 0.30f - u * 0.008f, top - u * 0.070f, u * 0.016f, u * 0.05f);
+        // Chimneys first: the roof covers their feet. One at each end of the ridge.
+        using (var b = new SolidBrush(brick))
+        using (var cap = new SolidBrush(Color.FromArgb(90, 52, 42)))
+            foreach (float cx in new[] { x - wallW * 0.38f, x + wallW * 0.38f })
+            {
+                g.FillRectangle(b, cx - u * 0.008f, top - u * 0.078f, u * 0.016f, u * 0.045f);
+                g.FillRectangle(cap, cx - u * 0.010f, top - u * 0.082f, u * 0.020f, u * 0.005f);
+            }
 
+        // The wall, with clapboard lines, on a stone foundation.
         using (var wall = new SolidBrush(white))
             g.FillRectangle(wall, x - wallW / 2, top, wallW, wallH + u * 0.004f);
-        // Clapboard: thin shaded lines across the wall.
         using (var board = new Pen(Color.FromArgb(70, 150, 130, 110), Math.Max(1f, u * 0.0012f)))
             for (float y = top + u * 0.006f; y < footY; y += u * 0.006f)
                 g.DrawLine(board, x - wallW / 2, y, x + wallW / 2, y);
+        using (var found = new SolidBrush(stone))
+            g.FillRectangle(found, x - wallW / 2, footY - u * 0.006f, wallW, u * 0.010f);
 
-        // The gable roof, with eaves that overhang the wall a little.
-        g.FillPolygon(new SolidBrush(roof), [
-            new PointF(x - wallW * 0.58f, top + u * 0.004f), new PointF(x, top - u * 0.050f), new PointF(x + wallW * 0.58f, top + u * 0.004f)]);
-        // The triangle of wall under the roof peak (the gable end), a shade darker than the front.
-        using (var gable = new SolidBrush(shade))
-            g.FillPolygon(gable, [new PointF(x - wallW * 0.46f, top), new PointF(x, top - u * 0.040f), new PointF(x + wallW * 0.46f, top)]);
-
-        // Shingle lines across the roof, and a cap on the chimney.
+        // The side-gabled roof: the front slope as a band from the eaves up to the ridge, lit a shade (it faces the sky).
+        using (var r = new SolidBrush(roofLit))
+            g.FillPolygon(r, [new PointF(x - wallW * 0.58f, top + u * 0.004f), new PointF(x - wallW * 0.50f, ridgeY), new PointF(x + wallW * 0.50f, ridgeY), new PointF(x + wallW * 0.58f, top + u * 0.004f)]);
         using (var shingle = new Pen(Color.FromArgb(60, 120, 96, 90), Math.Max(1f, u * 0.001f)))
             for (int i = 1; i < 6; i++)
             {
-                float t = i / 6f, y = top - u * 0.050f + (u * 0.054f) * t;
-                g.DrawLine(shingle, x - wallW * 0.58f * t, y, x + wallW * 0.58f * t, y);
+                float t = i / 6f, y = ridgeY + (top - ridgeY) * t;
+                g.DrawLine(shingle, x - wallW * (0.50f + 0.08f * t), y, x + wallW * (0.50f + 0.08f * t), y);
             }
-        using (var cap = new SolidBrush(Color.FromArgb(90, 52, 42)))
-            g.FillRectangle(cap, x - wallW * 0.30f - u * 0.010f, top - u * 0.074f, u * 0.020f, u * 0.005f);
+        using (var ridge = new Pen(roof, Math.Max(1f, u * 0.0025f))) g.DrawLine(ridge, x - wallW * 0.50f, ridgeY, x + wallW * 0.50f, ridgeY);
+        // The cross gable over the door: a triangle of wall standing out of the front slope, its own roof edges dark.
+        using (var face = new SolidBrush(shade))
+            g.FillPolygon(face, [new PointF(x - wallW * 0.22f, top), new PointF(x, gablePeak), new PointF(x + wallW * 0.22f, top)]);
+        using (var edge = new Pen(roof, Math.Max(1.5f, u * 0.004f)) { LineJoin = LineJoin.Round })
+            g.DrawLines(edge, [new PointF(x - wallW * 0.26f, top + u * 0.003f), new PointF(x, gablePeak - u * 0.003f), new PointF(x + wallW * 0.26f, top + u * 0.003f)]);
 
-        // Windows: glow, then pane, then a white frame and the cross bar.
+        // Windows: glow, pane, shutters, a white frame and the cross bar.
         RectangleF[] windows = FarmWindows(x, footY, u);
         using var glass = new SolidBrush(WindowWarm);
         using var frame = new Pen(Color.FromArgb(244, 238, 226), Math.Max(1f, u * 0.0015f));
         using var bar = new Pen(Color.FromArgb(120, 100, 80), Math.Max(1f, u * 0.0012f));
-        foreach (RectangleF win in windows)
+        using var shut = new SolidBrush(shutter);
+        for (int i = 0; i < windows.Length; i++)
         {
+            RectangleF win = windows[i];
             PaintWindowGlow(g, win, u * 0.020f);
+            if (i != 2)                                                                   // shutters either side (not on the gable window)
+            {
+                g.FillRectangle(shut, win.X - win.Width * 0.42f, win.Y, win.Width * 0.36f, win.Height);
+                g.FillRectangle(shut, win.Right + win.Width * 0.06f, win.Y, win.Width * 0.36f, win.Height);
+            }
             g.FillRectangle(glass, win);
             g.DrawLine(bar, win.X + win.Width / 2, win.Y, win.X + win.Width / 2, win.Bottom);
             g.DrawLine(bar, win.X, win.Y + win.Height / 2, win.Right, win.Y + win.Height / 2);
             g.DrawRectangle(frame, win.X, win.Y, win.Width, win.Height);
         }
 
-        // The door, right of middle.
-        using (var door = new SolidBrush(Color.FromArgb(88, 58, 42)))
-            g.FillRectangle(door, x + wallW * 0.02f, footY - wallH * 0.62f, u * 0.014f, wallH * 0.62f);
+        // The door, in the middle under the gable, with a fanlight over it.
+        RectangleF door = FarmDoorRect(x, footY, u);
+        using (var d = new SolidBrush(Color.FromArgb(88, 58, 42))) g.FillRectangle(d, door);
+        using (var fan = new SolidBrush(WindowWarm)) g.FillRectangle(fan, door.X, door.Y - u * 0.004f, door.Width, u * 0.003f);
+        using (var knob = new SolidBrush(Color.FromArgb(220, 190, 110))) g.FillEllipse(knob, door.Right - u * 0.004f, door.Y + door.Height * 0.55f, u * 0.002f, u * 0.002f);
 
-        // The porch: a shallow roof on four thin posts, along the front of the wall.
-        float porchTop = top + wallH * 0.30f;
-        using (var post = new Pen(white, Math.Max(1f, u * 0.0025f)))
-            for (int i = 0; i < 4; i++)
+        // The porch: a shallow roof across the whole front between the storeys, on six turned posts, a railing with
+        // balusters either side of the steps, and three steps up to the door.
+        float porchTop = top + wallH * 0.47f;
+        using (var post = new Pen(white, Math.Max(1f, u * 0.003f)))
+            for (int i = 0; i < 6; i++)
             {
-                float px = x - wallW * 0.42f + wallW * 0.84f * i / 3f;
+                float px = x - wallW * 0.47f + wallW * 0.94f * i / 5f;
                 g.DrawLine(post, px, porchTop, px, footY);
             }
         using (var porchRoof = new SolidBrush(roof))
-            g.FillRectangle(porchRoof, x - wallW * 0.50f, porchTop - u * 0.006f, wallW, u * 0.006f);
-        using (var step = new SolidBrush(shade))
-            g.FillRectangle(step, x - wallW * 0.50f, footY - u * 0.004f, wallW, u * 0.004f);   // the porch floor
-        // The porch railing: a rail with balusters, either side of the door.
+            g.FillRectangle(porchRoof, x - wallW * 0.54f, porchTop - u * 0.007f, wallW * 1.08f, u * 0.007f);
+        using (var fascia = new SolidBrush(white))
+            g.FillRectangle(fascia, x - wallW * 0.54f, porchTop, wallW * 1.08f, u * 0.002f);
+        using (var floor = new SolidBrush(shade))
+            g.FillRectangle(floor, x - wallW * 0.54f, footY - u * 0.004f, wallW * 1.08f, u * 0.004f);
         using (var rail = new Pen(white, Math.Max(1f, u * 0.0015f)))
         {
-            float ry = footY - u * 0.016f;
-            foreach (var (ra, rb) in new[] { (x - wallW * 0.50f, x - u * 0.012f), (x + u * 0.030f, x + wallW * 0.50f) })
+            float ry = footY - u * 0.018f;
+            foreach (var (ra, rb) in new[] { (x - wallW * 0.54f, x - u * 0.016f), (x + u * 0.016f, x + wallW * 0.54f) })
             {
                 g.DrawLine(rail, ra, ry, rb, ry);
                 for (float bx = ra + u * 0.004f; bx < rb; bx += u * 0.005f)
                     g.DrawLine(rail, bx, ry, bx, footY - u * 0.004f);
             }
         }
+        using (var step = new SolidBrush(shade))
+            for (int i = 0; i < 3; i++)
+                g.FillRectangle(step, x - u * 0.012f - u * 0.002f * i, footY - u * 0.004f + u * 0.003f * i, u * 0.024f + u * 0.004f * i, u * 0.003f);
+        // The lamp by the door, lit.
+        using (var lamp = new SolidBrush(Color.FromArgb(255, 230, 160)))
+        {
+            PointF at = FarmPorchLight(x, footY, u);
+            g.FillEllipse(lamp, at.X - u * 0.0025f, at.Y - u * 0.0025f, u * 0.005f, u * 0.005f);
+        }
+    }
+
+    internal static RectangleF FarmDoorRect(float x, float footY, float u) { var (_, wallH) = FarmWallSize(u); return new RectangleF(x - u * 0.008f, footY - wallH * 0.40f, u * 0.016f, wallH * 0.40f); }
+    internal static PointF FarmPorchLight(float x, float footY, float u) { var (_, wallH) = FarmWallSize(u); return new PointF(x + u * 0.016f, footY - wallH * 0.33f); }
+
+    /// <summary>
+    /// The doghouse in the yard right of the farmhouse (his ask): a little red-walled house with a dark gable roof, a
+    /// black arched doorway and a bowl by the step. Its foot is "at"; the dog lives here (FarmYard.cs).
+    /// </summary>
+    private static void PaintDoghouse(Graphics g, PointF at, float u)
+    {
+        float w = u * 0.024f, h = u * 0.014f;
+        using (var wall = new SolidBrush(Color.FromArgb(150, 54, 40))) g.FillRectangle(wall, at.X - w / 2, at.Y - h, w, h);
+        using (var board = new Pen(Color.FromArgb(70, 80, 20, 18), Math.Max(1f, u * 0.001f)))
+            for (float bx = at.X - w / 2 + u * 0.004f; bx < at.X + w / 2; bx += u * 0.004f) g.DrawLine(board, bx, at.Y - h, bx, at.Y);
+        using (var roof = new SolidBrush(Color.FromArgb(60, 44, 40)))
+            g.FillPolygon(roof, [new PointF(at.X - w * 0.6f, at.Y - h), new PointF(at.X, at.Y - h - u * 0.011f), new PointF(at.X + w * 0.6f, at.Y - h)]);
+        using (var trim = new Pen(Color.FromArgb(228, 214, 196), Math.Max(1f, u * 0.0012f)))
+            g.DrawLines(trim, [new PointF(at.X - w * 0.6f, at.Y - h), new PointF(at.X, at.Y - h - u * 0.011f), new PointF(at.X + w * 0.6f, at.Y - h)]);
+        using (var hole = new SolidBrush(Color.FromArgb(24, 14, 12)))
+        {
+            g.FillRectangle(hole, at.X - w * 0.18f, at.Y - h * 0.62f, w * 0.36f, h * 0.62f);
+            g.FillEllipse(hole, at.X - w * 0.18f, at.Y - h * 0.80f, w * 0.36f, h * 0.36f);
+        }
+        using (var bowl = new SolidBrush(Color.FromArgb(200, 196, 190))) g.FillEllipse(bowl, at.X + w * 0.40f, at.Y - u * 0.003f, u * 0.007f, u * 0.003f);
+    }
+
+    /// <summary>
+    /// A dirt road from the farmhouse's porch along the hill to the barn's big door (his ask: "a small road leading to
+    /// the barn"): a pale track with two darker ruts, curving down from the porch, running along below the orchard
+    /// and the pig pen, and up to the barn. Returns its middle line (the dog trots along it).
+    /// </summary>
+    private static PointF[] PaintRoad(Graphics g, PointF farmFoot, PointF barnFoot, PointF[] nearRidge, float u)
+    {
+        float RY(float x) => Brushwork.RidgeYAt(nearRidge, x);
+        PointF[] line =
+        [
+            new PointF(farmFoot.X + u * 0.012f, farmFoot.Y + u * 0.003f),
+            new PointF(farmFoot.X + u * 0.055f, RY(farmFoot.X + u * 0.055f) + u * 0.026f),
+            new PointF(farmFoot.X + u * 0.16f, RY(farmFoot.X + u * 0.16f) + u * 0.031f),
+            new PointF((farmFoot.X + barnFoot.X) / 2, RY((farmFoot.X + barnFoot.X) / 2) + u * 0.032f),
+            new PointF(barnFoot.X - u * 0.12f, RY(barnFoot.X - u * 0.12f) + u * 0.030f),
+            new PointF(barnFoot.X - u * 0.04f, RY(barnFoot.X - u * 0.04f) + u * 0.020f),
+            new PointF(barnFoot.X, barnFoot.Y + u * 0.003f),
+        ];
+        using (var bed = new Pen(Color.FromArgb(158, 118, 72), Math.Max(2f, u * 0.0085f)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+            g.DrawCurve(bed, line, 0.5f);
+        using (var rut = new Pen(Color.FromArgb(118, 84, 50), Math.Max(1f, u * 0.0012f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            foreach (float off in new[] { -u * 0.0025f, u * 0.0025f })
+            {
+                var pts = new PointF[line.Length];
+                for (int i = 0; i < line.Length; i++) pts[i] = new PointF(line[i].X, line[i].Y + off);
+                g.DrawCurve(rut, pts, 0.5f);
+            }
+        return line;
+    }
+
+    /// <summary>
+    /// A pond off in the distance (his ask), on the far hill's slope beyond the barn: a flat oval of still water that
+    /// holds the dusk sky, paler toward its far edge, a thread of light on it from the moon, a dark rim where the bank
+    /// shades it, and a few cattails along the near bank.
+    /// </summary>
+    private static void PaintPond(Graphics g, PointF at, float rx, float ry, float u)
+    {
+        using (var water = new LinearGradientBrush(new PointF(0, at.Y - ry), new PointF(0, at.Y + ry), Color.FromArgb(226, 150, 104), Color.FromArgb(146, 82, 96)))
+            g.FillEllipse(water, at.X - rx, at.Y - ry, rx * 2, ry * 2);
+        using (var rim = new Pen(Color.FromArgb(90, 60, 30, 46), Math.Max(1f, u * 0.0015f)))
+            g.DrawArc(rim, at.X - rx, at.Y - ry, rx * 2, ry * 2, 10, 160);                     // the near bank's shade along the lower edge
+        using (var gleam = new SolidBrush(Color.FromArgb(120, 255, 226, 170)))
+            g.FillEllipse(gleam, at.X - rx * 0.30f, at.Y - ry * 0.25f, rx * 0.5f, ry * 0.3f);   // the moon's thread
+        using (var stalk = new Pen(Color.FromArgb(70, 54, 34), Math.Max(1f, u * 0.0012f)))
+        using (var head = new SolidBrush(Color.FromArgb(96, 60, 34)))
+            foreach (float f in new[] { -0.80f, -0.62f, 0.55f, 0.72f, 0.86f })
+            {
+                float sx = at.X + rx * f, sy = at.Y + ry * (1f - 0.3f * f * f);
+                g.DrawLine(stalk, sx, sy, sx + u * 0.001f, sy - u * 0.012f);
+                g.FillRectangle(head, sx - u * 0.0008f, sy - u * 0.012f, u * 0.0022f, u * 0.004f);
+            }
+    }
+
+    /// <summary>
+    /// A post-and-rail fence along the hill (a horse paddock's rails, the pasture's edge): posts every so often and two
+    /// rails, in weathered grey wood. Painted in the backdrop as the BACK side of a pen; the yard stamps the front rail
+    /// over its animals each frame (FarmYard.cs), so a horse stands between the two.
+    /// </summary>
+    private static void PaintRails(Graphics g, float x0, float x1, float y, float u, Color wood)
+    {
+        float tall = u * 0.016f;
+        using var post = new Pen(wood, Math.Max(1f, u * 0.0025f));
+        using var rail = new Pen(wood, Math.Max(1f, u * 0.0016f));
+        for (float px = x0; px <= x1 + 0.5f; px += u * 0.016f) g.DrawLine(post, px, y - tall, px, y);
+        g.DrawLine(rail, x0, y - tall * 0.78f, x1, y - tall * 0.78f);
+        g.DrawLine(rail, x0, y - tall * 0.42f, x1, y - tall * 0.42f);
+    }
+
+    /// <summary>The pig pen: a low board fence round a patch of churned earth with a wallow and a trough. The back boards are here; the front ones are the yard's.</summary>
+    private static void PaintPigPen(Graphics g, float x0, float x1, float yBack, float yFront, float u)
+    {
+        using (var mud = new SolidBrush(Color.FromArgb(104, 74, 46)))
+            g.FillPolygon(mud, [new PointF(x0, yBack), new PointF(x1, yBack), new PointF(x1 + u * 0.004f, yFront), new PointF(x0 - u * 0.004f, yFront)]);
+        using (var wallow = new SolidBrush(Color.FromArgb(70, 48, 32)))
+            g.FillEllipse(wallow, x0 + (x1 - x0) * 0.55f, yBack + (yFront - yBack) * 0.35f, (x1 - x0) * 0.32f, (yFront - yBack) * 0.4f);
+        using (var trough = new SolidBrush(Color.FromArgb(90, 66, 44)))
+            g.FillRectangle(trough, x0 + (x1 - x0) * 0.08f, yBack + (yFront - yBack) * 0.45f, (x1 - x0) * 0.22f, u * 0.004f);
+        using var board = new Pen(Color.FromArgb(96, 70, 44), Math.Max(1f, u * 0.0018f));
+        g.DrawLine(board, x0, yBack - u * 0.006f, x1, yBack - u * 0.006f);
+        g.DrawLine(board, x0, yBack - u * 0.0025f, x1, yBack - u * 0.0025f);
+        for (float px = x0; px <= x1 + 0.5f; px += u * 0.014f) g.DrawLine(board, px, yBack - u * 0.009f, px, yBack);
     }
 
     /// <summary>
@@ -592,15 +772,19 @@ internal static class ThanksgivingPainter
     /// centered at (x, footY): [0] and [1] downstairs either side of the
     /// door, [2] up in the gable. The sizes must match PaintFarmhouse.
     /// </summary>
+    /// <summary>The farmhouse's lit windows: [0] and [1] downstairs either side of the door, [2] in the cross gable, [3] and [4] upstairs.</summary>
     internal static RectangleF[] FarmWindows(float x, float footY, float u)
     {
-        float wallW = u * 0.12f, wallH = u * 0.058f, top = footY - wallH;
+        var (wallW, wallH) = FarmWallSize(u);
+        float top = footY - wallH;
         RectangleF Window(float cx, float cy, float ww, float wh) => new(cx - ww / 2, cy - wh / 2, ww, wh);
         return
         [
-            Window(x - wallW * 0.30f, top + wallH * 0.62f, u * 0.016f, u * 0.018f),
-            Window(x + wallW * 0.30f, top + wallH * 0.62f, u * 0.016f, u * 0.018f),
-            Window(x, top - u * 0.016f, u * 0.012f, u * 0.014f),
+            Window(x - wallW * 0.30f, top + wallH * 0.74f, u * 0.017f, u * 0.020f),
+            Window(x + wallW * 0.30f, top + wallH * 0.74f, u * 0.017f, u * 0.020f),
+            Window(x, top - u * 0.026f, u * 0.011f, u * 0.015f),
+            Window(x - wallW * 0.30f, top + wallH * 0.24f, u * 0.015f, u * 0.018f),
+            Window(x + wallW * 0.30f, top + wallH * 0.24f, u * 0.015f, u * 0.018f),
         ];
     }
 
@@ -792,7 +976,7 @@ internal static class ThanksgivingPainter
     /// the farmhouse, the scarecrow and the barn, and stay short enough that their tops never reach the far ridge
     /// where the silhouette deer walk. The maples' own trunk and canopy brushes, at a smaller size.
     /// </summary>
-    private static List<(PointF At, float R)> PaintFarTrees(Graphics g, int w, float u, PointF[] nearRidge, float farmX, float barnX, float scarecrowX, float orchardX, float orchardHalf, Random rng)
+    private static List<(PointF At, float R)> PaintFarTrees(Graphics g, int w, float u, PointF[] nearRidge, float farmX, float barnX, float scarecrowX, float orchardX, float orchardHalf, float pondX, float pondRx, float paddockX0, float paddockX1, Random rng)
     {
         var trees = new List<(PointF At, float R)>();
         var oak = new BlossomPalette(Color.FromArgb(240, 196, 120, 40), Color.FromArgb(150, 70, 30), Color.FromArgb(246, 180, 70));
@@ -804,6 +988,7 @@ internal static class ThanksgivingPainter
         {
             float x = w * s.X;
             if (MathF.Abs(x - farmX) < u * 0.16f || MathF.Abs(x - barnX) < u * 0.21f || MathF.Abs(x - scarecrowX) < u * 0.08f || MathF.Abs(x - orchardX) < orchardHalf + u * 0.06f) continue;
+            if (MathF.Abs(x - pondX) < pondRx + u * 0.05f || (x > paddockX0 - u * 0.06f && x < paddockX1 + u * 0.06f)) continue;   // clear of the pond and the paddock
             float foot = Brushwork.RidgeYAt(nearRidge, x) + u * 0.014f;
             float cy = foot - u * s.Lift, r = u * s.R * (0.9f + 0.2f * (float)rng.NextDouble());
             Brushwork.Trunk(g, x, foot, cy, r, rng, bark);

@@ -573,8 +573,11 @@ Settings: amount of snow, fall speed, breeze, flake size, and how often a surpri
 ## Thanksgiving
 
 Maple leaves drifting down over a farm at harvest dusk: a sky from plum to gold, a big peach harvest
-moon, a white farmhouse with lamplit windows and a smoking chimney, a clothesline in its yard with the
-washing left out and flapping, a red barn with three silos (a tall one behind its corner, the old one
+moon, a big white two-storey farmhouse (a cross gable over the door, five lamplit windows with green
+shutters, two chimneys, one smoking, and a full-width porch with a lamp by the door), a clothesline in its
+yard with the washing left out and flapping, a doghouse past the scarecrow's garden, a dirt road curving
+from the porch steps along the hill to the barn door, a pond off on the far slope holding the dusk sky
+with cattails along its bank, a red barn with three silos (a tall one behind its corner, the old one
 against the wall, and a squat grain bin with a cone roof) and a steel water-pump windmill whose wheel
 turns with the gusts, a reaped field
 with hay bales, a scarecrow in the garden beside the house and a small orchard past it, two rows of round
@@ -587,6 +590,18 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
 
 - A V of Canada geese crosses the sky, each goose on its own wingbeat, passing behind the corner
   branches.
+- **The farm is alive up on the hill.** Two horses in a rail paddock past the silos graze, stand and
+  swish, walk about and now and then trot the length of the rails; three cows graze among the trees
+  left of the house and stand chewing; three pigs root, trot about and lie in the wallow of their pen
+  between the orchard and the windmill; a rooster and four hens peck and scratch round the scarecrow's
+  feet and scatter when the dog comes through. The farm dog lives in the doghouse: it sits in the yard,
+  trots the road to the barn and back, and barks at the coyotes, the raccoon and the owl (the hens
+  scatter, the turkeys look up). Every one of them has a mind from the shared kit (a doing with a timer
+  and weighted dice, a pace that eases, a pen it keeps to), jointed legs on a proper walk cycle paged by
+  the distance walked, a turn through three narrowing pages, a head that eases down to the grass and
+  nods, and a tail on its own clock; and every one is sized by the hill's one scale (a 7 m house, a
+  2.4 m horse, a 1 m dog, a 0.4 m hen), stamped behind the field and in front of the hill, inside its
+  fence (the near rails are stamped over the animals).
 - A flock of wild turkeys lives in the field behind the fence: they peck at the stubble, wander a
   few steps, stand and look about, and the tom fans his tail now and then; when he does, the
   curious hens walk over and stand watching him, and a bale dropped by the baler draws them over

@@ -174,10 +174,12 @@ a fed koi was as hungry as before and went straight back for the next.
   Thanksgiving/                    falling maple leaves, a V of geese, chimney smoke, a scarecrow's scarf
     Program.cs                     Main(), plus the definition
     ThanksgivingScene.cs           backdrop + the geese + the smoke + the window lamplight + the scarf + the shared engine dropping leaves
-    ThanksgivingPainter.cs         paints the harvest dusk, the moon, the farmhouse and barn, the field, the fence, the scarecrow, the pumpkins, the maples (the inner two big, with thick trunks, a hole up each for the squirrels to den in, and a hollow in the left one's roots)
+    ThanksgivingPainter.cs         paints the harvest dusk, the moon, the two-storey farmhouse, the doghouse, the road, the pond, the barn and silos, the paddock and pig pen, the field, the fence, the scarecrow, the pumpkins, the maples (the inner two big, with thick trunks, a hole up each for the squirrels to den in, and a hollow in the left one's roots)
     Pack.cs                        the coyotes and the rabbits on the far lane: minds, the chase, the catch, a minute's play with the carcass, the leave; Threat notices as they pass
     CoyoteArt.cs, RabbitArt.cs     how a coyote and a cottontail are drawn and the poses they take (trot, gallop, sit, dig, carry, shake, pounce, pull; sit, graze, hop, flee, dead, limp)
     FieldWork.cs                   the tractor baling the far lane: a resident with a job (baling, hauling, away), the bales it leaves, the Loud and Food notices it pins
+    FarmYard.cs                    the stock on the hill and the farm dog: horses, cows, pigs, hens and the dog as residents with minds, each kept to its pen, the dog on the road and barking at threats; the pens' front rails stamped over them
+    FarmArt.cs                     how the horse, cow, pig, hen and dog are drawn: one body each, jointed two-bone legs on a walk cycle (and a trot), a head dial for grazing, a tail dial, the dog's sit and bark, the pig's lie
     TractorArt.cs                  how the tractor (an International Harvester of about 1980), the round baler (with its tailgate, which swings up and back) and the empty hay wagon are drawn, the implements at seven pitches about the hitch pin so they rock on their own wheels, where the bales stack on the wagon (BaleSlots), and the wheels turned by distance rolled
     ThanksgivingSettings.cs        declares its knobs
     TurkeyFlock.cs                 the wild turkeys that live in the field: four doings and a timer each, the Turkey happening's pictures

@@ -62,6 +62,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly Noticeboard _board;           // what is going on, for the residents' senses (Core/Minds/Senses.cs)
     private (Sense Kind, float X, float Y, float Reach, float At)? _testNotice;
     private readonly PatchLife _life;              // the mice, birds and squirrel that live in the pumpkin patch
+    private readonly FarmYard _yard;               // the stock on the hill and the farm dog (FarmYard.cs)
     private readonly NutField _nuts;               // the acorns on the ground (Nuts.cs): the squirrels' business
     private readonly bool _frenzyTest;
     private readonly int _geeseDir;                // +1 the V flies right, -1 left
@@ -173,6 +174,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _scenery.Nuts = _nuts;                     // the AcornDrop happening drops into it
         _life = new PatchLife(_scenery, settings.CritterCount, _rng, _board, _nuts);
         _frenzyTest = Environment.GetEnvironmentVariable("PECKWORKS_NUTS") == "frenzy";   // test aid: the gust's shake and the frenzy at 5 s, once
+        _yard = new FarmYard(_scenery, _rng, _board);   // last: its roll of the scene's dice comes after every older resident's, so none of theirs moved
         string? notice = Environment.GetEnvironmentVariable("PECKWORKS_NOTICE");      // test aid: "Loud;0.5;0.72;0.8;3" posts that kind at (xf, yf) with reach in U at that second
         if (!string.IsNullOrEmpty(notice))
         {
@@ -521,6 +523,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _nuts.Update(dt);
         if (_frenzyTest && _time >= 5.0 && _time - dt < 5.0) { _nuts.Shake(12); _life.Frenzy(); }
         _life.Update(dt);
+        _yard.Update(dt);
         _happenings.Update(elapsedSeconds);
     }
 
@@ -566,6 +569,9 @@ internal sealed class ThanksgivingScene : IScreensaverScene
 
         // 3. The smoke, rising behind everything that stands in front of the farm.
         DrawSmoke(fb);
+
+        // 3b. The yard: the stock and the dog on the hill, through the farm stencil (behind the field and everything nearer).
+        _yard.Draw(fb);
 
         // 4. The geese, behind everything that is not sky (in practice, the corner branches).
         DrawGeese(fb, leadX, leadY);
