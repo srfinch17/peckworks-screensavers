@@ -523,6 +523,45 @@ internal static class SquirrelArt
         g.Restore(st);
     }
 
+    /// <summary>
+    /// A squirrel seen from BEHIND, going away from us into a hole: the round rump with the hind feet either side, the
+    /// back narrowing up to the shoulders, the back of the head with both ears, and the tail standing up behind it
+    /// all, a tall plume curling over. Squirrel units, y up, the origin at the middle of the head (the hole's middle
+    /// when it is stamped there): drawn ever smaller about that point, it goes down the hole.
+    /// </summary>
+    public static void PaintRear(Graphics g, Coat coat)
+    {
+        void Blob(PointF[] pts, Color c, float tension = 0.5f)
+        {
+            using var path = new GraphicsPath();
+            path.AddClosedCurve(pts, tension);
+            using var b = new SolidBrush(c);
+            g.FillPath(b, path);
+        }
+        // The tail first, behind everything: up from the rump, leaning a little right, curling over at the top.
+        Blob([P(-0.02f, -0.50f), P(0.10f, -0.30f), P(0.22f, 0.05f), P(0.26f, 0.40f), P(0.14f, 0.62f), P(-0.06f, 0.58f), P(-0.10f, 0.30f), P(-0.06f, -0.05f), P(-0.12f, -0.40f)], coat.TailDark, 0.5f);
+        Blob([P(-0.01f, -0.46f), P(0.09f, -0.28f), P(0.18f, 0.05f), P(0.21f, 0.36f), P(0.12f, 0.54f), P(-0.02f, 0.52f), P(-0.05f, 0.28f), P(-0.03f, -0.04f), P(-0.08f, -0.38f)], coat.TailMain, 0.5f);
+        using (var streak = new Pen(coat.TailLight, 0.03f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+        {
+            g.DrawCurve(streak, [P(0.02f, -0.30f), P(0.10f, 0.0f), P(0.14f, 0.30f), P(0.08f, 0.48f)], 0.5f);
+            g.DrawCurve(streak, [P(-0.03f, -0.20f), P(0.03f, 0.10f), P(0.05f, 0.34f)], 0.5f);
+        }
+        // The hind feet, flat on the bark either side of the rump.
+        Ell(g, -0.24f, -0.66f, 0.11f, 0.045f, coat.FurDark);
+        Ell(g, 0.24f, -0.66f, 0.11f, 0.045f, coat.FurDark);
+        // The body: a pear from behind, wide at the rump, narrowing to the shoulders.
+        Blob([P(-0.34f, -0.50f), P(-0.30f, -0.20f), P(-0.20f, 0.0f), P(-0.17f, -0.12f), P(0.17f, -0.12f), P(0.20f, 0.0f), P(0.30f, -0.20f), P(0.34f, -0.50f), P(0.18f, -0.66f), P(-0.18f, -0.66f)], coat.Fur, 0.55f);
+        Ell(g, 0f, -0.42f, 0.26f, 0.22f, coat.Fur);
+        Ell(g, 0.08f, -0.44f, 0.16f, 0.17f, coat.FurDark);                       // the shaded side of the rump (the moon is to the left)
+        // The head from behind: a round skull, the two ears up, no face.
+        Ell(g, 0f, 0f, 0.20f, 0.19f, coat.Fur);
+        Ell(g, 0.07f, -0.02f, 0.12f, 0.15f, coat.FurDark);
+        Ell(g, -0.12f, 0.20f, 0.062f, 0.12f, coat.Fur, -10f);
+        Ell(g, 0.12f, 0.20f, 0.062f, 0.12f, coat.Fur, 10f);
+        Ell(g, -0.12f, 0.19f, 0.03f, 0.08f, coat.FurDark, -10f);
+        Ell(g, 0.12f, 0.19f, 0.03f, 0.08f, coat.FurDark, 10f);
+    }
+
     /// <summary>The head alone, poking out of a hole: for the caper's hollow. outBy 0 to 1 is how far up it has come; the sheet's origin is the hole's middle.</summary>
     public static void PaintPeek(Graphics g, float outBy, bool blink)
     {

@@ -4,9 +4,18 @@ using Peckworks.Screensavers.Core;
 namespace Thanksgiving;
 
 /// <summary>
-/// How the farm's machinery is drawn: an old red tractor with big back wheels
-/// and one lit headlamp, and the two things it tows, a round baler and a hay
-/// wagon. The field's own machine (FieldWork.cs) stamps these.
+/// How the farm's machinery is drawn: a red International Harvester of about
+/// 1980 (the long square red hood with the black band along its side, the
+/// black grille with its lamps, the boxy glassed cab with the white roof, the
+/// chrome stack beside the hood, big back wheels on red rims) and the two
+/// things it tows, a round baler and a hay wagon. The field's own machine
+/// (FieldWork.cs) stamps these. An implement is HITCHED, not welded (his line:
+/// "make the baler and the tractor move at the hitch so they look independent
+/// of each other, but connected"): its sheet is painted at several PITCHES,
+/// the whole implement turned a few degrees about the hitch pin, and the
+/// field picks the pitch from the distance rolled, so the baler rocks on its
+/// own wheel behind a tractor that trembles on its own, and the tongue stays
+/// pinned to the clevis through all of it.
 ///
 /// FEYNMAN VERSION: everything is painted in "tractor units", T pixels to the
 /// unit, where the big rear wheel is one unit across. The machine is laid out
@@ -36,6 +45,17 @@ internal static class TractorArt
     public static readonly (float X, float Y)[] BaleSlots = [(0.50f, 0.98f), (1.30f, 0.98f), (2.10f, 0.98f), (0.90f, 1.76f), (1.70f, 1.76f), (1.30f, 2.54f)];
     public const float BalerWheelX = 2.00f, BalerRearX = 1.27f;                     // the baler's axle, and where a finished bale comes out (the drum sits round 2.05: at 2.5 it was pressed into the rear wheel, "there is a hitch there")
     public const float RearR = 0.50f, FrontR = 0.28f, CartR = 0.30f, BalerR = 0.30f;   // wheel radii, in units
+    public const float HitchX = 3.35f, HitchY = 0.40f;                              // the hitch pin: the implement's tongue ends here, and the implement pitches about it
+    public const int PitchPages = 7;                                                // the implement's pitch pages: -3.6 to +3.6 degrees in steps of 1.2 (a step is about a pixel at the drum)
+    public const float PitchStep = 1.2f;
+    /// <summary>The pitch, in degrees, of page i (the middle page is level); positive tips the implement's tail DOWN for a machine heading right.</summary>
+    public static float PitchOf(int i) => (i - PitchPages / 2) * PitchStep;
+    /// <summary>Where a point of the implement's sheet (units) ends up under a pitch: turned about the hitch pin. For the wheels and the bales, which are stamped on separately.</summary>
+    public static (float X, float Y) Pitched(float x, float y, float pitchDeg)
+    {
+        float a = pitchDeg * MathF.PI / 180f, dx = x - HitchX, dy = y - HitchY;
+        return (HitchX + dx * MathF.Cos(a) + dy * MathF.Sin(a), HitchY - dx * MathF.Sin(a) + dy * MathF.Cos(a));   // y is up: a positive pitch drops the tail (dx negative)
+    }
 
     // The paint is old and dusty: every red and green is pulled a little toward grey (his line: "the non fall color
     // primaries are a bit too bright"; the baler had been a fresh showroom green against the autumn field).
@@ -84,58 +104,107 @@ internal static class TractorArt
         public void Dispose() => Ink.Dispose();
     }
 
-    private static Sprite OnSheet(float T, bool flip, Action<Kit> paint)
+    private static Sprite OnSheet(float T, bool flip, Action<Kit> paint, float pitchDeg = 0f)
     {
         var (len, tall, gy) = Sheet(T);
         return Sprite.Paint(len, tall, g =>
         {
             if (flip) { g.TranslateTransform(len, 0); g.ScaleTransform(-1, 1); }
+            if (pitchDeg != 0f)
+            {
+                // The implement turned about the hitch pin (screen angles run clockwise, y down: a positive pitch drops the tail at the left).
+                float px = 1 + HitchX * T, py = gy - HitchY * T;
+                g.TranslateTransform(px, py); g.RotateTransform(pitchDeg); g.TranslateTransform(-px, -py);
+            }
             using var k = new Kit(g, T, gy);
             paint(k);
         });
     }
 
-    /// <summary>The tractor alone (no wheels), on the shared sheet: chassis, hood, grille, fender over the big wheel, seat, stack, lamp, and the tongue behind it.</summary>
+    /// <summary>
+    /// The tractor alone (no wheels), on the shared sheet: an International Harvester of the 86 series, about 1980. Back
+    /// to front: the drawbar's clevis at the hitch, the chassis, the big square cab (the Control Center: a glass box on
+    /// red corner posts with a white roof, a door line and a step), the red fender over the big wheel, the long square
+    /// red hood with the black band along its bottom edge and the badge stripe, the chrome stack and the air cleaner's
+    /// bowl standing beside the hood on the cab's side, the black grille at the nose with its two lamps, and the front
+    /// weights below it.
+    /// </summary>
     public static Sprite Tractor(float T, bool flip) => OnSheet(T, flip, k =>
     {
         var g = k.G;
-        g.DrawLine(k.Ink, k.P(2.55f, 0.40f), k.P(3.35f, 0.40f));                     // the tongue to whatever is towed
-        k.Box(Color.FromArgb(70, 46, 36), k.R(3.40f, 0.34f, 5.00f, 0.58f));          // chassis between the wheels
-        k.Box(Color.FromArgb(50, 36, 30), k.R(3.30f, 0.28f, 3.44f, 0.50f));          // the hitch: the drawbar's clevis the tongue pins into
-        k.Poly(Red, k.P(4.00f, 0.58f), k.P(4.00f, 1.00f), k.P(4.55f, 1.02f), k.P(5.12f, 0.92f), k.P(5.18f, 0.62f), k.P(5.05f, 0.58f));   // the hood
-        using (var shine = new Pen(RedLit, Math.Max(1f, T * 0.05f))) g.DrawLine(shine, k.P(4.10f, 0.94f), k.P(5.00f, 0.88f));
-        k.Box(Color.FromArgb(214, 196, 150), k.R(5.12f, 0.64f, 5.20f, 0.90f));        // the grille at the nose
-        k.Box(Color.FromArgb(40, 28, 24), k.R(4.70f, 1.02f, 4.86f, 1.52f));           // the exhaust stack
-        k.Box(Color.FromArgb(40, 28, 24), k.R(4.66f, 1.48f, 4.90f, 1.56f));           // its cap
-        using (var fender = new Pen(Red, Math.Max(2f, T * 0.10f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+        Color white = Color.FromArgb(226, 222, 212), glass = Color.FromArgb(58, 66, 76), glassLit = Color.FromArgb(104, 116, 128), black = Color.FromArgb(32, 26, 24), chrome = Color.FromArgb(170, 170, 166), chromeLit = Color.FromArgb(214, 214, 210);
+        k.Box(Color.FromArgb(50, 36, 30), k.R(3.28f, 0.28f, 3.44f, 0.52f));          // the hitch: the drawbar's clevis the tongue pins into
+        k.Box(Color.FromArgb(62, 44, 36), k.R(3.40f, 0.34f, 5.05f, 0.60f));          // the chassis between the wheels
+        k.Box(black, k.R(3.62f, 0.60f, 3.90f, 0.72f));                                // the step up to the cab
+        // The cab: floor at 0.98 over the fender, roof at 1.72; red posts, glass between, a thin red sill, the white roof over all.
+        k.Box(Red, k.R(3.34f, 0.98f, 4.14f, 1.10f));                                  // the sill under the glass
+        k.Box(glass, k.R(3.34f, 1.10f, 4.14f, 1.66f));                                // the glass
+        using (var lit = new SolidBrush(glassLit))                                     // the sky in the glass: a pale slant across each pane
+        {
+            g.FillPolygon(lit, [k.P(3.40f, 1.62f), k.P(3.58f, 1.62f), k.P(3.46f, 1.14f), k.P(3.40f, 1.14f)]);
+            g.FillPolygon(lit, [k.P(3.84f, 1.62f), k.P(4.08f, 1.62f), k.P(3.96f, 1.14f), k.P(3.84f, 1.14f)]);
+        }
+        using (var post = new Pen(Red, Math.Max(1.5f, T * 0.07f)))
+        {
+            g.DrawLine(post, k.P(3.36f, 1.08f), k.P(3.36f, 1.68f));                   // the rear post
+            g.DrawLine(post, k.P(3.76f, 1.08f), k.P(3.76f, 1.68f));                   // the door post
+            g.DrawLine(post, k.P(4.12f, 1.08f), k.P(4.12f, 1.68f));                   // the front post
+        }
+        k.Poly(white, k.P(3.26f, 1.66f), k.P(3.28f, 1.75f), k.P(4.20f, 1.75f), k.P(4.22f, 1.66f));   // the white roof, a little proud of the posts
+        g.DrawLine(k.Ink, k.P(3.76f, 1.20f), k.P(3.76f, 1.60f));                      // the door line
+        using (var handle = new Pen(black, Math.Max(1f, T * 0.04f))) g.DrawLine(handle, k.P(3.70f, 1.32f), k.P(3.64f, 1.32f));
+        // The fender over the big back wheel: an arc with a flat top the cab floor sits on.
+        using (var fender = new Pen(Red, Math.Max(2f, T * 0.11f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
         {
             PointF c = k.P(RearX, 0.50f);
-            float fr = RearR * T + T * 0.08f;                                           // the fender: an arc over the big back wheel (stamped over the body later)
-            g.DrawArc(fender, c.X - fr, c.Y - fr, fr * 2, fr * 2, 200, 140);
+            float fr = RearR * T + T * 0.09f;
+            g.DrawArc(fender, c.X - fr, c.Y - fr, fr * 2, fr * 2, 196, 148);
         }
-        k.Box(Red, k.R(3.30f, 0.98f, 3.92f, 1.04f));                                  // the flat of the fender, a step
-        k.Poly(Color.FromArgb(60, 40, 34), k.P(3.36f, 1.04f), k.P(3.40f, 1.34f), k.P(3.72f, 1.34f), k.P(3.76f, 1.04f));   // the seat
-        g.DrawLine(k.Ink, k.P(3.95f, 1.00f), k.P(3.95f, 1.40f));                      // the steering column
-        g.DrawLine(k.Ink, k.P(3.86f, 1.42f), k.P(4.06f, 1.38f));                      // its wheel
-        using (var lens = new SolidBrush(Color.FromArgb(255, 244, 190)))               // the headlamp's lens (its glow is stamped in Draw)
-            g.FillEllipse(lens, k.P(LampX, 0.80f).X - T * 0.07f, k.P(LampX, 0.80f).Y - T * 0.07f, T * 0.14f, T * 0.14f);
+        k.Box(Red, k.R(3.28f, 0.94f, 4.14f, 1.00f));                                  // the fender's flat and the cab floor
+        // The hood: long and square, level on top, the nose cut square; the black band along its bottom edge; the lit top edge.
+        k.Poly(Red, k.P(4.14f, 0.60f), k.P(4.14f, 1.12f), k.P(5.10f, 1.12f), k.P(5.16f, 1.06f), k.P(5.16f, 0.60f));
+        k.Box(black, k.R(4.14f, 0.60f, 5.16f, 0.72f));                                // the black band
+        using (var shine = new Pen(RedLit, Math.Max(1f, T * 0.05f))) g.DrawLine(shine, k.P(4.20f, 1.08f), k.P(5.06f, 1.08f));
+        using (var badge = new Pen(white, Math.Max(1f, T * 0.035f))) g.DrawLine(badge, k.P(4.30f, 0.80f), k.P(4.95f, 0.80f));   // the badge stripe along the side
+        // The grille at the nose: black with pale bars, the lit lamp in it (its glow is stamped in Draw) and a second lamp above.
+        k.Box(black, k.R(5.06f, 0.62f, 5.20f, 1.08f));
+        using (var bar = new Pen(Color.FromArgb(96, 92, 88), Math.Max(1f, T * 0.025f)))
+            for (int i = 0; i < 5; i++) g.DrawLine(bar, k.P(5.08f, 0.66f + 0.08f * i), k.P(5.19f, 0.66f + 0.08f * i));
+        using (var lens = new SolidBrush(Color.FromArgb(255, 244, 190)))
+        {
+            g.FillEllipse(lens, k.P(LampX - 0.06f, 0.80f).X - T * 0.06f, k.P(LampX - 0.06f, 0.80f).Y - T * 0.06f, T * 0.12f, T * 0.12f);
+            g.FillEllipse(lens, k.P(LampX - 0.06f, 0.98f).X - T * 0.045f, k.P(LampX - 0.06f, 0.98f).Y - T * 0.045f, T * 0.09f, T * 0.09f);
+        }
+        k.Box(black, k.R(5.00f, 0.36f, 5.22f, 0.60f));                                // the front weights hung under the nose
+        // The stack and the air cleaner: chrome, standing beside the hood on the cab's side, the stack with its rain cap.
+        k.Box(chrome, k.R(4.22f, 1.12f, 4.32f, 1.72f));
+        using (var gleam = new Pen(chromeLit, Math.Max(1f, T * 0.03f))) g.DrawLine(gleam, k.P(4.25f, 1.14f), k.P(4.25f, 1.70f));
+        k.Box(chrome, k.R(4.18f, 1.70f, 4.36f, 1.74f));                               // the cap
+        k.Box(chrome, k.R(4.44f, 1.12f, 4.56f, 1.30f));                               // the air cleaner's bowl
+        k.Box(black, k.R(4.42f, 1.30f, 4.58f, 1.34f));
+        // The mirror out from the cab's front post, and the steering wheel seen through the glass.
+        using (var arm = new Pen(black, Math.Max(1f, T * 0.03f))) { g.DrawLine(arm, k.P(4.12f, 1.52f), k.P(4.26f, 1.52f)); }
+        k.Box(black, k.R(4.24f, 1.44f, 4.30f, 1.60f));
+        using (var wheel = new Pen(Color.FromArgb(40, 44, 50), Math.Max(1f, T * 0.035f))) g.DrawLine(wheel, k.P(3.92f, 1.34f), k.P(4.06f, 1.30f));
     });
 
     /// <summary>The hay wagon (no wheels) on the shared sheet: an empty plank bed with slats. The bales it carries are not here: FieldWork stamps them in BaleSlots as they are loaded.</summary>
-    public static Sprite Wagon(float T, bool flip) => OnSheet(T, flip, k =>
+    public static Sprite Wagon(float T, bool flip, float pitchDeg = 0f) => OnSheet(T, flip, k =>
     {
         var g = k.G;
+        using (var tongue = new Pen(TractorArt.Ink, Math.Max(1.5f, T * 0.06f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            g.DrawLine(tongue, k.P(2.55f, HitchY), k.P(HitchX, HitchY));              // the tongue, pinned at the clevis
         k.Box(Wood, k.R(BedX0, 0.42f, 2.55f, 0.98f));
         using (var slat = new Pen(WoodLit, Math.Max(1f, T * 0.045f)))
             for (int i = 1; i < 6; i++) g.DrawLine(slat, k.P(0.05f + 0.42f * i, 0.46f), k.P(0.05f + 0.42f * i, 0.94f));
-    });
+    }, pitchDeg);
 
     /// <summary>
     /// The round baler (no wheels) on the shared sheet: a green drum on a frame behind the tractor, its pickup low at the
     /// front, and a TAILGATE, the rear half of the drum, hinged at the top, that swings up ("open" 0 shut to 1 wide) to
     /// let the finished bale roll out the back.
     /// </summary>
-    public static Sprite Baler(float T, bool flip, float open) => OnSheet(T, flip, k =>
+    public static Sprite Baler(float T, bool flip, float open, float pitchDeg = 0f) => OnSheet(T, flip, k =>
     {
         var g = k.G;
         // The drum's middle is 2.05: its front edge (2.83) clears the tractor's rear wheel (3.05) by a hand's breadth, so
@@ -172,5 +241,5 @@ internal static class TractorArt
         }
         g.Restore(st);
         using (var band = new Pen(GreenDark, Math.Max(1f, T * 0.05f))) g.DrawLine(band, k.P(2.05f, 0.36f), k.P(2.05f, 1.60f));   // the seam between the halves
-    });
+    }, pitchDeg);
 }

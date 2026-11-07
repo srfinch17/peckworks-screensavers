@@ -51,7 +51,7 @@ internal sealed class PatchLife
     // Climb: up the trunk and into the hole. Den: inside it, out of sight. Descend: head out, then head-first down.
     // Dismount: pitching off the bark onto the ground. Romp: a playful squirrel running at another for the game of it.
     // HopUp: the hop onto a pumpkin. Perch: sitting on top of it. HopDown: the hop off.
-    private enum Doing { Go, Still, Nibble, Hide, Peck, Fly, Perch, Dig, Bolt, Fetch, Carry, Bury, Eat, Raid, Chase, Leave, Mount, Climb, Den, Descend, Dismount, Romp, HopUp, HopDown }
+    private enum Doing { Go, Still, Nibble, Hide, Peck, Fly, Perch, Dig, Bolt, Fetch, Carry, Bury, Eat, Raid, Chase, Leave, Mount, Climb, Enter, Den, Exit, Descend, Dismount, Romp, HopUp, HopDown }
 
     private sealed class Critter
     {
@@ -101,6 +101,8 @@ internal sealed class PatchLife
     private const float TurnRise = 0.12f, TurnFor = 0.30f;   // a sitting turn: rise to the sit (0.12 s), the narrowing pages, the flip, the widening (0.30), sink (0.12)
     private const float CurlFor = 0.30f;            // the running curl: in and out again in a third of a second, never stopping
     private const float MountFor = 0.25f, HopFor = 0.55f, ClimbSpeed = 0.20f;   // ClimbSpeed in U a second
+    private const int EnterPages = 10;
+    private const float EnterFor = 0.6f, ExitFor = 1.2f;    // going in: the rear view shrinking down the hole; coming out: the face growing in it, then a look round
 
     private struct Sheet { public Sprite[] Pages; public int W, H, Ox, By; }
 
@@ -108,7 +110,7 @@ internal sealed class PatchLife
     private sealed class SqSheets
     {
         public float K;                             // pixels to the squirrel unit for this variant
-        public Sheet Run, RunNut, Look, Dig, Rise, Turn, Eat, Curl, Hop, Up, Down, MountUp, MountDown;
+        public Sheet Run, RunNut, Look, Dig, Rise, Turn, Eat, Curl, Hop, Up, Down, MountUp, MountDown, Enter, Exit;
         public Sheet[] Sit = new Sheet[4];
     }
     private static readonly (SquirrelArt.Coat Coat, float Scale)[] Variants = [(SquirrelArt.Coat.Red, 1.0f), (SquirrelArt.Coat.Grey, 1.08f), (SquirrelArt.Coat.Fox, 0.94f)];
@@ -122,7 +124,8 @@ internal sealed class PatchLife
     private readonly float _k, _m, _b;
     private readonly Ground.Solid _ground;
     private readonly NutField _nuts;                // the acorns on the ground (Nuts.cs)
-    private readonly bool[] _denMask;               // the stencil for a squirrel going into or coming out of a tree hole: hands off above the hole's middle, within the trunk's width (the part of the body that is inside the tree)
+    private readonly bool[] _denMask;               // the stencil for a squirrel climbing into or out of a tree hole: hands off inside the trunk above the hole's bottom rim (the part of the body that is inside the tree)
+    private readonly bool[] _denMaskHole;           // the stencil for the face in the opening: hands off everywhere BUT the holes' openings (a face growing in the dark is seen only through the hole)
     private Sheet _mouseRun, _mouseStill;
     private readonly SqSheets[] _sq = new SqSheets[Variants.Length];
     private const int LookPages = 4;                // Look: the head coming up into the look over four pages (page 0 the plain sit, page 3 the full look); it used to snap
@@ -142,13 +145,34 @@ internal sealed class PatchLife
         _b = Math.Max(7f, s.U * 0.020f);
         _ground = CanStand;                         // made once: a new delegate every frame is garbage
         _nuts.CanStand = _ground;                   // a nut lands only where a critter could stand
-        // The den stencil: true everywhere but a band up each inner trunk above its hole's middle.
+        // The den stencil: true everywhere but the INSIDE of each inner trunk above its hole's bottom rim (the trunk's own
+        // width at each height, and the hole's opening). A climbing body drawn over the bark is hidden exactly where it
+        // has gone into the tree; nothing beside the trunk is touched. (A flat band across the trunk and the air beside it
+        // cut the squirrel along a line: "sliding up through some pocket dimension".)
         _denMask = new bool[s.Width * s.Height];
         Array.Fill(_denMask, true);
-        foreach (var (at, _) in s.TreeHoles)
+        for (int t = 0; t < s.TreeHoles.Count; t++)
         {
-            int x0 = Math.Max(0, (int)(at.X - 0.09f * s.U)), x1 = Math.Min(s.Width - 1, (int)(at.X + 0.09f * s.U)), y1 = Math.Clamp((int)at.Y, 0, s.Height - 1);   // wide enough for a body clinging to either side of the trunk
-            for (int y = 0; y < y1; y++) for (int x = x0; x <= x1; x++) _denMask[y * s.Width + x] = false;
+            var (at, hw) = s.TreeHoles[t];
+            float hh = hw * 16f / 11f;
+            int y1 = Math.Clamp((int)(at.Y + hh), 0, s.Height - 1);
+            for (int y = 0; y < y1; y++)
+            {
+                float cx = TrunkX(t, y), half = TrunkHalf(t, y) * 1.05f;
+                int x0 = Math.Max(0, (int)(cx - half)), x1 = Math.Min(s.Width - 1, (int)(cx + half));
+                for (int x = x0; x <= x1; x++) _denMask[y * s.Width + x] = false;
+            }
+        }
+        _denMaskHole = new bool[s.Width * s.Height];
+        foreach (var (at, hw) in s.TreeHoles)
+        {
+            float hh = hw * 16f / 11f;
+            for (int y = Math.Max(0, (int)(at.Y - hh)); y <= Math.Min(s.Height - 1, (int)(at.Y + hh)); y++)
+                for (int x = Math.Max(0, (int)(at.X - hw)); x <= Math.Min(s.Width - 1, (int)(at.X + hw)); x++)
+                {
+                    float dx = (x - at.X) / hw, dy = (y - at.Y) / hh;
+                    if (dx * dx + dy * dy <= 1f) _denMaskHole[y * s.Width + x] = true;
+                }
         }
         int mice = (count + 1) / 2, birds = count / 3, squirrels = Math.Max(0, count - mice - birds);
         if (count >= 4 && squirrels < 2) { squirrels = 2; mice = Math.Max(1, count - birds - 2); }   // two squirrels at least (one alone has no one to romp with); the mice give one up
@@ -349,7 +373,7 @@ internal sealed class PatchLife
     {
         PointF[] trunk = tree == 0 ? _s.LeftTrunk : _s.RightTrunk;
         float f = Math.Clamp((trunk[0].Y - y) / MathF.Max(1f, trunk[0].Y - trunk[1].Y), 0f, 1f);
-        return _s.U * (0.019f - 0.008f * f);
+        return _s.U * (0.026f - 0.010f * f);
     }
 
     // ================================================================ painting (once)
@@ -396,6 +420,16 @@ internal sealed class PatchLife
             int cw = (int)(1.9f * k) + 6, ch = (int)(2.55f * k) + 6;
             sq.Up = Make(32, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3, i => { var q = SquirrelArt.Bound(i / 32f, 2.2f, cling: true); q.Rotate = -90f; q.Coat = coat; return SquirrelArt.Page(q, k, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3); });
             sq.Down = Make(32, cw, ch, 3, (int)(1.75f * k) + 3, i => { var q = SquirrelArt.Bound(i / 32f, 2.2f, cling: true); q.Rotate = 90f; q.Coat = coat; return SquirrelArt.Page(q, k, cw, ch, 3, (int)(1.75f * k) + 3); });
+            // Going in: the rear view, ever smaller about the head (the hole's middle), the last page a third the size. Coming
+            // out: the sitting front view (the symmetric middle of the turn) growing from a third to full, the head at the hole.
+            int ew = (int)(2.0f * k) + 6, eo = ew / 2, eb = (int)(1.3f * k) + 3;
+            sq.Enter = Make(EnterPages, ew, ew, eo, eb, i => { float sc = 1f - 0.68f * i / (EnterPages - 1f); return Sprite.Paint(ew, ew, g => { g.TranslateTransform(eo, eb); g.ScaleTransform(k * sc, -k * sc); SquirrelArt.PaintRear(g, coat); }); });
+            sq.Exit = Make(EnterPages, ew, ew, eo, eb, i =>
+            {
+                float sc = 0.32f + 0.68f * i / (EnterPages - 1f);
+                var q = SquirrelArt.Turn(0.5f, false); q.Coat = coat;
+                return Sprite.Paint(ew, ew, g => { g.TranslateTransform(eo, eb); g.ScaleTransform(k * sc, -k * sc); g.TranslateTransform(-q.Head.X, -q.Head.Y); SquirrelArt.Paint(g, q); });
+            });
             int sqw = (int)(4.0f * k) + 6, so = sqw / 2;
             sq.MountUp = Make(MountPages, sqw, sqw, so, so, i => { var q = i < MountPages - 1 ? SquirrelArt.Sit(0.2f, 0, false, false) : SquirrelArt.Bound(0f, 2.2f, cling: true); q.Rotate = -90f * (i + 1) / MountPages; q.Coat = coat; return SquirrelArt.Page(q, k, sqw, sqw, so, so); });
             sq.MountDown = Make(MountPages, sqw, sqw, so, so, i => { var q = i == 0 ? SquirrelArt.Bound(0f, 2.2f, cling: true) : SquirrelArt.Sit(0.2f, 0, false, false); q.Rotate = 90f * (1f - (i + 1) / (float)MountPages); q.Coat = coat; return SquirrelArt.Page(q, k, sqw, sqw, so, so); });
@@ -417,7 +451,7 @@ internal sealed class PatchLife
 
     // ================================================================ living
 
-    private static bool OnTree(Critter c) => c.Mind.Doing is Doing.Mount or Doing.Climb or Doing.Den or Doing.Descend or Doing.Dismount;
+    private static bool OnTree(Critter c) => c.Mind.Doing is Doing.Mount or Doing.Climb or Doing.Enter or Doing.Den or Doing.Exit or Doing.Descend or Doing.Dismount;
     private static bool OnPumpkin(Critter c) => c.Mind.Doing is Doing.HopUp or Doing.Perch or Doing.HopDown;
 
     public void Update(float dt)
@@ -675,10 +709,11 @@ internal sealed class PatchLife
         if (c.Mind.Doing == Doing.Den)
         {
             if (Lull && _rng.NextDouble() < 0.5 * c.Timid) { c.Mind.Left = 3f; return; }
-            c.Mind.Begin(Doing.Descend, 30f); c.Up = 0; c.Clock = 0;
+            c.Mind.Begin(Doing.Exit, ExitFor); c.Clock = 0;
             c.NextDen = (float)_time + 40f + 40f * (1f - c.Timid);
             return;
         }
+        if (_test == "den" && c.Kind == Kind.Squirrel && !c.Visitor && _time < 20 && c.Nut == null && GoDen(c)) return;   // the test aid, ahead of everything
         // The nuts come before the lull: a squirrel with a nut in its mouth or one in reach goes on with it while a story
         // plays (the frenzy is his ask; lulled, the visitors hid behind pumpkins for the whole story and never fetched one).
         if (c.Kind == Kind.Squirrel && DecideNuts(c)) return;
@@ -744,7 +779,6 @@ internal sealed class PatchLife
                 // at the earth, go up its tree and den (a timid one more), hop up onto a pumpkin (a playful one), romp
                 // after another squirrel (a playful one, when there is one about). It never hides behind a pumpkin
                 // (his line: "squirrels get hung up on pumpkins": that was a tail sticking out of one for fifteen seconds).
-                if (_test == "den" && _time < 20 && GoDen(c)) break;
                 Critter? mate = c.Playful > 0.3f ? Playmate(c, 1.2f * u) : null;
                 int face = Dice.Pick(_rng, [0.5f + 0.5f * c.Busy, 0.25f + 0.3f * (1 - c.Busy), 0.25f, c.Visitor || _time < c.NextDen ? 0f : 0.03f + 0.15f * c.Timid, 0.04f + 0.28f * c.Playful, mate == null ? 0f : 0.35f * c.Playful]);
                 // A bound goes ALONG the patch: the goal stays within a little of its own row (a goal straight up or down the
@@ -915,7 +949,8 @@ internal sealed class PatchLife
                         }
                     }
                     if (c.Legs <= 0 || mate.Mind.Doing != Doing.Bolt) { c.Pace.Halt(); c.Mind.Begin(Doing.Still, 1.5f); c.Clock = 0; c.ChaseId = -1; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} ends the romp"); return; }
-                    return;
+                    // The game goes on: the chaser keeps running after the bolting mate (the step below; a stop here with the pace
+                    // still up was 25 frames of a frozen run page on one seed).
                 }
                 if (dist < arrive)
                 {
@@ -1049,29 +1084,37 @@ internal sealed class PatchLife
                 break;
             case Doing.Climb:
             {
-                // Up the trunk at a steady pace, the pages by the distance climbed, until the whole body is in the hole.
+                // Up the trunk at a steady pace, the pages by the distance climbed, until the head is at the hole; then it goes in.
                 float k = _sq[c.Look].K;
                 float d = ClimbSpeed * u * dt;
                 c.Up += d; c.Travelled += d;
                 float hole = _s.TreeHoles[c.Tree].At.Y;
-                if (c.Y - c.Up < hole + 0.1f * k) { c.Mind.Begin(Doing.Den, 6f + 14f * (float)_rng.NextDouble()); c.Clock = 0; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} dens in tree {c.Tree}"); }
+                if (c.Y - c.Up < hole + 1.45f * k) { c.Mind.Begin(Doing.Enter, EnterFor); c.Clock = 0; }
                 break;
             }
+            case Doing.Enter:
+                if (c.Mind.Over) { c.Mind.Begin(Doing.Den, 6f + 14f * (float)_rng.NextDouble()); c.Clock = 0; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} dens in tree {c.Tree}"); }
+                break;
             case Doing.Den:
                 break;                                                              // out of sight; Decide ends it
+            case Doing.Exit:
+                if (c.Mind.Over)
+                {
+                    // Out of the hole: head-first down the trunk from the hole's bottom rim, then off the bark.
+                    var (at, hw) = _s.TreeHoles[c.Tree];
+                    c.Up = c.Y - (at.Y + hw * 16f / 11f) - 0.1f * _sq[c.Look].K;
+                    c.Mind.Begin(Doing.Descend, 30f); c.Clock = 0;
+                }
+                break;
             case Doing.Descend:
             {
-                // Head out of the hole for a moment (a look round), then head-first down the trunk, then off the bark.
                 float k = _sq[c.Look].K;
-                float hole = _s.TreeHoles[c.Tree].At.Y;
-                float top = c.Y - hole - 0.6f * k;                                  // Up at which only the head shows below the hole's middle
-                if (c.Clock < 1.0f) { c.Up = top; break; }
                 c.Up = MathF.Max(0f, c.Up - ClimbSpeed * u * dt); c.Travelled += ClimbSpeed * u * dt;
                 if (c.Up <= 0f) { c.Mind.Begin(Doing.Dismount, MountFor); c.Clock = 0; }
                 break;
             }
             case Doing.Dismount:
-                if (c.Mind.Over) { c.Tree = -1; c.Mind.Begin(Doing.Still, 0.5f + 1f * (float)_rng.NextDouble()); c.Clock = 0; c.WasDown = false; c.Blend = 0; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} is down from the tree"); }
+                if (c.Mind.Over) { c.Tree = -1; c.Mind.Begin(Doing.Still, 0.3f); c.Clock = 0; c.WasDown = false; c.Blend = 0; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} is down from the tree"); }   // a short sit: the trunk's foot is behind the front pumpkins, a long sit there is a tail out of a pumpkin
                 break;
         }
     }
@@ -1089,11 +1132,11 @@ internal sealed class PatchLife
         page.Draw(fb, left, (int)MathF.Round(y) - sh.By, 1f, null, mirror, _s.NearDepth, NearnessOf(c));
     }
 
-    /// <summary>A stamp at a given place, mirrored or not, through a stencil: the climbing pages.</summary>
-    private void StampAt(FrameBuffer fb, in Sheet sh, Sprite page, float x, float y, bool mirror, bool[]? stencil, Critter c)
+    /// <summary>A stamp at a given place, mirrored or not, through a stencil, in a given light: the climbing pages.</summary>
+    private void StampAt(FrameBuffer fb, in Sheet sh, Sprite page, float x, float y, bool mirror, bool[]? stencil, Critter c, int shade = 256)
     {
         int left = (int)MathF.Round(x) - (mirror ? sh.W - sh.Ox : sh.Ox);
-        page.Draw(fb, left, (int)MathF.Round(y) - sh.By, 1f, stencil, mirror, _s.NearDepth, NearnessOf(c));
+        page.Draw(fb, left, (int)MathF.Round(y) - sh.By, 1f, stencil, mirror, _s.NearDepth, NearnessOf(c), shade);
     }
 
     public void Draw(FrameBuffer fb)
@@ -1175,28 +1218,46 @@ internal sealed class PatchLife
                         // from, the body over the bark; going in and coming out through the den stencil. (With the feet on the bole's edge
                         // and the body out from it, it hung in the air beside the tree.)
                         bool mirror = c.Dir < 0;
-                        float Edge(float y) => TrunkX(c.Tree, y) + (mirror ? TrunkHalf(c.Tree, y) : -TrunkHalf(c.Tree, y)) * 0.2f;
+                        float Edge(float y, bool m) => TrunkX(c.Tree, y) + (m ? TrunkHalf(c.Tree, y) : -TrunkHalf(c.Tree, y)) * 0.2f;   // m: the stamp's own mirror (the body lies on the side the sheet puts it)
                         switch (c.Mind.Doing)
                         {
                             case Doing.Mount:
-                                StampAt(fb, sq.MountUp, sq.MountUp.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], Edge(c.Y), c.Y, mirror, null, c);
+                                StampAt(fb, sq.MountUp, sq.MountUp.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], Edge(c.Y, mirror), c.Y, mirror, null, c);
                                 break;
                             case Doing.Climb:
                             {
                                 float y = c.Y - 1.75f * k - 3 - c.Up;                                   // the pages' reference is the head end; the feet stand at the foot when Up is 0
                                 float cyc = c.Travelled / (2.2f * k);
-                                StampAt(fb, sq.Up, sq.Up.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], Edge(y + 0.9f * k), y, mirror, _denMask, c);
+                                StampAt(fb, sq.Up, sq.Up.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], Edge(y + 0.9f * k, mirror), y, mirror, _denMask, c);
+                                break;
+                            }
+                            case Doing.Enter:
+                            {
+                                // Head in first: seen from behind at the hole, shrinking down it into the dark (the light falls away with the size).
+                                float q = Math.Clamp(c.Clock / EnterFor, 0f, 0.999f);
+                                int pg = (int)(q * EnterPages);
+                                var (at, _) = _s.TreeHoles[c.Tree];
+                                StampAt(fb, sq.Enter, sq.Enter.Pages[pg], at.X, at.Y, false, null, c, 256 - (int)(190 * q));
+                                break;
+                            }
+                            case Doing.Exit:
+                            {
+                                // The face coming up out of the dark, growing to full size in the opening, then held there for the look round.
+                                float q = Math.Clamp(c.Clock / (ExitFor * 0.5f), 0f, 0.999f);
+                                int pg = (int)(q * EnterPages);
+                                var (at, _) = _s.TreeHoles[c.Tree];
+                                StampAt(fb, sq.Exit, sq.Exit.Pages[pg], at.X, at.Y, false, _denMaskHole, c, 70 + (int)(186 * q));
                                 break;
                             }
                             case Doing.Descend:
                             {
                                 float y = c.Y - 0.8f * k - 3 - c.Up;                                    // head-first: the reference is the head end, at the foot when Up is 0
                                 float cyc = c.Travelled / (2.2f * k);
-                                StampAt(fb, sq.Down, sq.Down.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], Edge(y - 0.9f * k), y, !mirror, _denMask, c);
+                                StampAt(fb, sq.Down, sq.Down.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], Edge(y - 0.9f * k, !mirror), y, !mirror, _denMask, c);
                                 break;
                             }
                             case Doing.Dismount:
-                                StampAt(fb, sq.MountDown, sq.MountDown.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], Edge(c.Y), c.Y, !mirror, null, c);
+                                StampAt(fb, sq.MountDown, sq.MountDown.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], Edge(c.Y, !mirror), c.Y, !mirror, null, c);
                                 break;
                         }
                         break;

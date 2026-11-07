@@ -1331,27 +1331,71 @@ internal static class ThanksgivingPainter
         }
 
         // The inner maples' trunks: a thick tapered bole from the foot up to the fork, over the thin stem the brush
-        // drew (the brush sizes its stem from the canopy, a sapling's width; a trunk with a hole in it needs girth).
-        // Lit on the left flank, the way the moon lights everything here.
-        float HalfAt(float f) => u * (0.019f - 0.008f * f);                     // half the trunk's width, f 0 at the foot to 1 at the fork
+        // drew (the brush sizes its stem from the canopy, a sapling's width; a trunk with a hole in it needs girth),
+        // and from the fork three big limbs dividing again into the canopy, the way a maple's crown is held up. The
+        // bark: a lit flank up the left side (the moon's side), a darker flank up the right, and long streaks of
+        // darker bark running up the bole with a little waver, so it reads as wood and not as a cut-out.
+        float HalfAt(float f) => u * (0.026f - 0.010f * f);                     // half the trunk's width, f 0 at the foot to 1 at the fork
+        Color barkLit = Color.FromArgb(84, 62, 50), barkDark = Color.FromArgb(44, 30, 24), barkStreak = Color.FromArgb(52, 36, 28);
         foreach (int i in new[] { 1, 2 })
         {
             PointF foot = trunks[i][0], fork = trunks[i][1];
-            using var bole = new SolidBrush(bark);
-            using var lit = new SolidBrush(Color.FromArgb(82, 60, 48));
-            using var path = new GraphicsPath();
-            path.AddClosedCurve([
-                new PointF(foot.X - HalfAt(0f), foot.Y + u * 0.002f), new PointF(foot.X + (fork.X - foot.X) * 0.5f - HalfAt(0.5f), foot.Y + (fork.Y - foot.Y) * 0.5f),
-                new PointF(fork.X - HalfAt(1f), fork.Y), new PointF(fork.X + HalfAt(1f), fork.Y),
-                new PointF(foot.X + (fork.X - foot.X) * 0.5f + HalfAt(0.5f), foot.Y + (fork.Y - foot.Y) * 0.5f), new PointF(foot.X + HalfAt(0f), foot.Y + u * 0.002f)], 0.2f);
-            g.FillPath(bole, path);
-            // The lit flank: a narrow paler strip up the left side.
-            using var strip = new GraphicsPath();
-            strip.AddClosedCurve([
-                new PointF(foot.X - HalfAt(0f) * 0.85f, foot.Y - u * 0.01f), new PointF(foot.X + (fork.X - foot.X) * 0.5f - HalfAt(0.5f) * 0.85f, foot.Y + (fork.Y - foot.Y) * 0.5f),
-                new PointF(fork.X - HalfAt(1f) * 0.8f, fork.Y + u * 0.01f), new PointF(fork.X - HalfAt(1f) * 0.45f, fork.Y + u * 0.01f),
-                new PointF(foot.X + (fork.X - foot.X) * 0.5f - HalfAt(0.5f) * 0.5f, foot.Y + (fork.Y - foot.Y) * 0.5f), new PointF(foot.X - HalfAt(0f) * 0.5f, foot.Y - u * 0.01f)], 0.2f);
-            g.FillPath(lit, strip);
+            float cx = w * trees[i].X, cy = ground.YAt(cx) - u * trees[i].Lift, r = u * trees[i].R;
+            PointF Along(float f, float across) => new(foot.X + (fork.X - foot.X) * f + across, foot.Y + (fork.Y - foot.Y) * f);
+            using (var bole = new SolidBrush(bark))
+            using (var path = new GraphicsPath())
+            {
+                path.AddClosedCurve([
+                    Along(0f, -HalfAt(0f)), Along(0.5f, -HalfAt(0.5f)), Along(1f, -HalfAt(1f) * 1.15f), Along(1.08f, 0f), Along(1f, HalfAt(1f) * 1.15f),
+                    Along(0.5f, HalfAt(0.5f)), Along(0f, HalfAt(0f))], 0.25f);
+                g.FillPath(bole, path);
+            }
+            // The limbs: from the fork, each a tapering stroke bending up and out, splitting once into two twigs that end inside the canopy.
+            var limbs = new (float Dx, float Dy, float Bend)[] { (-0.50f, -0.08f, -0.18f), (-0.18f, -0.42f, 0.08f), (0.34f, -0.36f, 0.20f), (0.52f, 0.06f, 0.10f) };   // ends well inside the canopy (the leaves reach about 0.75 r up and 1.1 r out from its middle): limbs poking out above it read as antlers
+            foreach (var (dx, dy, bend) in limbs)
+            {
+                PointF a = Along(0.98f, 0f), b = new PointF(cx + r * dx, cy + r * dy);
+                PointF m = new(a.X + (b.X - a.X) * 0.5f + r * bend, a.Y + (b.Y - a.Y) * 0.5f);
+                float w0 = HalfAt(1f) * 0.9f, w1 = HalfAt(1f) * 0.22f;
+                for (int seg = 0; seg < 6; seg++)
+                {
+                    float t0 = seg / 6f, t1 = (seg + 1) / 6f;
+                    PointF P(float t) => new((1 - t) * (1 - t) * a.X + 2 * (1 - t) * t * m.X + t * t * b.X, (1 - t) * (1 - t) * a.Y + 2 * (1 - t) * t * m.Y + t * t * b.Y);
+                    using var pen = new Pen(bark, Math.Max(1.5f, (w0 + (w1 - w0) * t0) * 2f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                    g.DrawLine(pen, P(t0), P(t1));
+                }
+                // Two twigs off the limb's end, thinner, carrying on outward.
+                using var twig = new Pen(bark, Math.Max(1.2f, w1 * 1.4f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                g.DrawLine(twig, b, new PointF(b.X + r * dx * 0.25f, b.Y + r * dy * 0.2f - r * 0.10f));
+                g.DrawLine(twig, b, new PointF(b.X + r * dx * 0.15f + r * 0.10f * MathF.Sign(dx + 0.01f), b.Y + r * dy * 0.25f + r * 0.06f));
+            }
+            // The flanks: lit on the left, darker on the right, each a long strip hugging the edge.
+            using (var lit = new SolidBrush(barkLit))
+            using (var strip = new GraphicsPath())
+            {
+                strip.AddClosedCurve([Along(0.02f, -HalfAt(0f) * 0.88f), Along(0.5f, -HalfAt(0.5f) * 0.88f), Along(0.98f, -HalfAt(1f) * 0.95f), Along(0.98f, -HalfAt(1f) * 0.55f), Along(0.5f, -HalfAt(0.5f) * 0.55f), Along(0.02f, -HalfAt(0f) * 0.5f)], 0.2f);
+                g.FillPath(lit, strip);
+            }
+            using (var dark = new SolidBrush(barkDark))
+            using (var strip = new GraphicsPath())
+            {
+                strip.AddClosedCurve([Along(0.02f, HalfAt(0f) * 0.92f), Along(0.5f, HalfAt(0.5f) * 0.92f), Along(0.98f, HalfAt(1f) * 0.98f), Along(0.98f, HalfAt(1f) * 0.62f), Along(0.5f, HalfAt(0.5f) * 0.62f), Along(0.02f, HalfAt(0f) * 0.66f)], 0.2f);
+                g.FillPath(dark, strip);
+            }
+            // The bark's grain: eight streaks up the bole, each wavering a little, in the deeper bark colour.
+            using (var streak = new Pen(barkStreak, Math.Max(1f, u * 0.0022f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                for (int s = 0; s < 8; s++)
+                {
+                    float across = -0.8f + 1.6f * (s + 0.5f) / 8f;
+                    float f0 = 0.05f + 0.25f * (float)rng.NextDouble(), f1 = f0 + 0.25f + 0.4f * (float)rng.NextDouble();
+                    var pts = new List<PointF>();
+                    for (int q = 0; q <= 4; q++)
+                    {
+                        float f = f0 + (f1 - f0) * q / 4f;
+                        pts.Add(Along(f, across * HalfAt(f) + u * 0.003f * ((float)rng.NextDouble() - 0.5f)));
+                    }
+                    g.DrawCurve(streak, pts.ToArray(), 0.5f);
+                }
         }
 
         // Each inner maple's foot flares into a buttress: the bark widens on both sides in one smooth concave sweep
@@ -1404,9 +1448,9 @@ internal static class ThanksgivingPainter
         foreach (int i in new[] { 1, 2 })
         {
             PointF foot = trunks[i][0], fork = trunks[i][1];
-            float f = 0.6f;                                                      // six tenths of the way up to the fork
+            float f = 0.72f;                                                     // seven tenths of the way up to the fork: a climb worth watching before it goes in
             var at = new PointF(foot.X + (fork.X - foot.X) * f, foot.Y + (fork.Y - foot.Y) * f);
-            float hw = u * 0.0085f, hh = u * 0.012f;
+            float hw = u * 0.011f, hh = u * 0.016f;
             using (var lipTop = new SolidBrush(Color.FromArgb(96, 72, 56)))
                 g.FillEllipse(lipTop, at.X - hw * 1.35f, at.Y - hh * 1.3f, hw * 2.7f, hh * 2.5f);
             using (var lipLow = new SolidBrush(Color.FromArgb(48, 32, 26)))

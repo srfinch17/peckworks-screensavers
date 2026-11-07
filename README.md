@@ -595,8 +595,11 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   1.7 m) to the fence posts at the front, and every animal on the field is sized from that and its real
   height or length, so a deer is half a tractor wheel tall and a rabbit a tenth of a tractor long,
   wherever it stands.
-- **The field is being worked.** An old red tractor with a lit headlamp drives slowly along the far
-  lane towing a round baler on its drawbar; every so often the baler's tailgate swings up and a finished bale rolls
+- **The field is being worked.** A red International Harvester of about 1980 (the long square hood with
+  the black band along it, the boxy glassed cab with the white roof, the chrome stack, lamps in the black grille)
+  drives slowly along the far lane towing a round baler on its drawbar. The two are hitched, not welded: the
+  tractor heaves and trembles on its own, and the baler rocks about the hitch pin on its own wheel, the tongue
+  staying pinned between them. Every so often the baler's tailgate swings up and a finished bale rolls
   out the back and is left standing on the field. It goes off one side, comes back the other way a
   while later and bales the next row, and when half a dozen bales stand loose it comes back towing
   the hay wagon and picks them up as it passes: as the wagon's tail clears a bale the loader swings it
@@ -668,9 +671,11 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   speed for the fun of it, hops up onto a pumpkin to sit on its top and look about, and romps after the other
   squirrel, which bolts a little way and is chased again, a few legs of the game, and then both sit up. A
   timid one flicks its tail more and dens more. A squirrel never hides behind a pumpkin: it hides in a TREE.
-  The two inner maples are big old trees with a hole up each trunk; the squirrel runs to the foot, pitches up
-  onto the bark, climbs head-up and goes into the hole tail last, stays a while out of sight, puts its head
-  out for a look, comes head-first down the trunk and drops off onto the ground. On the move it never flips:
+  The two inner maples are big old trees, thick tapered boles with bark and limbs dividing into the crown, and
+  a hole up each trunk; the squirrel runs to the foot, pitches up onto the bark, climbs head-up to the hole and
+  goes in head first (seen from behind, shrinking down into the dark, tail last), stays a while out of sight,
+  then its face comes up in the opening for a look, it comes head-first down the trunk and drops off onto the
+  ground. On the move it never flips:
   a step into a pumpkin's foot goes round it on the open side, and a change of direction is a curl (the front
   end plants, the back end comes round it with the tail whipped over, through the front view and off the other
   way, momentum kept); from a standstill it rises, turns through a front view that is the same picture both

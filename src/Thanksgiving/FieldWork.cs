@@ -56,8 +56,8 @@ internal sealed class FieldWork
     private readonly float _t;                      // the tractor unit in pixels
     private readonly int _len, _tall, _gy;
     private readonly Sprite[] _tractor = new Sprite[2];           // [0] heads right, [1] heads left
-    private readonly Sprite[][] _baler = new Sprite[2][];         // [dir][gate page]
-    private readonly Sprite[] _wagon = new Sprite[2];             // [0] heads right, [1] heads left; its bales are stamped on separately
+    private readonly Sprite[][][] _baler = new Sprite[2][][];     // [dir][pitch page][gate page]
+    private readonly Sprite[][] _wagon = new Sprite[2][];         // [dir][pitch page]; its bales are stamped on separately
     private const float LiftFor = 0.9f;             // seconds a bale takes from the ground to its slot on the wagon
     private readonly Sprite[] _rear = new Sprite[TractorArt.WheelPages], _front = new Sprite[TractorArt.WheelPages], _small = new Sprite[TractorArt.WheelPages];
     private readonly Sprite _lamp, _puff, _bale;
@@ -88,9 +88,14 @@ internal sealed class FieldWork
         {
             bool flip = d == 1;
             _tractor[d] = TractorArt.Tractor(_t, flip);
-            _baler[d] = new Sprite[GatePages];
-            for (int i = 0; i < GatePages; i++) _baler[d][i] = TractorArt.Baler(_t, flip, i / (float)(GatePages - 1));
-            _wagon[d] = TractorArt.Wagon(_t, flip);
+            _baler[d] = new Sprite[TractorArt.PitchPages][];
+            _wagon[d] = new Sprite[TractorArt.PitchPages];
+            for (int p = 0; p < TractorArt.PitchPages; p++)
+            {
+                _baler[d][p] = new Sprite[GatePages];
+                for (int i = 0; i < GatePages; i++) _baler[d][p][i] = TractorArt.Baler(_t, flip, i / (float)(GatePages - 1), TractorArt.PitchOf(p));
+                _wagon[d][p] = TractorArt.Wagon(_t, flip, TractorArt.PitchOf(p));
+            }
         }
         for (int i = 0; i < TractorArt.WheelPages; i++)
         {
@@ -217,8 +222,20 @@ internal sealed class FieldWork
         float cx = _x + _len / 2f;
         float ground = GroundAt(cx);
         int top = (int)MathF.Round(ground) - _gy;
-        int shake = (int)(_clock * 16) % 2 == 0 ? 0 : Math.Max(1, (int)(_s.U / 1100f));   // the engine's tremble: the body only, a pixel at a time
+        int shake = (int)(_clock * 16) % 2 == 0 ? 0 : Math.Max(1, (int)(_s.U / 1100f));   // the engine's tremble: the tractor's body only, a pixel at a time
         int left = (int)MathF.Round(_x);
+        // The hitch (his line: "move at the hitch so they look independent of each other, but connected"). The tractor HEAVES
+        // slowly on the lane's lumps, a pixel or two, by the distance rolled; the implement hangs off the hitch pin, so its
+        // tongue end heaves with the tractor, and about that pin it PITCHES on its own wheel by its own two waves of the
+        // distance (its wheel meets lumps the tractor's did not): the drum's tail rocks up and down a few degrees while the
+        // tractor trembles, and the two never share a motion except at the pin.
+        float heaveF = 1.1f * MathF.Sin(_rolled / (0.80f * _t)) * Math.Max(1f, _s.U / 1100f);
+        int heave = (int)MathF.Round(heaveF);
+        float pitch = 2.6f * MathF.Sin(_rolled / (1.15f * _t) + 0.7f) + 1.3f * MathF.Sin(_rolled / (0.47f * _t));
+        int pp = Math.Clamp((int)MathF.Round(pitch / TractorArt.PitchStep) + TractorArt.PitchPages / 2, 0, TractorArt.PitchPages - 1);
+        float pitchDeg = TractorArt.PitchOf(pp);
+        // Where a point of the implement (units, the right-heading sheet) is on screen under this pitch and heave.
+        (float X, float Y) At(float ux, float uy) { var (x, y) = TractorArt.Pitched(ux, uy, pitchDeg); return (AlongX(x), ground - heave - y * _t); }
 
         // The smoke first, so the machine is stamped over it. Puff j left the stack at time j * PuffEvery of this pass.
         for (int j = 0; j * PuffEvery < _clock; j++)
@@ -237,7 +254,7 @@ internal sealed class FieldWork
         if (_job == Job.Baling)
         {
             float open = _gateT < 0f ? 0f : _gateT < BaleOutAt ? _gateT / BaleOutAt : MathF.Max(0f, 1f - (_gateT - BaleOutAt) / (GateFor - BaleOutAt));
-            _baler[d][Math.Min(GatePages - 1, (int)(open * GatePages))].Draw(fb, left, top - shake, 1f, _stencil);
+            _baler[d][pp][Math.Min(GatePages - 1, (int)(open * GatePages))].Draw(fb, left, top - heave, 1f, _stencil);
             // The bale on its way out: while the gate is up and before it has dropped, it shows in the drum's open back.
             if (_gateT >= 0f && !_dropped && _gateT > BaleOutAt * 0.4f)
             {
@@ -251,34 +268,41 @@ internal sealed class FieldWork
             // The wagon, the bales already stacked on it (they tremble with the body), then the one on its way up: it
             // leaves the ground where it stood, rises over the rail in an arc and settles into its slot, which is
             // moving with the wagon, so it glides forward as it climbs. Smoothstep, so it neither jerks off nor thuds on.
-            _wagon[d].Draw(fb, left, top - shake, 1f, _stencil);
+            _wagon[d][pp].Draw(fb, left, top - heave, 1f, _stencil);
             for (int i = 0; i < _loaded; i++)
-                StampBale(fb, AlongX(TractorArt.BaleSlots[i].X), ground - TractorArt.BaleSlots[i].Y * _t - shake);
+            {
+                var (bx, by) = At(TractorArt.BaleSlots[i].X, TractorArt.BaleSlots[i].Y);   // the stack pitches with the bed
+                StampBale(fb, bx, by);
+            }
             if (_liftT >= 0f)
             {
                 var slot = TractorArt.BaleSlots[Math.Min(_loaded, TractorArt.BaleSlots.Length - 1)];
                 float s = Math.Clamp(_liftT / LiftFor, 0f, 1f), ease = s * s * (3f - 2f * s);
-                float fromY = GroundAt(_liftX), toY = ground - slot.Y * _t - shake;
-                StampBale(fb, _liftX + (AlongX(slot.X) - _liftX) * ease, fromY + (toY - fromY) * ease - 0.45f * _t * MathF.Sin(MathF.PI * s));
+                var (sx, sy) = At(slot.X, slot.Y);
+                float fromY = GroundAt(_liftX);
+                StampBale(fb, _liftX + (sx - _liftX) * ease, fromY + (sy - fromY) * ease - 0.45f * _t * MathF.Sin(MathF.PI * s));
             }
         }
-        _tractor[d].Draw(fb, left, top - shake, 1f, _stencil);
+        _tractor[d].Draw(fb, left, top - shake - heave, 1f, _stencil);
 
         // The wheels. Rolling right turns them clockwise; rolling left, the other way, which is the pages run backwards.
-        void Wheel(Sprite[] pages, float r, float unitsX)
+        // A tractor wheel sits on the lane under the heaving body; an implement's wheel hangs on its pitching axle.
+        void Wheel(Sprite[] pages, float r, float unitsX, bool implement)
         {
             float turn = _rolled / r / (MathF.PI / 3f);                                 // in sixths of a revolution
             int pg = (int)((turn - MathF.Floor(turn)) * TractorArt.WheelPages) % TractorArt.WheelPages;
             if (_left) pg = (TractorArt.WheelPages - pg) % TractorArt.WheelPages;
             Sprite sp = pages[pg];
-            sp.Draw(fb, (int)MathF.Round(AlongX(unitsX) - sp.Width / 2f), (int)MathF.Round(ground - r - sp.Height / 2f), 1f, _stencil);
+            float cx2 = AlongX(unitsX), cy2 = ground - r;
+            if (implement) (cx2, cy2) = At(unitsX, r / _t);
+            sp.Draw(fb, (int)MathF.Round(cx2 - sp.Width / 2f), (int)MathF.Round(cy2 - sp.Height / 2f), 1f, _stencil);
         }
-        if (_job == Job.Baling) Wheel(_small, TractorArt.BalerR * _t, TractorArt.BalerWheelX);
-        else { Wheel(_small, TractorArt.CartR * _t, TractorArt.CartX0); Wheel(_small, TractorArt.CartR * _t, TractorArt.CartX1); }
-        Wheel(_rear, TractorArt.RearR * _t, TractorArt.RearX);
-        Wheel(_front, TractorArt.FrontR * _t, TractorArt.FrontX);
+        if (_job == Job.Baling) Wheel(_small, TractorArt.BalerR * _t, TractorArt.BalerWheelX, true);
+        else { Wheel(_small, TractorArt.CartR * _t, TractorArt.CartX0, true); Wheel(_small, TractorArt.CartR * _t, TractorArt.CartX1, true); }
+        Wheel(_rear, TractorArt.RearR * _t, TractorArt.RearX, false);
+        Wheel(_front, TractorArt.FrontR * _t, TractorArt.FrontX, false);
 
         // The headlamp's glow, at the nose.
-        _lamp.DrawCentered(fb, AlongX(TractorArt.LampX) + Dir * _t * 0.15f, ground - 0.80f * _t, 0.65f, _stencil);
+        _lamp.DrawCentered(fb, AlongX(TractorArt.LampX) + Dir * _t * 0.15f, ground - heave - shake - 0.80f * _t, 0.65f, _stencil);
     }
 }
