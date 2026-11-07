@@ -184,6 +184,14 @@ internal static class ThanksgivingPainter
             g.FillPolygon(far, farRidge);
         PaintTreeline(g, w, u, farRidge, rng);
         PointF[] nearRidge = Brushwork.Ridge(w, horizon, u, 0.025f, 0.03f, 0.012f, 0.035f, rng);
+        // The near ridge swings about 0.04 U either way with the seed, and where it dipped under a pen the rails landed
+        // on the field's edge while the yard lifted its animals above them (seed 3: both horses on the far hill behind
+        // their own fence, "they are often on the wrong side of their fence"). So the hill has a KNOLL under the
+        // paddock and under the pig pen: the ridge is held up to 0.040 U there, blended in over 0.06 U each side.
+        // The ridge is the one owner of the ground: the rails, the pens' bands and the bales all ask it.
+        float knollBarn = w * 0.60f, knollFarm = w * 0.31f;
+        Knoll(nearRidge, knollBarn + u * 0.16f, knollBarn + u * 0.31f, horizon, u);                             // the paddock
+        Knoll(nearRidge, knollFarm + u * 0.282f, knollBarn - u * 0.141f, horizon, u);                           // the pig pen
         using (var near = new SolidBrush(Color.FromArgb(126, 78, 54)))
         {
             g.FillPolygon(near, nearRidge);
@@ -232,7 +240,7 @@ internal static class ThanksgivingPainter
         // painted here; the front ones are stamped over the animals each frame (FarmYard.cs). Each pen's floor is the band
         // between its back line and its front line.
         Color railWood = Color.FromArgb(150, 132, 104);
-        float paddockX0 = barnFoot.X + u * 0.18f, paddockX1 = barnFoot.X + u * 0.31f;
+        float paddockX0 = barnFoot.X + u * 0.16f, paddockX1 = barnFoot.X + u * 0.31f;   // 0.15 U: room for a walk (at 0.13 U a horse's goals were all within its own length); the left end clear of the silos
         float paddockBack = Brushwork.RidgeYAt(nearRidge, (paddockX0 + paddockX1) / 2) + u * 0.012f, paddockFront = paddockBack + u * 0.016f;
         PaintRails(g, paddockX0, paddockX1, paddockBack, u, railWood);
         float penX0 = orchardX + orchardHalf + u * 0.012f, penX1 = millX - u * 0.016f;
@@ -369,6 +377,24 @@ internal static class ThanksgivingPainter
             Canopies = canopies, CornerBranchSpots = cornerSpots,
             LeftMaple = canopies[1], RightMaple = canopies[2], LeftTrunk = leftTrunk, RightTrunk = rightTrunk, Hollow = hollow, TreeHoles = treeHoles,
         };
+    }
+
+    /// <summary>
+    /// Lifts the ridge's points between x0 and x1 up to at least 0.040 U above the horizon line, easing in over 0.06 U
+    /// outside each end (a smoothstep, so the knoll has rounded shoulders, not steps). Where the ridge is already
+    /// higher nothing changes.
+    /// </summary>
+    private static void Knoll(PointF[] ridge, float x0, float x1, float horizon, float u)
+    {
+        float blend = u * 0.06f;
+        for (int i = 0; i < ridge.Length; i++)
+        {
+            float x = ridge[i].X;
+            if (x < x0 - blend || x > x1 + blend) continue;
+            float e = Math.Min(1f, Math.Min(x - (x0 - blend), (x1 + blend) - x) / blend);
+            e = e * e * (3f - 2f * e);
+            ridge[i].Y = Math.Min(ridge[i].Y, horizon - u * 0.040f * e);
+        }
     }
 
     // ================================================================ sky

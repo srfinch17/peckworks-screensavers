@@ -54,12 +54,12 @@ internal sealed class FarmYard
     private sealed class Sheets
     {
         public float K; public int W, H, Ox, By;
-        public Sprite[] Walk = [], Trot = [], Stand = [], Down = [], Lie = [], Sit = [], Bark = [], Turn = [];
+        public Sprite[] Walk = [], Trot = [], Stand = [], Down = [], Lie = [], Sit = [], Bark = [], Turn = [], Dip = [];   // Dip: the head on its way down or up, paged by the Head dial
     }
 
-    private const int WalkPages = 24, DownPages = 6, TailPages = 8, TurnPages = 3;
-    private const float TurnFor = 0.24f;
-    private static readonly float[] Squash = [0.72f, 0.42f, 0.14f];
+    private const int WalkPages = 24, DownPages = 6, TailPages = 8, TurnPages = 5, DipPages = 6;
+    private const float TurnFor = 0.5f;                                            // at 0.24 s over three pages the turn was a snap
+    private static readonly float[] Squash = [0.85f, 0.62f, 0.40f, 0.22f, 0.08f];
 
     private readonly ThanksgivingScenery _s;
     private readonly Random _rng;
@@ -83,9 +83,10 @@ internal sealed class FarmYard
         _rng = new Random(sceneRng.Next());
         _log = MindLog.Open();
         float u = s.U, m = s.HillMetresToU;
-        // The pens: each a band of the hill. The front line is kept above the field's edge (the hill dips under it in places).
-        (float, float, float, float) Clamp((float X0, float X1, float Back, float Front) p) => (p.X0, p.X1, Math.Min(p.Back, s.Horizon - u * 0.016f), Math.Min(p.Front, s.Horizon - u * 0.005f));
-        var paddock = Clamp(s.Paddock); var pen = Clamp(s.PigPen); var pasture = Clamp(s.Pasture); var yard = Clamp(s.HenYard);
+        // The pens: each a band of the hill, taken from the painter AS PAINTED. (A clamp here once lifted a band whose
+        // hill dipped under the field's edge, and the horses stood above their own back rail; the painter's knoll under
+        // the paddock and the pen keeps every band on the hill now, so the rails and the animals agree.)
+        var paddock = s.Paddock; var pen = s.PigPen; var pasture = s.Pasture; var yard = s.HenYard;
         float[] busy = Traits.Deal(_rng, 14), timid = Traits.Deal(_rng, 14);
         int n = 0;
         void Add(Kind kind, int look, (float, float, float, float) p, float accel)
@@ -148,6 +149,8 @@ internal sealed class FarmYard
         for (int i = 0; i < TailPages; i++) sh.Stand[i] = Page(new FarmArt.Pose { Tail = MathF.Sin(MathF.Tau * i / TailPages) });
         sh.Down = new Sprite[DownPages];
         for (int i = 0; i < DownPages; i++) sh.Down[i] = Page(new FarmArt.Pose { HeadDown = 1f, Lift = 0.5f + 0.5f * MathF.Sin(MathF.Tau * i / DownPages) });   // head at the grass, nodding (grazing, rooting, pecking)
+        sh.Dip = new Sprite[DipPages];
+        for (int i = 0; i < DipPages; i++) sh.Dip[i] = Page(new FarmArt.Pose { HeadDown = i / (float)(DipPages - 1) });   // the head between up and the grass (the eased dial picks the page; it used to jump from up to down at 0.85)
         if (lies) sh.Lie = [Page(new FarmArt.Pose { Lie = true })];
         if (sits) { sh.Sit = new Sprite[TailPages]; for (int i = 0; i < TailPages; i++) sh.Sit[i] = Page(new FarmArt.Pose { Sit = true, Tail = MathF.Sin(MathF.Tau * i / TailPages) }); }
         if (barks) sh.Bark = [Page(new FarmArt.Pose { Sit = true, Mouth = false }), Page(new FarmArt.Pose { Sit = true, Mouth = true })];
@@ -226,11 +229,17 @@ internal sealed class FarmYard
     private void PickGoal(Beast b, float minDx)
     {
         var p = b.Pen;
-        float x, y, inset = SheetsOf(b).K * 0.9f;                    // the head reaches most of a body length past the feet: keep it inside the rails
+        float x, y, inset = SheetsOf(b).K * 1.0f;                    // the nose reaches a full K past the feet point (the page is 1.7 K wide, the feet 0.7 K in): keep it inside the rails
+        // A goal on the OTHER side of the pen's middle, so a walk is a walk (in a pen three lengths wide, every goal was
+        // within the animal's own length and the horses scooted a few pixels and turned); "minDx" is capped at what
+        // the pen allows, else the tries all fail and the goal is wherever the last roll fell.
+        float lo = p.X0 + inset, hi = p.X1 - inset, mid = (lo + hi) / 2;
+        if (b.X > mid) hi = mid; else lo = mid;
+        minDx = Math.Min(minDx, (hi - lo) * 0.5f);
         int tries = 0;
         do
         {
-            x = p.X0 + inset + (p.X1 - p.X0 - 2 * inset) * (float)_rng.NextDouble();
+            x = lo + (hi - lo) * (float)_rng.NextDouble();
             y = p.Back + (p.Front - p.Back) * (float)_rng.NextDouble();
         } while ((MathF.Abs(x - b.X) < minDx || InPond(b, x, y)) && ++tries < 24);
         b.GoalX = x;
@@ -260,7 +269,7 @@ internal sealed class FarmYard
                 if (face == 0) b.Mind.Begin(Doing.Graze, 6f + 12f * (float)_rng.NextDouble());
                 else if (face == 1) b.Mind.Begin(Doing.Stand, 3f + 6f * (float)_rng.NextDouble());
                 else if (face == 2) { PickGoal(b, 0.05f * u); b.Mind.Begin(Doing.Walk, 20f); }
-                else { float inset = SheetsOf(b).K * 0.9f; b.GoalX = b.X < (b.Pen.X0 + b.Pen.X1) / 2 ? b.Pen.X1 - inset : b.Pen.X0 + inset; b.GoalY = b.Y; Face(b); b.Mind.Begin(Doing.Trot, 12f); }
+                else { float inset = SheetsOf(b).K * 1.0f; b.GoalX = b.X < (b.Pen.X0 + b.Pen.X1) / 2 ? b.Pen.X1 - inset : b.Pen.X0 + inset; b.GoalY = b.Y; Face(b); b.Mind.Begin(Doing.Trot, 12f); }
                 break;
             }
             case Kind.Cow:
@@ -439,12 +448,12 @@ internal sealed class FarmYard
                     break;
                 }
                 case Doing.Graze: case Doing.Peck:
-                    page = b.Head < 0.85f ? sh.Stand[0] : sh.Down[(int)(b.Clock * (b.Kind == Kind.Hen ? 6f : 1.4f) * DownPages) % DownPages];   // the head comes down first, then nods
+                    page = b.Head < 0.9f ? sh.Dip[(int)(b.Head / 0.9f * (DipPages - 1))] : sh.Down[(int)(b.Clock * (b.Kind == Kind.Hen ? 6f : 1.4f) * DownPages) % DownPages];   // the head comes down page by page, then nods
                     break;
                 case Doing.Lie: page = sh.Lie[0]; break;
                 case Doing.Sit: page = sh.Sit[(int)(b.Clock * 1.2f * TailPages) % TailPages]; break;
                 case Doing.Bark: page = sh.Bark[(int)(b.Clock * 5f) % 2]; break;
-                default: page = sh.Stand[(int)(b.Clock * 0.9f * TailPages) % TailPages]; break;
+                default: page = b.Head > 0.1f ? sh.Dip[(int)(b.Head * (DipPages - 1))] : sh.Stand[(int)(b.Clock * 0.9f * TailPages) % TailPages]; break;   // standing after a graze: the head comes back up page by page
             }
             Stamp(fb, sh, page, b);
         }
