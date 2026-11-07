@@ -572,11 +572,11 @@ Settings: amount of snow, fall speed, breeze, flake size, and how often a surpri
 
 ## Thanksgiving
 
-Maple leaves drifting down over a farm at harvest dusk: a sky from plum to gold, a big peach harvest
-moon, a big white two-storey farmhouse (a cross gable over the door, five lamplit windows with green
+Maple leaves drifting down over a farm at sunset: a sky from violet through orange to gold, the sun
+sinking into the far hills, a big white two-storey farmhouse (a cross gable over the door, five lamplit windows with green
 shutters, two chimneys, one smoking, and a full-width porch with a lamp by the door), a clothesline in its
 yard with the washing left out and flapping, a doghouse past the scarecrow's garden, a dirt road curving
-from the porch steps along the hill to the barn door, a pond off on the far slope holding the dusk sky
+from the porch steps along the hill to the barn door, a pond off on the far slope holding the sunset sky
 with cattails along its bank, a red barn with three silos (a tall one behind its corner, the old one
 against the wall, and a squat grain bin with a cone roof) and a steel water-pump windmill whose wheel
 turns with the gusts, a reaped field

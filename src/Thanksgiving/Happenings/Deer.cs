@@ -33,7 +33,7 @@ namespace Thanksgiving.Happenings;
 /// her, a half second late in everything, so they never move in lockstep.
 ///
 /// Where they stand is picked in Begin: a place where the far ridge stands clear
-/// of the nearer hills, is not too steep, is away from the moon (a pale rim
+/// of the nearer hills, is not too steep, is away from the sun (a pale rim
 /// vanishes in its glow) and away from the farmhouse and the barn. If there is no
 /// such place, the showing ends at once (Seconds tiny) and the director deals again.
 /// </summary>
@@ -248,9 +248,9 @@ internal sealed class Deer : Happening
             if (behindTree) continue;
             float footY = RidgeY(_s.FarRidge, x);
 
-            // Far from the moon, measured to the middle of the animal.
-            float mx = x - _s.Moon.At.X, my = footY - hd * 0.5f - _s.Moon.At.Y;
-            if (MathF.Sqrt(mx * mx + my * my) < u * 0.16f + _s.Moon.R) continue;
+            // Far from the sun, measured to the middle of the animal.
+            float mx = x - _s.Sun.At.X, my = footY - hd * 0.5f - _s.Sun.At.Y;
+            if (MathF.Sqrt(mx * mx + my * my) < u * 0.16f + _s.Sun.R) continue;
 
             // The far ridge must stand clear above the nearer hills along the whole walk, and not be too steep under the feet.
             bool clear = true;

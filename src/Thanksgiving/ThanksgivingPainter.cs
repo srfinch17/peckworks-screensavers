@@ -18,8 +18,8 @@ internal sealed class ThanksgivingScenery
     public required int Height { get; init; }
     public required float U { get; init; }                           // the size unit: the height, or less on a tall screen. Size everything by this.
     public required float Horizon { get; init; }                     // the y where the sky ends behind the far hills
-    public required (PointF At, float R) Moon { get; init; }         // the harvest moon's center and radius
-    public required bool[] OpenSky { get; init; }                    // stencil: true where nothing was painted over the sky, moon and clouds
+    public required (PointF At, float R) Sun { get; init; }          // the setting sun's center and radius (its lower part is behind the far hills)
+    public required bool[] OpenSky { get; init; }                    // stencil: true where nothing was painted over the sky, sun and clouds
     public required bool[] OpenFromFarm { get; init; }               // stencil: true where nothing was painted after the farmhouse and barn (so: nothing stands in front of them)
     public required bool[] OpenField { get; init; }                  // stencil: true where nothing was painted after the harvested field and its bales (the tractor drives on the field, behind the scarecrow, the fence and the near ground)
     public required bool[] OpenOfBranches { get; init; }             // stencil: true where the corner branches did NOT paint (for things in front of everything but those branches)
@@ -129,8 +129,9 @@ internal sealed class ThanksgivingScenery
 }
 
 /// <summary>
-/// Paints the backdrop: a harvest dusk (plum overhead, gold at the horizon),
-/// a big peach harvest moon, two ranges of hills with a white farmhouse and a
+/// Paints the backdrop: a harvest sunset (violet overhead, through rose and
+/// orange to gold at the horizon), the sun itself sinking into the far hills,
+/// two ranges of hills with a white farmhouse and a
 /// red barn on the nearer one, a reaped field in gold stripes with round hay
 /// bales, a rail fence along the near ground, a scarecrow, a corn shock, a
 /// pumpkin patch, maples in full autumn colour
@@ -151,7 +152,7 @@ internal sealed class ThanksgivingScenery
 ///
 /// Positions are fractions of the width (w) or height (h). Sizes are
 /// fractions of "u": the height on a normal wide screen, or less on a tall
-/// one, so trees and the moon do not swallow a portrait monitor.
+/// one, so trees and the sun do not swallow a portrait monitor.
 /// </summary>
 internal static class ThanksgivingPainter
 {
@@ -169,8 +170,11 @@ internal static class ThanksgivingPainter
 
         // ---- The paint order, back to front. Keep this list explicit. ----
         List<PointF> stars = PaintSky(g, w, h, horizon, u, rng);
-        var moon = (At: new PointF(w * 0.74f, h * 0.26f), R: u * 0.075f);
-        PaintMoon(g, moon.At.X, moon.At.Y, moon.R);
+        // The sun sits low at the right, its centre a little above the horizon line, so the far ridge (painted next)
+        // covers its lower part: a sun half behind the hills is what "sunset" looks like (his ask, 2026-11-06: "let's
+        // make this at sunset not with the moon").
+        var sun = (At: new PointF(w * 0.74f, horizon - u * 0.13f), R: u * 0.075f);   // the far ridge there rises about 0.08 U, so the hills take the lower third
+        PaintSun(g, sun.At.X, sun.At.Y, sun.R);
         PaintClouds(g, w, h, u, rng);
         g.Flush();
         uint[] skyOnly = Brushwork.ToPixels(bmp);   // the copy the sky stencil is made from (see the class summary)
@@ -201,10 +205,13 @@ internal static class ThanksgivingPainter
         // The dog's house in the yard right of the porch, past the scarecrow's garden; the hens' yard is between them.
         var doghouse = new PointF(farmFoot.X + u * 0.135f, Brushwork.RidgeYAt(nearRidge, farmFoot.X + u * 0.135f) + u * 0.016f);
         PaintDoghouse(g, doghouse, u);
-        // A clothesline in the yard left of the house, the washing on it left out (the scene hangs the cloth, which
-        // moves in the breeze); and a steel water-pump windmill left of the barn (the scene turns its wheel).
-        float lineX0 = farmFoot.X - u * 0.175f, lineX1 = farmFoot.X - u * 0.125f;   // clear of the porch (the house is 0.16 U wide now, the porch a little more)
-        (PointF A, PointF B) clothesline = PaintClothesline(g, lineX0, lineX1, Brushwork.RidgeYAt(nearRidge, (lineX0 + lineX1) / 2) + u * 0.012f, u);
+        // A clothesline in the yard right beside the house, its near post just past the porch's end and its foot a
+        // little up the slope from the house's (so it stands in the side yard, not out in the pasture: his line,
+        // 2026-11-06, "the clothesline needs to be back by the house not out in the field"); the washing on it is
+        // left out (the scene hangs the cloth, which moves in the breeze). And a steel water-pump windmill left of
+        // the barn (the scene turns its wheel).
+        float lineX0 = farmFoot.X - u * 0.128f, lineX1 = farmFoot.X - u * 0.094f;   // the porch ends at 0.0864 U
+        (PointF A, PointF B) clothesline = PaintClothesline(g, lineX0, lineX1, farmFoot.Y - u * 0.004f, u);
         float millX = barnFoot.X - u * 0.125f;
         (PointF Hub, float R) windmill = PaintWindmill(g, millX, Brushwork.RidgeYAt(nearRidge, millX) + u * 0.012f, u);
         List<(PointF At, float R)> siloTops = PaintBarn(g, barnFoot.X, barnFoot.Y, u);
@@ -231,7 +238,7 @@ internal static class ThanksgivingPainter
         float penX0 = orchardX + orchardHalf + u * 0.012f, penX1 = millX - u * 0.016f;
         float penBack = Brushwork.RidgeYAt(nearRidge, (penX0 + penX1) / 2) + u * 0.012f, penFront = penBack + u * 0.014f;
         PaintPigPen(g, penX0, penX1, penBack, penFront, u);
-        float pastureX0 = w * 0.09f, pastureX1 = farmFoot.X - u * 0.13f;
+        float pastureX0 = w * 0.09f, pastureX1 = farmFoot.X - u * 0.165f;   // ends short of the clothesline (0.128 U left of the house) by a cow's length
         // A windbreak of trees along the far edge of the field, where the hill meets it: nearer than the hills' treeline,
         // farther than everything that moves on the field (his line: "another set of trees closer to the foreground but not
         // in front of the highest branches"). Painted here, with the farm, so the lane's animals pass in front of them.
@@ -327,7 +334,7 @@ internal static class ThanksgivingPainter
         return new ThanksgivingScenery
         {
             Pixels = pixels, LeafSpots = leafSpots, Stars = stars,
-            Width = w, Height = h, U = u, Horizon = horizon, Moon = moon,
+            Width = w, Height = h, U = u, Horizon = horizon, Sun = sun,
             OpenSky = Brushwork.Unchanged(skyOnly, pixels),
             OpenFromFarm = Brushwork.Unchanged(upToFarm, pixels),
             OpenField = Brushwork.Unchanged(upToField, pixels),
@@ -367,9 +374,11 @@ internal static class ThanksgivingPainter
     // ================================================================ sky
 
     /// <summary>
-    /// A harvest dusk: deep plum overhead, through rose, to amber and then a
-    /// band of gold right at the horizon where the sun has just gone down.
-    /// A few faint stars are out in the darker top third.
+    /// A harvest sunset: a deep blue-violet overhead (the sky is still bright at sunset, so no plum and no black),
+    /// through rose and a hot orange, to a wide band of gold right at the horizon where the sun is going down.
+    /// No stars: the sun is still up. The old dusk sky rolled 90 stars off the scene's dice here, and every ridge,
+    /// cloud and tree after it took the rolls that followed; those rolls are still taken (and thrown away) so every
+    /// seed paints the same hills and trees it did before. The returned list is empty: the scene twinkles nothing.
     /// </summary>
     private static List<PointF> PaintSky(Graphics g, int w, int h, float horizon, float u, Random rng)
     {
@@ -378,59 +387,49 @@ internal static class ThanksgivingPainter
         {
             InterpolationColors = new ColorBlend
             {
-                Colors = [Color.FromArgb(40, 24, 62), Color.FromArgb(112, 52, 84), Color.FromArgb(204, 110, 72), Color.FromArgb(246, 184, 92)],
-                Positions = [0f, 0.40f, 0.78f, 1f],
+                Colors = [Color.FromArgb(44, 40, 96), Color.FromArgb(150, 72, 98), Color.FromArgb(232, 124, 58), Color.FromArgb(255, 214, 112)],
+                Positions = [0f, 0.42f, 0.78f, 1f],
             },
         })
             g.FillRectangle(sky, 0, 0, w, horizon + 1);
 
         for (int i = 0; i < 90; i++)
         {
-            float x = (float)rng.NextDouble() * w, y = (float)Math.Pow(rng.NextDouble(), 1.8) * horizon * 0.5f;
-            float r = Math.Max(0.6f, u * (0.0008f + 0.0012f * (float)rng.NextDouble()));
-            using var star = new SolidBrush(Color.FromArgb(50 + rng.Next(120), 255, 240, 220));
-            g.FillEllipse(star, x - r, y - r, r * 2, r * 2);
-            if (i % 2 == 0) stars.Add(new PointF(x, y));                 // every other star twinkles (the scene stamps a glow on it)
+            rng.NextDouble(); rng.NextDouble(); rng.NextDouble(); rng.Next(120);   // the old stars' rolls, kept so the dice do not move
         }
         return stars;
     }
 
     /// <summary>
-    /// The harvest moon: big, low and peach coloured, the way a moon looks
-    /// through the thick evening air near the horizon, with a wide soft
-    /// amber glow around it (a "path gradient": strongest at the center,
-    /// nothing at the edge) and a few faint blotches for its seas.
+    /// The setting sun: a big disc, deep orange at its rim and paler gold at its heart (the thick evening air reddens
+    /// the edge first), with a wide soft glow around it (a "path gradient": strongest at the center, nothing at the
+    /// edge) that warms the sky and the hilltops it sinks behind. Painted before the hills, so they cover its lower
+    /// part.
     /// </summary>
-    private static void PaintMoon(Graphics g, float x, float y, float r)
+    private static void PaintSun(Graphics g, float x, float y, float r)
     {
-        float glowR = r * 3.4f;
+        float glowR = r * 4.2f;
         using (var glowPath = new GraphicsPath())
         {
             glowPath.AddEllipse(x - glowR, y - glowR, glowR * 2, glowR * 2);
             using var glow = new PathGradientBrush(glowPath)
             {
-                CenterColor = Color.FromArgb(150, 255, 200, 130),
-                SurroundColors = [Color.FromArgb(0, 255, 180, 110)],
+                CenterColor = Color.FromArgb(190, 255, 200, 100),
+                SurroundColors = [Color.FromArgb(0, 255, 160, 70)],
                 Blend = Sprite.SoftFalloff,   // eases out, so the glow has no visible rim
             };
             g.FillPath(glow, glowPath);
         }
-        using (var disc = new SolidBrush(Color.FromArgb(255, 220, 164)))
-            g.FillEllipse(disc, x - r, y - r, r * 2, r * 2);
-
-        GraphicsState before = g.Save();
         using (var discPath = new GraphicsPath())
         {
             discPath.AddEllipse(x - r, y - r, r * 2, r * 2);
-            g.SetClip(discPath, CombineMode.Intersect);
+            using var disc = new PathGradientBrush(discPath)
+            {
+                CenterColor = Color.FromArgb(255, 252, 226),
+                SurroundColors = [Color.FromArgb(255, 128, 40)],
+            };
+            g.FillPath(disc, discPath);
         }
-        using (var sea = new SolidBrush(Color.FromArgb(48, 200, 140, 90)))
-        {
-            g.FillEllipse(sea, x - r * 0.55f, y - r * 0.45f, r * 0.6f, r * 0.45f);
-            g.FillEllipse(sea, x - r * 0.1f, y - r * 0.1f, r * 0.7f, r * 0.5f);
-            g.FillEllipse(sea, x - r * 0.4f, y + r * 0.25f, r * 0.45f, r * 0.35f);
-        }
-        g.Restore(before);
     }
 
     /// <summary>
@@ -658,7 +657,7 @@ internal static class ThanksgivingPainter
     /// thing above the horses", and a terrace round it only made a bigger disc: water reads as water where the ground
     /// is flat, and the pasture's band is the flattest ground the farm has.) The water is an uneven oval, not a true
     /// ellipse, holding the dusk sky, paler toward its far edge; a dark muddy bank along its near edge, thicker in the
-    /// middle, with a few stones; three thin ripple lines; the moon's shimmer as a soft vertical smear; cattails in two
+    /// middle, with a few stones; three thin ripple lines; the sun's shimmer as a soft vertical smear; cattails in two
     /// clumps at the near bank and one lone at the far side.
     /// </summary>
     private static void PaintPond(Graphics g, PointF at, float rx, float ry, float u)
@@ -682,7 +681,7 @@ internal static class ThanksgivingPainter
         using (var ripple = new Pen(Color.FromArgb(120, 250, 210, 170), Math.Max(1f, u * 0.0012f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
             foreach (var (f, half) in new[] { (-0.45f, 0.35f), (-0.05f, 0.55f), (0.35f, 0.4f) })
                 g.DrawLine(ripple, at.X - rx * half + rx * 0.1f, at.Y + ry * f, at.X + rx * half, at.Y + ry * f);
-        // The moon's shimmer: a soft vertical smear of its light on the water.
+        // The sun's shimmer: a soft vertical smear of its light on the water.
         using (var shimmer = new LinearGradientBrush(new PointF(at.X - rx * 0.12f, 0), new PointF(at.X + rx * 0.12f, 0), Color.FromArgb(0, 255, 230, 180), Color.FromArgb(0, 255, 230, 180)))
         {
             shimmer.InterpolationColors = new ColorBlend { Colors = [Color.FromArgb(0, 255, 230, 180), Color.FromArgb(110, 255, 230, 180), Color.FromArgb(0, 255, 230, 180)], Positions = [0f, 0.5f, 1f] };
