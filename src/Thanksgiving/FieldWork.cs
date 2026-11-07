@@ -231,7 +231,7 @@ internal sealed class FieldWork
         // tractor trembles, and the two never share a motion except at the pin.
         float heaveF = 1.1f * MathF.Sin(_rolled / (0.80f * _t)) * Math.Max(1f, _s.U / 1100f);
         int heave = (int)MathF.Round(heaveF);
-        float pitch = 2.6f * MathF.Sin(_rolled / (1.15f * _t) + 0.7f) + 1.3f * MathF.Sin(_rolled / (0.47f * _t));
+        float pitch = 1.5f * MathF.Sin(_rolled / (1.15f * _t) + 0.7f) + 0.7f * MathF.Sin(_rolled / (0.47f * _t));   // a few pixels at the tail: the wheel rides the pitch (the lane is one flat line), so a bigger rock lifted it visibly off the lane
         int pp = Math.Clamp((int)MathF.Round(pitch / TractorArt.PitchStep) + TractorArt.PitchPages / 2, 0, TractorArt.PitchPages - 1);
         float pitchDeg = TractorArt.PitchOf(pp);
         // Where a point of the implement (units, the right-heading sheet) is on screen under this pitch and heave.
@@ -259,8 +259,9 @@ internal sealed class FieldWork
             if (_gateT >= 0f && !_dropped && _gateT > BaleOutAt * 0.4f)
             {
                 float out_ = (_gateT - BaleOutAt * 0.4f) / (BaleOutAt * 0.6f);
-                float bx = AlongX(TractorArt.BalerRearX + 0.5f - 0.5f * out_) - Dir * _baleR * 0.6f * out_;
-                StampBale(fb, bx, GroundAt(bx) - _baleR * 0.9f * (1 - out_));
+                var (bx, by) = At(TractorArt.BalerRearX + 0.5f - 0.5f * out_, 0f);                 // from the drum's open back, which pitches with the baler
+                bx -= Dir * _baleR * 0.6f * out_;
+                StampBale(fb, bx, by - _baleR * 0.9f * (1 - out_));
             }
         }
         else

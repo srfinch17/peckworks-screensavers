@@ -93,6 +93,9 @@ internal sealed class PatchLife
         public int ToPerch = -1;                    // the pumpkin a Go is heading for (to hop up on)
         public float Up;                            // how far up the trunk, pixels
         public float NextDen;                       // the clock (PatchLife time) before which it does not den again: a den is a rest, not a hiding habit
+        public int Fails;                           // goals in a row that could not be reached from here (a pocket): after a few it LEAPS out instead of trying again
+        public bool HopAfterTurn;                   // on a pumpkin top, facing the other way first: the hop down follows the turn
+        public float Arrived;                       // a visitor: the clock when it came in; its stay has a limit (five squirrels raiding each other's stashes kept a frenzy going for four minutes)
         public PointF? DenFoot;                     // on the way to its tree: the trunk's foot, the second leg of the trip (the first runs along its own row to beside the tree)
     }
 
@@ -100,7 +103,8 @@ internal sealed class PatchLife
     private const int RisePages = 6, TurnPages = 6, CurlPages = 8, MountPages = 4, HopPages = 22;
     private const float TurnRise = 0.12f, TurnFor = 0.30f;   // a sitting turn: rise to the sit (0.12 s), the narrowing pages, the flip, the widening (0.30), sink (0.12)
     private const float CurlFor = 0.30f;            // the running curl: in and out again in a third of a second, never stopping
-    private const float MountFor = 0.25f, HopFor = 0.55f, ClimbSpeed = 0.20f;   // ClimbSpeed in U a second
+    private const float MountFor = 0.25f, HopFor = 0.55f, ClimbSpeed = 0.13f;   // ClimbSpeed in U a second: the climb is seen, not flashed (0.20 was a third of a second)
+    private const float StartAt = 4.0f;             // the critters' first frame, seconds: pinned, so a seed is a scenario (their start used to wait on the sheets' side-thread build and drifted 0.4 s between runs)
     private const int EnterPages = 10;
     private const float EnterFor = 0.6f, ExitFor = 1.2f;    // going in: the rear view shrinking down the hole; coming out: the face growing in it, then a look round
 
@@ -111,6 +115,7 @@ internal sealed class PatchLife
     {
         public float K;                             // pixels to the squirrel unit for this variant
         public Sheet Run, RunNut, Look, Dig, Rise, Turn, Eat, Curl, Hop, Up, Down, MountUp, MountDown, Enter, Exit;
+        public int UpFoot, DownHead;                // in the climbing sheets, how far below the sheet's origin the feet (Up) or the head (Down) actually are: measured off the painted page, so the climb is anchored where the body is
         public Sheet[] Sit = new Sheet[4];
     }
     private static readonly (SquirrelArt.Coat Coat, float Scale)[] Variants = [(SquirrelArt.Coat.Red, 1.0f), (SquirrelArt.Coat.Grey, 1.08f), (SquirrelArt.Coat.Fox, 0.94f)];
@@ -144,7 +149,7 @@ internal sealed class PatchLife
         _m = _k * 0.55f;
         _b = Math.Max(7f, s.U * 0.020f);
         _ground = CanStand;                         // made once: a new delegate every frame is garbage
-        _nuts.CanStand = _ground;                   // a nut lands only where a critter could stand
+        _nuts.CanStand = NutCanLie;                 // a nut lands only where a critter could stand AND not up a pumpkin's painted body (a nut buried behind a pumpkin was a tail sticking out of it)
         // The den stencil: true everywhere but the INSIDE of each inner trunk above its hole's bottom rim (the trunk's own
         // width at each height, and the hole's opening). A climbing body drawn over the bark is hidden exactly where it
         // has gone into the tree; nothing beside the trunk is touched. (A flat band across the trunk and the air beside it
@@ -226,6 +231,7 @@ internal sealed class PatchLife
             c.Senses = new Attention(0.5f * c.Timid, curious[i]) { Keen = 0.8f };
             c.Pace = new Pace(0.9f * _s.U);
             c.Mind.Begin(Doing.Still, 2.5f + 0.7f * i);                      // the nuts take three to five seconds to come down; they arrive as the first ones land, one after another
+            c.Arrived = (float)_time;
             _all.Add(c);
         }
         _log?.WriteLine($"{_time,8:F2} frenzy: {bring} squirrels come in");
@@ -237,9 +243,9 @@ internal sealed class PatchLife
     private bool CanStand(float x, float y)
     {
         float u = _s.U;
-        if (x < -0.02f * _s.Width || x > 1.02f * _s.Width) return false;
+        if (x < -0.02f * _s.Width || x > 1.02f * _s.Width) return false;   // the margin is for a visitor at the edge, coming or going; a goal is picked on screen (RandomSpot)
         float crest = _s.Ground.YAt(Math.Clamp(x, 0, _s.Width - 1));
-        if (y < crest + 0.012f * u || y > _s.Height + 0.04f * u) return false;
+        if (y < crest + 0.012f * u || y > _s.Height - 0.012f * u) return false;   // the feet stay ON the screen (they used to run 0.04 U below its bottom edge: a squirrel out of sight for a tenth of a run)
         foreach (var (at, r) in _s.Pumpkins)
         {
             float foot = at.Y + 0.8f * r;
@@ -247,6 +253,15 @@ internal sealed class PatchLife
         }
         float walk = _s.WalkY(x);
         if (MathF.Abs(x - _s.CornShockFoot.X) < _s.CornShockHalfWidth + 0.01f * u && MathF.Abs(y - walk) < 0.04f * u) return false;
+        return true;
+    }
+
+    /// <summary>Where a nut may lie: where a critter can stand, and not inside the painted body of a pumpkin (above its foot, within its width): the depth picture would hide it and the squirrel digging for it.</summary>
+    private bool NutCanLie(float x, float y)
+    {
+        if (!CanStand(x, y)) return false;
+        foreach (var (at, r) in _s.Pumpkins)
+            if (MathF.Abs(x - at.X) < 1.15f * r && y > at.Y - 1.1f * r && y < at.Y + 0.8f * r) return false;
         return true;
     }
 
@@ -261,6 +276,8 @@ internal sealed class PatchLife
     private PointF? RandomSpot(float x0, float x1, int tries, float? yNear = null, float yReach = 0f, float minDx = 0f, PointF? from = null)
     {
         float u = _s.U, xm = (x0 + x1) / 2;
+        x0 = Math.Max(x0, 0.01f * _s.Width); x1 = Math.Min(x1, 0.99f * _s.Width);   // a goal is on the screen (one squirrel sat at x 1928 of 1920 for four and a half minutes)
+        if (x1 <= x0) return null;
         for (int i = 0; i < tries; i++)
         {
             float x = x0 + (x1 - x0) * (float)_rng.NextDouble();
@@ -274,6 +291,49 @@ internal sealed class PatchLife
             return new PointF(x, y);
         }
         return null;
+    }
+
+    /// <summary>A spot just past the screen's edge (inside CanStand's margin) with a clear line to it from "from", on the row: for a visitor leaving.</summary>
+    private PointF? EdgeSpot(float edge, float yNear, float yReach, PointF from)
+    {
+        float u = _s.U;
+        for (int i = 0; i < 20; i++)
+        {
+            float x = edge + 0.004f * _s.Width * (float)(_rng.NextDouble() * 2 - 1);
+            float crest = _s.Ground.YAt(Math.Clamp(x, 0, _s.Width - 1));
+            float y = Math.Clamp(yNear + yReach * (float)(_rng.NextDouble() * 2 - 1), crest + 0.012f * u, _s.Height - 0.012f * u);
+            if (CanStand(x, y) && Ground.LineClear(_ground, from, new PointF(x, y), 2f)) return new PointF(x, y);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// A squirrel in a POCKET (no goal on its row can be reached in a straight line: three failed picks in a row) LEAPS out of
+    /// it: a standing hop, on the hop pages along an arc, to any spot it can stand on within a few lengths, the vine or the
+    /// pumpkin's foot passed over. True when it found one. (Without this a squirrel that hopped down beside a pumpkin sat
+    /// there trying goals for minutes: 272 s on one seed, off the edge of the screen.)
+    /// </summary>
+    private bool Leap(Critter c)
+    {
+        if (++c.Fails < 3) return false;
+        float u = _s.U, k = _sq[c.Look].K;
+        _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} tries a leap (fails {c.Fails}) at {c.X:F0},{c.Y:F0}");
+        for (int i = 0; i < 40; i++)
+        {
+            float x = Math.Clamp(c.X + (0.06f + 0.14f * (float)_rng.NextDouble()) * u * (_rng.Next(2) == 0 ? -1 : 1), 0.02f * _s.Width, 0.98f * _s.Width);
+            float crest = _s.Ground.YAt(x);
+            float y = Math.Clamp(c.Y + 0.04f * u * (float)(_rng.NextDouble() * 2 - 1), crest + 0.012f * u, _s.Height - 0.012f * u);
+            if (!CanStand(x, y) || RandomSpot(x - 0.3f * u, x + 0.3f * u, 10, y, 0.05f * u, 3f * k, new PointF(x, y)) == null) continue;   // it must be a spot with a way on from it
+            c.Fails = 0;
+            c.FlyFrom = c.X; c.FlyTo = x; c.FlyY0 = c.Y; c.FlyY1 = y;
+            int dir = x >= c.X ? 1 : -1;
+            c.Mind.Begin(Doing.HopDown, HopFor); c.Clock = 0; c.Perched = -1;
+            if (dir != c.Dir) { c.Turning = true; c.Curl = false; c.TurnT = 0; c.HopAfterTurn = true; }
+            else c.Dir = dir;
+            _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} leaps out of a pocket at {c.X:F0},{c.Y:F0} to {x:F0},{y:F0}");
+            return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -378,6 +438,15 @@ internal sealed class PatchLife
 
     // ================================================================ painting (once)
 
+    /// <summary>The lowest row of a page that has any paint in it (the bottom of the body on that page).</summary>
+    private static int LowestRow(Sprite page)
+    {
+        for (int y = page.Height - 1; y >= 0; y--)
+            for (int x = 0; x < page.Width; x++)
+                if (page.PixelAt(x, y) >> 24 != 0) return y;
+        return page.Height - 1;
+    }
+
     private Sheet Make(int n, int w, int h, int ox, int by, Func<int, Sprite> page)
     {
         var sh = new Sheet { Pages = new Sprite[n], W = w, H = h, Ox = ox, By = by };
@@ -418,8 +487,13 @@ internal sealed class PatchLife
             sq.Hop = Ground(HopPages, i => SquirrelArt.Hop((i + 0.5f) / HopPages));   // the hop from a sit onto a pumpkin, and off again
             // Climbing (the caper's pages): head up the trunk, and head-first down it; pitching up onto the bark and off it.
             int cw = (int)(1.9f * k) + 6, ch = (int)(2.55f * k) + 6;
-            sq.Up = Make(32, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3, i => { var q = SquirrelArt.Bound(i / 32f, 2.2f, cling: true); q.Rotate = -90f; q.Coat = coat; return SquirrelArt.Page(q, k, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3); });
-            sq.Down = Make(32, cw, ch, 3, (int)(1.75f * k) + 3, i => { var q = SquirrelArt.Bound(i / 32f, 2.2f, cling: true); q.Rotate = 90f; q.Coat = coat; return SquirrelArt.Page(q, k, cw, ch, 3, (int)(1.75f * k) + 3); });
+            // The tail lies along the trunk on a climb (the bound's trailing arc stuck out sideways past the bark, and the stencil cut it).
+            SquirrelArt.Pose Cling(int i, float rot) { var q = SquirrelArt.Bound(i / 32f, 2.2f, cling: true); q.TailBase = 172f; q.TailCurl = -12f; q.TailS = 6f; q.TailWave = 4f; q.Rotate = rot; q.Coat = coat; return q; }
+            sq.Up = Make(32, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3, i => SquirrelArt.Page(Cling(i, -90f), k, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3));
+            sq.Down = Make(32, cw, ch, 3, (int)(1.75f * k) + 3, i => SquirrelArt.Page(Cling(i, 90f), k, cw, ch, 3, (int)(1.75f * k) + 3));
+            // Where the body really is on those pages: the feet are the lowest painted row of the head-up page, the head the lowest of the head-down page (the first cut guessed 1.75 k and the climb's first frame jumped 59 px from the mount's last).
+            sq.UpFoot = LowestRow(sq.Up.Pages[0]) - sq.Up.By;
+            sq.DownHead = LowestRow(sq.Down.Pages[0]) - sq.Down.By;
             // Going in: the rear view, ever smaller about the head (the hole's middle), the last page a third the size. Coming
             // out: the sitting front view (the symmetric middle of the turn) growing from a third to full, the head at the hole.
             int ew = (int)(2.0f * k) + 6, eo = ew / 2, eb = (int)(1.3f * k) + 3;
@@ -457,14 +531,14 @@ internal sealed class PatchLife
     public void Update(float dt)
     {
         _time += dt;                                // counted from the first frame, not from the sheets being ready: the log's clock is the frame dump's (the build took 0.4 s and every logged second was 0.4 s early)
-        if (!_ready) return;
+        if (!_ready || _time < StartAt) return;     // pinned: the critters' first frame is at StartAt on every run (unless the sheets are still building, at 4K)
         for (int i = 0; i < _all.Count; i++)
         {
             Critter c = _all[i];
             c.Mind.Tick(dt);
             c.Senses.Tick(dt);
             c.Clock += dt;
-            _log?.WriteLine($"{_time,8:F3} {c.Kind.ToString().ToLowerInvariant()}{c.Id} frame x {c.X:F1} y {c.Y:F1} v {c.Pace.Speed:F2} {c.Mind.Doing}{(c.Turning ? (c.Curl ? " curl" : " turn") : "")}");
+            _log?.WriteLine($"{_time,8:F3} {c.Kind.ToString().ToLowerInvariant()}{c.Id} frame x {c.X:F1} y {c.Y:F1} v {c.Pace.Speed:F2} {c.Mind.Doing}{(c.Turning ? (c.Curl ? " curl" : " turn") : "")} d{c.Dir}");
             // A squirrel on the move is a thing the mice and birds notice: it tells the board every third of a second.
             if (c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Fetch or Doing.Carry or Doing.Raid or Doing.Chase or Doing.Leave or Doing.Romp && c.Clock >= c.NextPost)
             {
@@ -481,9 +555,15 @@ internal sealed class PatchLife
                 // through a frenzy bounding round it.)
                 bool busyWithNut = c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Eat or Doing.Bury or Doing.Dig;
                 if (r == Reaction.Flee && !busyWithNut) Startle(c, cause.At);
-                else if (r is Reaction.Flee or Reaction.Freeze && busyWithNut) { if (MathF.Abs(MathF.Cos(c.Heading)) > 0.2f || c.Mind.Doing == Doing.Eat) c.Dir = cause.At.X >= c.X ? 1 : -1; }
+                else if (r is Reaction.Flee or Reaction.Freeze && busyWithNut) { }   // it keeps at its nut (a mirror flip toward the noise was one of the "abrupt" ones; the look is the head's, not the body's)
                 else if (r == Reaction.Freeze) { c.Pace.Halt(); c.Mind.Begin(Doing.Still, 1f + 1.5f * c.Timid); c.Clock = 0; c.Turning = false; c.Curl = false; }
-                else if (r == Reaction.Look && c.Mind.Doing is Doing.Still or Doing.Peck or Doing.Perch) { c.Clock = 1.1f; c.Mind.Left = Math.Max(c.Mind.Left, 0.8f); if (c.Kind != Kind.Bird && c.Perched < 0) c.Dir = cause.At.X >= c.X ? 1 : -1; }
+                else if (r == Reaction.Look && c.Mind.Doing is Doing.Still or Doing.Peck or Doing.Perch)
+                {
+                    c.Clock = 1.1f; c.Mind.Left = Math.Max(c.Mind.Left, 0.8f);
+                    int toward = cause.At.X >= c.X ? 1 : -1;
+                    if (c.Kind == Kind.Mouse) c.Dir = toward;
+                    else if (c.Kind == Kind.Squirrel && toward != c.Dir && c.Perched < 0 && !c.Turning) { c.Turning = true; c.Curl = false; c.TurnT = 0; }   // a sitting squirrel comes round through the front view to look (it used to mirror in one frame: 63 flips an hour)
+                }
             }
             if (c.Turning)
             {
@@ -505,6 +585,8 @@ internal sealed class PatchLife
                 {
                     c.Turning = false; c.Blend = 0;
                     if (c.Curl) { c.Curl = false; c.Pace.Resume(0.6f * c.TurnV); c.Heading = MathF.Atan2(c.Goal.Y - c.Y, c.Goal.X - c.X); }
+                    if (c.HopAfterTurn) { c.HopAfterTurn = false; c.Mind.Begin(Doing.HopDown, HopFor); c.Clock = 0; }   // on a pumpkin top: turned round, now the hop down the far side
+                    if (c.Mind.Doing == Doing.HopUp) c.Clock = 0;                      // a hop up that waited for the turn starts its pages now
                 }
                 continue;
             }
@@ -586,27 +668,36 @@ internal sealed class PatchLife
             c.Goal = spot.Value; c.Mind.Begin(Doing.Carry, 8f); c.Travelled = 0; Head(c);
             return true;
         }
-        NutField.Nut? loose = _nuts.NearestLoose(me, c.Visitor ? 1.6f * u : 0.8f * u);
+        NutField.Nut? loose = c.Visitor && _time - c.Arrived > 70f + 40f * (1f - c.Timid) ? null : _nuts.NearestLoose(me, c.Visitor ? 1.6f * u : 0.8f * u);
         if (loose != null && Ground.LineClear(_ground, me, new PointF(loose.X, loose.Y), 2f))
         {
             c.Target = loose; c.Goal = new PointF(loose.X, loose.Y); c.Mind.Begin(Doing.Fetch, 8f); c.Travelled = 0; Head(c);
             return true;
         }
-        NutField.Nut? stash = _nuts.NearestStash(c.Id, me, 0.35f * u);
+        bool overstayed = c.Visitor && _time - c.Arrived > 70f + 40f * (1f - c.Timid);   // a visitor's welcome runs out: no more raids, and it goes whether or not a nut still lies loose
+        NutField.Nut? stash = overstayed ? null : _nuts.NearestStash(c.Id, me, 0.35f * u);
         if (stash != null && _rng.NextDouble() < 0.25 + 0.5 * (1 - c.Timid) && Ground.LineClear(_ground, me, new PointF(stash.X, stash.Y), 2f))
         {
             c.Target = stash; c.Goal = new PointF(stash.X, stash.Y); c.Mind.Begin(Doing.Raid, 8f); c.Travelled = 0; Head(c);
             _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} goes for squirrel{stash.Owner}'s stash");
             return true;
         }
-        if (c.Visitor && _nuts.LooseCount == 0 && _nuts.FallingCount == 0)
+        if (c.Visitor && ((_nuts.LooseCount == 0 && _nuts.FallingCount == 0) || overstayed))
         {
-            if (_rng.NextDouble() < 0.4) { c.Mind.Begin(Doing.Still, 1f + 2f * (float)_rng.NextDouble()); return true; }   // lingers a moment first: sits up, looks about
-            float edge = c.EntrySide < 0 ? -0.015f * _s.Width : 1.015f * _s.Width;
-            PointF? off = RandomSpot(edge - 0.004f * _s.Width, edge + 0.004f * _s.Width, 20, c.Y, 0.05f * u, 0f, me);
-            if (off == null) { c.Mind.Begin(Doing.Still, 1f); return true; }
-            c.Goal = off.Value; c.Mind.Begin(Doing.Leave, 12f); c.Travelled = 0; Head(c);
-            _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} leaves");
+            if (_rng.NextDouble() < 0.4 && c.Fails < 3) { c.Mind.Begin(Doing.Still, 1f + 2f * (float)_rng.NextDouble()); return true; }   // lingers a moment first: sits up, looks about
+            // Off the way it came, or the other way if that is clear; the line along its row may bend up or down a little more than a
+            // resident's. When neither edge can be reached it leaps out of the pocket and tries again (two of nine visitors never left).
+            foreach (int side in new[] { c.EntrySide, -c.EntrySide })
+            {
+                float edge = side < 0 ? -0.015f * _s.Width : 1.015f * _s.Width;
+                PointF? off = EdgeSpot(edge, c.Y, 0.05f * u + 0.03f * u * c.Fails, me);
+                if (off == null) continue;
+                c.Fails = 0;
+                c.Goal = off.Value; c.Mind.Begin(Doing.Leave, 12f); c.Travelled = 0; Head(c);
+                _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} leaves");
+                return true;
+            }
+            if (!Leap(c)) c.Mind.Begin(Doing.Still, 1f);
             return true;
         }
         return false;
@@ -636,11 +727,15 @@ internal sealed class PatchLife
     /// A squirrel on the move turning back the other way: the running curl, started at the speed it has now. The
     /// doing goes on toward the (new) goal when the curl ends.
     /// </summary>
-    private void CurlBack(Critter c)
+    private void CurlBack(Critter c, float stepThisFrame = 0f, float dt = 1f / 60)
     {
-        c.Turning = true; c.Curl = true; c.TurnT = 0; c.TurnV = MathF.Max(c.Pace.Speed, 0.1f * _s.U);
+        c.Turning = true; c.Curl = true; c.TurnT = 0;
+        c.TurnV = MathF.Max(stepThisFrame > 0f ? stepThisFrame / dt : c.Pace.Speed, 0.1f * _s.U);   // the speed the body actually had (the bound's pulse runs it up to 1.45 times its pace)
         c.Pace.Halt();
         c.Refused = 0;
+        // The curl's first frame moves too (it used to stand one dead frame between the last bound and the first curl page).
+        float nx = c.X + c.Dir * c.TurnV * dt;
+        if (_ground(nx, c.Y)) c.X = nx;
     }
 
     private void Startle(Critter c, PointF from)
@@ -699,6 +794,14 @@ internal sealed class PatchLife
     {
         float u = _s.U;
         c.Clock = 0;
+        // On a pumpkin top there is one way down: the hop (a raid, a fetch, a lull or a frenzy decided from up there dug a stash
+        // through the pumpkin's face, and one visitor sat up there, in a doing that was not Perch, for four minutes).
+        if (c.Kind == Kind.Squirrel && c.Perched >= 0 && c.Mind.Doing is not (Doing.HopUp or Doing.HopDown))
+        {
+            if (c.Mind.Doing == Doing.Perch && _rng.NextDouble() < 0.4 && !(Lull && c.Visitor)) { c.Mind.Begin(Doing.Perch, 2f + 3f * (float)_rng.NextDouble()); return; }
+            HopOff(c);
+            return;
+        }
         if (c.Resume is PointF back)
         {
             // Going on after a stop-start pause: the same goal, the page cycle carrying on from where it stood.
@@ -713,7 +816,7 @@ internal sealed class PatchLife
             c.NextDen = (float)_time + 40f + 40f * (1f - c.Timid);
             return;
         }
-        if (_test == "den" && c.Kind == Kind.Squirrel && !c.Visitor && _time < 20 && c.Nut == null && GoDen(c)) return;   // the test aid, ahead of everything
+        if (_test == "den" && c.Kind == Kind.Squirrel && !c.Visitor && _time < 60 && c.NextDen <= _time && c.Nut == null && GoDen(c)) return;   // the test aid, ahead of everything
         // The nuts come before the lull: a squirrel with a nut in its mouth or one in reach goes on with it while a story
         // plays (the frenzy is his ask; lulled, the visitors hid behind pumpkins for the whole story and never fetched one).
         if (c.Kind == Kind.Squirrel && DecideNuts(c)) return;
@@ -786,7 +889,8 @@ internal sealed class PatchLife
                 if (face == 0)
                 {
                     PointF? g = RandomSpot(c.X - 0.45f * u, c.X + 0.45f * u, 30, c.Y, 0.05f * u, 4f * _k, new PointF(c.X, c.Y));
-                    if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; }
+                    if (g == null) { if (!Leap(c)) c.Mind.Begin(Doing.Still, 0.5f); break; }
+                    c.Fails = 0;
                     c.Goal = g.Value; c.Mind.Begin(Doing.Go, 6f); c.Travelled = 0;
                     // A long run is a stop-start one, four times in ten: it pulls up somewhere in the middle third, sits up, looks, goes on.
                     float far = MathF.Abs(g.Value.X - c.X);
@@ -820,14 +924,16 @@ internal sealed class PatchLife
     private void HopOff(Critter c)
     {
         var (at, r) = _s.Pumpkins[c.Perched];
-        float k = _sq[c.Look].K;
+        float k = _sq[c.Look].K, u = _s.U;
         foreach (int dir in new[] { c.Dir, -c.Dir })
         {
             var to = new PointF(at.X + dir * (1.05f * r + 0.6f * k), at.Y + 0.8f * r + 0.08f * r);
-            if (!CanStand(to.X, to.Y)) continue;
-            c.Dir = dir;
+            // The landing must be a spot with a way on from it (a landing hard against the pumpkin's foot, with every goal on
+            // the row blocked, was a squirrel sitting there for minutes).
+            if (!CanStand(to.X, to.Y) || RandomSpot(to.X - 0.3f * u, to.X + 0.3f * u, 10, to.Y, 0.05f * u, 3f * k, to) == null) continue;
             c.FlyFrom = c.X; c.FlyTo = to.X; c.FlyY0 = c.Y; c.FlyY1 = to.Y;
-            c.Mind.Begin(Doing.HopDown, HopFor); c.Clock = 0;
+            if (dir != c.Dir) { c.Turning = true; c.Curl = false; c.TurnT = 0; c.HopAfterTurn = true; }   // comes round on the top first, then hops down the far side
+            else { c.Mind.Begin(Doing.HopDown, HopFor); c.Clock = 0; }
             return;
         }
         c.Mind.Begin(Doing.Perch, 2f);                                      // nowhere to land: sits on
@@ -982,7 +1088,7 @@ internal sealed class PatchLife
                         case Doing.Go when c.ToPerch >= 0:
                         {
                             var (at, r) = _s.Pumpkins[c.ToPerch];
-                            c.Dir = at.X >= c.X ? 1 : -1;
+                            if ((at.X >= c.X ? 1 : -1) != c.Dir) { c.Turning = true; c.Curl = false; c.TurnT = 0; }   // it arrived along the row and the pumpkin is beside it: comes round first
                             c.Perched = c.ToPerch; c.ToPerch = -1;
                             c.FlyFrom = c.X; c.FlyTo = at.X - c.Dir * 0.12f * r; c.FlyY0 = c.Y; c.FlyY1 = at.Y - 0.98f * r;   // onto its shoulder, by the stem
                             c.Mind.Begin(Doing.HopUp, HopFor); c.Clock = 0;
@@ -1031,7 +1137,7 @@ internal sealed class PatchLife
                         c.Dart = false;
                         PointF me = new(c.X, c.Y);
                         PointF? back = c.Dir > 0 ? RandomSpot(c.X - 0.45f * u, c.X - 4f * _k, 30, c.Y, 0.05f * u, 0f, me) : RandomSpot(c.X + 4f * _k, c.X + 0.45f * u, 30, c.Y, 0.05f * u, 0f, me);
-                        if (back != null) { c.Goal = back.Value; c.Mind.Begin(Doing.Go, 6f); CurlBack(c); _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} darts back"); return; }
+                        if (back != null) { c.Goal = back.Value; c.Mind.Begin(Doing.Go, 6f); CurlBack(c, step, dt); _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} darts back"); return; }
                     }
                 }
                 float x = c.X, y = c.Y, hd = c.Heading;
@@ -1046,7 +1152,7 @@ internal sealed class PatchLife
                 if (MathF.Abs(MathF.Cos(hd)) > 0.2f)
                 {
                     int dir = MathF.Cos(hd) > 0 ? 1 : -1;
-                    if (dir != c.Dir && c.Kind == Kind.Squirrel) { CurlBack(c); return; }   // a squirrel on the move comes round in a curl (Update); a mouse at 13 px just faces the other way
+                    if (dir != c.Dir && c.Kind == Kind.Squirrel) { CurlBack(c, step, dt); return; }   // a squirrel on the move comes round in a curl (Update); a mouse at 13 px just faces the other way
                     c.Dir = dir;
                 }
                 if (c.Mind.Doing == Doing.Hide && c.Mind.Over) c.Mind.Begin(Doing.Still, 0.3f);
@@ -1089,7 +1195,7 @@ internal sealed class PatchLife
                 float d = ClimbSpeed * u * dt;
                 c.Up += d; c.Travelled += d;
                 float hole = _s.TreeHoles[c.Tree].At.Y;
-                if (c.Y - c.Up < hole + 1.45f * k) { c.Mind.Begin(Doing.Enter, EnterFor); c.Clock = 0; }
+                if (c.Y - c.Up < hole + 1.25f * k) { c.Mind.Begin(Doing.Enter, EnterFor); c.Clock = 0; }   // the head (about 1.2 lengths above the feet on the cling page) is at the hole
                 break;
             }
             case Doing.Enter:
@@ -1103,6 +1209,7 @@ internal sealed class PatchLife
                     // Out of the hole: head-first down the trunk from the hole's bottom rim, then off the bark.
                     var (at, hw) = _s.TreeHoles[c.Tree];
                     c.Up = c.Y - (at.Y + hw * 16f / 11f) - 0.1f * _sq[c.Look].K;
+                    c.Dir = -c.Dir;                                                  // the head-down pages face the other way from the climb's: the facing is handed over HERE, so the sit at the foot faces the way the body came down (it used to flip at the foot)
                     c.Mind.Begin(Doing.Descend, 30f); c.Clock = 0;
                 }
                 break;
@@ -1218,7 +1325,10 @@ internal sealed class PatchLife
                         // from, the body over the bark; going in and coming out through the den stencil. (With the feet on the bole's edge
                         // and the body out from it, it hung in the air beside the tree.)
                         bool mirror = c.Dir < 0;
-                        float Edge(float y, bool m) => TrunkX(c.Tree, y) + (m ? TrunkHalf(c.Tree, y) : -TrunkHalf(c.Tree, y)) * 0.2f;   // m: the stamp's own mirror (the body lies on the side the sheet puts it)
+                        // The climb runs up the HOLE's own line (the trunk's middle at the hole), so what the stencil hides is inside the
+                        // hole and the tree, never bark beside it; the feet's side of the line is the side the body came up on.
+                        PointF holeAt = _s.TreeHoles[c.Tree].At;
+                        float Edge(float y, bool m) => holeAt.X + (m ? 1f : -1f) * 0.15f * TrunkHalf(c.Tree, y);
                         switch (c.Mind.Doing)
                         {
                             case Doing.Mount:
@@ -1226,9 +1336,9 @@ internal sealed class PatchLife
                                 break;
                             case Doing.Climb:
                             {
-                                float y = c.Y - 1.75f * k - 3 - c.Up;                                   // the pages' reference is the head end; the feet stand at the foot when Up is 0
+                                float y = c.Y - sq.UpFoot - c.Up;                                       // anchored by the measured feet: at Up 0 they stand on the ground (the mount's last page is this page at the foot)
                                 float cyc = c.Travelled / (2.2f * k);
-                                StampAt(fb, sq.Up, sq.Up.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], Edge(y + 0.9f * k, mirror), y, mirror, _denMask, c);
+                                StampAt(fb, sq.Up, sq.Up.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], Edge(y, mirror), y, mirror, _denMask, c);
                                 break;
                             }
                             case Doing.Enter:
@@ -1251,13 +1361,13 @@ internal sealed class PatchLife
                             }
                             case Doing.Descend:
                             {
-                                float y = c.Y - 0.8f * k - 3 - c.Up;                                    // head-first: the reference is the head end, at the foot when Up is 0
+                                float y = c.Y - sq.DownHead - c.Up;                                     // head-first: anchored by the measured head, at the foot when Up is 0
                                 float cyc = c.Travelled / (2.2f * k);
-                                StampAt(fb, sq.Down, sq.Down.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], Edge(y - 0.9f * k, !mirror), y, !mirror, _denMask, c);
+                                StampAt(fb, sq.Down, sq.Down.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], Edge(y, mirror), y, mirror, _denMask, c);   // Dir was handed over at the exit
                                 break;
                             }
                             case Doing.Dismount:
-                                StampAt(fb, sq.MountDown, sq.MountDown.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], Edge(c.Y, !mirror), c.Y, !mirror, null, c);
+                                StampAt(fb, sq.MountDown, sq.MountDown.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], Edge(c.Y, mirror), c.Y, mirror, null, c);
                                 break;
                         }
                         break;

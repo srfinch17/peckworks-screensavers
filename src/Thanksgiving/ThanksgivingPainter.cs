@@ -194,7 +194,8 @@ internal static class ThanksgivingPainter
         var barnFoot = new PointF(w * 0.60f, Brushwork.RidgeYAt(nearRidge, w * 0.60f) + u * 0.012f);
         // The road first: the buildings' feet cover its ends. Then the pond, up on the far slope past the barn.
         PointF[] road = PaintRoad(g, farmFoot, barnFoot, nearRidge, u);
-        var pond = (At: new PointF(w * 0.745f, Brushwork.RidgeYAt(nearRidge, w * 0.745f) - u * 0.044f), Rx: u * 0.055f, Ry: u * 0.013f);   // on the far slope above the paddock (at 0.865 w the right maple hid it)
+        // The pond is painted after the road and before the house; it lies in the pasture, so the far trees keep clear of it.
+        var pond = (At: new PointF(w * 0.812f, Brushwork.RidgeYAt(nearRidge, w * 0.812f) + u * 0.017f), Rx: u * 0.050f, Ry: u * 0.0065f);   // on the hill's own band, the open stretch past the paddock (on the far slope it read as "that disc thing above the horses"; in the pasture the left maple hid it)
         PaintPond(g, pond.At, pond.Rx, pond.Ry, u);
         PaintFarmhouse(g, farmFoot.X, farmFoot.Y, u);
         // The dog's house in the yard right of the porch, past the scarecrow's garden; the hens' yard is between them.
@@ -652,25 +653,52 @@ internal static class ThanksgivingPainter
     }
 
     /// <summary>
-    /// A pond off in the distance (his ask), on the far hill's slope beyond the barn: a flat oval of still water that
-    /// holds the dusk sky, paler toward its far edge, a thread of light on it from the moon, a dark rim where the bank
-    /// shades it, and a few cattails along the near bank.
+    /// A pond (his ask: "a pond off in the distance"): the watering pond in the cows' pasture on the hill left of the
+    /// house, seen from low and far so it is a flat sliver of water. (On the far hill's slope it read as "that disc
+    /// thing above the horses", and a terrace round it only made a bigger disc: water reads as water where the ground
+    /// is flat, and the pasture's band is the flattest ground the farm has.) The water is an uneven oval, not a true
+    /// ellipse, holding the dusk sky, paler toward its far edge; a dark muddy bank along its near edge, thicker in the
+    /// middle, with a few stones; three thin ripple lines; the moon's shimmer as a soft vertical smear; cattails in two
+    /// clumps at the near bank and one lone at the far side.
     /// </summary>
     private static void PaintPond(Graphics g, PointF at, float rx, float ry, float u)
     {
-        using (var water = new LinearGradientBrush(new PointF(0, at.Y - ry), new PointF(0, at.Y + ry), Color.FromArgb(226, 150, 104), Color.FromArgb(146, 82, 96)))
-            g.FillEllipse(water, at.X - rx, at.Y - ry, rx * 2, ry * 2);
-        using (var rim = new Pen(Color.FromArgb(90, 60, 30, 46), Math.Max(1f, u * 0.0015f)))
-            g.DrawArc(rim, at.X - rx, at.Y - ry, rx * 2, ry * 2, 10, 160);                     // the near bank's shade along the lower edge
-        using (var gleam = new SolidBrush(Color.FromArgb(120, 255, 226, 170)))
-            g.FillEllipse(gleam, at.X - rx * 0.30f, at.Y - ry * 0.25f, rx * 0.5f, ry * 0.3f);   // the moon's thread
-        using (var stalk = new Pen(Color.FromArgb(70, 54, 34), Math.Max(1f, u * 0.0012f)))
+        // The water: an uneven oval, a little wider at the left, with a shallow bay at the near right.
+        using (var path = new GraphicsPath())
+        {
+            path.AddClosedCurve([
+                new PointF(at.X - rx * 1.0f, at.Y + ry * 0.1f), new PointF(at.X - rx * 0.7f, at.Y - ry * 0.8f), new PointF(at.X - rx * 0.1f, at.Y - ry * 1.0f),
+                new PointF(at.X + rx * 0.55f, at.Y - ry * 0.85f), new PointF(at.X + rx * 0.95f, at.Y - ry * 0.2f), new PointF(at.X + rx * 0.8f, at.Y + ry * 0.7f),
+                new PointF(at.X + rx * 0.3f, at.Y + ry * 0.75f), new PointF(at.X + rx * 0.05f, at.Y + ry * 1.0f), new PointF(at.X - rx * 0.5f, at.Y + ry * 0.9f)], 0.6f);
+            using (var water = new LinearGradientBrush(new PointF(0, at.Y - ry), new PointF(0, at.Y + ry), Color.FromArgb(222, 150, 108), Color.FromArgb(132, 74, 92)))
+                g.FillPath(water, path);
+            // The near bank: the water's own edge drawn in mud, thicker at the middle of the near side.
+            using (var bank = new Pen(Color.FromArgb(70, 44, 32), Math.Max(1.5f, u * 0.0025f)))
+                g.DrawPath(bank, path);
+            using (var mud = new SolidBrush(Color.FromArgb(78, 50, 36)))
+                g.FillEllipse(mud, at.X - rx * 0.55f, at.Y + ry * 0.55f, rx * 1.1f, ry * 0.55f);
+        }
+        // Ripples: thin pale lines across the water, longer in the middle.
+        using (var ripple = new Pen(Color.FromArgb(120, 250, 210, 170), Math.Max(1f, u * 0.0012f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            foreach (var (f, half) in new[] { (-0.45f, 0.35f), (-0.05f, 0.55f), (0.35f, 0.4f) })
+                g.DrawLine(ripple, at.X - rx * half + rx * 0.1f, at.Y + ry * f, at.X + rx * half, at.Y + ry * f);
+        // The moon's shimmer: a soft vertical smear of its light on the water.
+        using (var shimmer = new LinearGradientBrush(new PointF(at.X - rx * 0.12f, 0), new PointF(at.X + rx * 0.12f, 0), Color.FromArgb(0, 255, 230, 180), Color.FromArgb(0, 255, 230, 180)))
+        {
+            shimmer.InterpolationColors = new ColorBlend { Colors = [Color.FromArgb(0, 255, 230, 180), Color.FromArgb(110, 255, 230, 180), Color.FromArgb(0, 255, 230, 180)], Positions = [0f, 0.5f, 1f] };
+            g.FillRectangle(shimmer, at.X - rx * 0.12f, at.Y - ry * 0.7f, rx * 0.24f, ry * 1.4f);
+        }
+        // Stones at the near bank, and the cattails: two clumps near, one lone at the far left.
+        using (var stone = new SolidBrush(Color.FromArgb(104, 90, 80)))
+            foreach (var (f, sz) in new[] { (-0.3f, 1.0f), (0.45f, 0.7f), (0.62f, 0.5f) })
+                g.FillEllipse(stone, at.X + rx * f, at.Y + ry * 0.95f, u * 0.004f * sz, u * 0.0025f * sz);
+        using (var stalk = new Pen(Color.FromArgb(78, 60, 36), Math.Max(1f, u * 0.0012f)))
         using (var head = new SolidBrush(Color.FromArgb(96, 60, 34)))
-            foreach (float f in new[] { -0.80f, -0.62f, 0.55f, 0.72f, 0.86f })
+            foreach (var (f, dy, lean) in new[] { (-0.78f, 0.75f, -0.4f), (-0.70f, 0.95f, 0.2f), (-0.62f, 0.85f, -0.1f), (0.70f, 0.85f, 0.3f), (0.78f, 1.0f, -0.2f), (0.86f, 0.9f, 0.4f), (-0.55f, -0.95f, 0.1f) })
             {
-                float sx = at.X + rx * f, sy = at.Y + ry * (1f - 0.3f * f * f);
-                g.DrawLine(stalk, sx, sy, sx + u * 0.001f, sy - u * 0.012f);
-                g.FillRectangle(head, sx - u * 0.0008f, sy - u * 0.012f, u * 0.0022f, u * 0.004f);
+                float sx = at.X + rx * f, sy = at.Y + ry * dy, tall = u * (0.012f + 0.003f * MathF.Abs(lean));
+                g.DrawLine(stalk, sx, sy, sx + u * 0.002f * lean, sy - tall);
+                g.FillRectangle(head, sx + u * 0.002f * lean - u * 0.0009f, sy - tall, u * 0.0022f, u * 0.0045f);
             }
     }
 

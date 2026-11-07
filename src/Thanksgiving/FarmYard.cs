@@ -48,6 +48,7 @@ internal sealed class FarmYard
         public (float X0, float X1, float Back, float Front) Pen;
         public float Along;                         // the dog on the road: how far along it, 0 at the porch, 1 at the barn
         public float NextBark;
+        public float Rested;                        // the dog: the clock before which it will not start another bout of barking (it barked at the coyotes without a pause for fifty seconds, and every squirrel in the patch within earshot froze for all of it)
     }
 
     private sealed class Sheets
@@ -190,7 +191,7 @@ internal sealed class FarmYard
     public void Update(float dt)
     {
         _time += dt;
-        if (!_ready) return;
+        if (!_ready || _time < 4.0) return;         // pinned start, like the patch's: a seed is a scenario
         float u = _s.U;
         foreach (Beast b in _all)
         {
@@ -225,12 +226,25 @@ internal sealed class FarmYard
     private void PickGoal(Beast b, float minDx)
     {
         var p = b.Pen;
-        float x, inset = SheetsOf(b).K * 0.9f;                       // the head reaches most of a body length past the feet: keep it inside the rails
+        float x, y, inset = SheetsOf(b).K * 0.9f;                    // the head reaches most of a body length past the feet: keep it inside the rails
         int tries = 0;
-        do { x = p.X0 + inset + (p.X1 - p.X0 - 2 * inset) * (float)_rng.NextDouble(); } while (MathF.Abs(x - b.X) < minDx && ++tries < 12);
+        do
+        {
+            x = p.X0 + inset + (p.X1 - p.X0 - 2 * inset) * (float)_rng.NextDouble();
+            y = p.Back + (p.Front - p.Back) * (float)_rng.NextDouble();
+        } while ((MathF.Abs(x - b.X) < minDx || InPond(b, x, y)) && ++tries < 24);
         b.GoalX = x;
-        b.GoalY = p.Back + (p.Front - p.Back) * (float)_rng.NextDouble();
+        b.GoalY = y;
         Face(b);
+    }
+
+    /// <summary>Is a goal in the pasture's pond (the cows stand round it, not in it)? The feet and a little of the body either side.</summary>
+    private bool InPond(Beast b, float x, float y)
+    {
+        if (b.Kind != Kind.Cow) return false;
+        var (at, rx, ry) = _s.Pond;
+        float k = SheetsOf(b).K, dx = (x - at.X) / (rx + 0.5f * k), dy = (y - at.Y) / (ry + 0.2f * k);
+        return dx * dx + dy * dy < 1f;
     }
 
     private void Decide(Beast b)
@@ -362,16 +376,17 @@ internal sealed class FarmYard
             case Doing.Bark:
                 if (b.Clock >= b.NextBark)
                 {
-                    _board.Post(Sense.Loud, new PointF(b.X, b.Y), 0.35f * u, 0.7f, this);
+                    _board.Post(Sense.Loud, new PointF(b.X, b.Y), 0.22f * u, 0.6f, this);   // heard across the yard and the hill, not down in the pumpkin patch (0.35 U reached it)
                     b.NextBark = b.Clock + 0.6f;
                 }
                 break;
         }
         // The dog hears a threat (the raccoon, the coyotes, the owl) and barks at it from where it sits; the hens run from the dog and from a bark.
-        if (b.Kind == Kind.Dog && b.Mind.Doing is Doing.Sit or Doing.Stand && _board.Nearest(Sense.Threat, new PointF(b.X, b.Y), 2.0f * u) is Notice threat)
+        if (b.Kind == Kind.Dog && b.Mind.Doing is Doing.Sit or Doing.Stand && _time >= b.Rested && _board.Nearest(Sense.Threat, new PointF(b.X, b.Y), 2.0f * u) is Notice threat)
         {
             b.Dir = threat.At.X >= b.X ? 1 : -1;
             b.Mind.Begin(Doing.Bark, 2.5f + 2f * (float)_rng.NextDouble()); b.Clock = 0f; b.NextBark = 0f;
+            b.Rested = (float)_time + 15f + 25f * (float)_rng.NextDouble();   // a bout, then it settles: a threat that stays (the pack on the lane) gets a bark now and then, not a siren
             _log?.WriteLine($"{_time,8:F2} dog barks at {threat.Kind}");
         }
         if (b.Kind == Kind.Hen && b.Mind.Doing != Doing.Run)

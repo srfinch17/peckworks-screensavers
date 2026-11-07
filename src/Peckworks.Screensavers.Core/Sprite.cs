@@ -94,6 +94,9 @@ public sealed class Sprite
     /// </summary>
     public static Sprite FromPixels(int width, int height, uint[] argb) => new(width, height, argb);
 
+    /// <summary>One painted pixel, ARGB (alpha in the top byte): for measuring a page (where its paint actually is).</summary>
+    public uint PixelAt(int x, int y) => _argb[y * Width + x];
+
     /// <summary>
     /// A soft round light: strongest in the middle, fading to nothing at the
     /// edge, with a small near-white hot spot at the center. Stamp it over a

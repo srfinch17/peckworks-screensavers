@@ -48,13 +48,13 @@ internal static class TractorArt
     public const float HitchX = 3.35f, HitchY = 0.40f;                              // the hitch pin: the implement's tongue ends here, and the implement pitches about it
     public const int PitchPages = 7;                                                // the implement's pitch pages: -3.6 to +3.6 degrees in steps of 1.2 (a step is about a pixel at the drum)
     public const float PitchStep = 1.2f;
-    /// <summary>The pitch, in degrees, of page i (the middle page is level); positive tips the implement's tail DOWN for a machine heading right.</summary>
+    /// <summary>The pitch, in degrees, of page i (the middle page is level); positive lifts the implement's tail (screen angles run clockwise, and the tail is at the left of the right-heading sheet).</summary>
     public static float PitchOf(int i) => (i - PitchPages / 2) * PitchStep;
     /// <summary>Where a point of the implement's sheet (units) ends up under a pitch: turned about the hitch pin. For the wheels and the bales, which are stamped on separately.</summary>
     public static (float X, float Y) Pitched(float x, float y, float pitchDeg)
     {
         float a = pitchDeg * MathF.PI / 180f, dx = x - HitchX, dy = y - HitchY;
-        return (HitchX + dx * MathF.Cos(a) + dy * MathF.Sin(a), HitchY - dx * MathF.Sin(a) + dy * MathF.Cos(a));   // y is up: a positive pitch drops the tail (dx negative)
+        return (HitchX + dx * MathF.Cos(a) + dy * MathF.Sin(a), HitchY - dx * MathF.Sin(a) + dy * MathF.Cos(a));   // y is up: a positive pitch lifts the tail (dx negative), the same turn the sheet's RotateTransform makes
     }
 
     // The paint is old and dusty: every red and green is pulled a little toward grey (his line: "the non fall color

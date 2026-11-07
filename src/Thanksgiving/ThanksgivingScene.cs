@@ -570,6 +570,20 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         // 3. The smoke, rising behind everything that stands in front of the farm.
         DrawSmoke(fb);
 
+        // 3a. The windmill's wheel at its hub, and the washing on the line, both in the breeze (BEFORE the yard: the cows walk in front of the washing; stamped after the stock, the washing hung in front of them, "the clothesline is in front of everything"): the wheel's page is
+        //     read off its own added-up phase; each cloth flaps on the scarf's clock, a little out of step with the next.
+        {
+            double turn = _rotorPhase * RotorPages;
+            _rotor[(int)((turn - Math.Floor(turn)) * RotorPages) % RotorPages].DrawCentered(fb, _scenery.Windmill.Hub.X, _scenery.Windmill.Hub.Y, 1f, _scenery.OpenFromFarm);
+            var (la, lb) = _scenery.Clothesline;
+            for (int k = 0; k < _washing.Length; k++)
+            {
+                float s = _washing[k].Along;
+                float ax = la.X + (lb.X - la.X) * s, ay = la.Y + _u * 0.003f * 3f * s * (1 - s);   // on the line, which sags as the painter's bezier does
+                int page = (int)(((_scarfPhase / (Math.PI * 2)) + k * 0.37) % 1.0 * LaundryPages) % LaundryPages;
+                Sprite cloth = _laundry[k][page];
+                cloth.Draw(fb, (int)MathF.Round(ax - _u * _washing[k].W / 2f) - 2, (int)MathF.Round(ay) - 1, 1f, _scenery.OpenFromFarm);
+            }
         // 3b. The yard: the stock and the dog on the hill, through the farm stencil (behind the field and everything nearer).
         _yard.Draw(fb);
 
@@ -614,20 +628,6 @@ internal sealed class ThanksgivingScene : IScreensaverScene
             _loftGlow.DrawCentered(fb, loft.X + loft.Width / 2, loft.Y + loft.Height / 2, lamp);
         }
 
-        // 5a. The windmill's wheel at its hub, and the washing on the line, both in the breeze: the wheel's page is
-        //     read off its own added-up phase; each cloth flaps on the scarf's clock, a little out of step with the next.
-        {
-            double turn = _rotorPhase * RotorPages;
-            _rotor[(int)((turn - Math.Floor(turn)) * RotorPages) % RotorPages].DrawCentered(fb, _scenery.Windmill.Hub.X, _scenery.Windmill.Hub.Y, 1f, _scenery.OpenFromFarm);
-            var (la, lb) = _scenery.Clothesline;
-            for (int k = 0; k < _washing.Length; k++)
-            {
-                float s = _washing[k].Along;
-                float ax = la.X + (lb.X - la.X) * s, ay = la.Y + _u * 0.003f * 3f * s * (1 - s);   // on the line, which sags as the painter's bezier does
-                int page = (int)(((_scarfPhase / (Math.PI * 2)) + k * 0.37) % 1.0 * LaundryPages) % LaundryPages;
-                Sprite cloth = _laundry[k][page];
-                cloth.Draw(fb, (int)MathF.Round(ax - _u * _washing[k].W / 2f) - 2, (int)MathF.Round(ay) - 1, 1f, _scenery.OpenFromFarm);
-            }
         }
 
         // 6. The scarf: the page is picked from its own clock (see Update), so
