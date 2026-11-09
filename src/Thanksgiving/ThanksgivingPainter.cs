@@ -115,6 +115,21 @@ internal sealed class ThanksgivingScenery
     public required PointF StageLeft { get; init; }                  // the open stretch of the walk line left of the middle: where an apple rolls in to, and the raccoon sniffs at a pumpkin
     public required List<(PointF At, float R)> Canopies { get; init; } // each maple's cloud of leaves: center and size
     public required List<PointF> CornerBranchSpots { get; init; }    // points on the corner branches' twigs and tips
+    public required List<(PointF A, PointF B, float Width)> BranchTimber { get; init; }   // every piece of the corner branches' wood, as the painter grew it: a round-capped bar from A to B, Width thick. The TOP EDGE a thing stands on is the line A to B lifted by Width / 2 (BranchTopY). Pieces at least U * 0.009 wide bear a squirrel; a sparrow stands on any of them.
+    /// <summary>The y of the top edge of the thickest branch piece under x (the surface a bird or a squirrel stands on there), or null if no piece spans that x.</summary>
+    public float? BranchTopY(float x, float minWidth = 0f)
+    {
+        float? best = null; float bestW = -1f;
+        foreach (var (a, b, wd) in BranchTimber)
+        {
+            if (wd < minWidth) continue;
+            float x0 = MathF.Min(a.X, b.X), x1 = MathF.Max(a.X, b.X);
+            if (x < x0 || x > x1 || x1 - x0 < 0.5f) continue;
+            float f = (x - a.X) / (b.X - a.X), y = a.Y + (b.Y - a.Y) * f - wd / 2f;
+            if (best == null || y < best.Value || (wd > bestW && MathF.Abs(y - best.Value) < wd)) { best = y; bestW = wd; }
+        }
+        return best;
+    }
     public required (PointF At, float R) LeftMaple { get; init; }    // the inner maple on each side (canopy centre and size); its trunk stands at At.X. The squirrels' trees.
     public required (PointF At, float R) RightMaple { get; init; }
     public required PointF[] LeftTrunk { get; init; }                // each inner maple's trunk as a line to climb: [0] the foot on the ground, [1] the fork, [2] the end of a limb inside the canopy
@@ -302,7 +317,7 @@ internal static class ThanksgivingPainter
 
         g.Flush();
         uint[] upToBranches = Brushwork.ToPixels(bmp);  // a fourth copy: "unchanged since here" = no corner branch in front
-        List<PointF> cornerSpots = PaintCornerBranches(g, w, h, u, rng);
+        List<PointF> cornerSpots = PaintCornerBranches(g, w, h, u, rng, out var branchTimber);
         // Leaves can let go of the corner branches too, not only the maples.
         foreach (PointF spot in cornerSpots)
             if (spot.X >= 0 && spot.X < w && spot.Y >= 0 && spot.Y < h) leafSpots.Add(spot);
@@ -374,7 +389,7 @@ internal static class ThanksgivingPainter
             CornShockFoot = shockFoot, CornShockTop = new PointF(shockFoot.X, shockFoot.Y - shockTall), CornShockHalfWidth = shockHalf,
             Pumpkins = pumpkins, Jack = jack, JackHoles = jackHoles, NearDepth = nearDepth, CrestMin = crestMin,
             StageLeft = new PointF(w * 0.24f, ground.YAt(w * 0.24f) + u * 0.052f),
-            Canopies = canopies, CornerBranchSpots = cornerSpots,
+            Canopies = canopies, CornerBranchSpots = cornerSpots, BranchTimber = branchTimber,
             LeftMaple = canopies[1], RightMaple = canopies[2], LeftTrunk = leftTrunk, RightTrunk = rightTrunk, Hollow = hollow, TreeHoles = treeHoles,
         };
     }
@@ -1831,15 +1846,24 @@ internal static class ThanksgivingPainter
     /// cluster would have been, a small bunch of leaves is painted instead
     /// (each leaf a pointed oval turned its own way), so the clusters read
     /// as foliage and not as flowers.
+    ///
+    /// Two branches a side since 2026-11-09 (his ask: "there should be a couple more foreground branches too"): the
+    /// high one from the very corner and a lower, flatter one a little way down the edge, so each top corner is a
+    /// bit of oak canopy rather than one stick. The wood is handed back as geometry (timber) for the things that
+    /// stand on it: the branches are the nearest layer in the picture, so a squirrel running out along one or a
+    /// bird perched up there is in front of everything else. The lower pair stay above the maples' crowns.
     /// </summary>
-    private static List<PointF> PaintCornerBranches(Graphics g, int w, int h, float u, Random rng)
+    private static List<PointF> PaintCornerBranches(Graphics g, int w, int h, float u, Random rng, out List<(PointF A, PointF B, float Width)> timber)
     {
         Brushwork.BranchSeed[] seeds =
         [
             new(new PointF(-w * 0.01f, h * 0.04f), 0.30f, u * 0.44f, u * 0.018f, 3),            // top left, reaching right
             new(new PointF(w * 1.01f, h * 0.02f), MathF.PI - 0.30f, u * 0.40f, u * 0.016f, 3),  // top right, reaching left
+            new(new PointF(-w * 0.01f, h * 0.19f), 0.10f, u * 0.36f, u * 0.016f, 2),            // lower left, flatter, reaching right
+            new(new PointF(w * 1.01f, h * 0.16f), MathF.PI - 0.12f, u * 0.38f, u * 0.016f, 2),  // lower right, flatter, reaching left
         ];
-        List<PointF> spots = Brushwork.Branches(g, seeds, u, rng, wood: Wood, petalLight: Wood, petalDeep: Wood, bare: true);
+        timber = new List<(PointF A, PointF B, float Width)>();
+        List<PointF> spots = Brushwork.Branches(g, seeds, u, rng, wood: Wood, petalLight: Wood, petalDeep: Wood, bare: true, timberOut: timber);
 
         Color[] leafColours = [Color.FromArgb(244, 176, 48), Color.FromArgb(226, 118, 36), Color.FromArgb(166, 52, 24), Color.FromArgb(250, 204, 86)];
         float len = Math.Max(3f, u * 0.014f);

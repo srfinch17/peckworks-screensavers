@@ -327,10 +327,19 @@ public static class Brushwork
     /// spots where flowers WOULD have been are still returned, which is handy
     /// for hanging something else there (Christmas lights, say).
     /// </param>
+    /// <param name="timberOut">
+    /// If given, every piece of wood is added to this list as it is grown: a straight
+    /// stroke from A to B of the given Width (the pen is round-capped, so the piece
+    /// is a rounded bar). This is the branch's GEOMETRY, the same the painter used,
+    /// so anything that must stand on a branch (a bird, a squirrel) can ask for the
+    /// bar's top edge (the line from A to B lifted by half the Width) instead of
+    /// guessing from the picture. One shape, owned by the painter.
+    /// </param>
     public static List<PointF> Branches(Graphics g, IEnumerable<BranchSeed> seeds, float u, Random rng,
-                                        Color wood, Color petalLight, Color petalDeep, bool bare = false)
+                                        Color wood, Color petalLight, Color petalDeep, bool bare = false,
+                                        List<(PointF A, PointF B, float Width)>? timberOut = null)
     {
-        var timber = new List<(PointF A, PointF B, float Width)>();
+        var timber = timberOut ?? new List<(PointF A, PointF B, float Width)>();
         var flowers = new List<(PointF C, float R, Color Petal, float Turn)>();
         var spots = new List<PointF>();
 

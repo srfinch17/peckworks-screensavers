@@ -584,7 +584,7 @@ with hay bales, a scarecrow in the garden beside the house and a small orchard p
 trees in their own autumn orange (the fruit long picked), a split rail fence, a corn shock, a
 pumpkin patch that covers the whole foreground (pumpkins of three tints, gourds and broad leaves joined
 by vine runners, one small one at the back carved into a jack-o'-lantern with a candle guttering inside it,
-in homage to Halloween and kept subtle), maples in full colour, and oak branches with the year's last leaves in the top corners.
+in homage to Halloween and kept subtle), maples in full colour, and oak branches with the year's last leaves in the top corners, two a side (a high one from the corner and a lower, flatter one), their wood handed to the scene as geometry so birds and squirrels can stand on it.
 
 ![Thanksgiving](docs/images/thanksgiving.png)
 
