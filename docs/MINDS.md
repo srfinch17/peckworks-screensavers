@@ -531,3 +531,41 @@ follows one actor by its own logged place, and `tg_mindlog.py` reads it back as 
 largest frame-to-frame speed step per animal (a toy's is its whole speed; a deer's is 2 px/s a
 frame at a 54 px/s walk) and the reactions in time order. `PECKWORKS_NOTICE=Kind;xf;yf;reachU;at`
 pins one notice at a chosen second, for watching the whole field react to it on a sheet.
+
+### The animal pass of 2026-11-09 (Thanksgiving, round 13)
+
+His ask: "make them a little more special in various ways. more intelligent for example, or funnier". What each
+resident gained, all built on the parts above (a new doing with its interrupters listed, a notice posted and its
+listeners measured, a pace for every move):
+
+- The pack's rabbits (`Pack.cs`): `Thump` and `Alert`. A rabbit that sees a coyote rears up and thumps a hind foot
+  twice, then bolts; the thump is posted (a `Sense.Friend` with the rabbit as `Who`, since the kit has no Noise)
+  and every rabbit within twelve coyote lengths sits up and bolts early. A coyote closer than 0.10 U skips the
+  thump. The coyotes: `Howl` at the end of a bout (the boldest on screen; `Sense.Loud` at 0.5 U, full weight).
+  Listeners measured: the deer look and the timid retreat; the yard's dog barks back (below).
+- The deer herd (`DeerHerd.cs`): the fawn's `Gambol` (a `Leaping` gait: springs, a dash out along her row, a skid,
+  a turn, the bounds back; the doe `Look`s at the end). Starts only when both stand quiet with nothing noisy in
+  the fawn's reach for 2 s; ended at once by a Threat, a Loud that is more than a glance, or the doe going Alert.
+- The turkey flock (`TurkeyFlock.cs`): a second tom when there are three or more birds; `Square` and `Slink`. The
+  face-off posts the display's Call at full weight; a Freeze or Flee in either tom aborts it; never two in 60 s.
+- The farm yard (`FarmYard.cs`): the dog's `Spin` and `Dizzy` (a playful dial), `Hunt`, `Pull` and `Slink` at the
+  hens (it posts `Sense.Threat` at itself at 0.08 U while hunting and skips its own post when it listens; the
+  hens scatter with a hop, the rooster `Look`s then `Run`s at it); the rooster's `Crow` (`Sense.Loud` at 0.09 U,
+  weight 0.3: the hens look up, a sitting dog woofs or pricks up); a cow's `Fold`, `Lie` and `Rise`. The dog also
+  hears a Loud of full weight from outside the yard within 2.0 U (the coyote's howl) and barks back, even from
+  inside its house, and that hearing is gated by its own 12 s `Heard` clock, not by the rest after an ordinary
+  bark: a stronger reaction breaks a weaker one's cooldown.
+- The patch's birds (`PatchLife.cs`): `Branch`, a perch up on the corner oak branches (the scenery's
+  `BranchTimber` and `BranchTopY` give the surface; the bird's feet land one pixel into the wood). The flight up
+  is the bounding flight climbing, with a flare in the last 0.3 s; up there it looks, preens, pecks and hops
+  along; a Threat within 1.0 U sends a grounded bird up and keeps a perched one up (capped at 45 s). Birds above
+  the ground's crest are drawn in a second pass with no depth stencil, in front of everything but the leaves.
+- A new story, `BranchRaid.cs` (the stories' deck): a third squirrel on a corner branch shakes acorns down
+  (`NutField.Drop` from the leaf spots near it), then slips and hangs or eats one. It posts Movement at its foot
+  (reaches nobody: the branches are far above the ground animals) and the nuts post Food as they land, which
+  the patch squirrels and a turkey answered in the log.
+
+The reach rule held twice in this round: the howl reached the deer but not the dog until the dog was given a
+listener for it, and the dog's first listener missed the howl because the dog was resting after its bark at the
+pack's arrival, then because it was inside its house (`Home`, a doing the listener had not named). Read the
+listener's own state in the log before widening any reach.

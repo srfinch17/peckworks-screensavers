@@ -38,7 +38,11 @@ internal static class FarmArt
         public float Tail;                         // -1 to 1, the swish
         public float Lift;                         // a chewing or a rooting nod of the head, 0 to 1
         public bool Sit, Lie;                      // the dog sits; the pig lies
-        public bool Mouth;                         // the dog barking: mouth open, head up
+        public bool Mouth;                         // the dog barking: mouth open, head up (the rooster crowing: beak open)
+        public float Kneel, Squat;                 // the cow lying down or getting up: how far the FRONT end and the HIND end are down, 0 standing to 1 on the grass
+        public float Crow;                         // the hen or rooster stretching the neck up and back, 0 normal to 1 full crow (the quiver is Tail)
+        public float Shake;                        // the sitting dog's head swaying side to side, -1 to 1 (dizzy, or shaking its head)
+        public bool TailDown;                      // the dog's plume hanging between its legs (slinking off)
     }
 
     private static void Blob(Graphics g, Color c, float tension, params PointF[] pts)
@@ -149,34 +153,40 @@ internal static class FarmArt
     public static void Cow(Graphics g, Pose q, CowCoat coat, int patches)
     {
         float belly = 0.34f;
+        // LYING DOWN (his ask: a cow lies down, front knees first, then the hind end settles; it gets up hind end first): the body is one shape,
+        // so each of its points drops by how far ITS end is down (D of x blends the hind end's dial into the front end's), and a folded leg is the same
+        // two-bone leg with its foot tucked forward under the barrel. The pages are the dials at (0.2,0) (0.6,0) (1,0.25) (1,0.65) (1,1); getting up plays them backward.
+        float kn = q.Kneel, sq = q.Squat;
+        float D(float x) => 0.24f * Lerp(sq, kn, Math.Clamp((x + 0.47f) / 0.93f, 0f, 1f));
+        float dF = D(0.30f), dH = D(-0.32f);
         var (nf, ff, nh, fh) = q.Walk < 0 ? (P(0, 0), P(0, 0), P(0, 0), P(0, 0)) : Feet(q.Walk, false, 0.22f, 0.05f);
         float bob = q.Walk < 0 ? 0f : 0.008f * MathF.Sin(MathF.Tau * 2f * q.Walk);
         Color far = Color.FromArgb(Math.Max(0, coat.Body.R - 36), Math.Max(0, coat.Body.G - 36), Math.Max(0, coat.Body.B - 36)), hoof = Color.FromArgb(50, 40, 36);
-        Leg(g, P(0.30f, belly + bob), P(0.32f + ff.X, ff.Y), 0.20f, far, 0.07f, true, hoof);
-        Leg(g, P(-0.32f, belly + bob), P(-0.34f + fh.X, fh.Y), 0.20f, far, 0.08f, false, hoof);
+        Leg(g, P(0.30f, belly + bob - dF), P(0.32f + ff.X + 0.28f * kn, ff.Y), 0.20f, far, 0.07f, true, hoof);
+        Leg(g, P(-0.32f, belly + bob - dH), P(-0.34f + fh.X + 0.30f * sq, fh.Y), 0.20f, far, 0.08f, false, hoof);
         // The tail: a thin rope with a tuft, hanging from the rump, swung by the swish.
-        using (var rope = new Pen(coat.Body, 0.03f) { EndCap = LineCap.Round }) g.DrawLine(rope, 0.46f * -1f, 0.58f + bob, -0.50f - 0.10f * q.Tail, 0.22f + bob);
-        Ell(g, -0.50f - 0.11f * q.Tail, 0.18f + bob, 0.04f, 0.05f, coat.Patch);
+        using (var rope = new Pen(coat.Body, 0.03f) { EndCap = LineCap.Round }) g.DrawLine(rope, 0.46f * -1f, 0.58f + bob - dH, -0.50f - 0.10f * q.Tail, 0.22f + bob - dH * 0.6f);
+        Ell(g, -0.50f - 0.11f * q.Tail, 0.18f + bob - dH * 0.6f, 0.04f, 0.05f, coat.Patch);
         // The body: a long deep box with rounded corners; the hip bones stand up a little at the rump.
-        Blob(g, coat.Body, 0.35f, P(0.42f, belly - 0.04f + bob), P(0.44f, 0.56f + bob), P(0.30f, 0.62f + bob), P(-0.30f, 0.62f + bob), P(-0.46f, 0.60f + bob), P(-0.47f, 0.40f + bob), P(-0.36f, belly - 0.04f + bob), P(0.0f, belly - 0.08f + bob));
+        Blob(g, coat.Body, 0.35f, P(0.42f, belly - 0.04f + bob - D(0.42f)), P(0.44f, 0.56f + bob - D(0.44f)), P(0.30f, 0.62f + bob - D(0.30f)), P(-0.30f, 0.62f + bob - D(-0.30f)), P(-0.46f, 0.60f + bob - D(-0.46f)), P(-0.47f, 0.40f + bob - D(-0.47f)), P(-0.36f, belly - 0.04f + bob - D(-0.36f)), P(0.0f, belly - 0.08f + bob - D(0.0f)));
         // The patches (Holstein): a few dark blobs at fixed places chosen by "patches".
         if (patches > 0)
         {
-            Blob(g, coat.Patch, 0.5f, P(-0.36f, 0.58f + bob), P(-0.10f, 0.60f + bob), P(-0.14f, 0.42f + bob), P(-0.32f, 0.36f + bob));
-            if (patches > 1) Blob(g, coat.Patch, 0.5f, P(0.10f, 0.50f + bob), P(0.30f, 0.56f + bob), P(0.36f, 0.40f + bob), P(0.16f, 0.34f + bob));
+            Blob(g, coat.Patch, 0.5f, P(-0.36f, 0.58f + bob - D(-0.36f)), P(-0.10f, 0.60f + bob - D(-0.10f)), P(-0.14f, 0.42f + bob - D(-0.14f)), P(-0.32f, 0.36f + bob - D(-0.32f)));
+            if (patches > 1) Blob(g, coat.Patch, 0.5f, P(0.10f, 0.50f + bob - D(0.10f)), P(0.30f, 0.56f + bob - D(0.30f)), P(0.36f, 0.40f + bob - D(0.36f)), P(0.16f, 0.34f + bob - D(0.16f)));
         }
-        Ell(g, -0.22f, belly - 0.08f + bob, 0.12f, 0.07f, coat.Udder);                            // the udder
+        if (sq < 0.5f) Ell(g, -0.22f, belly - 0.08f + bob - D(-0.22f), 0.12f, 0.07f, coat.Udder);   // (lying, it is under her)                            // the udder
         // The head: low and heavy on a short thick neck, a broad muzzle, small horns and a drooping ear; down to the grass with HeadDown.
         float hd = q.HeadDown;
-        PointF head = P(Lerp(0.62f, 0.66f, hd), Lerp(0.50f, 0.12f, hd) + bob - 0.02f * q.Lift);
-        Bone(g, P(0.40f, 0.52f + bob), P(head.X - 0.08f, head.Y + 0.04f), 0.22f, 0.16f, coat.Body);
+        PointF head = P(Lerp(0.62f, 0.66f, hd), Lerp(0.50f, 0.12f, hd) + bob - 0.02f * q.Lift - 0.35f * dF);
+        Bone(g, P(0.40f, 0.52f + bob - dF), P(head.X - 0.08f, head.Y + 0.04f), 0.22f, 0.16f, coat.Body);
         Blob(g, coat.Body, 0.4f, P(head.X - 0.12f, head.Y + 0.12f), P(head.X + 0.02f, head.Y + 0.12f), P(head.X + 0.14f, head.Y - 0.02f), P(head.X + 0.12f, head.Y - 0.12f), P(head.X - 0.04f, head.Y - 0.12f), P(head.X - 0.14f, head.Y - 0.02f));
-        Ell(g, head.X + 0.11f, head.Y - 0.06f, 0.06f, 0.05f, Color.FromArgb(190, 150, 140));       // the muzzle
+        Ell(g, head.X + 0.11f, head.Y - 0.06f - (sq > 0.5f ? 0.035f * q.Lift : 0f), 0.06f, 0.05f, Color.FromArgb(190, 150, 140));       // the muzzle (lying, the lift is the JAW: the cud going round)
         Ell(g, head.X - 0.10f, head.Y + 0.06f, 0.05f, 0.03f, coat.Body);                           // the ear, out sideways
         using (var horn = new Pen(Color.FromArgb(200, 190, 170), 0.025f) { EndCap = LineCap.Round }) g.DrawLine(horn, head.X - 0.02f, head.Y + 0.12f, head.X + 0.02f, head.Y + 0.19f);
         Ell(g, head.X + 0.02f, head.Y + 0.02f, 0.013f, 0.013f, Color.FromArgb(30, 24, 22));
-        Leg(g, P(0.30f, belly + bob), P(0.30f + nf.X, nf.Y), 0.20f, coat.Body, 0.08f, true, hoof);
-        Leg(g, P(-0.32f, belly + bob), P(-0.32f + nh.X, nh.Y), 0.20f, coat.Body, 0.09f, false, hoof);
+        Leg(g, P(0.30f, belly + bob - dF), P(0.30f + nf.X + 0.28f * kn, nf.Y), 0.20f, coat.Body, 0.08f, true, hoof);
+        Leg(g, P(-0.32f, belly + bob - dH), P(-0.32f + nh.X + 0.30f * sq, nh.Y), 0.20f, coat.Body, 0.09f, false, hoof);
     }
 
     // ================================================================ the pig
@@ -217,6 +227,7 @@ internal static class FarmArt
         Color body = rooster ? Color.FromArgb(150, 60, 30) : Color.FromArgb(214, 150, 70), tail = rooster ? Color.FromArgb(30, 60, 50) : Color.FromArgb(150, 98, 44);
         Color leg = Color.FromArgb(210, 170, 60), comb = Color.FromArgb(206, 40, 40);
         float step = q.Walk < 0 ? 0f : 0.16f * MathF.Sin(MathF.Tau * q.Walk);
+        g.TranslateTransform(0.014f * q.Tail, 0f);      // the crow's quiver: the whole bird shudders sideways
         using (var l = new Pen(leg, 0.035f) { EndCap = LineCap.Round })
         {
             g.DrawLine(l, 0.02f, 0.30f, 0.02f + step, 0.0f);
@@ -225,11 +236,19 @@ internal static class FarmArt
         Blob(g, tail, 0.5f, P(-0.30f, 0.46f), P(-0.52f, rooster ? 0.80f : 0.62f), P(-0.44f, rooster ? 0.86f : 0.66f), P(-0.20f, 0.56f));   // the tail, up
         Blob(g, body, 0.6f, P(0.30f, 0.30f), P(0.36f, 0.50f), P(0.14f, 0.62f), P(-0.20f, 0.58f), P(-0.34f, 0.42f), P(-0.16f, 0.26f), P(0.10f, 0.24f));
         float hd = q.HeadDown;
-        PointF head = P(Lerp(0.42f, 0.56f, hd), Lerp(0.74f, 0.22f, hd));
+        // THE CROW (a real rooster: the neck stretched straight up and a little back, the beak pointed at the sky and wide open, the chest pumping): Crow 0 to 1.
+        float cr = q.Crow;
+        PointF head = P(Lerp(Lerp(0.42f, 0.56f, hd), 0.34f, cr), Lerp(Lerp(0.74f, 0.22f, hd), rooster ? 1.10f : 0.95f, cr));
         Bone(g, P(0.28f, 0.52f), head, 0.12f, 0.10f, body);
         Ell(g, head.X, head.Y, 0.09f, 0.08f, body);
         Blob(g, comb, 0.3f, P(head.X - 0.06f, head.Y + 0.07f), P(head.X - 0.02f, head.Y + 0.14f), P(head.X + 0.04f, head.Y + 0.13f), P(head.X + 0.06f, head.Y + 0.07f));
-        Ell(g, head.X + 0.10f, head.Y - 0.01f, 0.04f, 0.025f, Color.FromArgb(230, 190, 80));     // the beak
+        if (q.Mouth && cr > 0.5f)
+        {
+            Ell(g, head.X + 0.08f, head.Y + 0.07f, 0.035f, 0.022f, Color.FromArgb(230, 190, 80));     // the beak open: the upper half tipped to the sky
+            Ell(g, head.X + 0.08f, head.Y - 0.01f, 0.03f, 0.02f, Color.FromArgb(230, 190, 80));      // and the lower half down
+            Ell(g, head.X + 0.07f, head.Y + 0.03f, 0.02f, 0.015f, Color.FromArgb(196, 60, 60));       // the red of the mouth between
+        }
+        else Ell(g, head.X + 0.10f, head.Y - 0.01f + 0.05f * cr, 0.04f, 0.025f, Color.FromArgb(230, 190, 80));     // the beak
         Ell(g, head.X + 0.02f, head.Y + 0.02f, 0.012f, 0.012f, Color.FromArgb(30, 24, 22));
     }
 
@@ -246,7 +265,7 @@ internal static class FarmArt
             Blob(g, white, 0.5f, P(0.08f, 0.10f), P(0.14f, 0.44f), P(0.04f, 0.46f), P(-0.02f, 0.14f));                 // the white chest
             Bone(g, P(0.10f, 0.40f), P(0.18f, 0.02f), 0.09f, 0.07f, coat); Bone(g, P(0.04f, 0.38f), P(0.10f, 0.02f), 0.08f, 0.06f, dark);
             Blob(g, coat, 0.4f, P(-0.40f, 0.06f), P(-0.60f, 0.30f + 0.10f * q.Tail), P(-0.52f, 0.46f + 0.10f * q.Tail), P(-0.36f, 0.26f));   // the tail round the haunch
-            PointF sh = P(0.22f, 0.78f);
+            PointF sh = P(0.22f + 0.22f * q.Shake, 0.78f - 0.05f * MathF.Abs(q.Shake));      // (the sway: the head swings out and dips at each end)
             Bone(g, P(0.06f, 0.60f), sh, 0.16f, 0.14f, coat);
             Ell(g, sh.X, sh.Y, 0.12f, 0.11f, coat);
             Blob(g, coat, 0.3f, P(sh.X + 0.04f, sh.Y - 0.06f), P(sh.X + 0.22f, sh.Y - 0.02f + 0.06f * (q.Mouth ? 1 : 0)), P(sh.X + 0.06f, sh.Y + 0.04f));
@@ -260,7 +279,8 @@ internal static class FarmArt
         float belly = 0.36f, bob = q.Walk < 0 ? 0f : 0.015f * MathF.Sin(MathF.Tau * 2f * q.Walk);
         Leg(g, P(0.26f, belly + bob), P(0.28f + ff.X, ff.Y), 0.20f, dark, 0.06f, true);
         Leg(g, P(-0.28f, belly + bob), P(-0.30f + fh.X, fh.Y), 0.20f, dark, 0.07f, false);
-        Blob(g, coat, 0.45f, P(-0.42f, 0.52f + bob), P(-0.58f, 0.68f + 0.12f * q.Tail + bob), P(-0.50f, 0.76f + 0.12f * q.Tail + bob), P(-0.36f, 0.60f + bob));   // the plume, carried up
+        if (q.TailDown) Blob(g, coat, 0.45f, P(-0.40f, 0.50f + bob), P(-0.52f, 0.40f + bob), P(-0.50f, 0.22f + bob), P(-0.42f, 0.26f + bob), P(-0.38f, 0.40f + bob));   // slinking: the plume hangs, tucked down
+        else Blob(g, coat, 0.45f, P(-0.42f, 0.52f + bob), P(-0.58f, 0.68f + 0.12f * q.Tail + bob), P(-0.50f, 0.76f + 0.12f * q.Tail + bob), P(-0.36f, 0.60f + bob));   // the plume, carried up
         Blob(g, coat, 0.55f, P(0.34f, belly - 0.02f + bob), P(0.38f, 0.56f + bob), P(0.10f, 0.62f + bob), P(-0.30f, 0.60f + bob), P(-0.44f, 0.52f + bob), P(-0.40f, 0.36f + bob), P(0.0f, belly - 0.06f + bob));
         Blob(g, white, 0.5f, P(0.34f, belly - 0.02f + bob), P(0.36f, 0.50f + bob), P(0.14f, 0.50f + bob), P(0.10f, belly - 0.04f + bob));   // the white chest and collar
         float hd = q.HeadDown;

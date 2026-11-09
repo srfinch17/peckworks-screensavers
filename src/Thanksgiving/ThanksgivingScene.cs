@@ -169,7 +169,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _herd = new DeerHerd(_scenery, settings.DeerCount, _rng, _board);
         _work = new FieldWork(_scenery, _rng, _board);
         _pack = new Pack(_scenery, settings.CoyoteCount, 4, _rng, _board);
-        _stories = new StoryDirector(_scenery, _happenings, _rng, _board, c => [new AcornCaper(c), new HideAndSeek(c), new FawnApple(c, _herd), new MouseParade(c)]);
+        _stories = new StoryDirector(_scenery, _happenings, _rng, _board, c => [new AcornCaper(c), new HideAndSeek(c), new FawnApple(c, _herd), new MouseParade(c), new BranchRaid(c, () => _nuts)]);
         _nuts = new NutField(_scenery, _rng, _board);
         _scenery.Nuts = _nuts;                     // the AcornDrop happening drops into it
         _life = new PatchLife(_scenery, settings.CritterCount, _rng, _board, _nuts);

@@ -45,13 +45,27 @@ namespace Thanksgiving;
 /// where they should, and they keep between the maples so a head is never
 /// parked behind the leaves.
 ///
-/// Test aid: PECKWORKS_DEER=walk keeps the doe walking (for the hoof
-/// measure); PECKWORKS_DEER=graze keeps her grazing.
+/// THE FAWN GAMBOLS (2026-11-09: "make them a little more special ... funnier"). When the herd is settled and the
+/// board is empty, the fawn now and then bursts into play the way a real fawn does. A real fawn's play is a
+/// PRONK (a "stott"): all four legs stiff and gathered under a hunched, arched back, the leap UP more than
+/// forward, tail flag up; then a gallop of low bounds (legs stretched out front and behind in the air, gathered
+/// before the landing); and it ends in a skid, hind legs under it and forelegs braced. So the script is: three or
+/// four springs, a dash of bounds out along her row (a little nearer the eye as it goes), a skid stop, a TURN
+/// through the turn pages, a dash back, a skid, and maybe a second, shorter bout; then she stands and looks at
+/// her mother, and the doe lifts her head, turns to look back and flicks her tail, and both go back to grazing.
+/// Five extra body pages carry it (Gam[0] load, 1 gather, 2 reach, 3 land, 4 skid), drawn lifted off the
+/// ground by a parabola of the leap (never higher than 0.6 of her own height: a leap higher than the animal is
+/// tall is wrong). Only a danger ends it at once (the doe alarmed, any Threat or Loud notice, a Freeze or a Flee):
+/// she lands and the herd's usual reactions take over, the fawn trotting to her mother as ever.
+///
+/// Test aids: PECKWORKS_DEER=walk keeps the doe walking (for the hoof
+/// measure); PECKWORKS_DEER=graze keeps her grazing; PECKWORKS_FAWN=now starts a gambol at 3 s of scene time
+/// (as soon as both are standing), for a frame dump that lines up with the log.
 /// </summary>
 internal sealed class DeerHerd
 {
-    private enum Doing { Graze, Look, Walk, Alert, Retreat }   // Alert: head up, still, facing what it heard; Retreat: a brisk walk away from it
-    private enum Gait { Settled, Rising, Walking, Stopping, Settling, Turning }   // Rising: the settle pages backward (about to walk); Settling: forward (just stopped); Turning: coming round on the spot
+    private enum Doing { Graze, Look, Walk, Alert, Retreat, Gambol }   // Alert: head up, still, facing what it heard; Retreat: a brisk walk away from it
+    private enum Gait { Settled, Rising, Walking, Stopping, Settling, Turning, Leaping }   // Rising: the settle pages backward (about to walk); Settling: forward (just stopped); Turning: coming round on the spot
 
     private sealed class Animal
     {
@@ -87,6 +101,13 @@ internal sealed class DeerHerd
         public bool Lent;                                   // a story is driving it: the herd keeps the neck, the bites and the ears, nothing else
         public float LentNeck;                              // where the story wants its neck
         public float HomeDepth;                             // its own line across the field, given back when the story is over
+        public Sprite[] Gam = new Sprite[GamPages];         // the gambol's poses: load, gather, reach, land, skid
+        public PointF[] NeckGam = new PointF[GamPages];
+        public int Pose;                                    // which of them (while Gait is Leaping)
+        public float Lift;                                  // pixels off the ground, in the air
+        public int GPhase, GN, GCount, GBouts;              // the gambol script: phase, spring or bound number, how many this phase, bouts left
+        public float GT, GHomeX, GHomeDepth, GStay;         // seconds into the phase, where the bout began, her own row, the seconds she stands and looks at her mother
+        public bool GOut;                                   // the out leg (true) or the leg back
     }
 
     /// <summary>The fawn's index, or -1 when there is none (for a story that borrows it).</summary>
@@ -97,7 +118,7 @@ internal sealed class DeerHerd
     {
         if (i < 0 || i >= _deer.Length || _deer[i].Lent) return false;
         Animal a = _deer[i];
-        a.Lent = true; a.LentNeck = a.NeckF; a.HomeDepth = a.Depth; a.Gait = Gait.Settled; a.Doing = Doing.Look; a.Walked = 0;
+        a.Lift = 0; a.Lent = true; a.LentNeck = a.NeckF; a.HomeDepth = a.Depth; a.Gait = Gait.Settled; a.Doing = Doing.Look; a.Walked = 0;
         return true;
     }
 
@@ -133,6 +154,10 @@ internal sealed class DeerHerd
         a.Lent = false; a.Depth = a.HomeDepth; a.Gait = Gait.Settled; a.Doing = Doing.Look; a.Timer = 1.5f; a.Clock = 0;
     }
 
+    private const int GamPages = 5;
+    private const float SpringFor = 0.52f, SpringGround = 0.10f, BoundFor = 0.32f, BoundGround = 0.05f, SkidFor = 0.38f;   // a spring is 0.1 s crouched and 0.42 s in the air; a bound 0.05 and 0.27; a skid 0.38
+    private const float SpringLift = 0.6f, BoundLift = 0.22f;   // the peak, in her own heights
+    private const float SpringSpeed = 1.25f, BoundSpeed = 5.0f; // in her heights a second (a spring goes up more than forward)
     private const int WalkPages = 48, SettlePages = 8, TailPages = 3, HeadPages = 24, HeadKinds = 3;   // 48 walk pages: a planted hoof shimmers by half the stride a page covers, about a pixel; 8 settle pages: two per foot
     private const float Speed = 0.035f;                     // in U per second: 1.2 m/s at the field's scale (0.05 was set for a deer twice the size)
     private const float RetreatSpeed = 0.06f;               // a startled deer's brisk walk away
@@ -164,7 +189,11 @@ internal sealed class DeerHerd
     private readonly Animal[] _deer;
     private readonly string? _test = Environment.GetEnvironmentVariable("PECKWORKS_DEER");
     private readonly StreamWriter? _log;
-    private double _time;
+    private readonly bool _fawnTest = Environment.GetEnvironmentVariable("PECKWORKS_FAWN") == "now";
+    private bool _fawnTestDone;
+    private double _lastNoise = -99;
+    private readonly Random _playDice = new(7919);          // its own dice for the urge to play, so the herd's own rolls never move
+    private double _time, _nextGambol = 20;                 // never two gambols within a minute; none in the opening twenty seconds
 
     public DeerHerd(ThanksgivingScenery s, int count, Random sceneRng, Noticeboard board)
     {
@@ -240,6 +269,23 @@ internal sealed class DeerHerd
             float dip = 0.008f * (1 - k);
             a.NeckSettle[i] = new PointF(NeckX, NeckRoot(0f).Y + (NeckY - NeckRoot(0f).Y) * k);
             a.Settle[i] = Body(g => PaintBody(g, feet, -dip, -dip, 0, a.Fawn, h));
+        }
+        // The gambol's poses (see the header): feet are (near hind, near fore, far hind, far fore) from their hips, wd and cd
+        // lower the withers and the croup (hunched: the back arches between them), tail 0 down to 2 up.
+        PointF[] Gf(float hind, float fore, float up) => [P(hind, up), P(fore, up), P(hind - 0.04f, up), P(fore + 0.04f, up)];
+        (PointF[] feet, float wd, float cd, int tail)[] gam =
+        [
+            (SquareFeet(), 0.045f, 0.050f, 0),            // load: crouched to spring, the feet planted square
+            (Gf(0.05f, -0.02f, 0.03f), 0.035f, 0.040f, 2),   // gather: all four legs stiff and tucked under the hunched back, the flag up
+            (Gf(-0.17f, 0.17f, 0.07f), 0f, 0f, 1),            // reach: hind legs stretched back and forelegs forward, off the ground
+            (Gf(-0.04f, 0.10f, 0.0f), 0.02f, 0.02f, 1),       // land: the forefeet reaching out to meet the ground
+            (Gf(0.05f, 0.12f, 0.0f), 0f, 0.05f, 2),           // skid: hind legs under her, haunch low, forelegs braced out in front
+        ];
+        for (int t = 0; t < GamPages; t++)
+        {
+            var (gfeet, gwd, gcd, gtail) = gam[t];
+            a.NeckGam[t] = P(NeckX, NeckY - gwd);
+            a.Gam[t] = Body(g => PaintBody(g, gfeet, gwd, gcd, gtail, a.Fawn, h));
         }
         for (int t = 0; t < TailPages; t++)
         {
@@ -490,16 +536,19 @@ internal sealed class DeerHerd
         float u = _s.U;
         _time += dt;
         Animal doe = _deer.Length > 0 ? _deer[0] : null!;
+        BoardQuiet();                                           // keeps the clock of the last noise
+        if (_fawnTest && !_fawnTestDone && _time >= 3.0 && _deer.Length >= 2) TestGambol();
         for (int i = 0; i < _deer.Length; i++)
         {
             Animal a = _deer[i];
             a.Timer -= dt;
             a.Clock += dt;
             a.Senses.Tick(dt);
+            a.GStay -= dt;
             _log?.WriteLine($"{_time,8:F3} deer{i} frame x {a.X:F1} v {a.Pace.Speed:F2} {a.Doing}/{a.Gait}");
 
             // ---- the neck: a damped spring toward where the doing wants it (slow off the mark, fastest in the middle, settling in about half a second) ----
-            float want = a.Lent ? a.LentNeck : a.Doing switch { Doing.Graze => 1f, Doing.Look => 0f, Doing.Alert => 0f, Doing.Retreat => 0.15f, _ => 0.25f };
+            float want = a.Lent ? a.LentNeck : a.Doing switch { Doing.Graze => 1f, Doing.Look => 0f, Doing.Alert => 0f, Doing.Gambol => 0.05f, Doing.Retreat => 0.15f, _ => 0.25f };
             a.NeckV += ((want - a.NeckF) * NeckSpring - a.NeckV * NeckDamp) * dt;
             a.NeckF = Math.Clamp(a.NeckF + a.NeckV * dt, 0f, 1f);
             // Bites while grazing with the nose down: bursts of a few, each a tug up, a hold and an ease down, then chewing.
@@ -526,8 +575,14 @@ internal sealed class DeerHerd
             if (a.Doing != Doing.Retreat && _test == null)
             {
                 Reaction r = a.Senses.Check(_board, new PointF(a.X, FootY(a)), a, out Notice cause);
+                if (r != Reaction.None && a.Doing == Doing.Gambol)
+                {
+                    if (cause.Kind == Sense.Threat || (cause.Kind == Sense.Loud && r != Reaction.Look) || r is Reaction.Freeze or Reaction.Flee) AbortGambol(a, $"{cause.Kind} {r}");   // a danger or a bang ends the play at once, then the usual reaction
+                    else r = Reaction.None;                                  // a tom's call, an apple, a glance, a far-off bang: no reason to stop playing
+                }
                 if (r != Reaction.None) React(a, i, r, cause);
             }
+            if (a.Doing == Doing.Gambol && (doe.Doing is Doing.Alert or Doing.Retreat || doe.Lent)) AbortGambol(a, $"doe {doe.Doing}");   // her mother is alarmed: the play is over
 
             // ---- the gait ----
             switch (a.Gait)
@@ -579,7 +634,12 @@ internal sealed class DeerHerd
                 if (a.X > hi) { a.X = hi; StopWalk(a); a.Doing = Doing.Walk; a.TurnWhenSettled = -1; }
             }
 
-            if (a.Fawn && doe != null && !doe.Lent && a.Doing != Doing.Retreat && a.Doing != Doing.Alert)
+            if (a.Doing == Doing.Gambol) { TickGambol(a, dt, doe); continue; }
+            // The urge to play: a settled fawn with a quiet board has about a one in twelve chance each second (a fawn follows her
+            // mother for most of the time and seldom rolls the dice, so the dice alone almost never came up).
+            if (a.Fawn && _test == null && a.Timer > 0.3f && _time >= _nextGambol && CanGambol(a, doe) && a.GStay <= 0 && BoardQuiet() && _playDice.NextDouble() < dt / 12.0) { StartGambol(a, doe); continue; }
+
+            if (a.Fawn && doe != null && !doe.Lent && a.Doing != Doing.Retreat && a.Doing != Doing.Alert && a.GStay <= 0)
             {
                 // The fawn keeps close (Herd.cs): her place is a gap behind her mother on the side she came from; if the gap is
                 // wrong by more than she can bear she trots to it, and stops once she is near it.
@@ -610,9 +670,11 @@ internal sealed class DeerHerd
             if (a.Doing is Doing.Walk or Doing.Retreat) { StopWalk(a); a.Timer = Organic.Jitter(_rng, 5f); Log(a, i, "stop"); continue; }
             if (a.Doing == Doing.Alert) { a.Doing = Doing.Look; a.Timer = Organic.Jitter(_rng, 1.5f); continue; }   // the alarm passes: a look, then whatever is next
             // The dice: graze (the usual), look about (a timid deer more), walk off (a doe only; the fawn follows).
-            int face = Dice.Pick(_rng, [0.55f, 0.25f + 0.2f * a.Timid, a.Fawn ? 0f : 0.2f]);
+            bool play = a.Fawn && CanGambol(a, doe) && _time >= _nextGambol && BoardQuiet();
+            int face = Dice.Pick(_rng, [0.55f, 0.25f + 0.2f * a.Timid, a.Fawn ? 0f : 0.2f, play ? 0.16f : 0f]);
             switch (face)
             {
+                case 3: StartGambol(a, doe); break;
                 case 0: a.Doing = Doing.Graze; a.Timer = Organic.Jitter(_rng, 5.5f); break;
                 case 1: a.Doing = Doing.Look; a.Timer = Organic.Jitter(_rng, 2.5f); a.TailT = 0; break;
                 default: StartWalk(a, _rng.Next(3) == 0 ? -a.Dir : a.Dir); a.Timer = Organic.Jitter(_rng, 4f); break;
@@ -652,6 +714,158 @@ internal sealed class DeerHerd
         }
         Log(a, i, $"react {r} to {cause.Kind}");
     }
+
+    // ================================================================ the gambol
+
+    /// <summary>The herd is settled: she is standing and grazing or looking, neither of them in a story.</summary>
+    private static bool CanGambol(Animal a, Animal doe) =>
+        !a.Lent && !doe.Lent && a.Gait == Gait.Settled && doe.Gait == Gait.Settled && a.Doing is Doing.Graze or Doing.Look && doe.Doing is Doing.Graze or Doing.Look;
+
+    /// <summary>Nothing on the board that is danger, noise or movement (a tom's call, an apple or a friend's glance do not count).</summary>
+    private bool BoardQuiet()
+    {
+        if (_deer.Length < 2) return true;
+        Animal f = _deer[1];
+        foreach (Notice n in _board.Live)
+        {
+            if (n.Kind is not (Sense.Threat or Sense.Loud or Sense.Movement)) continue;
+            // Only what she can really feel counts (the field work bangs away all day far off): the notice's strength at her place, as Senses.Check works it out.
+            float dx = n.At.X - f.X, dy = n.At.Y - FootY(f), strength = (1f - MathF.Sqrt(dx * dx + dy * dy) / (n.Reach * 1.3f)) * n.Weight;
+            if (strength > 0.25f) { _lastNoise = _time; break; }
+        }
+        return _time - _lastNoise > 2.0;                     // a notice pins only briefly, and a noisy stretch comes in bangs: quiet means none for two seconds
+    }
+
+    private void TestGambol()
+    {
+        Animal a = _deer[1], doe = _deer[0];
+        if (!CanGambol(a, doe)) return;                              // wait until both are standing
+        _fawnTestDone = true;
+        StartGambol(a, doe);
+    }
+
+    private void StartGambol(Animal a, Animal doe)
+    {
+        a.Doing = Doing.Gambol;
+        a.GBouts = 1 + (_rng.NextDouble() < 0.35 ? 1 : 0);
+        a.GHomeDepth = a.Depth;
+        a.Pace.Halt();
+        BeginBout(a, 3 + _rng.Next(2));
+        _log?.WriteLine($"{_time,8:F2} deer1 gambol begins: bouts {a.GBouts} springs {a.GCount} x {a.X:F0} doe {doe.X:F0}");
+    }
+
+    /// <summary>A bout: face the way with room (the herd keeps between the maples), then springs, a dash out, a skid, a turn, a dash back, a skid.</summary>
+    private void BeginBout(Animal a, int springs)
+    {
+        float reach = 9f * a.H, lo = _s.Width * 0.22f, hi = _s.Width * 0.76f;
+        int dir = a.X >= _deer[0].X ? 1 : -1;                          // away from her mother first (a dash through the doe's legs read as a collision)
+        if (a.X + dir * reach < lo || a.X + dir * reach > hi) dir = -dir;
+        a.GPhase = 0; a.GCount = springs; a.GHomeX = a.X; a.GOut = true;
+        if (dir != a.Dir) BeginTurn(a, dir);
+    }
+
+    private void AbortGambol(Animal a, string why)
+    {
+        a.Gait = Gait.Settled; a.Lift = 0; a.Depth = a.GHomeDepth;
+        a.Doing = Doing.Look; a.Timer = 1f; a.Pace.Halt(); a.Walked = 0;
+        _nextGambol = _time + 60;
+        _log?.WriteLine($"{_time,8:F2} deer1 gambol aborted: {why}");
+    }
+
+    /// <summary>
+    /// The script, once a frame. Phases: 0 wait for the turn (or the stance), 1 springs, 2 bounds, 3 skid, 4 wait for the turn
+    /// at the end of the out leg, 5 turn to face her mother, 6 stand and look; then the doe looks back.
+    /// </summary>
+    private void TickGambol(Animal a, float dt, Animal doe)
+    {
+        float H = a.H;
+        a.GT += dt;
+        float targetDepth = a.GOut && (a.GPhase is 2 or 3) ? a.GHomeDepth + 0.02f : a.GHomeDepth;     // the loop is sold by a little nearer on the way out, back on the return
+        a.Depth += (targetDepth - a.Depth) * Math.Min(1f, dt * 3f);
+        switch (a.GPhase)
+        {
+            case 0:
+                if (a.Gait != Gait.Settled) return;                                  // the turn first
+                a.GPhase = 1; a.GT = 0; a.GN = 0;
+                break;
+            case 1:
+            {
+                a.Gait = Gait.Leaping;
+                if (a.GT < SpringGround) { a.Pose = 0; a.Lift = 0; }
+                else
+                {
+                    float q = (a.GT - SpringGround) / (SpringFor - SpringGround);
+                    a.Pose = 1; a.Lift = SpringLift * H * 4 * q * (1 - q);
+                    a.X += a.Dir * SpringSpeed * H * dt;
+                }
+                if (a.GT >= SpringFor)
+                {
+                    a.GT = 0; a.GN++;
+                    if (a.GN >= a.GCount) { a.GPhase = 2; a.GN = 0; a.GCount = a.GOut ? 4 : Math.Max(2, (int)MathF.Round((MathF.Abs(a.X - a.GHomeX) - 1.05f * H) / (1.5f * H))); }
+                }
+                break;
+            }
+            case 2:
+            {
+                a.Gait = Gait.Leaping;
+                if (a.GT < BoundGround) { a.Pose = 3; a.Lift = 0; }
+                else
+                {
+                    float q = (a.GT - BoundGround) / (BoundFor - BoundGround);
+                    a.Pose = q < 0.55f ? 2 : 1; a.Lift = BoundLift * H * 4 * q * (1 - q);
+                    a.X += a.Dir * BoundSpeed * H * dt;
+                }
+                if (a.GT >= BoundFor)
+                {
+                    a.GT = 0; a.GN++;
+                    if (a.GN >= a.GCount) { a.GPhase = 3; a.Pose = 4; a.Lift = 0; }
+                }
+                break;
+            }
+            case 3:
+            {
+                // The skid: the speed falls evenly to nothing over SkidFor, in the braced pose; then the square stance (the feet are
+                // already near it), a beat, and on.
+                a.Gait = Gait.Leaping; a.Pose = 4; a.Lift = 0;
+                if (a.GT < SkidFor) a.X += a.Dir * BoundSpeed * H * (1 - a.GT / SkidFor) * dt;
+                else
+                {
+                    a.Gait = Gait.Settled;
+                    if (a.GT >= SkidFor + 0.2f)
+                    {
+                        if (a.GOut) { a.GOut = false; BeginTurn(a, -a.Dir); a.GPhase = 4; }
+                        else if (--a.GBouts > 0) BeginBout(a, 2);
+                        else
+                        {
+                            int toward = doe.X >= a.X ? 1 : -1;
+                            if (toward != a.Dir) BeginTurn(a, toward);
+                            a.GPhase = 5;
+                        }
+                    }
+                }
+                break;
+            }
+            case 4:
+                if (a.Gait != Gait.Settled) return;
+                a.GPhase = 2; a.GT = 0; a.GN = 0; a.GCount = Math.Max(2, (int)MathF.Round((MathF.Abs(a.X - a.GHomeX) - 1.05f * H) / (1.5f * H)));
+                break;
+            case 5:
+                if (a.Gait != Gait.Settled) return;
+                // Stands and looks at her mother; she lifts her head, turns to look back and flicks her tail; then both graze.
+                a.Depth = a.GHomeDepth; a.Doing = Doing.Look; a.Timer = 2.0f; a.GStay = 2.2f; a.EarT = 0;
+                if (CanGambolDoe(doe))
+                {
+                    int toFawn = a.X >= doe.X ? 1 : -1;
+                    doe.Doing = Doing.Look; doe.Timer = 1.8f; doe.TailT = 0; doe.EarT = 0;
+                    if (doe.Dir != toFawn) BeginTurn(doe, toFawn);
+                }
+                _nextGambol = _time + 50 + 40 * _rng.NextDouble();
+                _log?.WriteLine($"{_time,8:F2} deer1 gambol over: looks at her mother, x {a.X:F0}");
+                break;
+        }
+    }
+
+    private static bool CanGambolDoe(Animal doe) => !doe.Lent && doe.Gait == Gait.Settled && doe.Doing is Doing.Graze or Doing.Look;
 
     private void Log(Animal a, int i, string what)
     {
@@ -702,6 +916,9 @@ internal sealed class DeerHerd
                     body = a.TurnBody[turnPage]; neck = P(NeckX * Squash[turnPage], NeckY);
                     break;
                 }
+                case Gait.Leaping:
+                    body = a.Gam[a.Pose]; neck = a.NeckGam[a.Pose];
+                    break;
                 case Gait.Walking:
                 case Gait.Stopping:
                 {
@@ -729,7 +946,8 @@ internal sealed class DeerHerd
                 }
             }
             int left = (int)MathF.Round(a.X) - a.BodyOx;
-            int top = (int)MathF.Round(foot) - a.BodyOy;
+            int lift = a.Gait == Gait.Leaping ? (int)MathF.Round(a.Lift) : 0;       // the leap: the whole animal, head too, off the ground
+            int top = (int)MathF.Round(foot) - a.BodyOy - lift;
             body.Draw(fb, left, top, 1f, _s.OpenField, mirror);
 
             // The head: the neck page, with the bite's tug (up and back, held, eased down) taken off it; chewing opens the
@@ -745,7 +963,7 @@ internal sealed class DeerHerd
             }
             int hp = Math.Clamp((int)MathF.Round(f * (HeadPages - 1)), 0, HeadPages - 1);
             int kind = a.ChewT >= 0 ? ((int)(a.ChewT * 3) % 2) : a.EarT >= 0 ? 2 : 0;      // a chew is a jaw cycle and a half a second (six was a shiver)
-            float neckX = a.X + (mirror ? -1 : 1) * neck.X * a.H, neckY = foot - neck.Y * a.H;
+            float neckX = a.X + (mirror ? -1 : 1) * neck.X * a.H, neckY = foot - neck.Y * a.H - lift;
             int hl = (int)MathF.Round(neckX) - a.HeadS / 2, ht = (int)MathF.Round(neckY) - (int)(a.HeadS * HeadRootF);
             (turnPage < 0 ? a.Head[hp, kind] : a.TurnHead[hp, turnPage]).Draw(fb, hl, ht, 1f, _s.OpenField, mirror);
         }

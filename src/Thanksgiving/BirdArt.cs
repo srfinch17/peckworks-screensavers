@@ -12,7 +12,15 @@ namespace Thanksgiving;
 /// </summary>
 internal static class BirdArt
 {
-    public enum Pose { Stand, Look, Peck, HopCrouch, HopUp, HopLand, Fly }
+    // Flare: the last quarter second of a landing (2026-11-09, the branch perches): a real small bird BRAKES by throwing its
+    //   wings up and forward and tilting its tail down, head up, with the feet reaching out ahead for the perch. Two pages:
+    //   wing 0 the wings thrown up, wing 1 the downstroke that settles it. The feet hang a little above the perch (the
+    //   scene snaps them onto the wood the frame after).
+    // Dive: a drop off a perch with the wings HALF shut: swept back and down, the body pitched head-down, the bird falling
+    //   forward along a glide before it flares (a songbird leaving a branch tips forward and lets gravity do the first part).
+    // Preen: head turned all the way back (the eye now looks the other way, the beak points back) and dipped into the
+    //   feathers at the shoulder. "wing" is the phase (0 or 1): the beak works a little deeper, then a little shallower.
+    public enum Pose { Stand, Look, Peck, HopCrouch, HopUp, HopLand, Fly, Flare, Dive, Preen }
 
     private static PointF P(float x, float y) => new(x, y);
 
@@ -40,10 +48,10 @@ internal static class BirdArt
             g.Restore(st);
         }
 
-        bool flying = pose == Pose.Fly;
-        bool folded = flying && wing < 0;                                                        // the bounding flight's fold: wings shut, the bird a dart
-        float lift = pose == Pose.HopUp ? 0.10f : pose == Pose.HopCrouch ? -0.08f : pose == Pose.HopLand ? -0.04f : 0f;
-        float tilt = pose == Pose.Peck ? -34f : pose == Pose.Look ? 6f : pose == Pose.HopUp ? 10f : folded ? -6f : flying ? 4f : 0f;
+        bool flying = pose is Pose.Fly or Pose.Flare or Pose.Dive;
+        bool folded = pose == Pose.Fly && wing < 0;                                              // the bounding flight's fold: wings shut, the bird a dart
+        float lift = pose == Pose.HopUp ? 0.10f : pose == Pose.HopCrouch ? -0.08f : pose == Pose.HopLand ? -0.04f : pose == Pose.Flare ? (wing == 0 ? 0.06f : 0.025f) : 0f;
+        float tilt = pose == Pose.Peck ? -34f : pose == Pose.Look ? 6f : pose == Pose.HopUp ? 10f : pose == Pose.Flare ? (wing == 0 ? 30f : 11f) : pose == Pose.Dive ? -22f : pose == Pose.Preen ? -4f : folded ? -6f : flying ? 4f : 0f;
         // The body sits a fifth of a length clear of the ground on its legs (it used to sit at 0.34 with a 0.27 half-height,
         // so the belly was 0.07 off the ground and the legs 0.03 long: a bird with no feet at any size this patch draws it).
         var body = P(0f, 0.46f + lift);
@@ -52,13 +60,13 @@ internal static class BirdArt
         // HOCK (really the ankle) bent BACKWARD just under the belly, then a thin bare shank down to long toes. Two bones
         // reach from a hip inside the body to the foot; the law of cosines puts the hock behind the straight line.
         // Tucked up out of sight in flight.
-        if (!flying)
+        if (!flying || pose == Pose.Flare)
         {
             const float thigh = 0.18f, shank = 0.22f;
             using var leg = new Pen(Color.FromArgb(188, 148, 128), 0.05f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             using var toe = new Pen(Color.FromArgb(188, 148, 128), 0.035f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             // Where the feet are for this pose: under the bird standing, forward on a landing, back and dangling mid-hop.
-            (float fx, float fy) = pose switch { Pose.HopUp => (-0.06f, 0.10f), Pose.HopLand => (0.12f, 0f), Pose.Peck => (0.10f, 0f), _ => (0.04f, 0f) };
+            (float fx, float fy) = pose switch { Pose.HopUp => (-0.06f, 0.10f), Pose.HopLand => (0.12f, 0f), Pose.Peck => (0.10f, 0f), Pose.Flare => (0.20f, 0.07f), _ => (0.04f, 0f) };
             foreach (float lx in (float[])[0f, 0.10f])
             {
                 PointF hip = P(lx - 0.02f, body.Y - 0.08f), foot = P(lx + fx, fy);
@@ -78,7 +86,7 @@ internal static class BirdArt
         g.TranslateTransform(body.X, body.Y);
         g.RotateTransform(tilt);
         // The far wing in flight, behind the body.
-        float beat = flying && !folded ? MathF.Sin(wing / 6f * MathF.Tau) : 0f;
+        float beat = pose == Pose.Flare ? (wing == 0 ? 1.0f : -0.10f) : pose == Pose.Dive ? -0.38f : flying && !folded ? MathF.Sin(wing / 6f * MathF.Tau) : 0f;
         void Wing(float sx, float sy, float scale, Color c)
         {
             if (!flying || folded) { Ell(sx - 0.08f, sy + 0.02f, 0.30f * scale, 0.11f * scale, c, -8f); return; }   // folded along the side (standing, or the dart of a bounding flight)
@@ -99,13 +107,19 @@ internal static class BirdArt
             using (var streak = new Pen(Color.FromArgb(120, 90, 60, 36), 0.025f))
                 for (int i = 0; i < 4; i++) g.DrawLine(streak, -0.25f + 0.13f * i, 0.16f, -0.28f + 0.13f * i, 0.04f);   // the sparrow's streaks
         // The head: a round head with a cap, a dark eye, a short beak.
-        float hx = 0.40f, hy = pose == Pose.Peck ? 0.08f : 0.22f;
+        // A preening bird's head is turned right round (s = -1 mirrors the face: the eye and the beak go to the back of the
+        // head) and sunk to the shoulder, the beak working the feathers of the folded wing.
+        bool preen = pose == Pose.Preen;
+        float s = preen ? -1f : 1f;
+        float hx = preen ? 0.06f : 0.40f, hy = pose == Pose.Peck ? 0.08f : preen ? 0.30f : 0.22f;   // preening: the head up over the back (so it shows against the sky), the beak reaching down behind it to the wing
         Ell(hx, hy, 0.20f, 0.19f, back);
         Ell(hx, hy + 0.06f, 0.18f, 0.11f, cap);
-        if (kind == 1) Ell(hx + 0.08f, hy - 0.03f, 0.10f, 0.07f, belly);                                   // the sparrow's pale cheek
-        using (var eye = new SolidBrush(Color.FromArgb(20, 16, 16))) g.FillEllipse(eye, hx + 0.06f, hy + 0.02f, 0.06f, 0.06f);
+        if (kind == 1) Ell(hx + s * 0.08f, hy - 0.03f, 0.10f, 0.07f, belly);                               // the sparrow's pale cheek
+        using (var eye = new SolidBrush(Color.FromArgb(20, 16, 16))) g.FillEllipse(eye, hx + (preen ? -0.10f : 0.06f), hy + 0.02f, 0.06f, 0.06f);
+        float dip = preen ? (wing == 0 ? -0.05f : 0.0f) : 0f;                                              // the beak works a little deeper, then a little shallower
         using (var bk = new SolidBrush(beak))
-            g.FillPolygon(bk, [P(hx + 0.17f, hy + 0.04f), P(hx + 0.34f, hy - 0.02f), P(hx + 0.17f, hy - 0.06f)]);
+            g.FillPolygon(bk, preen ? [P(hx - 0.14f, hy + 0.03f), P(hx - 0.30f, hy - 0.17f + dip), P(hx - 0.10f, hy - 0.05f)]
+                                    : [P(hx + 0.17f, hy + 0.04f), P(hx + 0.34f, hy - 0.02f), P(hx + 0.17f, hy - 0.06f)]);
         // The near wing, over the body.
         Wing(0.08f, 0.10f, 1f, Color.FromArgb(Math.Min(255, cap.R + 30), Math.Min(255, cap.G + 28), Math.Min(255, cap.B + 28)));
         g.Restore(st2);

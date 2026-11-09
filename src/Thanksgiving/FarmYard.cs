@@ -26,11 +26,22 @@ namespace Thanksgiving;
 /// each frame so they stand INSIDE their fences. Sized by the hill's one
 /// scale (ThanksgivingScenery.HillMetresToU): a horse is 2.4 m long, a hen
 /// 0.42, the dog 1.0, all beside a 7 m house.
+///
+/// THE ANIMAL PASS (2026-11-09, his ask: "make them a little more special in various ways... more intelligent... or funnier"):
+///  - THE DOG'S GAMES, by a Playful dial dealt at birth: it chases its own TAIL (Spin: the turn pages run round and round, speeding up, then Dizzy:
+///    a sit with the head swaying, then a shake), and it chases a HEN (Hunt at a run, Pull up, then Slink home with its tail down; the rooster
+///    stands its ground while the dog hunts and charges the dog when it pulls up). While it hunts it posts Sense.Threat at itself (0.08 U); the hens
+///    run from it by their own old rule (they look at the dog, not the board), the horses, cows and pigs listen to nothing, and the patch is far out of reach.
+///  - THE ROOSTER CROWS every minute or two (Crow: neck up and back, beak open, a quiver), posts Sense.Loud at 0.09 U, the hens in reach LOOK up
+///    (Look) and the dog, if sitting, either barks once back or pricks up and looks.
+///  - A COW LIES DOWN, one at a time (Fold, Lie, Rise: front knees first then the hind end; chewing the cud on the grass; up hind end first).
+///  Test aids: PECKWORKS_YARD=tail|hens|crow|lie makes that one happen at 5 s of process time (the first cow lies; the dog goes to its house first).
+///  Every new roll comes from _play, a second Random seeded from the dog's own dials, so no old roll of _rng moved.
 /// </summary>
 internal sealed class FarmYard
 {
     private enum Kind { Horse, Cow, Pig, Hen, Dog }
-    private enum Doing { Stand, Walk, Trot, Graze, Lie, Peck, Sit, Bark, Home, Run }
+    private enum Doing { Stand, Walk, Trot, Graze, Lie, Peck, Sit, Bark, Home, Run, Spin, Dizzy, Hunt, Pull, Slink, Crow, Look, Fold, Rise }
 
     private sealed class Beast
     {
@@ -48,16 +59,24 @@ internal sealed class FarmYard
         public (float X0, float X1, float Back, float Front) Pen;
         public float Along;                         // the dog on the road: how far along it, 0 at the porch, 1 at the barn
         public float NextBark;
+        public float Playful;                       // the dog: 0 solemn to 1 silly, dealt at birth: how often it plays at its tail and at the hens
+        public float Fold;                          // the cow: 0 standing to 1 lying, the progress of getting down or up
+        public bool WantLie;                        // the cow: lift the head first, then fold
+        public float SpinC, SpinT; public int SpinFlip;   // the dog's tail chase: half-turns done, its whole length in seconds, the half-turns already flipped
+        public Beast? Target;                       // the dog's hunt: the hen it runs at
+        public bool Told, Woof;                     // the rooster: has posted this crow; the dog: this bark is a single woof, not an alarm
+        public float Heard, NextPost;               // the clock before which it will not answer a crow again; the next Threat post of the hunt
         public float Rested;                        // the dog: the clock before which it will not start another bout of barking (it barked at the coyotes without a pause for fifty seconds, and every squirrel in the patch within earshot froze for all of it)
     }
 
     private sealed class Sheets
     {
         public float K; public int W, H, Ox, By;
-        public Sprite[] Walk = [], Trot = [], Stand = [], Down = [], Lie = [], Sit = [], Bark = [], Turn = [], Dip = [];   // Dip: the head on its way down or up, paged by the Head dial
+        public Sprite[] Walk = [], Trot = [], Stand = [], Down = [], Lie = [], Sit = [], Bark = [], Turn = [], Dip = [], Fold = [], Chew = [], Crow = [], Shake = [], Slink = [];   // Fold: the cow getting down (five pages, front knees first); Chew: lying; Crow: the neck up (three) and the beak open (two); Shake: the sitting dog's head swaying; Slink: the walk with the tail down. Dip: the head on its way down or up, paged by the Head dial
     }
 
     private const int WalkPages = 24, DownPages = 6, TailPages = 8, TurnPages = 5, DipPages = 6;
+    private const float FoldFor = 3.0f;                                            // the cow's getting down, and getting up, in seconds
     private const float TurnFor = 0.5f;                                            // at 0.24 s over three pages the turn was a snap
     private static readonly float[] Squash = [0.85f, 0.62f, 0.40f, 0.22f, 0.08f];
 
@@ -66,6 +85,11 @@ internal sealed class FarmYard
     private readonly Noticeboard _board;
     private readonly StreamWriter? _log;
     private readonly List<Beast> _all = new();
+    private readonly Random _play;                 // every NEW roll comes from here, so no old roll of _rng moved
+    private readonly string? _force;               // PECKWORKS_YARD: tail, hens, crow, lie
+    private bool _forced;
+    private double _nextPlay, _nextCrow, _nextLie;
+    private Beast? _lying;                          // the one cow that is lying (or getting down or up): one at a time
     private readonly Beast _dog;                    // the list is sorted by depth to draw, so the dog is kept by name
     private readonly Sheets[] _sheets = new Sheets[5];       // by Kind
     private readonly Sheets[] _horseCoats = new Sheets[3], _cowCoats = new Sheets[2];
@@ -106,6 +130,11 @@ internal sealed class FarmYard
         Add(Kind.Dog, 0, yard, 0.20f);
         _dog = _all[^1];
         _dog.X = s.Doghouse.X; _dog.Y = s.Doghouse.Y; _dog.Dir = -1;
+        // The new dials come after every old roll and from a Random of their own (seeded from the dog's dealt dials, so a seed still differs).
+        _play = new Random(BitConverter.SingleToInt32Bits(_dog.Busy) * 31 + BitConverter.SingleToInt32Bits(_dog.Timid));
+        _dog.Playful = (float)_play.NextDouble();
+        _nextCrow = 20.0 + 25.0 * _play.NextDouble(); _nextLie = 12.0 + 20.0 * _play.NextDouble(); _nextPlay = 30.0 + 30.0 * _play.NextDouble();
+        _force = Environment.GetEnvironmentVariable("PECKWORKS_YARD");
         _road = s.Road;
         _roadLen = new float[_road.Length];
         for (int i = 1; i < _road.Length; i++) _roadLen[i] = _roadLen[i - 1] + Dist(_road[i - 1], _road[i]);
@@ -136,7 +165,7 @@ internal sealed class FarmYard
 
     // ================================================================ painting (once)
 
-    private Sheets Make(float metres, Action<Graphics, FarmArt.Pose> paint, bool trots, bool lies, bool sits, bool barks)
+    private Sheets Make(float metres, Action<Graphics, FarmArt.Pose> paint, bool trots, bool lies, bool sits, bool barks, bool folds = false, bool crows = false, bool dogExtras = false)
     {
         float k = Math.Max(6f, _s.U * _s.HillMetresToU * metres);
         int w = (int)(1.7f * k) + 4, h = (int)(1.2f * k) + 4, ox = (int)(0.7f * k) + 2, by = h - 2;
@@ -154,6 +183,21 @@ internal sealed class FarmYard
         if (lies) sh.Lie = [Page(new FarmArt.Pose { Lie = true })];
         if (sits) { sh.Sit = new Sprite[TailPages]; for (int i = 0; i < TailPages; i++) sh.Sit[i] = Page(new FarmArt.Pose { Sit = true, Tail = MathF.Sin(MathF.Tau * i / TailPages) }); }
         if (barks) sh.Bark = [Page(new FarmArt.Pose { Sit = true, Mouth = false }), Page(new FarmArt.Pose { Sit = true, Mouth = true })];
+        if (folds)
+        {
+            (float, float)[] steps = [(0.2f, 0f), (0.6f, 0f), (1f, 0.25f), (1f, 0.65f), (1f, 1f)];     // front knees first, then the hind end settles
+            sh.Fold = new Sprite[steps.Length];
+            for (int i = 0; i < steps.Length; i++) sh.Fold[i] = Page(new FarmArt.Pose { Kneel = steps[i].Item1, Squat = steps[i].Item2 });
+            sh.Chew = [Page(new FarmArt.Pose { Kneel = 1f, Squat = 1f, Lift = 0f }), Page(new FarmArt.Pose { Kneel = 1f, Squat = 1f, Lift = 1f })];
+        }
+        if (crows) sh.Crow = [Page(new FarmArt.Pose { Crow = 0.35f }), Page(new FarmArt.Pose { Crow = 0.7f }), Page(new FarmArt.Pose { Crow = 1f }), Page(new FarmArt.Pose { Crow = 1f, Mouth = true, Tail = 1f }), Page(new FarmArt.Pose { Crow = 1f, Mouth = true, Tail = -1f })];
+        if (dogExtras)
+        {
+            sh.Shake = new Sprite[TailPages];
+            for (int i = 0; i < TailPages; i++) sh.Shake[i] = Page(new FarmArt.Pose { Sit = true, Shake = MathF.Sin(MathF.Tau * i / TailPages) });
+            sh.Slink = new Sprite[WalkPages];
+            for (int i = 0; i < WalkPages; i++) sh.Slink[i] = Page(new FarmArt.Pose { Walk = i / (float)WalkPages, TailDown = true, HeadDown = 0.35f });
+        }
         sh.Turn = new Sprite[TurnPages];
         for (int i = 0; i < TurnPages; i++) sh.Turn[i] = Page(new FarmArt.Pose(), Squash[i]);
         return sh;
@@ -163,12 +207,12 @@ internal sealed class FarmYard
     {
         FarmArt.HorseCoat[] hc = [FarmArt.HorseCoat.Bay, FarmArt.HorseCoat.Chestnut, FarmArt.HorseCoat.Grey];
         for (int i = 0; i < 3; i++) { var coat = hc[i]; _horseCoats[i] = Make(2.4f, (g, q) => FarmArt.Horse(g, q, coat), true, false, false, false); }
-        _cowCoats[0] = Make(2.3f, (g, q) => FarmArt.Cow(g, q, FarmArt.CowCoat.Holstein, 2), false, false, false, false);
-        _cowCoats[1] = Make(2.3f, (g, q) => FarmArt.Cow(g, q, FarmArt.CowCoat.Jersey, 0), false, false, false, false);
+        _cowCoats[0] = Make(2.3f, (g, q) => FarmArt.Cow(g, q, FarmArt.CowCoat.Holstein, 2), false, false, false, false, folds: true);
+        _cowCoats[1] = Make(2.3f, (g, q) => FarmArt.Cow(g, q, FarmArt.CowCoat.Jersey, 0), false, false, false, false, folds: true);
         _sheets[(int)Kind.Pig] = Make(1.2f, (g, q) => FarmArt.Pig(g, q), false, true, false, false);
-        _henSheets = Make(0.42f, (g, q) => FarmArt.Hen(g, q, false), false, false, false, false);
-        _roosterSheets = Make(0.48f, (g, q) => FarmArt.Hen(g, q, true), false, false, false, false);
-        _sheets[(int)Kind.Dog] = Make(1.0f, (g, q) => FarmArt.Dog(g, q), true, false, true, true);
+        _henSheets = Make(0.42f, (g, q) => FarmArt.Hen(g, q, false), false, false, false, false, crows: true);
+        _roosterSheets = Make(0.48f, (g, q) => FarmArt.Hen(g, q, true), false, false, false, false, crows: true);
+        _sheets[(int)Kind.Dog] = Make(1.0f, (g, q) => FarmArt.Dog(g, q), true, false, true, true, dogExtras: true);
     }
 
     private Sheets SheetsOf(Beast b) => b.Kind switch
@@ -188,7 +232,7 @@ internal sealed class FarmYard
         (Kind.Cow, _) => 0.7f,
         (Kind.Pig, _) => 0.8f,
         (Kind.Hen, Doing.Run) => 2.2f, (Kind.Hen, _) => 0.5f,
-        (Kind.Dog, Doing.Trot) => 3.0f, (Kind.Dog, Doing.Run) => 5.0f, (Kind.Dog, _) => 1.2f,
+        (Kind.Dog, Doing.Trot) => 3.0f, (Kind.Dog, Doing.Run) => 5.0f, (Kind.Dog, Doing.Hunt) => 5.0f, (Kind.Dog, Doing.Slink) => 1.6f, (Kind.Dog, _) => 1.2f,
     };
 
     public void Update(float dt)
@@ -196,6 +240,7 @@ internal sealed class FarmYard
         _time += dt;
         if (!_ready || _time < 4.0) return;         // pinned start, like the patch's: a seed is a scenario
         float u = _s.U;
+        if (_force != null && !_forced && _time >= 5.0) { _forced = true; Force(); }
         foreach (Beast b in _all)
         {
             b.Mind.Tick(dt);
@@ -260,6 +305,18 @@ internal sealed class FarmYard
     {
         float u = _s.U;
         b.Clock = 0f;
+        if (b.Kind == Kind.Cow)
+        {
+            // The lying cycle: lift the head, fold (front knees first), chew the cud a long while, rise (hind end first), stand a moment.
+            switch (b.Mind.Doing)
+            {
+                case Doing.Stand when b.WantLie: b.WantLie = false; b.Mind.Begin(Doing.Fold, FoldFor); _log?.WriteLine($"{_time,8:F2} cow{b.Look} folds down"); return;
+                case Doing.Fold: b.Mind.Begin(Doing.Lie, 25f + 25f * (float)_play.NextDouble()); return;
+                case Doing.Lie: b.Mind.Begin(Doing.Rise, FoldFor); return;
+                case Doing.Rise: b.Fold = 0f; b.Mind.Begin(Doing.Stand, 2f); _lying = null; _nextLie = _time + 25.0 + 30.0 * _play.NextDouble(); _log?.WriteLine($"{_time,8:F2} cow{b.Look} is up"); return;
+            }
+            if (_lying == null && _time >= _nextLie && _play.NextDouble() < 0.07) { _lying = b; b.WantLie = true; b.Mind.Begin(Doing.Stand, 1.3f); return; }   // the head comes up first
+        }
         switch (b.Kind)
         {
             case Kind.Horse:
@@ -296,6 +353,7 @@ internal sealed class FarmYard
             }
             case Kind.Hen:
             {
+                if (b.Look == 0 && _time >= _nextCrow) { BeginCrow(b); break; }
                 int face = Dice.Pick(_rng, [0.5f, 0.2f, 0.3f + 0.2f * b.Busy]);
                 if (face == 0) b.Mind.Begin(Doing.Peck, 1f + 3f * (float)_rng.NextDouble());
                 else if (face == 1) b.Mind.Begin(Doing.Stand, 0.5f + 2f * (float)_rng.NextDouble());
@@ -308,8 +366,16 @@ internal sealed class FarmYard
                 switch (b.Mind.Doing)
                 {
                     case Doing.Home: b.Mind.Begin(Doing.Sit, 4f + 10f * (float)_rng.NextDouble()); b.X = _s.Doghouse.X; b.Y = _s.Doghouse.Y; b.Dir = -1; b.Along = 0f; break;
+                    case Doing.Spin: b.Mind.Begin(Doing.Dizzy, 2.6f); break;
+                    case Doing.Dizzy: b.Mind.Begin(Doing.Sit, 3f + 5f * (float)_play.NextDouble()); break;
+                    case Doing.Look: b.Mind.Begin(Doing.Sit, 3f + 4f * (float)_play.NextDouble()); break;
+                    case Doing.Bark when b.Woof: b.Woof = false; b.Mind.Begin(Doing.Sit, 3f + 4f * (float)_play.NextDouble()); break;
+                    case Doing.Hunt: EndHunt(b); break;
+                    case Doing.Pull: b.GoalX = _s.Doghouse.X; b.GoalY = _s.Doghouse.Y; b.Mind.Begin(Doing.Slink, 30f); Face(b); break;
+                    case Doing.Slink: b.Mind.Begin(Doing.Sit, 3f); break;
                     case Doing.Sit when b.Along <= 0.01f:
-                        if (_rng.NextDouble() < 0.45) b.Mind.Begin(Doing.Home, 15f + 40f * (float)_rng.NextDouble());
+                        if (_time >= _nextPlay && _play.NextDouble() < 0.10 + 0.40 * b.Playful) StartSpin(b);
+                        else if (_rng.NextDouble() < 0.45) b.Mind.Begin(Doing.Home, 15f + 40f * (float)_rng.NextDouble());
                         else { b.Mind.Begin(Doing.Trot, 40f); b.GoalX = 1f; b.Dir = 1; _log?.WriteLine($"{_time,8:F2} dog trots to the barn"); }   // GoalX 1: the far end of the road
                         break;
                     case Doing.Sit: b.Mind.Begin(Doing.Trot, 40f); b.GoalX = 0f; b.Dir = -1; _log?.WriteLine($"{_time,8:F2} dog trots home"); break;
@@ -382,6 +448,46 @@ internal sealed class FarmYard
                 else b.Dir = dir;
                 break;
             }
+            case Doing.Spin:
+            {
+                // A tight spin on the spot: the turn pages run round and round (each narrowing and widening is half a turn, and the way it faces
+                // flips at the narrowest), speeding up from 0.6 to 1.7 turns a second (2.4 was a blur).
+                float tt = MathF.Min(b.Clock, b.SpinT);
+                b.SpinC = 2f * (0.6f * tt + 0.5f * (1.7f - 0.6f) / b.SpinT * tt * tt);
+                int flips = (int)(b.SpinC + 0.5f);
+                while (b.SpinFlip < flips) { b.Dir = -b.Dir; b.SpinFlip++; }
+                break;
+            }
+            case Doing.Hunt:
+            {
+                Beast h = b.Target!;
+                if (b.Clock >= b.NextPost) { _board.Post(Sense.Threat, new PointF(b.X, b.Y), 0.08f * u, 0.5f, b); b.NextPost = b.Clock + 0.25f; }
+                if (Chase(b, h.X, h.Y, SpeedOf(b, Doing.Hunt), 0.012f * u, dt, false))
+                {
+                    // Caught up with that hen (it hops away): on to the next one, a sweep through the flock, until it is out of breath at 2.2 s.
+                    if (b.Clock < 2.2f && NearestHen(b, 0.14f * u, h, 0.016f * u) is Beast next) { b.Target = next; _log?.WriteLine($"{_time,8:F2} dog turns on hen{next.Look}"); }
+                    else b.Mind.End();
+                }
+                break;
+            }
+            case Doing.Slink:
+                if (Chase(b, b.GoalX, b.GoalY, SpeedOf(b, Doing.Slink), 0.004f * u, dt, true))
+                {
+                    b.X = _s.Doghouse.X; b.Y = _s.Doghouse.Y; b.Along = 0f; b.Dir = -1;
+                    b.Mind.Begin(Doing.Sit, 3f + 5f * (float)_play.NextDouble());
+                }
+                break;
+            case Doing.Crow:
+                if (b.Clock >= 0.9f && !b.Told)
+                {
+                    b.Told = true;
+                    _board.Post(Sense.Loud, new PointF(b.X, b.Y), 0.09f * u, 0.3f, b);       // short reach: the yard hears it, the patch does not
+                    _log?.WriteLine($"{_time,8:F2} rooster crows");
+                }
+                break;
+            case Doing.Fold: b.Fold = MathF.Min(1f, b.Clock / FoldFor); break;
+            case Doing.Lie when b.Kind == Kind.Cow: b.Fold = 1f; break;
+            case Doing.Rise: b.Fold = MathF.Max(0f, 1f - b.Clock / FoldFor); break;
             case Doing.Bark:
                 if (b.Clock >= b.NextBark)
                 {
@@ -391,18 +497,48 @@ internal sealed class FarmYard
                 break;
         }
         // The dog hears a threat (the raccoon, the coyotes, the owl) and barks at it from where it sits; the hens run from the dog and from a bark.
-        if (b.Kind == Kind.Dog && b.Mind.Doing is Doing.Sit or Doing.Stand && _time >= b.Rested && _board.Nearest(Sense.Threat, new PointF(b.X, b.Y), 2.0f * u) is Notice threat)
+        if (b.Kind == Kind.Dog && b.Mind.Doing is Doing.Sit or Doing.Stand && _time >= b.Rested && Heard(b, Sense.Threat, 2.0f * u) is Notice threat)
         {
             b.Dir = threat.At.X >= b.X ? 1 : -1;
             b.Mind.Begin(Doing.Bark, 2.5f + 2f * (float)_rng.NextDouble()); b.Clock = 0f; b.NextBark = 0f;
             b.Rested = (float)_time + 15f + 25f * (float)_rng.NextDouble();   // a bout, then it settles: a threat that stays (the pack on the lane) gets a bark now and then, not a siren
             _log?.WriteLine($"{_time,8:F2} dog barks at {threat.Kind}");
         }
-        if (b.Kind == Kind.Hen && b.Mind.Doing != Doing.Run)
+        // The dog hears the rooster crow (a Loud posted by a Hen with Look 0) from where it sits: a woof back, or ears up and a look.
+        if (b.Kind == Kind.Dog && b.Mind.Doing == Doing.Sit && _time >= b.Heard && Heard(b, Sense.Loud, 0.14f * u, true) is Notice crow)
+        {
+            b.Heard = (float)_time + 12f; b.Dir = crow.At.X >= b.X ? 1 : -1; b.Clock = 0f;
+            if (_play.NextDouble() < 0.5) { b.Woof = true; b.Mind.Begin(Doing.Bark, 0.5f); b.NextBark = 0f; _log?.WriteLine($"{_time,8:F2} dog barks back at the rooster"); }
+            else { b.Mind.Begin(Doing.Look, 1.6f); _log?.WriteLine($"{_time,8:F2} dog pricks up at the rooster"); }
+        }
+        // The dog hears the coyote's HOWL from the far lane (a Loud of full weight posted by something that is not of the yard)
+        // and barks back, a whole bout, the way a farm dog answers a coyote at dusk. The howl reaches 0.5 U; the dog listens
+        // out to 2.0 U the way it does for a threat, so the lane is in earshot wherever the pack stands.
+        if (b.Kind == Kind.Dog && b.Mind.Doing is Doing.Sit or Doing.Stand or Doing.Home && _time >= b.Heard && Heard(b, Sense.Loud, 2.0f * u, afield: true) is Notice howl)   // gated by Heard, not Rested: a howl breaks the rest after an ordinary bark (a stronger reaction breaks a weaker one's cooldown)
+        {
+            b.Dir = howl.At.X >= b.X ? 1 : -1;
+            b.Mind.Begin(Doing.Bark, 2.5f + 1.5f * (float)_play.NextDouble()); b.Clock = 0f; b.NextBark = 0f;
+            b.Rested = (float)_time + 15f + 25f * (float)_play.NextDouble();
+            b.Heard = (float)_time + 12f;
+            _log?.WriteLine($"{_time,8:F2} dog barks back at the howl");
+        }
+        // A hen in reach of a crow looks up.
+        if (b.Kind == Kind.Hen && b.Look != 0 && b.Mind.Doing is Doing.Stand or Doing.Peck or Doing.Walk && _time >= b.Heard && Heard(b, Sense.Loud, 0.09f * u, true) != null)
+        {
+            b.Heard = (float)_time + 8f; b.Clock = 0f; b.Mind.Begin(Doing.Look, 1.3f + 0.8f * (float)_play.NextDouble());
+            _log?.WriteLine($"{_time,8:F2} hen{b.Look} looks up at the rooster");
+        }
+        if (b.Kind == Kind.Hen && b.Look == 0 && _dog.Mind.Doing == Doing.Hunt && Dist(new PointF(_dog.X, _dog.Y), new PointF(b.X, b.Y)) < 0.12f * u)
+        {
+            // The rooster does not run: it turns on the dog and stands its ground (neck up) until the dog pulls up.
+            b.Dir = _dog.X >= b.X ? 1 : -1;
+            if (b.Mind.Doing != Doing.Look) { b.Mind.Begin(Doing.Look, 4f); b.Clock = 0f; _log?.WriteLine($"{_time,8:F2} rooster squares up to the dog"); }
+        }
+        else if (b.Kind == Kind.Hen && b.Mind.Doing != Doing.Run)
         {
             Beast dog = _dog;
-            bool near = dog.Mind.Doing is Doing.Trot or Doing.Run && MathF.Abs(dog.X - b.X) < 0.04f * u && MathF.Abs(dog.Y - b.Y) < 0.03f * u;
-            if (near || (dog.Mind.Doing == Doing.Bark && _rng.NextDouble() < dt * 2))
+            bool near = dog.Mind.Doing is Doing.Trot or Doing.Run or Doing.Hunt && MathF.Abs(dog.X - b.X) < 0.04f * u && MathF.Abs(dog.Y - b.Y) < 0.03f * u;
+            if (near || (dog.Mind.Doing == Doing.Bark && !dog.Woof && _rng.NextDouble() < dt * 2))
             {
                 float away = dog.X >= b.X ? -1f : 1f;
                 b.GoalX = Math.Clamp(b.X + away * (0.02f + 0.02f * (float)_rng.NextDouble()) * u, b.Pen.X0, b.Pen.X1);
@@ -410,6 +546,116 @@ internal sealed class FarmYard
                 b.Dir = away > 0 ? 1 : -1;
                 b.Mind.Begin(Doing.Run, 2f); b.Clock = 0f;
             }
+        }
+        // THE DOG HUNTS A HEN: sitting or standing at its house with a hen close, a roll a second (more for a silly dog), then a rest of a minute or two.
+        if (b.Kind == Kind.Dog && b.Mind.Doing is Doing.Sit or Doing.Stand && b.Along <= 0.05f && _time >= _nextPlay && _time >= b.Rested
+            && _play.NextDouble() < dt * 0.12f * (0.3f + b.Playful) && NearestHen(b, 0.14f * u) is Beast prey) StartHunt(b, prey);
+    }
+
+    // ================================================================ the new games
+
+    private static float Dist(Beast a, Beast b) => Dist(new PointF(a.X, a.Y), new PointF(b.X, b.Y));
+
+    /// <summary>The nearest notice of a kind within reach of the beast, never one it posted itself; with onlyRooster, only a Loud posted by the rooster (a crow).</summary>
+    private Notice? Heard(Beast me, Sense kind, float within, bool onlyRooster = false, bool afield = false)
+    {
+        Notice? best = null; float bd = within;
+        foreach (Notice n in _board.Live)
+        {
+            if (n.Kind != kind || ReferenceEquals(n.Who, me)) continue;
+            if (onlyRooster && !(n.Who is Beast rb && rb.Kind == Kind.Hen && rb.Look == 0)) continue;
+            if (afield && (n.Who is Beast || n.Who is FarmYard || n.Weight < 0.9f)) continue;   // afield: not the yard's own noises (the crow, a bark); the howl posts weight 1
+            float d = Dist(n.At, new PointF(me.X, me.Y));
+            if (d < bd) { best = n; bd = d; }
+        }
+        return best;
+    }
+
+    private Beast? NearestHen(Beast me, float within, Beast? not = null, float atLeast = 0f)
+    {
+        Beast? best = null; float bd = within;
+        foreach (Beast h in _all)
+        {
+            if (h.Kind != Kind.Hen || h.Look == 0 || h == not) continue;           // the rooster is not prey
+            float d = Dist(h, me);
+            if (d < bd && d >= atLeast) { best = h; bd = d; }
+        }
+        return best;
+    }
+
+    private Beast? Rooster()
+    {
+        foreach (Beast h in _all) if (h.Kind == Kind.Hen && h.Look == 0) return h;
+        return null;
+    }
+
+    /// <summary>One step toward a point on the hunt or the slink: true on arrival. A hunt does not slow in (it runs the hen down); a reversal is a turn on the spot.</summary>
+    private bool Chase(Beast b, float tx, float ty, float want, float arrive, float dt, bool slowIn)
+    {
+        float dx = tx - b.X, dy = ty - b.Y, dist = MathF.Sqrt(dx * dx + dy * dy);
+        if (dist < arrive) { b.Pace.Halt(); return true; }
+        b.Pace.Want = slowIn ? MathF.Min(want, MathF.Max(0.2f * want, dist * 3f)) : want;
+        float d = b.Pace.Tick(dt);
+        if (d <= 0f) return false;
+        b.X += dx / dist * d; b.Y += dy / dist * d;
+        b.Walked += d;
+        if (MathF.Abs(dx) > 0.006f * _s.U)
+        {
+            int dir = dx >= 0 ? 1 : -1;
+            if (dir != b.Dir) { b.TurnT = 0f; b.Pace.Halt(); } else b.Dir = dir;
+        }
+        return false;
+    }
+
+    private void StartSpin(Beast b)
+    {
+        float revs = _play.NextDouble() < 0.5 ? 2f : 3f;
+        b.SpinT = 2f * revs / (0.6f + 1.7f); b.SpinC = 0f; b.SpinFlip = 0; b.TurnT = -1f;
+        b.Pace.Halt(); b.Mind.Begin(Doing.Spin, b.SpinT); b.Clock = 0f;
+        _nextPlay = _time + 40.0 + 40.0 * _play.NextDouble();
+        _log?.WriteLine($"{_time,8:F2} dog chases its tail {revs} turns");
+    }
+
+    private void StartHunt(Beast b, Beast prey)
+    {
+        b.Target = prey; b.NextPost = 0f; b.Pace.Halt(); b.GoalX = prey.X; b.GoalY = prey.Y;
+        b.Mind.Begin(Doing.Hunt, 3.2f); b.Clock = 0f; Face(b);
+        _nextPlay = _time + 50.0 + 60.0 * _play.NextDouble();
+        _log?.WriteLine($"{_time,8:F2} dog chases hen{prey.Look}");
+    }
+
+    /// <summary>The hunt is over (caught up, or out of breath): the dog pulls up; the rooster, if it stood its ground close by, charges the dog.</summary>
+    private void EndHunt(Beast b)
+    {
+        b.Pace.Halt(); b.Mind.Begin(Doing.Pull, 1.0f);
+        Beast? r = Rooster(); float u = _s.U;
+        if (r != null && Dist(r, b) < 0.12f * u)
+        {
+            var p = r.Pen;
+            r.GoalX = Math.Clamp(b.X + (r.X < b.X ? -1f : 1f) * 0.012f * u, p.X0, p.X1); r.GoalY = Math.Clamp(b.Y, p.Back, p.Front);
+            r.Dir = r.GoalX >= r.X ? 1 : -1; r.Mind.Begin(Doing.Run, 1.8f); r.Clock = 0f;
+            _log?.WriteLine($"{_time,8:F2} rooster charges the dog");
+        }
+        else _log?.WriteLine($"{_time,8:F2} dog pulls up, no rooster near");
+    }
+
+    private void BeginCrow(Beast b)
+    {
+        b.Told = false; b.Mind.Begin(Doing.Crow, 2.6f); b.Clock = 0f;
+        _nextCrow = _time + 55.0 + 60.0 * _play.NextDouble();
+    }
+
+    /// <summary>Test aid PECKWORKS_YARD: makes one thing happen at 5 s of process time.</summary>
+    private void Force()
+    {
+        Beast d = _dog;
+        void DogHome() { d.X = _s.Doghouse.X; d.Y = _s.Doghouse.Y; d.Dir = -1; d.Along = 0f; d.TurnT = -1f; d.Pace.Halt(); d.Mind.Begin(Doing.Sit, 1f); d.Rested = 0f; }
+        switch (_force)
+        {
+            case "tail": DogHome(); StartSpin(d); break;
+            case "hens": DogHome(); if (NearestHen(d, float.MaxValue) is Beast prey) StartHunt(d, prey); break;
+            case "crow": if (Rooster() is Beast r) BeginCrow(r); break;
+            case "lie": foreach (Beast c in _all) if (c.Kind == Kind.Cow) { _lying = c; c.WantLie = true; c.Mind.Begin(Doing.Stand, 1.3f); break; } break;
         }
     }
 
@@ -419,7 +665,9 @@ internal sealed class FarmYard
     {
         bool mirror = b.Dir < 0;
         int left = (int)MathF.Round(b.X) - (mirror ? sh.W - sh.Ox : sh.Ox);
-        page.Draw(fb, left, (int)MathF.Round(b.Y) - sh.By, 1f, _s.OpenFromFarm, mirror);
+        // A hen scattering HOPS (the whole bird off the ground at each beat of its run): up to a third of its length.
+        float hop = b.Kind == Kind.Hen && b.Mind.Doing == Doing.Run ? 0.33f * sh.K * MathF.Abs(MathF.Sin(b.Clock * 11f)) : 0f;
+        page.Draw(fb, left, (int)MathF.Round(b.Y - hop) - sh.By, 1f, _s.OpenFromFarm, mirror);
     }
 
     public void Draw(FrameBuffer fb)
@@ -439,10 +687,35 @@ internal sealed class FarmYard
             }
             else switch (b.Mind.Doing)
             {
-                case Doing.Walk: case Doing.Run: case Doing.Trot:
+                case Doing.Spin:
                 {
-                    bool trot = b.Mind.Doing is Doing.Trot or Doing.Run && sh.Trot.Length > 0;
-                    float stride = sh.K * (trot ? 0.34f : b.Kind == Kind.Hen ? 0.4f : 0.26f) * 2f;   // one page cycle is two steps of the stride
+                    float q = b.SpinC - MathF.Floor(b.SpinC);
+                    page = sh.Turn[q < 0.5f ? Math.Min(TurnPages - 1, (int)(q * 2 * TurnPages)) : Math.Min(TurnPages - 1, (int)((1 - q) * 2 * TurnPages))];
+                    break;
+                }
+                case Doing.Dizzy:
+                {
+                    float t = b.Clock, ph = t < 1.8f ? t * 1.0f : 1.8f + (t - 1.8f) * 7f;      // a slow dizzy sway, then a quick shake of the head
+                    page = sh.Shake[(int)(ph * TailPages) % TailPages];
+                    break;
+                }
+                case Doing.Slink:
+                    page = sh.Slink[(int)(((b.Walked / (sh.K * 0.6f)) % 1f + 1f) % 1f * WalkPages) % WalkPages];
+                    break;
+                case Doing.Crow:
+                {
+                    float t = b.Clock;
+                    page = t < 0.3f ? sh.Crow[0] : t < 0.6f ? sh.Crow[1] : t < 0.9f ? sh.Crow[2] : t < 1.9f ? sh.Crow[3 + (int)(t * 9f) % 2] : t < 2.2f ? sh.Crow[2] : t < 2.4f ? sh.Crow[1] : sh.Crow[0];
+                    break;
+                }
+                case Doing.Look when b.Kind == Kind.Hen: page = sh.Crow[b.Clock < 0.25f ? 0 : 1]; break;                 // the neck up, looking
+                case Doing.Look: page = sh.Sit[(int)(b.Clock * 1.2f * TailPages) % TailPages]; break;                     // the dog, ears up
+                case Doing.Fold: case Doing.Rise: page = sh.Fold[Math.Min(sh.Fold.Length - 1, (int)(b.Fold * sh.Fold.Length))]; break;
+                case Doing.Lie when b.Kind == Kind.Cow: page = sh.Chew[(int)(b.Clock * 3.4f) % 2]; break;               // chewing the cud: the jaw goes round
+                case Doing.Walk: case Doing.Run: case Doing.Trot: case Doing.Hunt:
+                {
+                    bool trot = b.Mind.Doing is Doing.Trot or Doing.Run or Doing.Hunt && sh.Trot.Length > 0;
+                    float stride = sh.K * (trot ? 0.34f : b.Kind == Kind.Hen ? 0.4f : 0.26f) * 2f;   // (a hunting dog's stride is the trot's)   // one page cycle is two steps of the stride
                     float cyc = b.Walked / stride;
                     page = (trot ? sh.Trot : sh.Walk)[(int)((cyc - MathF.Floor(cyc)) * WalkPages) % WalkPages];
                     break;

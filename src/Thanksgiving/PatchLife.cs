@@ -51,7 +51,9 @@ internal sealed class PatchLife
     // Climb: up the trunk and into the hole. Den: inside it, out of sight. Descend: head out, then head-first down.
     // Dismount: pitching off the bark onto the ground. Romp: a playful squirrel running at another for the game of it.
     // HopUp: the hop onto a pumpkin. Perch: sitting on top of it. HopDown: the hop off.
-    private enum Doing { Go, Still, Nibble, Hide, Peck, Fly, Perch, Dig, Bolt, Fetch, Carry, Bury, Eat, Raid, Chase, Leave, Mount, Climb, Enter, Den, Exit, Descend, Dismount, Romp, HopUp, HopDown }
+    // Branch: a bird sitting up on a corner oak branch (2026-11-09, his ask: "birds should land up there sometimes"). Its flights
+    // up to it and down from it are Fly with Critter.Flight set (1 climbing to the branch, 2 dropping off it).
+    private enum Doing { Go, Still, Nibble, Hide, Peck, Fly, Perch, Dig, Bolt, Fetch, Carry, Bury, Eat, Raid, Chase, Leave, Mount, Climb, Enter, Den, Exit, Descend, Dismount, Romp, HopUp, HopDown, Branch }
 
     private sealed class Critter
     {
@@ -97,7 +99,18 @@ internal sealed class PatchLife
         public bool HopAfterTurn;                   // on a pumpkin top, facing the other way first: the hop down follows the turn
         public float Arrived;                       // a visitor: the clock when it came in; its stay has a limit (five squirrels raiding each other's stashes kept a frenzy going for four minutes)
         public PointF? DenFoot;                     // on the way to its tree: the trunk's foot, the second leg of the trip (the first runs along its own row to beside the tree)
+        // ---- A bird's branch perch (2026-11-09) ----
+        public int Flight;                          // a bird in Fly: 0 an ordinary flight, 1 climbing to a branch, 2 dropping from one
+        public int Sub;                             // sitting on a branch: what it is up to (Sub* constants)
+        public float SubLeft;                       // seconds left of that
+        public float ShufFrom, ShufTo, ShufT;       // a shuffle's hop along the wood: from x, to x, seconds in
+        public int ShufFace;                        // the way it will face after the hop (the flip is made at the top of the hop, in the air)
+        public float NextTry;                       // after a search for a seat found none: not again before this clock (a threat on the board asks every frame)
+        public float NextPerch;                     // the clock before which it does not choose a branch on its own (a visit is a treat, not a habit)
+        public float PerchedAt;                     // the clock when it landed on its branch (a long stay is cut short even in a story)
     }
+    private const int SubSit = 0, SubPreen = 1, SubPeck = 2, SubShuffle = 3;
+    private const float ShuffleFor = 0.28f, FlareFor = 0.30f, TakeOffFor = 0.25f;   // a shuffle hop's length; the last pages of a landing are a flare; the first of a drop are wing beats
 
     private const float BlendFor = 0.15f;           // a squirrel drops into its run, or sits up out of it, over nine frames (it used to pop in one)
     private const int RisePages = 6, TurnPages = 6, CurlPages = 8, MountPages = 4, HopPages = 22;
@@ -136,6 +149,13 @@ internal sealed class PatchLife
     private const int LookPages = 4;                // Look: the head coming up into the look over four pages (page 0 the plain sit, page 3 the full look); it used to snap
     private Sheet[] _bird = new Sheet[2], _birdLook = new Sheet[2], _birdPeck = new Sheet[2], _birdHop = new Sheet[2];
     private Sheet[] _birdFlyKind = new Sheet[2];
+    private Sheet[] _birdFlare = new Sheet[2], _birdDive = new Sheet[2], _birdPreen = new Sheet[2];   // the branch perch's poses (BirdArt: Flare 2 pages, Dive 1, Preen 2)
+    // The branch perches roll their own dice: a new behaviour must not move the old rolls of every other critter.
+    private readonly Random _perchRng;
+    // PECKWORKS_PERCH: "now" sends the first bird up to a branch at 5.0 s (pinned to the process clock, so a frame dump lines up with the
+    // log); "scare" pins a Threat on the board at 8.0 s over the patch (the birds should go up, and stay up while it is there).
+    private readonly string? _perchTest;
+    private bool _perchTestDone;
     private volatile bool _ready;
 
     public PatchLife(ThanksgivingScenery s, int count, Random sceneRng, Noticeboard board, NutField nuts)
@@ -145,7 +165,9 @@ internal sealed class PatchLife
         _nuts = nuts;
         _log = MindLog.Open();
         _rng = new Random(sceneRng.Next());         // its own dice
-        _k = Math.Max(9f, s.U * 0.030f);   // the near ground's scale: a pumpkin of 0.4 m is about 0.05 U, so a squirrel of 0.25 m is 0.030 U (at 0.055 it was "too big"), a mouse 0.55 of that, a sparrow 0.020
+        _perchRng = new Random(7919 + s.Width);     // the branch perches' own dice (a constant: it takes nothing from the scene's)
+        _perchTest = Environment.GetEnvironmentVariable("PECKWORKS_PERCH");
+        _k =Math.Max(9f, s.U * 0.030f);   // the near ground's scale: a pumpkin of 0.4 m is about 0.05 U, so a squirrel of 0.25 m is 0.030 U (at 0.055 it was "too big"), a mouse 0.55 of that, a sparrow 0.020
         _m = _k * 0.55f;
         _b = Math.Max(7f, s.U * 0.020f);
         _ground = CanStand;                         // made once: a new delegate every frame is garbage
@@ -187,6 +209,7 @@ internal sealed class PatchLife
         for (int i = 0; i < mice; i++) { Add(Kind.Mouse, timid[n], busy[n], curious[n], playful[n], _rng.Next(2)); n++; }
         for (int i = 0; i < birds; i++) { Add(Kind.Bird, timid[n], busy[n], curious[n], playful[n], _rng.Next(2)); n++; }
         for (int i = 0; i < squirrels; i++) { Add(Kind.Squirrel, timid[n], busy[n], curious[n], playful[n], i % Variants.Length); n++; }   // the residents wear different coats
+        foreach (Critter c in _all) if (c.Kind == Kind.Bird) c.NextPerch = 10f + 25f * (float)_perchRng.NextDouble();   // not in the first seconds
         _nextId = _all.Count;                       // the residents took 0 to count-1; visitors count on from there
         _test = Environment.GetEnvironmentVariable("PECKWORKS_SQUIRREL");   // test aid: "dart" makes every squirrel playful and every run a dart (the curl within the first seconds); "den" sends them to the trees at once
         if (_test != null) foreach (Critter c in _all) if (c.Kind == Kind.Squirrel) { c.Playful = 1f; c.Timid = 1f; }
@@ -520,6 +543,9 @@ internal sealed class PatchLife
             _birdPeck[kind] = Make(1, bw, bh, box, bby, _ => BirdArt.Page(BirdArt.Pose.Peck, kk, b, bw, bh, box, bby));
             _birdHop[kind] = Make(3, bw, bh, box, bby, i => BirdArt.Page(i == 0 ? BirdArt.Pose.HopCrouch : i == 1 ? BirdArt.Pose.HopUp : BirdArt.Pose.HopLand, kk, b, bw, bh, box, bby));
             _birdFlyKind[kind] = Make(7, bw, bh, box, bby, i => BirdArt.Page(BirdArt.Pose.Fly, kk, b, bw, bh, box, bby, i < 6 ? i : -1));   // six beating pages and the fold
+            _birdFlare[kind] = Make(2, bw, bh, box, bby, i => BirdArt.Page(BirdArt.Pose.Flare, kk, b, bw, bh, box, bby, i));
+            _birdDive[kind] = Make(1, bw, bh, box, bby, _ => BirdArt.Page(BirdArt.Pose.Dive, kk, b, bw, bh, box, bby));
+            _birdPreen[kind] = Make(2, bw, bh, box, bby, i => BirdArt.Page(BirdArt.Pose.Preen, kk, b, bw, bh, box, bby, i));
         }
     }
 
@@ -532,13 +558,32 @@ internal sealed class PatchLife
     {
         _time += dt;                                // counted from the first frame, not from the sheets being ready: the log's clock is the frame dump's (the build took 0.4 s and every logged second was 0.4 s early)
         if (!_ready || _time < StartAt) return;     // pinned: the critters' first frame is at StartAt on every run (unless the sheets are still building, at 4K)
+        if (_perchTest != null && !_perchTestDone)
+        {
+            if (_perchTest == "now" && _time >= 5.0)
+            {
+                _perchTestDone = true;
+                foreach (Critter c in _all) if (c.Kind == Kind.Bird) { BeginUp(c); break; }
+            }
+            else if (_perchTest == "scare" && _time >= 8.0)
+            {
+                _perchTestDone = true;
+                _board.Post(Sense.Threat, new PointF(_s.Width * 0.5f, _s.WalkY(_s.Width * 0.5f)), 1.6f * _s.U, 1f, this);   // the test's own raccoon: a threat across the whole patch, for the one second a notice lives
+            }
+        }
         for (int i = 0; i < _all.Count; i++)
         {
             Critter c = _all[i];
             c.Mind.Tick(dt);
             c.Senses.Tick(dt);
             c.Clock += dt;
-            _log?.WriteLine($"{_time,8:F3} {c.Kind.ToString().ToLowerInvariant()}{c.Id} frame x {c.X:F1} y {c.Y:F1} v {c.Pace.Speed:F2} {c.Mind.Doing}{(c.Turning ? (c.Curl ? " curl" : " turn") : "")} d{c.Dir}");
+            _log?.WriteLine($"{_time,8:F3} {c.Kind.ToString().ToLowerInvariant()}{c.Id} frame x {c.X:F1} y {c.Y:F1} v {c.Pace.Speed:F2} {c.Mind.Doing}{(c.Turning ? (c.Curl ? " curl" : " turn") : "")} d{c.Dir}{(c.Mind.Doing == Doing.Branch ? $" sub{c.Sub}" : c.Mind.Doing == Doing.Fly && c.Flight != 0 ? $" flight{c.Flight}" : "")}");
+            // A bird that sees a THREAT (the raccoon, a fox, the wolves) goes UP: "it saw the thing and went up". The look is wider
+            // than the senses' own reach (a bird on a wire sees the whole lane), and it works from a pumpkin's shoulder too. A
+            // timid bird also takes to a branch when a squirrel bounds right at it. Once up, a bird on a branch listens.
+            if (c.Kind == Kind.Bird && c.Mind.Doing is not (Doing.Fly or Doing.Branch)
+                && _board.Nearest(Sense.Threat, new PointF(c.X, c.Y), 1.0f * _s.U) is Notice) BeginUp(c);
+            else if (c.Kind == Kind.Bird && c.Mind.Doing == Doing.Branch) ListenOnBranch(c);
             // A squirrel on the move is a thing the mice and birds notice: it tells the board every third of a second.
             if (c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Fetch or Doing.Carry or Doing.Raid or Doing.Chase or Doing.Leave or Doing.Romp && c.Clock >= c.NextPost)
             {
@@ -547,9 +592,11 @@ internal sealed class PatchLife
             }
             // The senses: a mouse bolts from a squirrel or a scuffle, freezes at a noise; a bird flies up; a squirrel sits up and looks.
             // A squirrel up a tree or on a pumpkin, or in the middle of a game, is past noticing.
-            if (c.Mind.Doing is not (Doing.Bolt or Doing.Fly or Doing.Chase or Doing.Leave or Doing.Romp) && !OnTree(c) && !OnPumpkin(c))
+            if (c.Mind.Doing is not (Doing.Bolt or Doing.Fly or Doing.Chase or Doing.Leave or Doing.Romp or Doing.Branch) && !OnTree(c) && !OnPumpkin(c))
             {
                 Reaction r = c.Senses.Check(_board, new PointF(c.X, c.Y), c, out Notice cause);
+                // A timid bird that a squirrel bounds right at takes to a branch instead of just freezing (a third of the time).
+                if (c.Kind == Kind.Bird && r == Reaction.Freeze && cause.Kind == Sense.Movement && c.Timid > 0.5f && _perchRng.NextDouble() < 0.35 && BeginUp(c)) continue;
                 // A squirrel busy with a nut (chewing, burying, digging one up) is not put off its work by a noise or a passing
                 // squirrel: it only looks that way. (Every freeze restarted the meal: one squirrel chewed one nut for 31 s
                 // through a frenzy bounding round it.)
@@ -802,6 +849,15 @@ internal sealed class PatchLife
             HopOff(c);
             return;
         }
+        // A bird up on its branch: the timer ending is the end of a visit, unless a story is playing or a threat is about (it
+        // stays up, and longer the longer the threat lasts), or it has been up so long (28 s in a story, 45 s in a scare) that it comes down.
+        if (c.Kind == Kind.Bird && c.Mind.Doing == Doing.Branch)
+        {
+            bool scared = _board.Nearest(Sense.Threat, new PointF(c.X, c.Y), 1.2f * u) is Notice;
+            if ((Lull || scared) && _time - c.PerchedAt < (scared ? 45.0 : 28.0)) { c.Mind.Left = 2.5f + 3f * (float)_perchRng.NextDouble(); return; }
+            BeginDrop(c);
+            return;
+        }
         if (c.Resume is PointF back)
         {
             // Going on after a stop-start pause: the same goal, the page cycle carrying on from where it stood.
@@ -861,6 +917,9 @@ internal sealed class PatchLife
                 // A songbird in a patch gets about by FLYING (his line: "they need to look like they're flying around
                 // instead of hopping around"): the flights are the heavy faces, a hop is a few steps at most.
                 bool perched = c.Perched >= 0;
+                // Now and then, up to a branch in a top corner (about once a minute or two a bird; a timid one more). Rolled
+                // on its own dice and ahead of the old ones, so a bird that does not go up rolls exactly as it always did.
+                if (!perched && _time >= c.NextPerch && _perchRng.NextDouble() < 0.02 + 0.03 * c.Timid && BeginUp(c)) break;
                 int face = Dice.Pick(_rng, [perched ? 0f : 0.15f + 0.15f * c.Busy, perched ? 0f : 0.45f, 0.35f, perched ? 0.15f : 0.3f + 0.3f * c.Timid, perched ? 0.6f : 0.45f + 0.4f * c.Busy]);
                 if (face == 0) { PointF? g = RandomSpot(c.X - 0.06f * u, c.X + 0.06f * u, 30, from: new PointF(c.X, c.Y)); if (g == null) { c.Mind.Begin(Doing.Still, 0.5f); break; } c.Goal = g.Value; c.Mind.Begin(Doing.Go, 1.5f); c.Travelled = 0; }
                 else if (face == 1) c.Mind.Begin(Doing.Peck, 0.6f + 1.4f * (float)_rng.NextDouble());
@@ -972,6 +1031,175 @@ internal sealed class PatchLife
         c.Dir = to.X >= c.X ? 1 : -1;
         c.Clock = 0;                                                    // the wing pages count from the take-off
         c.Mind.Begin(Doing.Fly, c.FlyFor);
+    }
+
+    // ================================================================ the branch perch (2026-11-09)
+    //
+    // FEYNMAN VERSION. The oak branches in the top corners are just wood the painter grew; it handed the scene their
+    // geometry (BranchTimber: a list of fat round-ended bars, BranchTopY(x): the y of the top edge, the surface a foot
+    // stands on). A bird picks a spot on that top edge, flies UP to it in bounds (beats, then a shut-wing dart, each
+    // bound a little higher: the way a sparrow climbs the air), throws its wings up and its feet out in the last
+    // quarter second (the FLARE), and sits. Up there it looks about, preens (head turned right round, beak in the
+    // shoulder feathers), pecks at the bark, and now and then hops a step along the wood. Then it tips off the branch
+    // and glides down into the patch with its wings half shut, flaring again onto the ground or a pumpkin's shoulder.
+    // It posts nothing. It listens: a threat on the board (the raccoon, the wolves) sends a bird UP, and keeps it up.
+    // WHAT IT IS SOLID TO: the wood only (its feet are exactly on the top edge). It passes over everything else; it is
+    // drawn in the second pass at the end of Draw, with no depth stencil (nothing in the near ground can hide it), and
+    // never over the falling leaves, which are drawn after the whole patch.
+
+    /// <summary>Is a bird up in the high pass: its feet above the ground's crest and not standing on a pumpkin.</summary>
+    private bool IsHigh(Critter c) => c.Perched < 0 && c.Y < _s.Ground.YAt(Math.Clamp(c.X, 0, _s.Width - 1));
+
+    /// <summary>
+    /// A spot on a branch to sit: the feet's place on the wood's top edge, or null. Candidates are random points along
+    /// the timber that pass the tests (on screen, a gentle slope under the feet, the wood under the toes as well as the
+    /// heels, clear of every leaf bunch's centre by a bird's length, clear of another bird's seat); the best of up to six
+    /// wins by a score that likes the lower branches, the inner halves of the screen, and a short flight.
+    /// </summary>
+    private PointF? PickBranchSpot(Critter c, bool relaxed = false)
+    {
+        float leafR = relaxed ? 0.55f : 1f, slopeMax = relaxed ? 0.8f : 0.45f, thin = relaxed ? 0.1f : 0.2f;   // a scene whose branches are all thin or leafy gets a second, looser search
+        float b = _b, w = _s.Width, h = _s.Height;
+        var timber = _s.BranchTimber;
+        if (timber.Count == 0) return null;
+        PointF? best = null; float bestScore = float.MinValue; int found = 0;
+        for (int tries = 0; tries < 400 && found < 6; tries++)
+        {
+            var (a, e, wd) = timber[_perchRng.Next(timber.Count)];
+            if (wd < thin * b) continue;                                                    // a twig no thicker than a toe is no perch
+            float x = a.X + (e.X - a.X) * (0.1f + 0.8f * (float)_perchRng.NextDouble());
+            if (x < 0.04f * w || x > 0.96f * w) continue;
+            float? top = _s.BranchTopY(x);
+            if (top is not float y || y < 1.5f * b || y > 0.45f * h) continue;               // the whole bird on the screen, on the branches (not some far twig down the picture)
+            float? fore = _s.BranchTopY(x + 0.6f * b), aft = _s.BranchTopY(x - 0.4f * b);
+            if (fore is not float yf || aft is not float ya || MathF.Abs(yf - ya) > slopeMax * b) continue;   // wood under the toes and the heels, and not a steep one
+            bool clear = true;
+            foreach (PointF p in _s.CornerBranchSpots)
+            {
+                float dx = p.X - x, dy = p.Y - (y - 0.45f * b);
+                if (dx * dx + dy * dy < leafR * leafR * b * b) { clear = false; break; }                    // never within a bird's length of a leaf bunch's centre
+            }
+            if (!clear) continue;
+            foreach (Critter o in _all)
+                if (o != c && o.Kind == Kind.Bird && (o.Mind.Doing == Doing.Branch || (o.Mind.Doing == Doing.Fly && o.Flight == 1)) && MathF.Abs(o.FlyTo - x) < 2.5f * b && MathF.Abs(o.FlyY1 - y) < 3f * b) { clear = false; break; }
+            if (!clear) continue;
+            found++;
+            float inner = MathF.Min(x, w - x) / (0.5f * w);                                     // 0 at the edge, 1 in the middle
+            float score = 1.0f * (y / (0.45f * h)) + 1.2f * inner - 0.8f * MathF.Abs(x - c.X) / w + 0.9f * (float)_perchRng.NextDouble();
+            if (score > bestScore) { bestScore = score; best = new PointF(x, y + 1f); }       // a pixel into the wood: the toes' line overlaps the top edge, never hangs a hair above it
+        }
+        return best;
+    }
+
+    /// <summary>Sends a bird up to a branch (the flight up: bounds, flare). False when no seat could be found.</summary>
+    private bool BeginUp(Critter c)
+    {
+        if (_time < c.NextTry) return false;
+        PointF? spot = PickBranchSpot(c) ?? PickBranchSpot(c, true);
+        if (spot == null) {
+            c.NextTry = (float)_time + 3f;
+            _log?.WriteLine($"{_time,8:F2} bird{c.Id} found NO branch spot (timber {_s.BranchTimber.Count}, w {_s.Width} h {_s.Height})"); return false; }
+        float u = _s.U;
+        PointF to = spot.Value;
+        float dx = to.X - c.X, dy = to.Y - c.Y;
+        c.FlyFrom = c.X; c.FlyTo = to.X; c.FlyY0 = c.Y; c.FlyY1 = to.Y;
+        c.FlyFor = Math.Clamp(MathF.Sqrt(dx * dx + dy * dy) / (1.0f * u) + 0.6f, 1.3f, 3.2f);
+        c.Dir = dx >= 0 ? 1 : -1;
+        c.Perched = -1; c.Flight = 1; c.Clock = 0; c.Pace.Halt();
+        c.Mind.Begin(Doing.Fly, c.FlyFor);
+        _log?.WriteLine($"{_time,8:F2} bird{c.Id} goes UP to a branch spot {to.X:F0},{to.Y:F0} from {c.X:F0},{c.Y:F0} ({c.FlyFor:F1} s)");
+        return true;
+    }
+
+    /// <summary>The bird's flight up has arrived: it sits, for six to twenty-five seconds.</summary>
+    private void BeginBranch(Critter c)
+    {
+        c.X = c.FlyTo; c.Y = c.FlyY1; c.Flight = 0;
+        c.Mind.Begin(Doing.Branch, 6f + 19f * (float)_perchRng.NextDouble());
+        c.Clock = 0; c.PerchedAt = (float)_time;
+        c.Sub = SubSit; c.SubLeft = 1.2f + 1.5f * (float)_perchRng.NextDouble();
+        _log?.WriteLine($"{_time,8:F2} bird{c.Id} LANDS on its branch at {c.X:F0},{c.Y:F0} for {c.Mind.Left:F1} s");
+    }
+
+    /// <summary>The bird tips off its branch and glides down to the ground (or a pumpkin's shoulder) somewhere in the patch.</summary>
+    private void BeginDrop(Critter c)
+    {
+        float u = _s.U;
+        PointF to;
+        int perch = _perchRng.NextDouble() < 0.4 ? PerchNear(c.X + (c.X < _s.Width * 0.5f ? 0.5f : -0.5f) * u, 0.5f * u) : -1;
+        if (perch >= 0) { var (at, r) = _s.Pumpkins[perch]; to = new PointF(at.X - 0.1f * r, at.Y - 1.05f * r); }
+        else
+        {
+            // Into the patch: toward the middle of the screen from the corner, a good way off.
+            float lo = c.X < _s.Width * 0.5f ? c.X + 0.15f * u : c.X - 0.9f * u, hi = c.X < _s.Width * 0.5f ? c.X + 0.9f * u : c.X - 0.15f * u;
+            to = RandomSpot(lo, hi, 40) ?? new PointF(c.X, _s.WalkY(c.X));
+        }
+        c.Perched = perch;
+        c.FlyFrom = c.X; c.FlyTo = to.X; c.FlyY0 = c.Y; c.FlyY1 = to.Y;
+        float dx = to.X - c.X, dy = to.Y - c.Y;
+        c.FlyFor = Math.Clamp(MathF.Sqrt(dx * dx + dy * dy) / (0.75f * u) + 0.7f, 1.2f, 3.2f);
+        c.Dir = dx >= 0 ? 1 : -1;
+        c.Flight = 2; c.Clock = 0;
+        c.NextPerch = (float)_time + 40f + 40f * (1f - c.Timid);
+        c.Mind.Begin(Doing.Fly, c.FlyFor);
+        _log?.WriteLine($"{_time,8:F2} bird{c.Id} LEAVES its branch for {to.X:F0},{to.Y:F0} ({c.FlyFor:F1} s, up {(float)(_time - c.PerchedAt):F1} s)");
+    }
+
+    /// <summary>A bird on a branch notices a thing near it: it turns to look (a hop round if it faces the wrong way), else just looks.</summary>
+    private void ListenOnBranch(Critter c)
+    {
+        if (c.Sub == SubShuffle) return;
+        Reaction r = c.Senses.Check(_board, new PointF(c.X, c.Y), c, out Notice cause);
+        if (r == Reaction.None) return;
+        int toward = cause.At.X >= c.X ? 1 : -1;
+        if (toward != c.Dir) StartShuffle(c, 0f, toward);
+        else { c.Sub = SubSit; c.Clock = 1.1f; c.SubLeft = Math.Max(c.SubLeft, 1.0f); }   // the page is chosen by Clock: 1.1 is the head-up look
+    }
+
+    /// <summary>A hop of "step" pixels along the wood (0 turns it round on the spot), facing "face" afterwards. False when the wood runs out.</summary>
+    private void StartShuffle(Critter c, float step, int face)
+    {
+        float b = _b, tx = c.X + step;
+        if (step != 0f)
+        {
+            float? t = _s.BranchTopY(tx), tf = _s.BranchTopY(tx + MathF.Sign(step) * 0.6f * b);
+            if (t is not float ty || tf is not float tfy || MathF.Abs(tfy - ty) > 0.45f * b) { step = 0f; tx = c.X; face = -c.Dir; }   // no wood that way: it turns round instead
+        }
+        c.Sub = SubShuffle; c.ShufT = 0; c.ShufFrom = c.X; c.ShufTo = tx; c.ShufFace = face;
+    }
+
+    /// <summary>What a bird on a branch is up to this frame: the hop of a shuffle, or its sub-doing running out and the next one dealt.</summary>
+    private void BranchAct(Critter c, float dt)
+    {
+        float b = _b;
+        if (c.Sub == SubShuffle)
+        {
+            c.ShufT += dt;
+            float k = Math.Clamp(c.ShufT / ShuffleFor, 0f, 1f), s = k * k * (3f - 2f * k);
+            c.X = c.ShufFrom + (c.ShufTo - c.ShufFrom) * s;
+            float? top = _s.BranchTopY(c.X);
+            if (top is float y) c.Y = y + 1f;
+            if (k >= 0.45f && c.Dir != c.ShufFace) c.Dir = c.ShufFace;                   // the flip is made at the top of the hop, in the air
+            if (k >= 1f) { c.Sub = SubSit; c.SubLeft = 0.8f + 1.4f * (float)_perchRng.NextDouble(); c.Clock = 0; }
+            return;
+        }
+        c.SubLeft -= dt;
+        if (c.SubLeft > 0f) return;
+        // The next thing: sit and look about, preen, peck at the bark, or a step along the branch (never two shuffles running).
+        int pick = Dice.Pick(_perchRng, [0.35f, c.Sub == SubPreen ? 0f : 0.28f, 0.2f, c.Sub == SubShuffle ? 0f : 0.22f]);
+        c.Clock = 0;
+        switch (pick)
+        {
+            case 1: c.Sub = SubPreen; c.SubLeft = 1.6f + 1.2f * (float)_perchRng.NextDouble(); break;
+            case 2: c.Sub = SubPeck; c.SubLeft = 0.8f + 0.9f * (float)_perchRng.NextDouble(); break;
+            case 3:
+            {
+                int side = _perchRng.Next(2) == 0 ? -1 : 1;
+                StartShuffle(c, side * (0.6f + 0.5f * (float)_perchRng.NextDouble()) * b, side);
+                break;
+            }
+            default: c.Sub = SubSit; c.SubLeft = 1.2f + 2.0f * (float)_perchRng.NextDouble(); break;
+        }
     }
 
     /// <summary>
@@ -1161,11 +1389,35 @@ internal sealed class PatchLife
             case Doing.Fly:
             {
                 float p = FlightAlong(Math.Clamp(1f - c.Mind.Left / c.FlyFor, 0f, 1f));
+                if (c.Flight != 0)
+                {
+                    // The branch flights. UP: a straight climb from below with the bound's dip riding on it (the same dip as
+                    // any flight: beats lift it, the fold drops it), easing into the flare. DROP: the bird tips off the wood
+                    // and glides, the first of the way mostly forward and the last mostly down (p to the 1.6), then flares.
+                    c.X = c.FlyFrom + (c.FlyTo - c.FlyFrom) * p;
+                    float qd = ((c.Clock % 0.5f) / 0.5f + 0.25f) % 1f;
+                    float dipUp = c.Flight == 1 && qd < 0.4f ? 0.5f * _b * MathF.Sin(qd / 0.4f * MathF.PI) * 4 * p * (1 - p) : 0f;
+                    float yp = c.Flight == 1 ? p : MathF.Pow(p, 1.6f);
+                    c.Y = c.FlyY0 + (c.FlyY1 - c.FlyY0) * yp - dipUp;
+                    if (c.Mind.Over)
+                    {
+                        if (c.Flight == 1) BeginBranch(c);
+                        else
+                        {
+                            c.X = c.FlyTo; c.Y = c.FlyY1; c.Flight = 0;
+                            c.Mind.Begin(c.Perched >= 0 ? Doing.Perch : Doing.Still, 1f + 3f * (float)_perchRng.NextDouble()); c.Clock = 0;
+                        }
+                    }
+                    break;
+                }
                 c.X = c.FlyFrom + (c.FlyTo - c.FlyFrom) * p;
                 c.Y = c.FlyY0 + (c.FlyY1 - c.FlyY0) * p - FlightHeight(c, p, u);
                 if (c.Mind.Over) { c.X = c.FlyTo; c.Y = c.FlyY1; c.Mind.Begin(c.Perched >= 0 ? Doing.Perch : Doing.Still, 1f + 3f * (float)_rng.NextDouble()); c.Clock = 0; }
                 break;
             }
+            case Doing.Branch:
+                BranchAct(c, dt);
+                break;
             case Doing.Perch:
                 if (c.Kind == Kind.Bird && c.Mind.Over && c.Perched >= 0 && _rng.NextDouble() < 0.6) c.Mind.Left = 1f + 3f * (float)_rng.NextDouble();   // often sits a while longer
                 break;
@@ -1236,7 +1488,8 @@ internal sealed class PatchLife
     {
         bool mirror = c.Dir < 0;
         int left = (int)MathF.Round(c.X) - (mirror ? sh.W - sh.Ox : sh.Ox);
-        page.Draw(fb, left, (int)MathF.Round(y) - sh.By, 1f, null, mirror, _s.NearDepth, NearnessOf(c));
+        bool high = c.Kind == Kind.Bird && IsHigh(c);                          // up in the branches: no depth stencil, nothing of the near ground can hide it
+        page.Draw(fb, left, (int)MathF.Round(y) - sh.By, 1f, null, mirror, high ? null : _s.NearDepth, NearnessOf(c));
     }
 
     /// <summary>A stamp at a given place, mirrored or not, through a stencil, in a given light: the climbing pages.</summary>
@@ -1253,6 +1506,7 @@ internal sealed class PatchLife
         _all.Sort((a, b) => a.Y.CompareTo(b.Y));
         foreach (Critter c in _all)
         {
+            if (c.Kind == Kind.Bird && IsHigh(c)) continue;                         // a bird above the ground's crest is drawn in the second pass below
             switch (c.Kind)
             {
                 case Kind.Mouse:
@@ -1266,34 +1520,8 @@ internal sealed class PatchLife
                     break;
                 }
                 case Kind.Bird:
-                {
-                    int kind = c.Look;
-                    if (c.Mind.Doing == Doing.Fly)
-                    {
-                        // Bounding flight: the wings beat for most of each half second (four beats a second, six pages a
-                        // beat) and shut for the last fifth of it, the dip in FlightHeight; never shut in the first or
-                        // last third of a second (the take-off and the flare are all beating).
-                        float t = c.Clock, left = c.Mind.Left;
-                        bool fold = (t % 0.5f) > 0.4f && t > 0.33f && left > 0.33f;
-                        Stamp(fb, _birdFlyKind[kind], _birdFlyKind[kind].Pages[fold ? 6 : (int)(t * 24) % 6], c, c.Y);
-                    }
-                    else if (c.Mind.Doing is Doing.Go or Doing.Bolt)
-                    {
-                        // Hops: four a second, each a small arc; crouch, up, land.
-                        float hop = (c.Clock * 4f) % 1f;
-                        int page = hop < 0.2f ? 0 : hop < 0.7f ? 1 : 2;
-                        float lift = hop >= 0.2f && hop < 0.7f ? 0.25f * _b * MathF.Sin((hop - 0.2f) / 0.5f * MathF.PI) : 0f;
-                        Stamp(fb, _birdHop[kind], _birdHop[kind].Pages[page], c, c.Y - lift);
-                    }
-                    else if (c.Mind.Doing == Doing.Peck)
-                        Stamp(fb, (c.Clock % 0.5f) < 0.3f ? _birdPeck[kind] : _bird[kind], ((c.Clock % 0.5f) < 0.3f ? _birdPeck[kind] : _bird[kind]).Pages[0], c, c.Y);
-                    else
-                    {
-                        bool look = ((int)(c.Clock / 1.1f)) % 2 == 1;
-                        Stamp(fb, look ? _birdLook[kind] : _bird[kind], (look ? _birdLook[kind] : _bird[kind]).Pages[0], c, c.Y);
-                    }
+                    DrawBird(fb, c);
                     break;
-                }
                 default:
                 {
                     SqSheets sq = _sq[c.Look];
@@ -1410,6 +1638,76 @@ internal sealed class PatchLife
                     break;
                 }
             }
+        }
+        // The second pass (2026-11-09): the birds up in the branches, and the birds flying to or from them above the fence line, in
+        // front of the whole patch and of every pumpkin (no depth stencil), after the ground pass. The falling leaves are drawn
+        // later by the scene, so they still fall in front of a bird on its branch.
+        foreach (Critter c in _all)
+            if (c.Kind == Kind.Bird && IsHigh(c)) DrawBird(fb, c);
+    }
+
+    /// <summary>One bird, in the page its doing calls for: flights (the branch flights have their own wings), hops, pecks, looks, preens.</summary>
+    private void DrawBird(FrameBuffer fb, Critter c)
+    {
+        int kind = c.Look;
+        if (c.Mind.Doing == Doing.Fly && c.Flight != 0)
+        {
+            // The branch flights. Both END in the flare (the last 0.3 s: wings thrown up, then the downstroke settling the bird).
+            // UP also bounds like any flight (beats, then a shut-wing dart) but never folds in the take-off or the flare. DROP
+            // beats its wings for the take-off off the wood, then glides with them half shut (the dive pose), then flares.
+            float t = c.Clock, left = c.Mind.Left;
+            if (left < FlareFor) Stamp(fb, _birdFlare[kind], _birdFlare[kind].Pages[left > 0.12f ? 0 : 1], c, c.Y);
+            else if (c.Flight == 2 && t >= TakeOffFor) Stamp(fb, _birdDive[kind], _birdDive[kind].Pages[0], c, c.Y);
+            else
+            {
+                bool fold = c.Flight == 1 && (t % 0.5f) > 0.4f && t > 0.33f && left > 0.33f;
+                Stamp(fb, _birdFlyKind[kind], _birdFlyKind[kind].Pages[fold ? 6 : (int)(t * 24) % 6], c, c.Y);
+            }
+        }
+        else if (c.Mind.Doing == Doing.Fly)
+        {
+            // Bounding flight: the wings beat for most of each half second (four beats a second, six pages a
+            // beat) and shut for the last fifth of it, the dip in FlightHeight; never shut in the first or
+            // last third of a second (the take-off and the flare are all beating).
+            float t = c.Clock, left = c.Mind.Left;
+            bool fold = (t % 0.5f) > 0.4f && t > 0.33f && left > 0.33f;
+            Stamp(fb, _birdFlyKind[kind], _birdFlyKind[kind].Pages[fold ? 6 : (int)(t * 24) % 6], c, c.Y);
+        }
+        else if (c.Mind.Doing == Doing.Branch)
+        {
+            // Up on the wood. Sit: stands, and every second or so the head comes up to look about. Preen: the head turned right
+            // round, the beak working at the shoulder (two pages, swapped eight times a second). Peck: at the bark by its feet.
+            // Shuffle: the hop of a step along the branch, crouch, up (a small arc), land; the bird is lifted only for the drawing.
+            if (c.Sub == SubShuffle)
+            {
+                float k = Math.Clamp(c.ShufT / ShuffleFor, 0f, 1f);
+                int page = k < 0.2f ? 0 : k < 0.75f ? 1 : 2;
+                float lift = k >= 0.2f && k < 0.75f ? 0.25f * _b * MathF.Sin((k - 0.2f) / 0.55f * MathF.PI) : 0f;
+                Stamp(fb, _birdHop[kind], _birdHop[kind].Pages[page], c, c.Y - lift);
+            }
+            else if (c.Sub == SubPreen) Stamp(fb, _birdPreen[kind], _birdPreen[kind].Pages[(int)(c.Clock * 8f) % 2], c, c.Y);
+            else if (c.Sub == SubPeck)
+                Stamp(fb, (c.Clock % 0.5f) < 0.3f ? _birdPeck[kind] : _bird[kind], ((c.Clock % 0.5f) < 0.3f ? _birdPeck[kind] : _bird[kind]).Pages[0], c, c.Y);
+            else
+            {
+                bool look = ((int)(c.Clock / 1.1f)) % 2 == 1;
+                Stamp(fb, look ? _birdLook[kind] : _bird[kind], (look ? _birdLook[kind] : _bird[kind]).Pages[0], c, c.Y);
+            }
+        }
+        else if (c.Mind.Doing is Doing.Go or Doing.Bolt)
+        {
+            // Hops: four a second, each a small arc; crouch, up, land.
+            float hop = (c.Clock * 4f) % 1f;
+            int page = hop < 0.2f ? 0 : hop < 0.7f ? 1 : 2;
+            float lift = hop >= 0.2f && hop < 0.7f ? 0.25f * _b * MathF.Sin((hop - 0.2f) / 0.5f * MathF.PI) : 0f;
+            Stamp(fb, _birdHop[kind], _birdHop[kind].Pages[page], c, c.Y - lift);
+        }
+        else if (c.Mind.Doing == Doing.Peck)
+            Stamp(fb, (c.Clock % 0.5f) < 0.3f ? _birdPeck[kind] : _bird[kind], ((c.Clock % 0.5f) < 0.3f ? _birdPeck[kind] : _bird[kind]).Pages[0], c, c.Y);
+        else
+        {
+            bool look = ((int)(c.Clock / 1.1f)) % 2 == 1;
+            Stamp(fb, look ? _birdLook[kind] : _bird[kind], (look ? _birdLook[kind] : _bird[kind]).Pages[0], c, c.Y);
         }
     }
 }

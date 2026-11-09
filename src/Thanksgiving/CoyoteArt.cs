@@ -37,6 +37,7 @@ internal static class CoyoteArt
         public float TailCurl = -20f;
         public float Ears = 60f;                   // the ears' angle: 60 up, 110 flat back
         public bool Mouth;                         // open (carrying, or a snarl)
+        public float Gape;                         // the jaw dropped wide, 0 shut to 1 as wide as a howl
         public float Arch;                         // the back humped (gathered) or sagging (stretched): body heights
         public bool Sitting;
     }
@@ -113,6 +114,25 @@ internal static class CoyoteArt
         return q;
     }
 
+    /// <summary>
+    /// THE HOWL, p 0 to 1 over the whole howl. How a coyote does it: it sits on its haunches, draws the chest up, and
+    /// lifts its muzzle until the nose points at the sky, the jaw dropped open, ears swept back, holding the note while the
+    /// throat trembles, then lets the head sink. So: the head RISES (0 to 0.2), HOLDS with a slow tremble of the tilt
+    /// (0.2 to 0.85), and SINKS (0.85 to 1). It ends on the plain Sit pose, so both seams of the pose change (the sit
+    /// before it, the stand it ends in) are a small step.
+    /// </summary>
+    public static Pose Howl(float p)
+    {
+        float up = Keys(p, (0f, 0f), (0.2f, 1f), (0.85f, 1f), (1f, 0f));
+        var q = Sit();
+        q.Chest = P(0.22f + 0.02f * up, 0.62f + 0.04f * up);
+        q.Head = P(Lerp(0.52f, 0.38f, up), Lerp(0.86f, 1.03f, up));
+        q.HeadTilt = Lerp(8f, 68f, up) + 3f * MathF.Sin(p * MathF.Tau * 3f) * up;     // the held note: the muzzle shivers
+        q.Gape = MathF.Min(1f, up * 1.4f);
+        q.Ears = Lerp(60f, 100f, up);
+        q.Tail = -80f;
+        return q;
+    }
     /// <summary>Digging: the rump up, the chest low, the nose at the ground, the forepaws scrabbling by "phase".</summary>
     public static Pose Dig(float phase)
     {
@@ -243,6 +263,15 @@ internal static class CoyoteArt
             Blob([P(0.04f, 0.09f), P(0.30f * len, 0.0f), P(0.33f * len, -0.05f), P(0.26f * len, -0.09f), P(0.02f, -0.11f)], Coat, 0.3f);   // the muzzle, a wedge
             Blob([P(0.06f, -0.03f), P(0.28f * len, -0.05f), P(0.26f * len, -0.09f), P(0.04f, -0.11f)], Belly, 0.3f);                       // pale under the muzzle
             if (q.Mouth) Blob([P(0.12f, -0.09f), P(0.30f * len, -0.07f), P(0.28f * len, -0.13f), P(0.12f, -0.13f)], Ink, 0.3f);           // the jaw open
+            if (q.Gape > 0f)
+            {
+                Blob([P(0.10f, -0.04f), P(0.30f * len, -0.05f), P(0.25f * len, -0.15f - 0.05f * q.Gape), P(0.10f, -0.14f)], Ink, 0.3f);   // the inside of the mouth
+                var js = g.Save();
+                g.TranslateTransform(0.10f, -0.08f);
+                g.RotateTransform(-24f * q.Gape);                                              // the lower jaw swings down about the hinge
+                Blob([P(0f, 0.03f), P(0.20f * len, 0.02f), P(0.22f * len, -0.025f), P(0f, -0.045f)], Coat, 0.3f);
+                g.Restore(js);
+            }
             Ell(g, 0.32f * len, -0.03f, 0.035f, 0.03f, Ink);                                   // the nose
             foreach (float ex in (float[])[-0.06f, 0.0f])
             {

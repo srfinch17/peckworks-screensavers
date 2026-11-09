@@ -596,7 +596,13 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   between the orchard and the windmill; a rooster and four hens peck and scratch round the scarecrow's
   feet and scatter when the dog comes through. The farm dog lives in the doghouse: it sits in the yard,
   trots the road to the barn and back, and barks at the coyotes, the raccoon and the owl (the hens
-  scatter, the turkeys look up). Every one of them has a mind from the shared kit (a doing with a timer
+  scatter, the turkeys look up). The dog has games too: it chases its own tail in a tightening spin and
+  sits dizzy afterwards, and now and then it runs at the hens, who scatter with a hop while the rooster
+  stands his ground and then charges it, and the dog slinks home with its tail down. The rooster crows
+  every minute or two (neck up and back, beak open, a quiver), the hens look up and the dog woofs back
+  or pricks up its ears; when the coyotes howl on the far lane the dog barks back from its kennel
+  doorway. One cow at a time folds down onto the grass (front knees first) and lies chewing for a while,
+  then rises hind end first. Every one of them has a mind from the shared kit (a doing with a timer
   and weighted dice, a pace that eases, a pen it keeps to), jointed legs on a proper walk cycle paged by
   the distance walked, a turn through three narrowing pages, a head that eases down to the grass and
   nods, and a tail on its own clock; and every one is sized by the hill's one scale (a 7 m house, a
@@ -605,7 +611,12 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
 - A flock of wild turkeys lives in the field behind the fence: they peck at the stubble, wander a
   few steps, stand and look about, and the tom fans his tail now and then; when he does, the
   curious hens walk over and stand watching him, and a bale dropped by the baler draws them over
-  to scratch at the hay.
+  to scratch at the hay. With three or more turkeys there are two toms, and when one displays with the
+  other near they square up: both fan and quiver out of step, then the smaller folds his fan, turns and
+  slinks off with his head low while the winner stands fanned a moment longer. The fawn in the deer herd
+  gambols when all is quiet: stiff-legged springs with her back arched and tail up, a dash out along her
+  row in low bounds, a skid, a turn and the bounds back, then she stands and looks at her mother, who
+  lifts her head and looks back.
 - **The field has one scale.** Metres to pixels run from the tractor at the far lane (its rear wheel is
   1.7 m) to the fence posts at the front, and every animal on the field is sized from that and its real
   height or length, so a deer is half a tractor wheel tall and a rabbit a tenth of a tractor long,
@@ -631,8 +642,12 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   where the rabbit is caught, droplets flung off the catcher's mouth at every shake and toss, each one
   landing as a speck, all of it fading away a couple of minutes later. A tiny, hilariously horrifying
   thing way in the background of a serene fall scene, to reward the viewer who keeps watching. The
-  whole field knows the pack is through: the deer lift their heads and the timid trot off, the turkeys
-  hurry. Knob "Coyotes" (0 to 4; 0 keeps the rabbits).
+  rabbits are not fools: one that spots a coyote coming sits up tall, thumps a hind foot twice (a puff
+  of dust each time) and bolts, and every rabbit in earshot sits up and bolts before the coyote is on
+  them, so the whole lane empties at once. When a bout ends the boldest coyote sits, lifts its muzzle
+  and howls at the sunset for three seconds before the pack leaves; the deer look up and the farm dog
+  barks back. The whole field knows the pack is through: the deer lift their heads and the timid trot
+  off, the turkeys hurry. Knob "Coyotes" (0 to 4; 0 keeps the rabbits).
 - A windbreak of small trees in autumn colour stands along the far edge of the field, where the hill
   meets it: nearer than the hills' treeline, behind everything that moves on the field.
 - A white-tailed doe, her fawn and a buck with antlers graze at the far side of the field, lift
@@ -658,8 +673,12 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   sticking out of it. The acorn is flung out of the scuffle, and while they are still rolling a mouse
   creeps out from the corn shock, sniffs it, takes it and scurries home. The dust settles; the two
   squirrels sit, look at where it was, look at each other, and each goes back up its own tree.
-- **Three more little scenes** take turns with the caper, one every minute or two, dealt so that every
-  one plays before any repeats. *Hide and seek*: the squirrel bursts out of its hollow after a mouse,
+- **Four more little scenes** take turns with the caper, one every minute or two, dealt so that every
+  one plays before any repeats. *The branch raid*: a third squirrel comes in along one of the oak branches
+  in a top corner, runs out over the patch, sits up, and scrabbles at the wood until acorns shake loose
+  from the leaves and patter down for the patch's squirrels; then it either loses its footing and hangs
+  under the branch by its forepaws for a second, scrambles back up and looks about as if nobody saw, or
+  sits and eats one it kept, before it runs back out the way it came. *Hide and seek*: the squirrel bursts out of its hollow after a mouse,
   which bolts down through the patch and dives into the jack-o'-lantern's grin; the squirrel pulls up
   beside it, sits up and looks about, sniffs along the pumpkin's foot and gives up, while the mouse's
   head rises in one carved eye, watching, and ducks; once the squirrel has gone it looks out of the other
@@ -669,6 +688,11 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   *The mouse parade*: four mice file across the patch with acorns in their mouths until a sparrow drops
   out of the maple and swoops low over the line; they scatter behind the nearest pumpkins, noses showing
   past the edges, while the sparrow sits on a pumpkin and looks about, then fall back into line.
+- **The birds use the branches.** A junco or sparrow in the patch sometimes flies up to one of the oak
+  branches in the top corners, flaring onto the wood with its feet forward, and sits there six to
+  twenty-five seconds looking about, preening, pecking at the bark and hopping along the branch, then
+  tips off and glides back down into the patch. A threat on the ground (the raccoon, a squirrel bounding
+  past a timid bird) sends them up early and keeps them up longer.
 - **The patch's own life**: field mice, juncos and sparrows and two squirrels live among the pumpkins,
   each with a small mind of its own (the koi pond's shared kit). Mice scurry between the pumpkins,
   sniff, nibble at one, hide behind one and peek; birds get about by FLYING (a few hops at most): a

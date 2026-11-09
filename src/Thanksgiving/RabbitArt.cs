@@ -30,6 +30,7 @@ internal static class RabbitArt
         public PointF HindFoot = new(-0.10f, 0f), ForeFoot = new(0.34f, 0f);
         public float HindLift, ForeLift;            // feet off the ground (flight)
         public bool Dead;                           // lying on its side
+        public bool Upright;                        // sat up tall on its haunches (the body tilted nearly vertical): the cotton tail and the hips follow the tilt
     }
 
     private static PointF P(float x, float y) => new(x, y);
@@ -70,6 +71,19 @@ internal static class RabbitArt
         return q;
     }
 
+    /// <summary>
+    /// SAT UP TALL, and the THUMP (his ask: "a rabbit that sees a coyote ... sits up tall and thumps a hind foot on the
+    /// ground, twice"). How a real cottontail does it: it rears up on its haunches with the forepaws tucked to the chest,
+    /// ears straight up, stares at the danger, then drives ONE hind foot down hard on the ground (the other stays planted),
+    /// twice, as an alarm for every rabbit in earshot. "foot" is the thumping foot: 0 down on the ground, 1 cocked up and
+    /// back ready to strike. The whole body rocks back a hair as the foot goes up and settles as it lands.
+    /// </summary>
+    public static Pose Tall(float foot = 0f) => new()
+    {
+        Upright = true, Body = P(-0.04f, 0.34f + 0.05f * foot), BodyRx = 0.34f, BodyRy = 0.24f, BodyTilt = 62f + 7f * foot,
+        Head = P(0.12f + 0.01f * foot, 0.80f + 0.05f * foot), EarAngle = 84f, EarSpread = 9f,
+        HindFoot = P(-0.10f - 0.06f * foot, 0f), HindLift = 0.36f * foot, ForeFoot = P(0.24f, 0.30f),
+    };
     /// <summary>Dead on its side: the body a long low shape, the legs out, an ear flat on the ground.</summary>
     public static Pose Dead() => new() { Dead = true, Body = P(0f, 0.16f), BodyRx = 0.42f, BodyRy = 0.16f, Head = P(0.42f, 0.14f), HeadR = 0.15f, EarAngle = 175f, EarSpread = 25f, HindFoot = P(-0.30f, 0.06f), ForeFoot = P(0.30f, 0.05f) };
 
@@ -137,7 +151,9 @@ internal static class RabbitArt
         Leg(P(q.ForeFoot.X - 0.05f, q.ForeFoot.Y), q.ForeLift, false, CoatDark);
         Ell(g, q.Body.X, q.Body.Y, q.BodyRx, q.BodyRy, Coat, q.BodyTilt);
         Ell(g, q.Body.X + 0.04f, q.Body.Y - q.BodyRy * 0.3f, q.BodyRx * 0.75f, q.BodyRy * 0.55f, Belly, q.BodyTilt);   // the pale belly
-        Ell(g, q.Body.X - q.BodyRx * 0.98f, q.Body.Y + q.BodyRy * 0.1f, 0.075f, 0.07f, Color.White);                  // the cotton tail
+        PointF tail = P(q.Body.X - q.BodyRx * 0.98f, q.Body.Y + q.BodyRy * 0.1f);
+        if (q.Upright) { float ta = q.BodyTilt * MathF.PI / 180f, tx = -q.BodyRx * 0.98f, ty = q.BodyRy * 0.1f; tail = P(q.Body.X + tx * MathF.Cos(ta) - ty * MathF.Sin(ta), q.Body.Y + tx * MathF.Sin(ta) + ty * MathF.Cos(ta)); }   // sat up, the tail is at the BOTTOM of the tilted body
+        Ell(g, tail.X, tail.Y, 0.075f, 0.07f, Color.White);                                                           // the cotton tail
         Leg(q.HindFoot, q.HindLift, true, Coat);
         Leg(q.ForeFoot, q.ForeLift, false, Coat);
         Ell(g, q.Head.X, q.Head.Y, q.HeadR, q.HeadR * 0.92f, Coat);

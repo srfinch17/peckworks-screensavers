@@ -21,6 +21,19 @@ namespace Thanksgiving;
 /// (Core/Minds) with dials dealt at birth, and the coyotes pin Threat notices as they pass, so the deer lift their
 /// heads and the timid trot off, and the turkeys hurry: the whole field knows the pack is through.
 ///
+/// THE THUMP AND THE HOWL (his ask, 2026-11-09: "make them a little more special ... more intelligent, or funnier").
+/// A rabbit that sees a coyote while it sits or grazes does what a real cottontail does: it rears up tall, THUMPS one
+/// hind foot on the ground twice (a puff of dust each time) and bolts. The thump is an alarm: it is posted on the
+/// noticeboard (Sense.Friend, with the thumping rabbit as its "who", so only rabbits read it here), and every other rabbit
+/// in earshot (12 coyote lengths) sits up tall at once and runs a moment later, BEFORE the coyote is on it; the lane
+/// empties. The thump never saves the thumper itself when a chase is rolled to catch it. A rabbit that has fled does not
+/// thump again for 20 s. And when a bout ends (the play is over, or the time is up) the boldest coyote on screen sits,
+/// throws its muzzle at the sky and HOWLS for 3 s, faint sound arcs rising off it, and THEN the pack leaves. The howl is
+/// a Sense.Loud at 0.5 U. More test aids: PECKWORKS_PACK=thump (the rabbits crowd together at the left, the pack comes
+/// in from the left and no chase is rolled, so a thump is the first thing that happens, about 8 s in), PECKWORKS_PACK=howl
+/// (a bout of 10 s with no chase, so the howl and the leave follow at about 16 s); the log has "thump", "hears thump"
+/// and "HOWL" lines.
+///
 /// The lane is the field's far edge, BEHIND every deer and turkey, so this is all drawn first through the field
 /// stencil, after the tractor's bales, and everything nearer walks in front of it. Test aids: PECKWORKS_PACK=now
 /// (the first bout at 5 s), PECKWORKS_PACK=catch (every chase is run and every chase catches), PECKWORKS_MINDLOG
@@ -28,8 +41,8 @@ namespace Thanksgiving;
 /// </summary>
 internal sealed class Pack
 {
-    private enum Doing { Away, Roam, Stand, Dig, Sit, Chase, Shake, Play, Leave }
-    private enum RDoing { Sit, Graze, Hop, Flee, Dead, Gone }
+    private enum Doing { Away, Roam, Stand, Dig, Sit, Chase, Shake, Play, Leave, Howl }
+    private enum RDoing { Sit, Graze, Hop, Flee, Dead, Gone, Alert, Thump }
     private enum Act { None, Pounce, Toss, Tug, Carry, Watch }
 
     private sealed class Coyote
@@ -57,6 +70,11 @@ internal sealed class Pack
         public Pace Pace = null!;
         public float Goal, GoalDepth, Clock, Hops;  // Hops: the odometer in hop lengths, for the page
         public float CalmFor;                       // seconds no coyote has been near, for ending a flight
+        public float ThumpCool;                     // seconds before it may thump again (20 after any flight)
+        public int Thumps;                          // thumps struck so far this alarm (0, 1, 2)
+        public float AlertFor;                      // how long an alerted rabbit sits tall before it bolts
+        public double HeardAt = -1;                 // the board time of the last thump it answered
+        public Coyote Fear = null!;                 // the coyote it is afraid of (the thump's cause), for which way to run
     }
 
     private const float MaxDepth = 0.13f;
@@ -66,6 +84,10 @@ internal sealed class Pack
     private const float HopLen = 0.9f, FleeHopLen = 1.6f;         // in rabbit lengths
     private const float BoutEvery = 240f, BoutFor = 75f, PlayFor = 60f, ChaseFor = 7f;
     private const float TurnFor = 0.28f;
+    private const float HowlFor = 3.0f;                          // seconds the howl lasts
+    private const float ThumpEnd = 1.5f;                         // the thump sequence: tall 0.4, foot up 0.4 to 0.65 then strikes, again 0.8 to 1.05, then holds tall to 1.5 and bolts
+    private const float TooClose = 0.10f;                        // U: a coyote this near is no time for theatre, the rabbit just runs
+    private const int HowlPages = 12;
     private const int TrotPages = 24, GallopPages = 24, DigPages = 8, ShakePages = 6, PouncePages = 12, HopPages = 12, TurnPages = 3;
     private static readonly float[] Squash = [0.72f, 0.42f, 0.14f];
 
@@ -85,6 +107,14 @@ internal sealed class Pack
     private readonly PointF _carryMouth, _pullMouth;
     private readonly Sprite[][] _hop = new Sprite[2][], _flee = new Sprite[2][];
     private readonly Sprite[] _rsit = new Sprite[2], _graze = new Sprite[2], _dead = new Sprite[2], _limp = new Sprite[2];
+    private readonly Sprite[][] _tall = new Sprite[2][], _howl = new Sprite[2][], _wave = new Sprite[2][];   // _tall: foot down, half up, cocked; _wave: three sizes of sound arc
+    private readonly int _tw, _th, _tox, _tby;                  // the tall rabbit's sheet
+    private readonly Sprite _puff;                              // the dust a thump kicks up
+    private readonly List<(float X, float Y, float T)> _puffs = new();
+    private readonly PointF _howlTip;                           // where the muzzle points to, in coyote units, at full howl
+    private readonly float _howlDirX, _howlDirY;                // the way the muzzle points
+    private bool _howling; private int _howler = -1; private float _howlPostAt;
+    private float _thumpRange, _hearRange;
     private double _time;
     private float _nextBout, _boutClock, _playClock, _nextThreat;
     private bool _on;                                             // the pack is in the picture (or coming)
@@ -119,6 +149,10 @@ internal sealed class Pack
         _cw = (int)(2.2f * _k) + 4; _ch = (int)(1.35f * _k) + 4; _cox = (int)(1.0f * _k) + 2; _cby = _ch - 2;
         _rw = (int)(1.7f * _r) + 4; _rh = (int)(1.15f * _r) + 4; _rox = (int)(0.85f * _r) + 2; _rby = _rh - 2;
         _lw = (int)(0.9f * _r) + 4; _lh = (int)(1.3f * _r) + 4; _lox = _lw / 2; _lby = (int)(0.12f * _r) + 2;
+        _tw = (int)(1.3f * _r) + 4; _th = (int)(1.7f * _r) + 4; _tox = (int)(0.65f * _r) + 2; _tby = _th - 2;   // the rabbit sat up tall is higher than it is long
+        _thumpRange = MathF.Max(6f * _k, 0.30f * u);               // "within about 6 coyote lengths" (and never less than a bit past the old flight distance of 0.22 U, or the rabbit would bolt before it could thump)
+        _hearRange = 12f * _k;                                     // "about 12 coyote lengths": how far a thump carries to other rabbits
+        { var hp = CoyoteArt.Howl(0.5f); float a = hp.HeadTilt * MathF.PI / 180f; _howlDirX = MathF.Cos(a); _howlDirY = MathF.Sin(a); _howlTip = new PointF(hp.Head.X + 0.33f * _howlDirX, hp.Head.Y + 0.33f * _howlDirY); }
         for (int d = 0; d < 2; d++)
         {
             bool m = d == 1;
@@ -136,10 +170,39 @@ internal sealed class Pack
             Sprite R(RabbitArt.Pose q) => Sprite.Paint(_rw, _rh, g => { if (m) { g.TranslateTransform(_rw, 0); g.ScaleTransform(-1, 1); } g.TranslateTransform(_rox, _rby); g.ScaleTransform(_r, -_r); RabbitArt.Paint(g, q); });
             _hop[d] = new Sprite[HopPages]; _flee[d] = new Sprite[HopPages];
             for (int i = 0; i < HopPages; i++) { _hop[d][i] = R(RabbitArt.Hop(i / (float)HopPages)); _flee[d][i] = R(RabbitArt.Hop(i / (float)HopPages, true)); }
+            _tall[d] = new Sprite[3]; _howl[d] = new Sprite[HowlPages]; _wave[d] = new Sprite[3];
+            for (int i = 0; i < 3; i++) _tall[d][i] = Sprite.Paint(_tw, _th, g => { if (m) { g.TranslateTransform(_tw, 0); g.ScaleTransform(-1, 1); } g.TranslateTransform(_tox, _tby); g.ScaleTransform(_r, -_r); RabbitArt.Paint(g, RabbitArt.Tall(i * 0.5f)); });
+            for (int i = 0; i < HowlPages; i++) _howl[d][i] = C(CoyoteArt.Howl((i + 0.5f) / HowlPages));
+            for (int i = 0; i < 3; i++)
+            {
+                // A sound arc: a short curved stroke across the way the muzzle points (the cell is square, the arc centred on it),
+                // three sizes so a ring seems to grow as it rises. Painted in screen coordinates (y down): "up and forward" is a negative angle.
+                int ws = (int)((0.5f + 0.28f * i) * _k) + 6; float rad = (0.14f + 0.10f * i) * _k, half = 38f;
+                float ang = -MathF.Atan2(_howlDirY, _howlDirX) * 180f / MathF.PI;
+                _wave[d][i] = Sprite.Paint(ws, ws, g =>
+                {
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    if (m) { g.TranslateTransform(ws, 0); g.ScaleTransform(-1, 1); }
+                    using var pen = new Pen(Color.FromArgb(236, 230, 210), MathF.Max(1.6f, 0.05f * _k)) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
+                    g.DrawArc(pen, ws / 2f - rad, ws / 2f - rad, rad * 2, rad * 2, ang - half, half * 2);
+                });
+            }
             _rsit[d] = R(RabbitArt.Sit()); _graze[d] = R(RabbitArt.Graze()); _dead[d] = R(RabbitArt.Dead());
             _limp[d] = Sprite.Paint(_lw, _lh, g => { if (m) { g.TranslateTransform(_lw, 0); g.ScaleTransform(-1, 1); } g.TranslateTransform(_lox, _lby); g.ScaleTransform(_r, -_r); RabbitArt.Paint(g, RabbitArt.Limp()); });
         }
 
+        // The dust of a thump: a flat pale tan puff with two small side puffs, drawn rising and fading for half a second.
+        {
+            int dw2 = (int)(1.1f * _r) + 4, dh2 = (int)(0.6f * _r) + 4;
+            _puff = Sprite.Paint(dw2, dh2, g =>
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using var b = new SolidBrush(Color.FromArgb(214, 198, 164));
+                g.FillEllipse(b, dw2 / 2f - 0.30f * _r, dh2 / 2f - 0.15f * _r, 0.6f * _r, 0.3f * _r);
+                g.FillEllipse(b, dw2 / 2f - 0.45f * _r, dh2 / 2f - 0.05f * _r, 0.3f * _r, 0.2f * _r);
+                g.FillEllipse(b, dw2 / 2f + 0.15f * _r, dh2 / 2f - 0.05f * _r, 0.3f * _r, 0.2f * _r);
+            });
+        }
         // The blood: one big splat (a flat blob with ragged lobes and a few satellite drops, lying on the lane, so it is
         // wider than tall), one speck where a droplet lands, and one droplet in the air. Cartoon red, deliberately: this
         // is a joke, not a wound.
@@ -176,7 +239,10 @@ internal sealed class Pack
             r.Mind.Begin(RDoing.Sit, 1f + 4f * (float)_rng.NextDouble());
             _rabbits[i] = r;
         }
-        _nextBout = _test is "now" or "catch" ? 5f : 40f + 60f * (float)_rng.NextDouble();   // the first bout comes sooner than the rest
+        // Test: PECKWORKS_PACK=thump crowds the rabbits at the left where the pack walks in, so a thump is the first event.
+        if (_test == "thump") for (int i = 0; i < rabbits; i++) { _rabbits[i].X = s.Width * (0.20f + 0.035f * i); _rabbits[i].Depth = 0.04f + 0.03f * (i % 3); _rabbits[i].Dir = 1; _rabbits[i].Mind.Begin(RDoing.Sit, 30f); }
+        _nextBout = _test is "now" or "catch" or "thump" or "howl" ? 5f : 40f + 60f * (float)_rng.NextDouble();   // the first bout comes sooner than the rest
+        Log($"sizes: coyote length k {_k:F1} px, rabbit r {_r:F1} px; thump seen within {_thumpRange:F0} px, heard within {_hearRange:F0} px");
     }
 
     public int Coyotes => _pack.Length;
@@ -226,8 +292,18 @@ internal sealed class Pack
                 // The bout ends: the pack leaves, with the carcass if there is one, when the play is done or the time is up.
                 bool anyChasing = false;
                 foreach (Coyote c in _pack) if (c.Mind.Doing is Doing.Chase or Doing.Shake) anyChasing = true;
-                if (!anyChasing && ((anyPlaying && _playClock >= PlayFor) || (!anyPlaying && _boutClock >= BoutFor)))
-                    foreach (Coyote c in _pack) if (c.Mind.Doing != Doing.Leave && c.Mind.Doing != Doing.Away) BeginLeave(c);
+                float boutFor = _test == "howl" ? 10f : _test == "thump" ? 22f : BoutFor;
+                if (_howling)
+                {
+                    // THE HOWL is the last thing of a bout: when it has run its three seconds the whole pack leaves.
+                    if (_pack[_howler].Clock >= HowlFor)
+                    {
+                        _howling = false;
+                        foreach (Coyote c in _pack) if (c.Mind.Doing != Doing.Leave && c.Mind.Doing != Doing.Away) BeginLeave(c);
+                    }
+                }
+                else if (!anyChasing && ((anyPlaying && _playClock >= PlayFor) || (!anyPlaying && _boutClock >= boutFor)))
+                    BeginHowl();
                 bool allAway = true;
                 foreach (Coyote c in _pack) if (c.Mind.Doing != Doing.Away) allAway = false;
                 if (allAway)
@@ -244,6 +320,7 @@ internal sealed class Pack
             for (int i = 0; i < _pack.Length; i++) StepCoyote(i, dt);
         }
         for (int i = 0; i < _rabbits.Length; i++) StepRabbit(i, dt);
+        for (int i = _puffs.Count - 1; i >= 0; i--) { var p = _puffs[i]; p.T += dt; if (p.T > 0.5f) _puffs.RemoveAt(i); else _puffs[i] = p; }
         if (_tossT >= 0f) { _tossT += dt; if (_tossT >= 0.6f) { _tossT = -1f; _carcassX = _tossToX; } }
         // The droplets fall under gravity (sized to the rabbit, so the arc reads at the lane's scale) and each one that
         // reaches its bit of ground becomes a speck there; the stains go when they have faded.
@@ -261,7 +338,7 @@ internal sealed class Pack
     private void BeginBout()
     {
         _on = true; _boutClock = 0; _playClock = 0;
-        bool fromLeft = _rng.Next(2) == 0;
+        bool fromLeft = _rng.Next(2) == 0 || _test == "thump";
         for (int i = 0; i < _pack.Length; i++)
         {
             Coyote c = _pack[i];
@@ -269,6 +346,7 @@ internal sealed class Pack
             c.X = fromLeft ? -_k * (1.2f + 1.3f * i) : _s.Width + _k * (1.2f + 1.3f * i);
             c.Depth = 0.02f + 0.09f * (float)_rng.NextDouble();
             c.Goal = _s.Width * (0.15f + 0.7f * (float)_rng.NextDouble()); c.GoalDepth = c.Depth;
+            if (_test == "thump") c.Goal = _s.Width * 0.30f;                       // the thump test walks the pack at the crowd of rabbits
             c.Mind.Begin(Doing.Roam, 30f); c.Clock = 0; c.Pace.Want = Trot * _s.U; c.Act = Act.None; c.Carrying = false;
         }
         Log($"bout: in from the {(fromLeft ? "left" : "right")}");
@@ -281,6 +359,38 @@ internal sealed class Pack
         c.Mind.Begin(Doing.Leave, 60f); c.Clock = 0; c.Pace.Want = Trot * _s.U; c.Act = Act.None;
         if (_carcass >= 0 && _carrier < 0 && _tossT < 0f) { _carrier = Array.IndexOf(_pack, c); c.Carrying = true; }   // the first to leave takes it
         Log($"coyote{Array.IndexOf(_pack, c)} leaves {(left ? "left" : "right")}{(c.Carrying ? " with the carcass" : "")}");
+    }
+
+    /// <summary>
+    /// THE HOWL: the boldest coyote that is in the picture sits, lifts its muzzle and howls for HowlFor seconds, and the rest of
+    /// the pack stands still and waits (no chase can begin: TryChase is closed while it lasts); when it ends Update sends the pack
+    /// off. Interrupters: none (a chase cannot be running, the bout end waits for that); it interrupts the play, whose acts are
+    /// dropped (a carcass in a mouth is set down). If no coyote is in the picture the pack just leaves, as before.
+    /// </summary>
+    private void BeginHowl()
+    {
+        int best = -1;
+        for (int i = 0; i < _pack.Length; i++)
+        {
+            Coyote c = _pack[i];
+            if (c.Mind.Doing is Doing.Away or Doing.Leave || !OnScreen(c.X, -0.5f * _k)) continue;
+            if (best < 0 || c.Bold > _pack[best].Bold) best = i;
+        }
+        if (best < 0) { foreach (Coyote c in _pack) if (c.Mind.Doing != Doing.Leave && c.Mind.Doing != Doing.Away) BeginLeave(c); return; }
+        _howling = true; _howler = best; _howlPostAt = 0.5f;
+        for (int i = 0; i < _pack.Length; i++)
+        {
+            Coyote c = _pack[i];
+            if (c.Mind.Doing is Doing.Away or Doing.Leave) continue;
+            c.Pace.Halt(); c.Act = Act.None; c.Turning = false;
+            if (i == best)
+            {
+                if (c.Carrying) { c.Carrying = false; _carrier = -1; _carcassX = c.X + c.Dir * _carryMouth.X * _k; _carcassDepth = c.Depth; }
+                c.Mind.Begin(Doing.Howl, HowlFor + 1f); c.Clock = 0;
+            }
+            else c.Mind.Begin(Doing.Stand, HowlFor + 1f);   // stands and listens; keeps what is in its mouth
+        }
+        Log($"coyote{best} HOWL (bold {_pack[best].Bold:F2}) at {_pack[best].X:F0}");
     }
 
     private void StartTurn(Coyote c, int dir) { if (dir == c.Dir || c.Turning) return; c.Turning = true; c.TurnT = 0; }
@@ -374,6 +484,15 @@ internal sealed class Pack
             case Doing.Play:
                 StepPlay(c, i, dt);
                 break;
+            case Doing.Howl:
+                // The note: the first Loud when the head is up (0.6 s), a second when the note is held (1.8 s), each pinned where the muzzle is.
+                if (c.Clock >= _howlPostAt && _howlPostAt < 2f)
+                {
+                    _board.Post(Sense.Loud, new PointF(c.X, FeetY(c.X, c.Depth) - 0.9f * _k), 0.5f * u, 1f, c);
+                    Log($"coyote{i} howls (Loud, reach {0.5f * u:F0} px)");
+                    _howlPostAt += 1.2f;
+                }
+                break;
             case Doing.Leave:
                 Travel(Trot * u);
                 if (!OnScreen(c.X, 1.5f * _k) || c.Mind.Over) { c.Pace.Halt(); c.Mind.Begin(Doing.Away, 1f); if (c.Carrying) { c.Carrying = false; } }
@@ -400,7 +519,7 @@ internal sealed class Pack
 
     private void TryChase(Coyote c, int i)
     {
-        if (_carcass >= 0) return;                                                           // one kill a bout
+        if (_carcass >= 0 || _howling || _test is "thump" or "howl") return;               // one kill a bout; none while the pack is howling; none in the thump and howl tests
         for (int j = 0; j < _rabbits.Length; j++)
         {
             Rabbit r = _rabbits[j];
@@ -477,8 +596,39 @@ internal sealed class Pack
         r.Dir = r.X >= from.X ? 1 : -1;
         r.Goal = r.Dir > 0 ? _s.Width + 2f * _r : -2f * _r;                                 // off the edge away from it
         r.GoalDepth = Math.Clamp(r.Depth + 0.04f * (float)(_rng.NextDouble() - 0.5), 0.005f, MaxDepth);
-        r.Mind.Begin(RDoing.Flee, 20f); r.Clock = 0; r.CalmFor = 0;
+        r.Mind.Begin(RDoing.Flee, 20f); r.Clock = 0; r.CalmFor = 0; r.ThumpCool = 20f;      // a rabbit that has fled does not thump again for 20 s
         Log($"rabbit{j} flees {(r.Dir > 0 ? "right" : "left")}");
+    }
+
+    private Coyote NearestCoyote(Rabbit r)
+    {
+        Coyote near = _pack[0]; float best = float.MaxValue;
+        foreach (Coyote c in _pack) { float d = c.Mind.Doing == Doing.Away ? float.MaxValue : MathF.Abs(c.X - r.X); if (d < best) { best = d; near = c; } }
+        return near;
+    }
+
+    /// <summary>The rabbit has seen a coyote close enough to warn the lane: it rears up tall facing it, and the sequence in StepRabbit follows.</summary>
+    private void BeginThump(Rabbit r, int j, Coyote from)
+    {
+        r.Fear = from; r.Dir = from.X >= r.X ? 1 : -1; r.Thumps = 0;
+        r.Mind.Begin(RDoing.Thump, ThumpEnd + 1f); r.Clock = 0; r.Pace.Halt();
+        Log($"rabbit{j} sits tall and will thump (coyote at {MathF.Abs(from.X - r.X):F0} px)");
+    }
+
+    /// <summary>Reads the board for another rabbit's thump in earshot that this rabbit has not answered yet.</summary>
+    private void HearThump(Rabbit r, int j)
+    {
+        foreach (Notice n in _board.Live)
+        {
+            if (n.Kind != Sense.Friend || n.Who is not Rabbit from || from == r || n.Posted <= r.HeardAt) continue;
+            float dx = n.At.X - r.X, dy = n.At.Y - FeetY(r.X, r.Depth);
+            if (MathF.Sqrt(dx * dx + dy * dy) > n.Reach) continue;
+            r.HeardAt = n.Posted; r.Fear = from.Fear; r.Dir = from.Fear.X >= r.X ? 1 : -1;
+            r.AlertFor = 0.3f + 0.5f * (float)_rng.NextDouble() * (1f - r.Timid);       // the timid ones bolt first
+            r.Mind.Begin(RDoing.Alert, r.AlertFor + 1f); r.Clock = 0; r.Pace.Halt();
+            Log($"rabbit{j} hears thump from rabbit{Array.IndexOf(_rabbits, from)} ({MathF.Sqrt(dx * dx + dy * dy):F0} px away), sits tall, bolts in {r.AlertFor:F2} s");
+            return;
+        }
     }
 
     private void StepRabbit(int j, float dt)
@@ -490,11 +640,15 @@ internal sealed class Pack
         _log?.WriteLine($"{_time,8:F3} rabbit{j} frame x {r.X:F1} y {FeetY(r.X, r.Depth):F1} v {r.Pace.Speed:F2} {r.Mind.Doing}");
         float nearest = float.MaxValue;
         foreach (Coyote c in _pack) if (c.Mind.Doing != Doing.Away) nearest = MathF.Min(nearest, MathF.Abs(c.X - r.X));
+        r.ThumpCool -= dt;
+        // Listening: a rabbit at rest (or hopping) that hears another rabbit's thump sits up tall at once and bolts a moment later.
+        if (r.Mind.Doing is RDoing.Sit or RDoing.Graze or RDoing.Hop) HearThump(r, j);
         switch (r.Mind.Doing)
         {
             case RDoing.Sit:
             case RDoing.Graze:
-                if (nearest < 0.22f * u) { Coyote near = _pack[0]; foreach (Coyote c in _pack) if (MathF.Abs(c.X - r.X) <= nearest) near = c; BeginFlee(r, j, near); break; }
+                if (nearest < _thumpRange && nearest > TooClose * u && r.ThumpCool <= 0f && (_test != "catch")) { BeginThump(r, j, NearestCoyote(r)); break; }
+                if (nearest < 0.22f * u) { BeginFlee(r, j, NearestCoyote(r)); break; }
                 if (r.Mind.Over)
                 {
                     int face = Dice.Pick(_rng, [0.45f, 0.3f, 0.25f + 0.2f * (1 - r.Timid)]);
@@ -530,6 +684,27 @@ internal sealed class Pack
                 if (r.CalmFor > 1.5f) { r.Pace.Halt(); r.Mind.Begin(RDoing.Sit, 2f); r.Clock = 0; Log($"rabbit{j} stops, safe"); }
                 break;
             }
+            case RDoing.Thump:
+            {
+                // The sequence is read off the clock (see ThumpEnd): a strike lands at 0.65 s and at 1.05 s, each posts the alarm and kicks up dust.
+                r.Pace.Halt();
+                if (nearest < TooClose * u) { BeginFlee(r, j, r.Fear); break; }
+                int due = r.Clock >= 1.05f ? 2 : r.Clock >= 0.65f ? 1 : 0;
+                while (r.Thumps < due)
+                {
+                    r.Thumps++;
+                    float fy = FeetY(r.X, r.Depth);
+                    _board.Post(Sense.Friend, new PointF(r.X, fy), _hearRange, 0.6f, r);
+                    _puffs.Add((r.X - r.Dir * 0.12f * _r, fy, 0f));   // behind the rabbit: the hind foot is at the tail end of the sat-up body
+                    Log($"rabbit{j} thump {r.Thumps} at {r.X:F0} (heard within {_hearRange:F0} px)");
+                }
+                if (r.Clock >= ThumpEnd) BeginFlee(r, j, r.Fear);
+                break;
+            }
+            case RDoing.Alert:
+                r.Pace.Halt();
+                if (nearest < TooClose * u || r.Clock >= r.AlertFor) BeginFlee(r, j, r.Fear);
+                break;
             case RDoing.Dead:
                 break;
             case RDoing.Gone:
@@ -570,6 +745,8 @@ internal sealed class Pack
             else DrawCarcass(fb);
         }
         foreach (Drop d in _drops) _drop.DrawCentered(fb, d.X, d.Y, 1f, _stencil);   // the droplets in the air, over everyone
+        foreach (var (px, py, pt) in _puffs) _puff.DrawCentered(fb, px, py - 0.15f * _r - 0.35f * _r * pt / 0.5f, 0.75f * (1f - pt / 0.5f), _stencil);   // thump dust: rises a little and fades
+        if (_howling && _pack[_howler].Mind.Doing == Doing.Howl) DrawHowlWaves(fb, _pack[_howler]);
     }
 
     private void DrawCarcass(FrameBuffer fb)
@@ -595,7 +772,31 @@ internal sealed class Pack
             RDoing.Graze => ((int)(r.Clock * 2) % 3 == 2) ? _rsit[d] : _graze[d],          // lifts its head now and then
             _ => _rsit[d],
         };
+        if (r.Mind.Doing is RDoing.Thump or RDoing.Alert)
+        {
+            // Sat up tall: the thump's foot is down, half up (0.40 to 0.50 s and 0.80 to 0.90 s), cocked (to 0.65 s and 1.05 s), then strikes.
+            float c = r.Clock; int foot = r.Mind.Doing == RDoing.Thump && ((c >= 0.40f && c < 0.50f) || (c >= 0.80f && c < 0.90f)) ? 1 : r.Mind.Doing == RDoing.Thump && ((c >= 0.50f && c < 0.65f) || (c >= 0.90f && c < 1.05f)) ? 2 : 0;
+            _tall[d][foot].Draw(fb, (int)MathF.Round(r.X) - (d == 0 ? _tox : _tw - _tox), (int)MathF.Round(FeetY(r.X, r.Depth)) - _tby, 1f, _stencil);
+            return;
+        }
         page.Draw(fb, (int)MathF.Round(r.X) - (d == 0 ? _rox : _rw - _rox), (int)MathF.Round(FeetY(r.X, r.Depth)) - _rby, 1f, _stencil);
+    }
+
+    /// <summary>Faint sound arcs rising off the howler's muzzle: three rings a third of a cycle apart, each growing, drifting up and forward and fading.</summary>
+    private void DrawHowlWaves(FrameBuffer fb, Coyote c)
+    {
+        float p = c.Clock / HowlFor;
+        if (p < 0.18f || p > 0.88f) return;                                       // only while the head is up and the note is held
+        int d = c.Dir > 0 ? 0 : 1;
+        float y = FeetY(c.X, c.Depth);
+        for (int i = 0; i < 3; i++)
+        {
+            float ph = (c.Clock * 0.9f + i / 3f) % 1f;                             // 0 born at the muzzle, 1 gone
+            int size = ph < 0.34f ? 0 : ph < 0.67f ? 1 : 2;
+            float dist = 0.10f + 0.65f * ph;                                       // coyote lengths out from the muzzle
+            float x = c.X + c.Dir * (_howlTip.X + _howlDirX * dist) * _k, yy = y - (_howlTip.Y + _howlDirY * dist) * _k;
+            _wave[d][size].DrawCentered(fb, x, yy, 0.7f * MathF.Sin(MathF.PI * ph), null);
+        }
     }
 
     private void DrawCoyote(FrameBuffer fb, Coyote c)
@@ -613,6 +814,7 @@ internal sealed class Pack
         else switch (c.Mind.Doing)
         {
             case Doing.Sit: page = _sit[d]; break;
+            case Doing.Howl: page = _howl[d][Math.Min(HowlPages - 1, (int)(c.Clock / HowlFor * HowlPages))]; break;
             case Doing.Dig: page = _dig[d][(int)(c.Clock * 3.0f * DigPages) % DigPages]; break;
             case Doing.Shake: { int pg = (int)(c.Clock * 2.2f * ShakePages) % ShakePages; page = _shake[d][pg]; mouth = _shakeMouth[pg]; break; }
             case Doing.Play when c.Act == Act.Pounce: page = _pounce[d][Math.Min(PouncePages - 1, (int)(c.Clock / 1.0f * PouncePages))]; break;
