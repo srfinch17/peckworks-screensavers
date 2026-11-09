@@ -92,6 +92,19 @@ internal sealed class Pack
     private float _carcassX, _carcassDepth, _tossT = -1f, _tossFromX, _tossToX;   // a tossed carcass flies for 0.6 s
     private int _carrier = -1;                                    // the coyote with the carcass in its mouth
 
+    // THE JOKE (his line, 2026-11-09: "when the wolves get the rabbit, there needs to be fake blood, that's the joke. it's a
+    // hilariously horrifying tiny thing that happens in the background of a relaxing serene thanksgiving fall screensaver").
+    // Cartoon blood and nothing else: a bright red splat on the lane where the rabbit is caught, a fan of droplets flung
+    // from the catcher's mouth with every shake and every toss, each landing on the lane as a speck, and all the stains
+    // fading away a couple of minutes later. The gore rolls its own dice, so the pack behaves exactly as it did before.
+    private readonly Random _gore = new(1917);
+    private readonly Sprite _splat, _speck, _drop;
+    private readonly List<(float X, float Y, bool Big, double Born)> _stains = new();   // on the lane; Y is the ground under the middle
+    private readonly List<Drop> _drops = new();                                        // in the air
+    private float _dripClock;
+    private struct Drop { public float X, Y, VX, VY, GroundY; }
+    private const float StainFor = 100f, StainFade = 30f;                             // seconds a stain stays bright, then seconds it takes to fade
+
     public Pack(ThanksgivingScenery s, int coyotes, int rabbits, Random sceneRng, Noticeboard board)
     {
         _s = s;
@@ -127,6 +140,31 @@ internal sealed class Pack
             _limp[d] = Sprite.Paint(_lw, _lh, g => { if (m) { g.TranslateTransform(_lw, 0); g.ScaleTransform(-1, 1); } g.TranslateTransform(_lox, _lby); g.ScaleTransform(_r, -_r); RabbitArt.Paint(g, RabbitArt.Limp()); });
         }
 
+        // The blood: one big splat (a flat blob with ragged lobes and a few satellite drops, lying on the lane, so it is
+        // wider than tall), one speck where a droplet lands, and one droplet in the air. Cartoon red, deliberately: this
+        // is a joke, not a wound.
+        Color red = Color.FromArgb(206, 14, 24), redDark = Color.FromArgb(150, 8, 16);
+        int sw = (int)(3.2f * _r) + 6, sh = (int)(1.2f * _r) + 4;
+        _splat = Sprite.Paint(sw, sh, g =>
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var b = new SolidBrush(red); using var dk = new SolidBrush(redDark);
+            float cx = sw / 2f, cy = sh / 2f;
+            g.FillEllipse(b, cx - 1.1f * _r, cy - 0.32f * _r, 2.2f * _r, 0.64f * _r);
+            for (int i = 0; i < 7; i++)                                                   // ragged lobes round the rim
+            {
+                float a = MathF.Tau * i / 7f + 0.3f, lr = _r * (0.18f + 0.14f * (i % 3) / 2f);
+                g.FillEllipse(b, cx + MathF.Cos(a) * 1.0f * _r - lr, cy + MathF.Sin(a) * 0.28f * _r - lr * 0.6f, lr * 2, lr * 1.2f);
+            }
+            foreach (var (dx, dy, dr) in new[] { (1.45f, -0.1f, 0.09f), (-1.4f, 0.15f, 0.08f), (1.2f, 0.35f, 0.06f), (-1.1f, -0.3f, 0.06f) })
+                g.FillEllipse(b, cx + dx * _r - dr * _r, cy + dy * _r - dr * _r * 0.7f, dr * 2 * _r, dr * 1.4f * _r);   // satellite drops
+            g.FillEllipse(dk, cx - 0.5f * _r, cy - 0.12f * _r, 0.8f * _r, 0.26f * _r);    // a darker pool in the middle
+        });
+        int pw = (int)(0.6f * _r) + 4;
+        _speck = Sprite.Paint(pw, pw, g => { g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias; using var b = new SolidBrush(red); g.FillEllipse(b, pw / 2f - 0.22f * _r, pw / 2f - 0.10f * _r, 0.44f * _r, 0.20f * _r); });
+        int dw = (int)(0.3f * _r) + 4;
+        _drop = Sprite.Paint(dw, dw, g => { g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias; using var b = new SolidBrush(red); float dr = MathF.Max(1f, 0.11f * _r); g.FillEllipse(b, dw / 2f - dr, dw / 2f - dr, dr * 2, dr * 2); });
+
         float[] bold = Traits.Deal(_rng, Math.Max(1, coyotes)), timid = Traits.Deal(_rng, Math.Max(1, rabbits));
         _pack = new Coyote[coyotes];
         for (int i = 0; i < coyotes; i++)
@@ -142,6 +180,17 @@ internal sealed class Pack
     }
 
     public int Coyotes => _pack.Length;
+
+    /// <summary>Flings n droplets from (x, y) in the air, mostly the way the catcher faces (dir), to land about groundY.</summary>
+    private void Spray(float x, float y, float groundY, int n, int dir)
+    {
+        for (int i = 0; i < n; i++)
+        {
+            float vx = dir * (1.5f + 6f * (float)_gore.NextDouble()) * _r + (float)(_gore.NextDouble() - 0.5) * 4f * _r;
+            float vy = -(3f + 8f * (float)_gore.NextDouble()) * _r;
+            _drops.Add(new Drop { X = x, Y = y, VX = vx, VY = vy, GroundY = groundY + ((float)_gore.NextDouble() - 0.5f) * 0.5f * _r });
+        }
+    }
 
     private float FeetY(float x, float depth) => _s.FieldY(x) + (_s.Ground.YAt(Math.Clamp(x, 0, _s.Width - 1)) - _s.U * 0.006f - _s.FieldY(x)) * depth;
     private void Log(string what) => _log?.WriteLine($"{_time,8:F2} pack {what}");
@@ -196,6 +245,17 @@ internal sealed class Pack
         }
         for (int i = 0; i < _rabbits.Length; i++) StepRabbit(i, dt);
         if (_tossT >= 0f) { _tossT += dt; if (_tossT >= 0.6f) { _tossT = -1f; _carcassX = _tossToX; } }
+        // The droplets fall under gravity (sized to the rabbit, so the arc reads at the lane's scale) and each one that
+        // reaches its bit of ground becomes a speck there; the stains go when they have faded.
+        float gravity = 30f * _r;
+        for (int i = _drops.Count - 1; i >= 0; i--)
+        {
+            Drop d = _drops[i];
+            d.VY += gravity * dt; d.X += d.VX * dt; d.Y += d.VY * dt;
+            if (d.Y >= d.GroundY) { _stains.Add((d.X, d.GroundY, false, _time)); _drops.RemoveAt(i); }
+            else _drops[i] = d;
+        }
+        for (int i = _stains.Count - 1; i >= 0; i--) if (_time - _stains[i].Born > StainFor + StainFade) _stains.RemoveAt(i);
     }
 
     private void BeginBout()
@@ -285,11 +345,24 @@ internal sealed class Pack
                     c.Target = -1; c.Pace.Halt(); c.Mind.Begin(Doing.Shake, 3f); c.Clock = 0; _playClock = 0;
                     c.X = r.X - c.Dir * _carryMouth.X * _k; c.Depth = r.Depth;
                     Log($"coyote{i} CAUGHT rabbit{_carcass} at {r.X:F0}");
+                    // The joke lands: a splat on the lane under the rabbit and a fan of droplets off the catcher's mouth.
+                    float feet = FeetY(r.X, r.Depth);
+                    _stains.Add((r.X, feet, true, _time));
+                    Spray(c.X + c.Dir * _carryMouth.X * _k, feet - _carryMouth.Y * _k, feet, 14, c.Dir);
                     foreach (Coyote o in _pack) if (o != c && o.Mind.Doing != Doing.Away) { o.Mind.Begin(Doing.Play, PlayFor + 5f); o.Clock = 0; o.Act = Act.None; o.Goal = r.X + (o.X < r.X ? -1 : 1) * (0.8f + 0.6f * (float)_rng.NextDouble()) * _k; o.GoalDepth = r.Depth + 0.02f * (float)(_rng.NextDouble() - 0.5); }
                 }
                 break;
             }
             case Doing.Shake:
+                _dripClock += dt;
+                if (_dripClock > 0.12f)
+                {
+                    // Every shake flings a couple more droplets off the mouth, the way a cartoon dog shakes a wet toy.
+                    _dripClock = 0f;
+                    int pg = (int)(c.Clock * 2.2f * ShakePages) % ShakePages;
+                    float feet = FeetY(c.X, c.Depth);
+                    Spray(c.X + c.Dir * _shakeMouth[pg].X * _k, feet - _shakeMouth[pg].Y * _k, feet, 2, c.Dir);
+                }
                 if (c.Mind.Over)
                 {
                     // Drops it at its feet and the play begins.
@@ -383,7 +456,7 @@ internal sealed class Pack
                 // Picks it up over the first half, flings it over the second: the carcass flies a short arc the way it faces.
                 if (c.Clock < 0.6f) { c.X = _carcassX - c.Dir * _carryMouth.X * _k; }
                 else if (_carrier < 0 && c.Clock >= 0.6f && c.Clock < 0.9f) { _carrier = i; c.Carrying = true; }
-                else if (c.Carrying && c.Clock >= 0.9f) { c.Carrying = false; _carrier = -1; _tossT = 0f; _tossFromX = c.X + c.Dir * _carryMouth.X * _k; _tossToX = _tossFromX + c.Dir * (0.5f + 0.4f * (float)_rng.NextDouble()) * _k; _carcassX = _tossFromX; }
+                else if (c.Carrying && c.Clock >= 0.9f) { c.Carrying = false; _carrier = -1; _tossT = 0f; _tossFromX = c.X + c.Dir * _carryMouth.X * _k; _tossToX = _tossFromX + c.Dir * (0.5f + 0.4f * (float)_rng.NextDouble()) * _k; _carcassX = _tossFromX; Spray(_tossFromX, FeetY(c.X, c.Depth) - _carryMouth.Y * _k, FeetY(c.X, c.Depth), 4, c.Dir); }
                 break;
             case Act.Carry:
                 if (c.Clock < 0.4f) c.X = _carcassX - c.Dir * _carryMouth.X * _k;
@@ -483,6 +556,12 @@ internal sealed class Pack
         for (int i = 0; i < _rabbits.Length; i++) if (_rabbits[i].Mind.Doing is not RDoing.Gone and not RDoing.Dead) order.Add((_rabbits[i].Depth, 0, i));
         for (int i = 0; i < _pack.Length; i++) if (_pack[i].Mind.Doing != Doing.Away) order.Add((_pack[i].Depth, 1, i));
         if (_carcass >= 0 && _carrier < 0) order.Add((_carcassDepth, 2, _carcass));
+        // The blood lies on the lane under everything that walks on it, bright for a while and then fading.
+        foreach (var (sx, sy, big, born) in _stains)
+        {
+            float age = (float)(_time - born), alpha = age < StainFor ? 1f : 1f - (age - StainFor) / StainFade;
+            (big ? _splat : _speck).DrawCentered(fb, sx, sy, alpha, _stencil);
+        }
         order.Sort((a, b) => a.Depth.CompareTo(b.Depth));
         foreach (var (_, kind, idx) in order)
         {
@@ -490,6 +569,7 @@ internal sealed class Pack
             else if (kind == 1) DrawCoyote(fb, _pack[idx]);
             else DrawCarcass(fb);
         }
+        foreach (Drop d in _drops) _drop.DrawCentered(fb, d.X, d.Y, 1f, _stencil);   // the droplets in the air, over everyone
     }
 
     private void DrawCarcass(FrameBuffer fb)

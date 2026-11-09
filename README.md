@@ -627,7 +627,10 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   gallop while a rabbit flees in long hops. Most chases fail; occasionally one is caught, and then the
   catcher shakes it, drops it, and the whole pack plays with the carcass for a minute, pouncing on it,
   tossing it in the air, tugging it between two of them, carrying it a few steps, before they trot off
-  with it. A tiny, horrifying thing way in the background, to reward the viewer who keeps watching. The
+  with it. And there is fake blood, because that is the joke: a bright red cartoon splat on the lane
+  where the rabbit is caught, droplets flung off the catcher's mouth at every shake and toss, each one
+  landing as a speck, all of it fading away a couple of minutes later. A tiny, hilariously horrifying
+  thing way in the background of a serene fall scene, to reward the viewer who keeps watching. The
   whole field knows the pack is through: the deer lift their heads and the timid trot off, the turkeys
   hurry. Knob "Coyotes" (0 to 4; 0 keeps the rabbits).
 - A windbreak of small trees in autumn colour stands along the far edge of the field, where the hill
@@ -687,7 +690,10 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   squirrel, which bolts a little way and is chased again, a few legs of the game, and then both sit up. A
   timid one flicks its tail more and dens more. A squirrel never hides behind a pumpkin: it hides in a TREE.
   The two inner maples are big old trees, thick tapered boles with bark and limbs dividing into the crown, and
-  a hole up each trunk; the squirrel runs to the foot, pitches up onto the bark, climbs head-up to the hole and
+  a hole up each trunk. Every maple's crown is a ring of leafy lobes, each shaded on its own: deep crimson
+  underneath, orange on its body and gold where the low sun catches its top, with the lit side facing the sun
+  (so the left trees are lit from the right and the right trees from the left); a long shadow lies on the turf
+  away from the sun, and the roots run out from a rounded buttress. The squirrel runs to the foot, pitches up onto the bark, climbs head-up to the hole and
   goes in head first (seen from behind, shrinking down into the dark, tail last), stays a while out of sight,
   then its face comes up in the opening for a look, it comes head-first down the trunk and drops off onto the
   ground. On the move it never flips:
