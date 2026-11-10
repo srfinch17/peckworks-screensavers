@@ -939,8 +939,8 @@ Time per frame (update + render):
 
 | Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Thanksgiving | Cabin by Stream |
 |------------|-------------|-------------|-------------|-------------|-------------|--------------|-----------------|
-| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | to be re-measured | about 3 ms   | about 2 ms      |
-| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | to be re-measured | about 12 ms  | about 9 ms      |
+| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 7 ms  | about 3 ms   | about 2 ms      |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 25 ms | about 12 ms  | about 9 ms      |
 
 Under about 16 ms means the full 60 frames per second. Each frame waits for the screen's next
 refresh before the next one is drawn, so frames reach the screen evenly, one per refresh (an
@@ -977,6 +977,11 @@ their worst second. Six are dearer while they last: Red Fuji (about 7.5 ms more)
 director never lets two of them run at once and their costs never add up. At 1920x1080 none of
 them drops a frame.
 
-Christmas (the rebuilt saver, its residents and its happenings): to be re-measured.
+Christmas, rebuilt (2026-11-10), measured over 90 seconds at 1920x1080 with every resident, the stories and
+the happenings on: 7.3 ms on average, 10.0 ms in its worst second, 15.9 ms for its slowest frame, so no
+frame is dropped. With the happenings off it is 6.7 ms. At 3840x2160 it averages about 25 ms (28 ms in its
+worst second): smooth at 30 frames a second there, not at 60. Each resident's flip-books are painted on a
+helper thread in the first seconds, so the animals appear a few seconds after the snow starts (the
+reindeer last, at about 14 seconds).
 
 Measure your own with `/snapshot`; the timing lands in `out.png.txt`.
