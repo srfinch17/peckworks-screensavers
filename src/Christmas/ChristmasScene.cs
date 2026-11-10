@@ -93,6 +93,7 @@ internal sealed class ChristmasScene : IScreensaverScene
     // bulb would freeze.
     private double _time;
     private double _santaTold;                      // when Santa was last pinned on the noticeboard
+    private bool _started;                          // true once every resident's flip-books are painted: they all begin on that frame
 
     public ChristmasScene(int width, int height, ChristmasSettings settings)
     {
@@ -162,7 +163,10 @@ internal sealed class ChristmasScene : IScreensaverScene
         _glitter = [.. glitter];
 
         // ---- The noticeboard: whatever happens is pinned here, and every resident reads it ----
-        _board = new Noticeboard();
+        // The board is asked for CALM (Core/Minds/Senses.cs): a glance is followed by a rest of about a quarter of
+        // a minute, the same source is not interesting again for three quarters of a minute, and the whole field
+        // may begin two glances in any ten seconds. Fear is never rationed.
+        _board = new Noticeboard { LookRest = 14f, Habituate = 45f, Looks = 2, Window = 10f };
         _happenings.Began = Tell;
 
         // ---- The residents. Each takes ONE roll of the scene's dice for its own set, in this
@@ -211,7 +215,7 @@ internal sealed class ChristmasScene : IScreensaverScene
         // Santa going over is something to look up at: pinned once a second
         // while he is in view (a notice lasts one second), high in the sky
         // with a long reach and little weight, so it is a glance, not a fright.
-        if (_scenery.SantaOnScreen && _time - _santaTold >= 0.9)
+        if (_scenery.SantaOnScreen && _time - _santaTold >= 2.5)
         {
             _santaTold = _time;
             _board.Post(Sense.Movement, _scenery.SantaSleigh, 1.6f * _u, 0.35f, _santa);
@@ -219,10 +223,21 @@ internal sealed class ChristmasScene : IScreensaverScene
         if (_testNotice is { } tn && _time >= tn.At && _time - dt < tn.At)
             _board.Post(tn.Kind, new PointF(tn.X * _w, tn.Y * _h), tn.Reach * _u, 1f, this);
 
-        _stories.Update(dt);                        // before the residents: a story may borrow one this very frame
-        if (_time >= ResidentsStart)
-            foreach (Resident r in _residents)
-                if (r.Ready) { r.Lull = _stories.Playing; r.Update(dt); }
+        // ONE START FOR EVERYBODY: nobody begins until every resident's flip-books are painted. (At first each
+        // began when its own were done: the mice at 4 s, the herd at 15 to 18, each popping into the scene fully
+        // formed, and the same seed played differently from run to run.) Each resident then makes its own
+        // entrance: the herd walks in, the birds fly in, the hares come up out of their burrows.
+        if (!_started && _time >= ResidentsStart)
+        {
+            _started = true;
+            foreach (Resident r in _residents) if (!r.Ready) { _started = false; break; }
+        }
+        if (_started) _stories.Update(dt);          // before the residents: a story may borrow one this very frame
+        if (_started)
+        {
+            _scenery.TurnPage();                    // last frame's "who stands where" becomes the sheet to read
+            foreach (Resident r in _residents) { r.Lull = _stories.Playing; r.Update(dt); }
+        }
         _happenings.Update(elapsedSeconds);
     }
 
@@ -320,9 +335,8 @@ internal sealed class ChristmasScene : IScreensaverScene
 
         // 5. The residents, far to near: each hands the queue one line per
         //    animal, and the queue draws them in order of their feet.
-        if (_time >= ResidentsStart)
-            foreach (Resident r in _residents)
-                if (r.Ready) r.Collect(_queue);
+        if (_started)
+            foreach (Resident r in _residents) r.Collect(_queue);
         _queue.Flush(fb);
 
         // 5b. The story that is on, if any: its actors and props, over the residents.

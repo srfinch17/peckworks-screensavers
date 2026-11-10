@@ -92,7 +92,7 @@ internal sealed class SantaRig
 
     private double _time, _gait;
     private bool _flying;
-    private double _pause = 1.0, _d, _len, _p0x, _p0y, _tx, _ty, _nx, _ny, _a1, _l1, _ph1, _a2, _l2, _ph2, _speed, _dir;
+    private double _pause = 9.0, _d, _len, _p0x, _p0y, _tx, _ty, _nx, _ny, _a1, _l1, _ph1, _a2, _l2, _ph2, _speed, _dir;
     private double _nextEvent = 3.0, _evStart, _evEnd;
     private int _evKind;                                                          // 0 none, 1 wave, 2 look down, 3 crack the reins
     /// <summary>How taut the traces are, 0 (hanging slack) to 1 (straight). The flight beats it with the gallop; a story sets LineTension by hand.</summary>
@@ -242,7 +242,7 @@ internal sealed class SantaRig
     public void Take() { Directed = true; _flying = false; }
 
     /// <summary>Takes the reins back. He is off screen by now; the next flight starts after a short pause.</summary>
-    public void Release() { ReleaseLadder(); Directed = false; _flying = false; _set = 0; _pause = _quickStory ? 3600 : 5 + 4 * _rng.NextDouble(); }
+    public void Release() { ReleaseLadder(); Directed = false; _flying = false; _set = 0; _pause = _quickStory ? 3600 : 40 + 50 * _rng.NextDouble(); }
 
     /// <summary>The wobble the path adds to the straight line: two slow waves, so the team rises and dips.</summary>
     private double Wave(double d) => _a1 * Math.Sin(Math.Tau * d / _l1 + _ph1) + _a2 * Math.Sin(Math.Tau * d / _l2 + _ph2);
@@ -338,7 +338,7 @@ internal sealed class SantaRig
                 _d += _speed * (1.0 + 0.04 * Math.Sin(_time * 0.9)) * dt;
                 LayOutFlight(dt);
                 if (_d - 7.9 * _s > _len) _flying = false;
-                if (!_flying) _pause = _quickStory ? 3600 : 5 + 7 * _rng.NextDouble();
+                if (!_flying) _pause = _quickStory ? 3600 : 45 + 60 * _rng.NextDouble();   // SANTA IS AN EVENT (the first review: at 5 to 12 s he was on screen more than half the time, wallpaper, and the main reason every animal kept looking up)
             }
         }
 

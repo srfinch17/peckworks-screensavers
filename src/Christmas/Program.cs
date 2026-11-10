@@ -11,6 +11,11 @@ internal sealed class ChristmasScreensaver : ScreensaverDefinition
 {
     public override string DisplayName => "Christmas";
 
+    // On a screen wider than this it draws at this width and Windows enlarges the picture (the "Draw width"
+    // setting, 1920 unless changed): a soft storybook scene loses almost nothing enlarged, and at 4K's full
+    // eight million pixels a frame cost more than a frame has, so every animal stuttered however well it was drawn.
+    public override int MaxRenderWidth => ChristmasSettings.LoadSaved().DrawWidth;
+
     public override IScreensaverScene CreateScene(int width, int height, bool isPreview) =>
         new ChristmasScene(width, height, ChristmasSettings.LoadSaved());
 

@@ -112,6 +112,48 @@ public sealed class Noticeboard
 
     /// <summary>Drops everything (a scene reset).</summary>
     public void Clear() => _live.Clear();
+
+    // ------------------------------------------------------------------ CALM (off unless a scene turns it on)
+    //
+    // FEYNMAN VERSION: put eight kinds of animal in one field, let each pin a note whenever it walks, and every
+    // animal is glancing at some other animal every second or two. Each glance is correct on its own; together
+    // they are a room where everybody keeps looking up, and nobody finishes a mouthful. (Christmas, 2026-11-10:
+    // hares began 18 to 28 doings a minute with a median length of 1.7 seconds. The owner's word was "chaotic".)
+    // Real animals do three things about this, and so does the board when these dials are set:
+    //
+    //   - A glance is followed by a REST (LookRest seconds, give or take): having looked, it gets on with life.
+    //   - It GETS USED TO things (Habituate seconds): the second note from the same source counts for less than a
+    //     third of the first, and its interest comes back slowly. Santa passing is worth one look, not twenty.
+    //   - The scene has a BUDGET (Looks per Window seconds, for everybody together): if two animals have just
+    //     looked up, a third waits. A crowd where heads turn one or two at a time reads as alive; a crowd where
+    //     all heads turn all the time reads as broken.
+    //
+    // Fear is never rationed: a Freeze or a Flee ignores all three.
+
+    /// <summary>Seconds an animal rests after a mere Look before it can Look again (0 = the kit's old 1 to 2.5 s).</summary>
+    public float LookRest;
+    /// <summary>Seconds for interest in the SAME source to come back after reacting to it (0 = never dulled).</summary>
+    public float Habituate;
+    /// <summary>How many Looks the whole scene may begin per Window seconds (0 = no budget).</summary>
+    public int Looks;
+    /// <summary>The budget's window, seconds.</summary>
+    public float Window = 10f;
+
+    private readonly double[] _granted = new double[8];   // when the last few Looks were granted (a small ring)
+    private int _grantNext;
+
+    /// <summary>Asks the scene's budget for one Look. True (and it is counted) if fewer than Looks were granted in the last Window seconds.</summary>
+    internal bool GrantLook()
+    {
+        if (Looks <= 0) return true;
+        int recent = 0;
+        for (int i = 0; i < _granted.Length; i++)
+            if (_granted[i] > 0 && _time - _granted[i] < Window) recent++;
+        if (recent >= Looks) return false;
+        _granted[_grantNext] = _time + 1e-9;                // never exactly zero, which means "empty"
+        _grantNext = (_grantNext + 1) % _granted.Length;
+        return true;
+    }
 }
 
 /// <summary>What an animal felt about the board this frame.</summary>
@@ -152,6 +194,30 @@ public sealed class Attention
 
     public Attention(float timid, float curious) { Timid = timid; Curious = curious; }
 
+    // What it has reacted to lately: the last few sources and when (see the board's "calm" dials).
+    private readonly object?[] _knownWho = new object?[4];
+    private readonly double[] _knownAt = new double[4];
+    private int _knownNext;
+
+    /// <summary>How fresh a source is to this animal: 1 for something new, 0.3 just after reacting to it, climbing back over the board's Habituate seconds.</summary>
+    private float Fresh(Noticeboard board, object? who)
+    {
+        if (board.Habituate <= 0 || who == null) return 1f;
+        for (int i = 0; i < _knownWho.Length; i++)
+            if (ReferenceEquals(_knownWho[i], who))
+                return 0.3f + 0.7f * Math.Clamp((float)((board.Time - _knownAt[i]) / board.Habituate), 0f, 1f);
+        return 1f;
+    }
+
+    private void Remember(Noticeboard board, object? who)
+    {
+        if (board.Habituate <= 0 || who == null) return;
+        for (int i = 0; i < _knownWho.Length; i++)
+            if (ReferenceEquals(_knownWho[i], who)) { _knownAt[i] = board.Time; return; }
+        _knownWho[_knownNext] = who; _knownAt[_knownNext] = board.Time;
+        _knownNext = (_knownNext + 1) % _knownWho.Length;
+    }
+
     /// <summary>Counts the cooldown. Call once a frame.</summary>
     public void Tick(float dt) => Rested.Tick(dt);
 
@@ -179,6 +245,9 @@ public sealed class Attention
             float closeness = 1f - d / (n.Reach * Keen);
             if (closeness <= 0) continue;
             float strength = closeness * n.Weight;                 // 1 right on top of a full-strength notice, 0 at the edge of its reach
+            // Getting used to it: a movement, a friend's alarm or a call from a source it has just reacted to counts
+            // for less. A THREAT and a LOUD noise are never dulled: a fox is a fox every time.
+            if (n.Kind is Sense.Movement or Sense.Friend or Sense.Call) strength *= Fresh(board, n.Who);
             Reaction r = n.Kind switch
             {
                 Sense.Threat => strength * (0.5f + Timid) > 0.30f ? (Timid > 0.4f ? Reaction.Flee : Reaction.Freeze) : strength > 0.12f ? Reaction.Look : Reaction.None,
@@ -192,12 +261,18 @@ public sealed class Attention
             if (r == Reaction.None || Rank(r) <= floor) continue;
             if (Rank(r) > Rank(best) || (Rank(r) == Rank(best) && strength > bestStrength)) { best = r; bestStrength = strength; cause = n; }
         }
+        // The scene's budget: a mere Look needs a slot. Refused, the animal simply did not notice this time.
+        if (best == Reaction.Look && !board.GrantLook()) { cause = default; return Reaction.None; }
         if (best != Reaction.None)
         {
             Last = best; LastNotice = cause;
+            if (best is Reaction.Look or Reaction.Approach) Remember(board, cause.Who);
+            // The rest after a Look, when the board asks for calm: LookRest seconds, spread from 0.75 to 1.35 of it by a
+            // number that differs per animal and per moment (no dice here: Check must not move anybody's luck).
+            float spread = 0.75f + 0.6f * (float)((board.Time * 0.6180339 + Timid * 7.3 + Curious * 3.1) % 1.0);
             Rested.Start(best switch
             {
-                Reaction.Look => 1f + 1.5f * (1 - Curious),
+                Reaction.Look => MathF.Max(1f + 1.5f * (1 - Curious), board.LookRest * spread),
                 Reaction.Freeze => 2.5f + 3f * Timid,
                 Reaction.Flee => 6f + 10f * Timid,
                 Reaction.Approach => 2f,

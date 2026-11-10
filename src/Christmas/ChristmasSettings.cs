@@ -9,7 +9,7 @@ namespace Christmas;
 /// </summary>
 public sealed class ChristmasSettings : ScreensaverSettings
 {
-    private readonly IntSetting _density, _speed, _wind, _size, _surprises, _stories, _reindeer, _hares, _birds, _mice, _otters;
+    private readonly IntSetting _density, _speed, _wind, _size, _surprises, _stories, _reindeer, _hares, _birds, _mice, _otters, _drawWidth;
 
     public ChristmasSettings() : base("Christmas")
     {
@@ -24,6 +24,7 @@ public sealed class ChristmasSettings : ScreensaverSettings
         _birds = Add(nameof(BirdCount), "Birds", 0, 10, 5, "");
         _mice = Add(nameof(MouseCount), "Mice", 0, 6, 3, "");
         _otters = Add(nameof(OtterCount), "Otters", 0, 3, 2, "");
+        _drawWidth = Add(nameof(DrawWidth), "Draw width", 1600, 3840, 1920, "px");
     }
 
     /// <summary>How many snowflakes are falling at once.</summary>
@@ -58,6 +59,13 @@ public sealed class ChristmasSettings : ScreensaverSettings
 
     /// <summary>How many otters play on the frozen pond.</summary>
     public int OtterCount => _otters.Value;
+
+    /// <summary>
+    /// The widest the scene is ever drawn. On a wider screen (a 4K one) it is drawn at this width and Windows
+    /// enlarges the picture. Drawing all eight million pixels of a 4K screen took 21 to 23 thousandths of a second
+    /// a frame, more than the 16.7 a smooth 60 frames a second allows, so nothing could move smoothly there.
+    /// </summary>
+    public int DrawWidth => _drawWidth.Value;
 
     public static ChristmasSettings LoadSaved()
     {

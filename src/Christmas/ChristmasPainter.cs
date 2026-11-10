@@ -81,6 +81,17 @@ internal sealed class ChristmasScenery
     /// </summary>
     public required byte[] NearDepth { get; init; }
     public required float CrestMin { get; init; }                       // the highest point of the hill's crest (the smallest y): where nearness starts counting
+    public required float CrestMax { get; init; }                       // the LOWEST point of the crest (the largest y), in the dip by the cabin
+
+    /// <summary>
+    /// THE FIELD'S TWO BANDS. The herd keeps to level rows in a band just below the crest's lowest dip, from
+    /// HerdBandTop to HerdBandBottom. Everything smaller (the fox, the hares) lives at or below SmallBandTop, a
+    /// clear gap nearer to us. Animals of the two bands then pass in FRONT of or BEHIND each other, never through:
+    /// the first build had the hares' lanes running through the herd's rows, and a hare stood inside a reindeer.
+    /// </summary>
+    public float HerdBandTop => CrestMax + 0.045f * U;
+    public float HerdBandBottom => CrestMax + 0.070f * U;
+    public float SmallBandTop => CrestMax + 0.105f * U;
 
     /// <summary>How near something standing with its feet at y is, 1 (at the crest, far) to 254 (at the bottom edge, close).</summary>
     public byte Nearness(float y) => (byte)Math.Clamp(1 + 253 * (y - CrestMin) / (Height - CrestMin), 1, 254);
@@ -159,6 +170,52 @@ internal sealed class ChristmasScenery
     public void Stamp(FrameBuffer fb, Sprite page, float feetX, float feetY, int originX, int originY, bool mirror = false, float opacity = 1f) =>
         page.Draw(fb, (int)MathF.Round(feetX) - (mirror ? page.Width - 1 - originX : originX), (int)MathF.Round(feetY) - originY,
                   opacity, null, mirror, NearDepth, Nearness(feetY));
+
+    // ---- WHO STANDS WHERE (added after the first review: "no resident knows any other resident exists": the fox
+    //      trotted through a reindeer's legs and a hare stood inside one for seventeen seconds) ----
+    //
+    // FEYNMAN VERSION: a cloakroom list. Every frame each animal on the snow writes down where its feet are and
+    // how long it is (Occupy). Before an animal picks a place to go, or takes a step, it asks the list whether
+    // somebody ELSE is already standing on that bit of that row (Crowded). Passing in front of or behind another
+    // animal is fine and is what the depth picture is for; standing INSIDE one is not. There are two sheets: the
+    // one being written this frame and the one finished last frame, which is the one everybody reads, so the answer
+    // does not depend on who happened to be updated first.
+    private List<(object Who, int Index, float X, float Y, float Half)> _standing = new(64), _writing = new(64);
+
+    /// <summary>Called by the scene once a frame, before the residents think: last frame's sheet becomes the one to read.</summary>
+    public void TurnPage() { (_standing, _writing) = (_writing, _standing); _writing.Clear(); }
+
+    /// <summary>Writes one animal on this frame's sheet: its owner and index, its feet, and half its body length in pixels.</summary>
+    public void Occupy(object who, int index, float feetX, float feetY, float half) => _writing.Add((who, index, feetX, feetY, half));
+
+    /// <summary>
+    /// True if another animal stands on this spot: its feet within "rows" (pixels up or down the screen: the
+    /// same row of the field) and its body overlapping a body of half length "half" centred at x. An animal never
+    /// counts against itself (same owner AND same index); pass index -1 to ignore everything of that owner.
+    /// </summary>
+    public bool Crowded(float x, float y, float half, object self, int index, float rows = -1f)
+    {
+        if (rows < 0) rows = 0.016f * U;
+        foreach (var o in _standing)
+        {
+            if (ReferenceEquals(o.Who, self) && (index < 0 || o.Index == index)) continue;
+            if (MathF.Abs(o.Y - y) < rows && MathF.Abs(o.X - x) < o.Half + half) return true;
+        }
+        return false;
+    }
+
+    /// <summary>The nearest other animal's feet to (x, y) within "within" pixels, or null: for stepping round somebody.</summary>
+    public PointF? NearestOther(float x, float y, float within, object self, int index)
+    {
+        PointF? best = null; float bestD = within * within;
+        foreach (var o in _standing)
+        {
+            if (ReferenceEquals(o.Who, self) && (index < 0 || o.Index == index)) continue;
+            float d = (o.X - x) * (o.X - x) + (o.Y - y) * (o.Y - y);
+            if (d < bestD) { bestD = d; best = new PointF(o.X, o.Y); }
+        }
+        return best;
+    }
 
     // ---- Live facts, set by the scene every frame before the happenings draw ----
     public PointF SantaSleigh { get; set; }                             // the middle of the sleigh's body, in pixels
@@ -247,7 +304,8 @@ internal static class ChristmasPainter
 
         Bank ground = MakeGround(w, h);
         float crestMin = float.MaxValue;
-        foreach (PointF p in ground.Edge) crestMin = Math.Min(crestMin, p.Y);
+        float crestMax = 0;
+        foreach (PointF p in ground.Edge) { crestMin = Math.Min(crestMin, p.Y); if (p.X >= 0 && p.X <= w) crestMax = Math.Max(crestMax, p.Y); }
         PaintValley(g, w, horizon, u, rng, ground, nearRange, villageWindows);
 
         ground.Paint(g, Color.FromArgb(222, 233, 252), Color.FromArgb(118, 140, 196), Color.FromArgb(220, 255, 255, 255), Math.Max(1.5f, u * 0.004f));
@@ -371,7 +429,7 @@ internal static class ChristmasPainter
             FeederFoot = feederFoot, FeederTray = tray, FeederRoof = roof,
             SaplingFoot = saplingFoot, SaplingHeight = saplingTall,
             SnowmanFoot = snowmanFoot, SnowmanHeight = snowmanTall,
-            Bushes = bushes, NearDepth = nearDepth, CrestMin = crestMin,
+            Bushes = bushes, NearDepth = nearDepth, CrestMin = crestMin, CrestMax = crestMax,
         };
     }
 
