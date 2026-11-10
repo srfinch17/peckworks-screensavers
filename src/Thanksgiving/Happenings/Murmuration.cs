@@ -9,21 +9,25 @@ namespace Thanksgiving.Happenings;
 /// as its path turns, the way they do before they settle to roost. It fades
 /// in from nothing, flies for most of a minute, and fades away.
 ///
-/// FEYNMAN VERSION: no bird steers. The FLOCK is a ribbon that follows a
-/// path: the ribbon's middle moves along a curve made of slow sines, and the
-/// ribbon always lies ALONG the way it is going (its long axis is the path's
-/// direction at that moment), so when the path bends the whole flock swings
-/// round into the new heading, which is what the eye reads as a turn. Each
-/// bird keeps a place in the ribbon (how far along, how far across, rolled
-/// once in Begin, most of them near the middle line), and that place drifts
-/// a little with time (birds overtaking each other). On top of that three
-/// things move through the ribbon as waves: a bend (the ribbon curves into
-/// a banana, swinging from one side to the other), a fold (a wave running
-/// down its length, so it ripples like a flag), and a density wave (the
-/// birds bunch and spread along it, a pulse travelling through the flock).
+/// FEYNMAN VERSION: no bird steers. The FLOCK is a ribbon laid along a
+/// path: the leader's point moves along a curve made of slow sines, and
+/// every other bird is where the leader WAS a little earlier (its place in
+/// the ribbon is a lag in seconds, rolled once in Begin, plus a sideways
+/// offset, most of them near the middle line). So the ribbon is the trail
+/// the flock just flew: when the path bends, the ribbon BENDS along the
+/// bend, and when the path slows at a turn the birds bunch up and then
+/// stream out again, which is what a real murmuration does. (The version
+/// before this laid the ribbon as a rigid bar along the path's direction at
+/// that instant; each time the sines reversed, the bar spun half a turn about
+/// its middle: "the bird flock full rotate seems awkward". The version before
+/// THAT was a ball of dots turning about its centre: "a ball of points that
+/// rotates". A thing laid along a trail never rotates about its middle.) On
+/// top of that two things move through the ribbon as waves: a fold (a wave
+/// running down its length, so it ripples like a flag) and a density wave
+/// (the birds bunch and spread along it, a pulse travelling through the
+/// flock); and each bird's place drifts a little with time (overtaking).
 /// Each bird is a dark dot that flicks between two sizes on its own beat,
-/// the twinkle a distant flock has. (The first version was a ball of dots
-/// turning about its centre: "a ball of points that rotates".)
+/// the twinkle a distant flock has.
 ///
 /// It is drawn through the painter's OpenFromFarm stencil (in front of the
 /// hills, the farm and the far trees, behind everything on the field), and
@@ -33,6 +37,7 @@ internal sealed class Murmuration : Happening
 {
     private const int Birds = 280;
     private const float Total = 50f;
+    private const float Span = 3.6f;                 // seconds of path the ribbon covers from its leader to its last bird
 
     private readonly ThanksgivingScenery _s;
     private readonly Sprite _small, _big;
@@ -87,22 +92,20 @@ internal sealed class Murmuration : Happening
         float fade = Fade(t, Total, 4f, 4f);
         if (fade <= 0.01f) return;
         float U = _s.U;
-        var (cx, cy, hx, hy) = Path(t);
-        float nx = -hy, ny = hx;                                                        // across the ribbon
-        // The ribbon's length and width breathe slowly; it bends from side to side; a fold runs down it; the birds bunch in a travelling wave.
-        float len = U * (0.075f + 0.03f * MathF.Sin(0.23f * t + _p5));
+        // The ribbon's width breathes slowly; a fold runs down it; the birds bunch in a travelling wave.
         float wid = U * (0.016f + 0.008f * MathF.Sin(0.31f * t + _p2));
-        float bend = U * 0.03f * MathF.Sin(0.27f * t + _p3);
         float foldPhase = 1.6f * t, bunchPhase = 1.1f * t;
         for (int i = 0; i < Birds; i++)
         {
             float a = _along[i] + 0.12f * MathF.Sin(0.5f * t + _ph[i]);                 // drifting along: overtaking
             a += 0.10f * MathF.Sin(MathF.PI * 1.5f * a - bunchPhase);                      // the density wave
             if (a > 1f) a -= 2f; else if (a < -1f) a += 2f;
+            // This bird is where the leader was (1 - a) / 2 of the span ago: a = 1 is the leader, a = -1 the last bird.
+            var (cx, cy, hx, hy) = Path(t - Span * (1f - a) * 0.5f);
+            float nx = -hy, ny = hx;                                                    // across the path, at this bird's own point on it
             float b = _across[i] * (1f - 0.5f * a * a);                                   // the ribbon tapers toward its ends
-            float across = b * wid + bend * a * a + 0.6f * wid * MathF.Sin(3.1f * a + foldPhase + 0.3f * _ph[i]);   // the banana, and the flag's fold
-            float along = a * len;
-            float px = cx + hx * along + nx * across, py = cy + hy * along + ny * across;
+            float across = b * wid + 0.6f * wid * MathF.Sin(3.1f * a + foldPhase + 0.3f * _ph[i]);   // the flag's fold
+            float px = cx + nx * across, py = cy + ny * across;
             Sprite dot = MathF.Sin(9f * t + _flap[i]) > 0.35f ? _big : _small;           // the flicker of wings catching the light
             dot.DrawCentered(fb, px, py, fade, _s.OpenFromFarm);
         }
