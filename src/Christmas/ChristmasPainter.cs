@@ -834,7 +834,7 @@ internal static class ChristmasPainter
         }
         using (var bow = new SolidBrush(Color.FromArgb(214, 44, 50)))
         {
-            float by = lanternBottom + tall * 0.030f, br = tall * 0.028f;
+            float by = lanternBottom + tall * 0.105f, br = tall * 0.028f;   // BELOW the crossbar: tied above it, a red cardinal perched on the bar sat on red ribbon and vanished
             g.FillPolygon(bow, [new PointF(x, by), new PointF(x - br * 1.6f, by - br), new PointF(x - br * 1.6f, by + br)]);
             g.FillPolygon(bow, [new PointF(x, by), new PointF(x + br * 1.6f, by - br), new PointF(x + br * 1.6f, by + br)]);
             g.FillPolygon(bow, [new PointF(x, by), new PointF(x - br * 0.9f, by + br * 2.6f), new PointF(x - br * 0.2f, by + br * 2.4f)]);

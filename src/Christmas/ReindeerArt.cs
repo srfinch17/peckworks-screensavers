@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Numerics;
 using Peckworks.Screensavers.Core;
 
 namespace Christmas;
@@ -73,11 +74,11 @@ internal sealed class ReindeerSet
     public RPage[] Up = new RPage[ReindeerArt.LiePages];          // getting up: the hind end first
     public RPage[] Shake = new RPage[ReindeerArt.ShakePages];     // the torso twisted from one side to the other
     public RPage[] Gam = new RPage[ReindeerArt.GamPages];         // the calf's play poses
-    public RPage[] Turn = new RPage[ReindeerArt.TurnPages];
     public RPage[] TrotIn = new RPage[ReindeerArt.TrotInPages];     // the square stance to the trot's first page (and back): a start and a stop that share pages with the trot       // the square stance narrowed about the feet
     public RPage[,] Head = new RPage[ReindeerArt.HeadPages, ReindeerArt.HeadKinds];
+    public RPage?[,,] Fig = new RPage?[2, ReindeerArt.TurnLevels, ReindeerArt.TurnSteps + 1];   // the turn: whole animals (body and head together) seen from every angle of a half turn; [side (0 toward us, 1 away), head pitch level, step]; steps 0 and TurnSteps are null (the ordinary standing pages are used there)
+    public int FigW, FigH, FigOx, FigOy;                            // the turn sheet and the pixel that is the body's middle on the ground
     public PointF[] Nose = new PointF[ReindeerArt.HeadPages];     // the nostril on each head page (body heights from the neck's root, y up)
-    public RPage[,] TurnHead = new RPage[ReindeerArt.TurnPitches, ReindeerArt.TurnPages];
     public Sprite Shadow = null!, ShadowLie = null!;              // the soft blue shadow under it, a separate stamp (it stays on the ground when the animal leaps)
     public RPage CapLie = null!;                                 // the snow settled along a lying back
     public RPage Stand => Settle[ReindeerArt.SettlePages - 1];
@@ -97,10 +98,20 @@ internal sealed class Pose
 
 internal static class ReindeerArt
 {
-    public const int WalkPages = 24, TrotPages = 16, SettlePages = 8, PawPages = 16, LiePages = 12, ShakePages = 9, GamPages = 6, TurnPages = 4, TrotInPages = 6;
-    public const int HeadPages = 16, HeadKinds = 3, TurnPitches = 4;   // head kinds: 0 jaw closed, 1 jaw open (chewing), 2 near ear flicked back
-    public static readonly float[] TurnSquash = [0.78f, 0.50f, 0.28f, 0.12f];
-    public static readonly float[] TurnPitch = [0f, 0.25f, 0.60f, 1f];   // the head's tilt on the turn pages
+    public const int WalkPages = 24, TrotPages = 16, SettlePages = 8, PawPages = 16, LiePages = 12, ShakePages = 9, GamPages = 6, TrotInPages = 6;
+    public const int HeadPages = 16, HeadKinds = 3;   // head kinds: 0 jaw closed, 1 jaw open (chewing), 2 near ear flicked back
+    // THE TURN is a half turn drawn in TurnSteps steps of 9 degrees (page 0 is the side view facing one way, page TurnSteps the side view
+    // facing the other, the three-quarter view toward us and the head-on view between). The head pitch is one of TurnLevels, each EXACTLY
+    // one of the ordinary head pages (TurnHp), so the head of the standing animal and the head of the first turn page are the same picture.
+    public const int TurnSteps = 20, TurnLevels = 7;
+    public static readonly int[] TurnHp = [0, 2, 4, 6, 8, 11, 15];
+    public static float TurnF(int level) => TurnHp[level] / (float)(HeadPages - 1);
+    public static int TurnLevelOf(float f)
+    {
+        int best = 0; float bd = 9f;
+        for (int k = 0; k < TurnLevels; k++) { float d = MathF.Abs(TurnF(k) - f); if (d < bd) { bd = d; best = k; } }
+        return best;
+    }
 
     // ---- the gaits: how far a foot travels either side of its hip, and the share of the stride it is on the ground ----
     public const float WalkReach = 0.25f, WalkDuty = 0.62f;
@@ -210,13 +221,14 @@ internal static class ReindeerArt
             Nap();
             var page = new RPage();
             PointF neck = P(0, 0);
-            var full = Sprite.Paint(set.BodyW, set.BodyH, g =>
+            // PaintCrop paints on one scratch bitmap kept for the whole build and hands back only the rows and columns that hold paint
+            // (a stamp costs its painted rows, and a smaller sheet is also less to hold and to copy).
+            page.S = PaintCrop(set.BodyW, set.BodyH, set.BodyOx, set.BodyOy, g =>
             {
                 g.TranslateTransform(set.BodyOx, set.BodyOy);
                 g.ScaleTransform(h, -h);                       // body heights, y UP
                 neck = PaintBody(g, pose, kind, h);
-            });
-            page.S = Crop(full, set.BodyOx, set.BodyOy, out page.OX, out page.OY);   // a stamp costs its painted rows, but a smaller sheet is also less to hold and to copy
+            }, out page.OX, out page.OY);
             page.NX = neck.X; page.NY = neck.Y;
             return page;
         }
@@ -224,13 +236,12 @@ internal static class ReindeerArt
         {
             Nap();
             var page = new RPage();
-            var full = Sprite.Paint(set.HeadW, set.HeadH, g =>
+            page.S = PaintCrop(set.HeadW, set.HeadH, set.HeadOx, set.HeadOy, g =>
             {
                 g.TranslateTransform(set.HeadOx, set.HeadOy);
                 g.ScaleTransform(h * sx, -h);
                 paint(g);
-            });
-            page.S = Crop(full, set.HeadOx, set.HeadOy, out page.OX, out page.OY);
+            }, out page.OX, out page.OY);
             return page;
         }
 
@@ -319,21 +330,6 @@ internal static class ReindeerArt
                 set.Gam[t] = Body(new Pose { Feet = gf, WD = gwd, CD = gcd, Tail = gt });
             }
         }
-        // The turn pages: the square stance narrowed about the feet (a body coming round through the front view is a sliver).
-        for (int t = 0; t < TurnPages; t++)
-        {
-            float sq = TurnSquash[t];
-            var page = new RPage();
-            var full = Sprite.Paint(set.BodyW, set.BodyH, g =>
-            {
-                g.TranslateTransform(set.BodyOx, set.BodyOy);
-                g.ScaleTransform(h * sq, -h);
-                PaintBody(g, new Pose(), kind, h);
-            });
-            page.S = Crop(full, set.BodyOx, set.BodyOy, out page.OX, out page.OY);
-            page.NX = NeckX * sq; page.NY = NeckY;
-            set.Turn[t] = page;
-        }
         for (int j = 0; j < HeadPages; j++)
         {
             float f = j / (float)(HeadPages - 1);
@@ -344,23 +340,36 @@ internal static class ReindeerArt
             }
             set.Nose[j] = NoseTip(f, kind);
         }
-        for (int pi = 0; pi < TurnPitches; pi++)
-            for (int t = 0; t < TurnPages; t++)
-            {
-                float sq = TurnSquash[t], f = TurnPitch[pi];
-                set.TurnHead[pi, t] = HeadPage(sq, g => PaintHead(g, f, 0, kind, h));
-            }
+        // THE TURN: whole animals drawn at every angle of the half turn, toward us (side 0) and away from us (side 1), at each head pitch level.
+        set.FigW = (int)(3.5f * h) + 10; set.FigOx = set.FigW / 2;
+        set.FigOy = (int)((0.86f + 0.62f + 0.95f * antlerH) * h) + 10;
+        set.FigH = set.FigOy + (int)(0.12f * h) + 6;
+        for (int side = 0; side < 2; side++)
+            for (int lv = 0; lv < TurnLevels; lv++)
+                for (int k = 1; k < TurnSteps; k++)
+                {
+                    Nap();
+                    var page = new RPage();
+                    float f = TurnF(lv), phi = k * 180f / TurnSteps; int sd = side == 0 ? 1 : -1;
+                    page.S = PaintCrop(set.FigW, set.FigH, set.FigOx, set.FigOy, g =>
+                    {
+                        g.TranslateTransform(set.FigOx, set.FigOy);
+                        g.ScaleTransform(h, -h);
+                        PaintFigure(g, kind, h, phi, sd, f);
+                    }, out page.OX, out page.OY);
+                    set.Fig[side, lv, k] = page;
+                }
         // The shadows: a flat soft ellipse on the snow, blue because it is night and the snow is lit by the moon and the sky.
         set.Shadow = ShadowSprite(h, 1.30f);
         set.ShadowLie = ShadowSprite(h, 1.55f);
         // The snow that settles along a lying back (drawn over the lying page with a rising opacity).
         set.CapLie = new RPage();
-        set.CapLie.S = Crop(Sprite.Paint(set.BodyW, set.BodyH, g =>
+        set.CapLie.S = PaintCrop(set.BodyW, set.BodyH, set.BodyOx, set.BodyOy, g =>
         {
             g.TranslateTransform(set.BodyOx, set.BodyOy);
             g.ScaleTransform(h, -h);
             PaintCap(g, new Pose { WD = 0.40f, CD = 0.40f, FoldF = 1, FoldH = 1 }, kind);
-        }), set.BodyOx, set.BodyOy, out set.CapLie.OX, out set.CapLie.OY);
+        }, out set.CapLie.OX, out set.CapLie.OY);
         return set;
     }
 
@@ -368,20 +377,67 @@ internal static class ReindeerArt
     /// <summary>Every fourth page the painter sleeps a moment so the build thread leaves a core to the frames being drawn (a test run of the whole herd's build took frames from 6 ms to 60 ms in the first seconds).</summary>
     private static void Nap() { if ((Interlocked.Increment(ref _naps) & 3) == 0) Thread.Sleep(1); }
 
-    /// <summary>Cuts a painted sheet down to the rows and columns that hold paint; returns the new sprite and where the old origin is in it.</summary>
-    private static Sprite Crop(Sprite s, int ox, int oy, out int nox, out int noy)
+    // A brush per colour, made once and kept for the whole build (a fresh brush for every polygon was a quarter of the build's garbage).
+    [ThreadStatic] private static Dictionary<int, SolidBrush>? _brushes;
+    private static SolidBrush Br(Color c)
     {
-        ReadOnlySpan<uint> a = s.Argb;
-        int x0 = s.Width, y0 = s.Height, x1 = -1, y1 = -1;
-        for (int y = 0; y < s.Height; y++)
-            for (int x = 0; x < s.Width; x++)
-                if ((a[y * s.Width + x] >> 24) != 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        var d = _brushes ??= new Dictionary<int, SolidBrush>();
+        int k = c.ToArgb();
+        if (!d.TryGetValue(k, out var b)) d[k] = b = new SolidBrush(c);
+        return b;
+    }
+
+    // ---- the scratch painter: ONE bitmap and ONE Graphics for the whole build (a fresh sheet per page was most of the garbage) ----
+    [ThreadStatic] private static Bitmap? _tb;
+    [ThreadStatic] private static Graphics? _tg;
+    [ThreadStatic] private static int[]? _traw;
+    [ThreadStatic] private static int _tw, _th;
+
+    /// <summary>Frees the scratch bitmap; the build calls it when its last page is painted.</summary>
+    public static void ReleaseScratch()
+    {
+        if (_brushes != null) { foreach (var b in _brushes.Values) b.Dispose(); _brushes = null; }
+        _tg?.Dispose(); _tb?.Dispose(); _tg = null; _tb = null; _traw = null; _tw = _th = 0;
+    }
+
+    /// <summary>
+    /// Paints one page on the scratch bitmap and returns only the rows and columns that hold paint, as a sprite, plus where the
+    /// sheet's origin (ox, oy) is inside it. Same pixels as Sprite.Paint followed by a crop, with no whole-sheet arrays left over.
+    /// </summary>
+    private static Sprite PaintCrop(int w, int h, int ox, int oy, Action<Graphics> paint, out int nox, out int noy)
+    {
+        w = Math.Max(1, w); h = Math.Max(1, h);
+        if (_tb == null || _tw < w || _th < h)
+        {
+            int nw = Math.Max(w, _tw), nh = Math.Max(h, _th);
+            _tg?.Dispose(); _tb?.Dispose();
+            _tb = new Bitmap(nw, nh, PixelFormat.Format32bppArgb);
+            _tg = Graphics.FromImage(_tb);
+            _tg.SmoothingMode = SmoothingMode.AntiAlias;
+            _tw = nw; _th = nh;
+            _traw = new int[nw * nh];
+        }
+        Graphics g = _tg!;
+        g.ResetTransform(); g.ResetClip();
+        g.SetClip(new Rectangle(0, 0, w, h));
+        g.Clear(Color.Transparent);
+        paint(g);
+        g.ResetTransform(); g.ResetClip();
+        int[] raw = _traw!;
+        var data = _tb.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try { for (int y = 0; y < h; y++) System.Runtime.InteropServices.Marshal.Copy(data.Scan0 + y * data.Stride, raw, y * w, w); }
+        finally { _tb.UnlockBits(data); }
+        int x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                if (((uint)raw[y * w + x] >> 24) != 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
         if (x1 < 0) { nox = 0; noy = 0; return Sprite.FromPixels(1, 1, [0u]); }
-        int w = x1 - x0 + 1, h = y1 - y0 + 1;
-        var px = new uint[w * h];
-        for (int y = 0; y < h; y++) a.Slice((y0 + y) * s.Width + x0, w).CopyTo(px.AsSpan(y * w, w));
+        int cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+        var px = new uint[cw * ch];
+        for (int y = 0; y < ch; y++)
+            System.Runtime.InteropServices.MemoryMarshal.Cast<int, uint>(raw.AsSpan((y0 + y) * w + x0, cw)).CopyTo(px.AsSpan(y * cw, cw));
         nox = ox - x0; noy = oy - y0;
-        return Sprite.FromPixels(w, h, px);
+        return Sprite.FromPixels(cw, ch, px);
     }
 
     private static Sprite ShadowSprite(int h, float widthH)
@@ -453,21 +509,21 @@ internal static class ReindeerArt
         {
             using var path = new GraphicsPath();
             path.AddClosedCurve(pts, tension);
-            using var b = new SolidBrush(c);
+            var b = Br(c);
             g.FillPath(b, path);
         }
         void Bone(PointF a, PointF b, float wa, float wb, Color c)
         {
             wa = MathF.Max(wa, 1.6f * pw); wb = MathF.Max(wb, 1.3f * pw);
             float dx = b.X - a.X, dy = b.Y - a.Y, l = MathF.Sqrt(dx * dx + dy * dy) + 1e-5f, nx = -dy / l, ny = dx / l;
-            using var br = new SolidBrush(c);
+            var br = Br(c);
             g.FillPolygon(br, [P(a.X + nx * wa / 2, a.Y + ny * wa / 2), P(b.X + nx * wb / 2, b.Y + ny * wb / 2), P(b.X - nx * wb / 2, b.Y - ny * wb / 2), P(a.X - nx * wa / 2, a.Y - ny * wa / 2)]);
             g.FillEllipse(br, a.X - wa / 2, a.Y - wa / 2, wa, wa);
             g.FillEllipse(br, b.X - wb / 2, b.Y - wb / 2, wb, wb);
         }
         void HoofAt(PointF f)
         {
-            using var hb = new SolidBrush(Hoof);
+            var hb = Br(Hoof);
             g.FillPolygon(hb, [P(f.X - 0.035f, f.Y + 0.032f), P(f.X + 0.045f, f.Y + 0.028f), P(f.X + 0.058f, f.Y - 0.022f), P(f.X - 0.040f, f.Y - 0.022f)]);
         }
 
@@ -692,8 +748,8 @@ internal static class ReindeerArt
         float wBeam = MathF.Max(bull ? 0.050f : 0.034f, 2.3f * pw);
         PointF T(float x, float y) => P(at.X + x * s, at.Y + y * s);
         using var penB = new Pen(c, wBeam) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-        using var penT = new Pen(c, wBeam * 0.72f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-        using var penTip = new Pen(c, wBeam * 0.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        using var penT = new Pen(c, MathF.Max(wBeam * 0.72f, 1.8f * pw)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        using var penTip = new Pen(c, MathF.Max(wBeam * 0.5f, 1.5f * pw)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
         g.DrawCurve(penB, [T(0, 0), T(-0.10f, 0.20f), T(-0.20f, 0.42f), T(-0.19f, 0.62f)], 0.5f);
         g.DrawCurve(penT, [T(-0.19f, 0.62f), T(-0.06f, 0.80f), T(0.14f, 0.90f)], 0.5f);
         // Brow tine over the face: flat and broad at its end (the shovel).
@@ -717,6 +773,453 @@ internal static class ReindeerArt
         }
     }
 
+    // ================================================================ THE TURN: whole animals drawn from every angle
+    //
+    // FEYNMAN VERSION. The old turn squeezed the standing picture narrower and narrower, so for a few frames a reindeer was a thin
+    // tall card. A real animal turning on the spot shows a DIFFERENT PICTURE of itself at every angle: the side, then three-quarters
+    // toward us (one eye, two forelegs, the near flank), then head-on (a chest, two forelegs side by side, the hind legs behind,
+    // the antlers seen from the front), then three-quarters the other way, then the other side. So each page of the turn is painted
+    // as a little 3D animal turned to a given angle and flattened to the screen, the way a shadow puppet of a model reindeer would be.
+    //
+    // HOW. Every part is a loft: a row of cross-sections (ovals) along the part, and each pair of neighbours is joined by the
+    // smallest convex shape holding both (the "hull": a rubber band stretched round two coins). Turn the model by an angle and
+    // every oval's centre slides across the screen by x * cos(angle) and every oval's width grows by its half-thickness * sin(angle).
+    // The torso is 23 ovals along the back, the neck 7, the skull 7, the muzzle 5. The legs are bones with real knees: the joint
+    // of two equal bones is found in 3D, bent toward the animal's forward direction, so a foreleg seen head-on is straight and a
+    // hind leg still zigzags. Antlers are curves in 3D (the beam goes up AND out sideways, so head-on the rack is a wide V).
+    // Parts are painted far to near by their depth, so head-on the hind legs are behind the belly and the forelegs in front of it.
+    //
+    // THE ANGLE. Phi runs 0 to 180 degrees over the TurnSteps pages. "side 0" turns toward us (the face comes round to us, then past
+    // us), "side 1" turns away (we see the rump, the pale patch and the short tail). The head LEADS the body by up to 17 degrees
+    // (psi = phi + 0.3 sin phi) and the neck twists between them. The page for phi = 0 and for phi = 180 are NOT drawn here: the
+    // ordinary standing pages are used there, so the turn has no pop at either end. Turning to the right is the same pages
+    // stamped mirrored, as every other page of the herd is.
+    //
+    // THE FEET. A turn on the spot is a pivot on planted feet. Each foot stays where it last landed (so it never slides) and the
+    // body swings round it; when the foot has fallen about 25 degrees behind the body it lifts (a 0.10 body-height hop), swings
+    // and lands 26 degrees AHEAD of the body, the legs going in the order near hind, far fore, near fore, far hind. Three steps a
+    // foot, twelve in all, one at a time: a pivot, never a skate. The last step of each foot lands exactly on the final square
+    // stance, and the first step starts after page 1, so the feet are continuous with the standing pages at both ends.
+
+    private const int StepEvents = 12;
+    private const float StepT0 = 17f, StepDt = 13.27f, StepHalf = 7f, StepLead = 26f;     // in degrees of body yaw
+    private static readonly int[] StepOrder = [0, 3, 1, 2];                              // near hind, far fore, near fore, far hind
+    private static readonly float[] LegZ = [0.13f, 0.12f, -0.13f, -0.12f];               // each leg's sideways place under the body (near legs +, toward us)
+
+    /// <summary>Where foot j is at body yaw phiDeg: world x, the lift off the snow, and the depth (toward us is +).</summary>
+    private static (float X, float Lift, float Z) FootWorld(int j, float phiDeg, int s, bool calf)
+    {
+        float xr = HipRest[j] * (calf ? 0.88f : 1f) + SquareFeet()[j].X, zr = LegZ[j];
+        float thFrom = 0f, thTo = 0f, u = -1f;
+        for (int e = 0; e < StepEvents; e++)
+        {
+            if (StepOrder[e % 4] != j) continue;
+            float t = StepT0 + StepDt * e, begin = t - StepHalf, land = t + StepHalf;
+            float lands = e >= StepEvents - 4 ? 180f : MathF.Min(180f, land + StepLead);
+            if (phiDeg >= land) { thFrom = lands; continue; }
+            if (phiDeg > begin) { thTo = lands; u = (phiDeg - begin) / (2 * StepHalf); }
+            break;
+        }
+        static (float X, float Z) At(float xr, float zr, float thDeg, int s)
+        {
+            float th = thDeg * MathF.PI / 180f, c = MathF.Cos(th), sn = MathF.Sin(th);
+            return (xr * c - s * zr * sn, s * xr * sn + zr * c);
+        }
+        var p0 = At(xr, zr, thFrom, s);
+        if (u < 0) return (p0.X, 0f, p0.Z);
+        var p1 = At(xr, zr, thTo, s);
+        float k = Smooth(u);
+        return (p0.X + (p1.X - p0.X) * k, 0.10f * MathF.Sin(MathF.PI * u), p0.Z + (p1.Z - p0.Z) * k);
+    }
+
+    /// <summary>The torso's outline read off the SAME curve PaintBody draws: for each of 23 slices along the back, the top and the bottom.</summary>
+    private sealed class Profile { public float[] X = null!, Top = null!, Bot = null!; }
+    private static Profile? _profBody, _profCalf;
+    private static Profile TorsoProfile(bool calf)
+    {
+        Profile? have = calf ? _profCalf : _profBody;
+        if (have != null) return have;
+        float[] v = [0.34f, 0.99f, 0.52f, 0.88f, 0.58f, 0.68f, 0.46f, 0.50f, 0.20f, 0.45f, -0.10f, 0.46f, -0.38f, 0.52f, -0.62f, 0.58f, -0.72f, 0.76f, -0.62f, 0.91f, -0.34f, 0.96f, 0.0f, 0.97f];
+        var w = new Warp(new Pose(), calf);
+        var pts = new PointF[v.Length / 2];
+        for (int i = 0; i < pts.Length; i++) pts[i] = w.Q(v[2 * i], v[2 * i + 1]);
+        using var path = new GraphicsPath();
+        path.AddClosedCurve(pts, 0.5f);
+        path.Flatten(null, 0.002f);
+        PointF[] pp = path.PathPoints;
+        float xmin = 9, xmax = -9;
+        foreach (PointF q in pp) { xmin = MathF.Min(xmin, q.X); xmax = MathF.Max(xmax, q.X); }
+        const int n = 23;
+        var pr = new Profile { X = new float[n], Top = new float[n], Bot = new float[n] };
+        for (int i = 0; i < n; i++)
+        {
+            float x = xmin + 0.012f + (xmax - xmin - 0.024f) * i / (n - 1), lo = 9, hi = -9;
+            for (int j = 0; j < pp.Length; j++)
+            {
+                PointF a = pp[j], b = pp[(j + 1) % pp.Length];
+                if ((a.X - x) * (b.X - x) <= 0 && a.X != b.X) { float y = a.Y + (b.Y - a.Y) * (x - a.X) / (b.X - a.X); lo = MathF.Min(lo, y); hi = MathF.Max(hi, y); }
+            }
+            if (hi < lo) { lo = 0.65f; hi = 0.75f; }
+            pr.X[i] = x; pr.Top[i] = hi; pr.Bot[i] = lo;
+        }
+        if (calf) _profCalf = pr; else _profBody = pr;
+        return pr;
+    }
+
+    /// <summary>Half the barrel's width at body-length position x: fullest at the ribs, slimmer toward the chest and the rump.</summary>
+    private static float Wz(float x, bool calf)
+    {
+        float u = (x + 0.05f) / 0.80f;
+        return 0.165f * MathF.Pow(MathF.Max(0.02f, 1f - u * u), 0.35f) * (calf ? 0.88f : 1f);
+    }
+
+    private static Color Mix(Color under, Color over, float a) =>
+        Color.FromArgb((int)(under.R + (over.R - under.R) * a), (int)(under.G + (over.G - under.G) * a), (int)(under.B + (over.B - under.B) * a));
+
+    private static float Cross(PointF o, PointF a, PointF b) => (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
+
+    [ThreadStatic] private static PointF[]? _hp, _hh;
+
+    /// <summary>Fills the smallest convex shape that holds both rings (the rubber band round two coins). With b == null: the one ring.</summary>
+    private static void Hull(Graphics g, Color col, PointF[] a, PointF[]? b = null)
+    {
+        int n = a.Length + (b?.Length ?? 0);
+        var p = _hp ??= new PointF[64];
+        var hl = _hh ??= new PointF[128];
+        a.CopyTo(p, 0); b?.CopyTo(p, a.Length);
+        Array.Sort(p, 0, n, HullOrder.Instance);
+        int k = 0;
+        for (int i = 0; i < n; i++) { while (k >= 2 && Cross(hl[k - 2], hl[k - 1], p[i]) <= 0) k--; hl[k++] = p[i]; }
+        for (int i = n - 2, t = k + 1; i >= 0; i--) { while (k >= t && Cross(hl[k - 2], hl[k - 1], p[i]) <= 0) k--; hl[k++] = p[i]; }
+        if (k - 1 < 3) return;
+        var br = Br(col);
+        g.FillPolygon(br, new ReadOnlySpan<PointF>(hl, 0, k - 1));
+    }
+    private sealed class HullOrder : IComparer<PointF>
+    {
+        public static readonly HullOrder Instance = new();
+        public int Compare(PointF u, PointF v) => u.X != v.X ? u.X.CompareTo(v.X) : u.Y.CompareTo(v.Y);
+    }
+
+    private static PointF[] Ring(float cx, float cy, float ax, float ay, float bx, float by)
+    {
+        const int n = 12;
+        var r = new PointF[n];
+        for (int i = 0; i < n; i++) { float t = i * MathF.Tau / n, cs = MathF.Cos(t), sg = MathF.Sin(t); r[i] = new PointF(cx + cs * ax + sg * bx, cy + cs * ay + sg * by); }
+        return r;
+    }
+
+    /// <summary>
+    /// One whole animal turned to body yaw phiDeg (0 = the side view facing right, 90 = facing us or facing away, 180 = facing left),
+    /// seen from the side s (+1 turns toward us, -1 turns away). f: the head pitch (0 nose up to 1 nose in the snow).
+    /// The sheet's origin is the middle of the body on the ground; y is up, in body heights.
+    /// </summary>
+    private static void PaintFigure(Graphics g, ReindeerKind kind, int h, float phiDeg, int side, float f)
+    {
+        bool calf = kind == ReindeerKind.Calf, bull = kind == ReindeerKind.Bull;
+        float pw = MathF.Max(0.012f, 1.0f / h);
+        float phi = phiDeg * MathF.PI / 180f, c = MathF.Cos(phi), sn = MathF.Sin(phi), s = side;
+        float psi = MathF.Min(MathF.PI, phi + 0.30f * MathF.Sin(phi));       // the head leads the body round
+        float cp = MathF.Cos(psi), sp = MathF.Sin(psi);
+        Color coat = calf ? CoatCalf : Coat, dark = calf ? CoatCalfDark : CoatDark, far = calf ? CoatCalfFar : CoatFar;
+        var warp = new Warp(new Pose(), calf);
+        var items = new List<(float D, Action Paint)>();
+
+        void Bone(PointF a, PointF b, float wa, float wb, Color col)
+        {
+            wa = MathF.Max(wa, 1.6f * pw); wb = MathF.Max(wb, 1.3f * pw);
+            float dx = b.X - a.X, dy = b.Y - a.Y, l = MathF.Sqrt(dx * dx + dy * dy) + 1e-5f, nx = -dy / l, ny = dx / l;
+            var br = Br(col);
+            g.FillPolygon(br, [P(a.X + nx * wa / 2, a.Y + ny * wa / 2), P(b.X + nx * wb / 2, b.Y + ny * wb / 2), P(b.X - nx * wb / 2, b.Y - ny * wb / 2), P(a.X - nx * wa / 2, a.Y - ny * wa / 2)]);
+            g.FillEllipse(br, a.X - wa / 2, a.Y - wa / 2, wa, wa);
+            g.FillEllipse(br, b.X - wb / 2, b.Y - wb / 2, wb, wb);
+        }
+
+        // ---------------------------------------------------------------- the torso: 23 slices, each with its coat, saddle, belly, rump patch and moon rim
+        Profile pr = TorsoProfile(calf);
+        int n = pr.X.Length;
+        var rBase = new PointF[n][]; var rSad = new PointF[]?[n]; var rBel = new PointF[]?[n]; var rPat = new PointF[]?[n]; var rRim = new PointF[]?[n];
+        Color patC = Mix(coat, Cream, 0.84f), rimC = Mix(coat, Color.FromArgb(196, 214, 246), 0.59f);
+        for (int i = 0; i < n; i++)
+        {
+            float x = pr.X[i], yt = pr.Top[i], yb = pr.Bot[i], hh = MathF.Max(0.004f, (yt - yb) / 2), yc = (yt + yb) / 2, wz = Wz(x, calf);
+            float cx = x * c, bx = -s * wz * sn;
+            rBase[i] = Ring(cx, yc, 0, hh, bx, 0);
+            float lo = MathF.Max(yb, yt - 0.14f), hi = yt - 0.012f;
+            if (hi - lo > 0.02f) rSad[i] = Ring(cx, (lo + hi) / 2, 0, (hi - lo) / 2, bx * 0.85f, 0);
+            lo = yb + 0.01f; hi = MathF.Min(yt, yb + 0.095f);
+            if (hi - lo > 0.02f) rBel[i] = Ring(cx, (lo + hi) / 2, 0, (hi - lo) / 2, bx * 0.8f, 0);
+            if (x < (calf ? -0.40f : -0.46f) && x > (calf ? -0.58f : -0.66f))
+            {
+                lo = MathF.Max(yb, 0.62f); hi = MathF.Min(yt, 0.86f);
+                if (hi - lo > 0.02f) rPat[i] = Ring(cx, (lo + hi) / 2, 0, (hi - lo) / 2, bx, 0);
+            }
+            if (yt - yb > 0.05f && sn < 0.5f) rRim[i] = Ring(cx, yt - 0.012f, 0, 0.012f, bx * 0.55f, 0);
+        }
+        // Near the side view the slices all lie at about one depth, so the whole back is painted in two sweeps (every slice's coat, then
+        // every slice's layers): painting slice by slice let each neighbour's coat nibble the last one's saddle into stripes. From about
+        // 58 degrees on, the slices are real depths (the chest in front of the ribs) and go into the depth sort one by one.
+        void Layers(int i0)
+        {
+            if (rSad[i0] != null && rSad[i0 + 1] != null) Hull(g, dark, rSad[i0]!, rSad[i0 + 1]!);
+            if (rBel[i0] != null && rBel[i0 + 1] != null) Hull(g, Cream, rBel[i0]!, rBel[i0 + 1]!);
+            if (rPat[i0] != null && rPat[i0 + 1] != null) Hull(g, patC, rPat[i0]!, rPat[i0 + 1]!);
+            if (rRim[i0] != null && rRim[i0 + 1] != null) Hull(g, rimC, rRim[i0]!, rRim[i0 + 1]!);
+        }
+        if (sn < 0.85f)
+            items.Add((0f, () =>
+            {
+                for (int i = 0; i < n - 1; i++) Hull(g, coat, rBase[i], rBase[i + 1]);
+                for (int i = 0; i < n - 1; i++) Layers(i);
+            }));
+        else
+        {
+            // Facing us or away: each slice is a depth of its own, but each LAYER (saddle, belly, rump patch) is one piece laid at the depth
+            // of where it lives, so the nearer slices cover it and it does not break into ribs.
+            for (int i = 0; i < n - 1; i++)
+            {
+                int i0 = i;
+                items.Add((s * 0.5f * (pr.X[i] + pr.X[i + 1]) * sn, () => Hull(g, coat, rBase[i0], rBase[i0 + 1])));
+            }
+            void Layer(float atX, PointF[]?[] ring, Color col) => items.Add((s * atX * sn + 0.001f, () =>
+            {
+                for (int i = 0; i < n - 1; i++) if (ring[i] != null && ring[i + 1] != null) Hull(g, col, ring[i]!, ring[i + 1]!);
+            }));
+            Layer(-0.56f, rPat, patC); Layer(0.0f, rSad, dark); Layer(0.45f, rBel, Cream);
+        }
+
+        // ---------------------------------------------------------------- the tail: a short white tuft, hanging down and back
+        {
+            PointF root = warp.Q(-0.68f, 0.83f);
+            PointF a = P(root.X * c, root.Y), b = P((root.X - 0.07f) * c, root.Y - 0.075f);
+            items.Add((s * root.X * sn + 0.02f, () => Bone(a, b, 0.085f, 0.06f, White)));
+        }
+
+        // ---------------------------------------------------------------- the legs: planted feet, real knees
+        Vector3 fwd = new(c, 0, s * sn);
+        float ls = calf ? 1.07f : 1f;
+        Vector3 Joint(Vector3 a, Vector3 b, float bone, Vector3 bend)
+        {
+            Vector3 d = b - a; float dl = d.Length();
+            if (dl < 1e-4f) return a;
+            float len = MathF.Min(dl, 2 * bone - 0.002f);
+            Vector3 u = d / dl, nn = bend - Vector3.Dot(bend, u) * u;
+            nn = nn.LengthSquared() < 1e-6f ? new Vector3(0, 0, 1) : Vector3.Normalize(nn);
+            return a + u * (len / 2) + nn * MathF.Sqrt(MathF.Max(0f, bone * bone - len * len / 4));
+        }
+        static PointF V(Vector3 v) => new(v.X, v.Y);
+        for (int j = 0; j < 4; j++)
+        {
+            bool hind = j == 0 || j == 2;
+            PointF hb = warp.Q(HipRest[j], hind ? 0.64f : 0.58f);
+            var hip = new Vector3(hb.X * c - s * LegZ[j] * sn, hb.Y, s * hb.X * sn + LegZ[j] * c);
+            var (fx, lift, fz) = FootWorld(j, phiDeg, side, calf);
+            var foot = new Vector3(fx, 0.02f + lift, fz);
+            float tt = Math.Clamp((hip.Z + 0.06f) / 0.12f, 0f, 1f);          // 1 = on the lit side, 0 = on the far side
+            Color upper = Mix(far, coat, tt), lower = Mix(LegFar, LegPale, tt);
+            items.Add((hip.Z, () =>
+            {
+                if (!hind)
+                {
+                    Vector3 knee = Joint(hip, foot, 0.29f * ls, fwd);
+                    Bone(V(hip), V(knee), 0.125f, 0.082f, upper);
+                    Bone(V(knee), V(foot), 0.072f, 0.056f, lower);
+                }
+                else
+                {
+                    float pl = Math.Clamp(0.035f - 2.0f * lift, -0.5f, 0.7f);
+                    Vector3 hock = foot + 0.25f * ls * (MathF.Cos(pl) * Vector3.UnitY - MathF.Sin(pl) * fwd);
+                    Vector3 stifle = Joint(hip, hock, 0.27f * ls, fwd);
+                    Bone(V(hip), V(stifle), 0.17f, 0.105f, upper);
+                    Bone(V(stifle), V(hock), 0.105f, 0.075f, upper);
+                    Bone(V(hock), V(foot), 0.072f, 0.056f, lower);
+                }
+                float k = MathF.Abs(c) + 0.9f * MathF.Abs(sn), cx = foot.X + 0.01f * c, y = foot.Y;
+                var hb2 = Br(Hoof);
+                g.FillPolygon(hb2, [P(cx - 0.040f * k, y + 0.032f), P(cx + 0.050f * k, y + 0.028f), P(cx + 0.058f * k, y - 0.022f), P(cx - 0.040f * k, y - 0.022f)]);
+            }));
+        }
+
+        // ---------------------------------------------------------------- the neck, the mane and the head
+        {
+            float na = NeckAngle(f), ha = HeadAxis(f), nlen = NeckLen(f, kind);
+            PointF rootB = warp.Q(NeckX, NeckY);
+            float w0 = bull ? 0.46f : calf ? 0.32f : 0.38f, w1 = bull ? 0.31f : calf ? 0.22f : 0.27f;
+            float zb0 = bull ? 0.19f : calf ? 0.13f : 0.16f;
+            const int N = 6;
+            var nc = new PointF[N + 1];
+            var yw = new float[N + 1];
+            nc[0] = P(rootB.X * c, rootB.Y);
+            yw[0] = phi;
+            for (int i = 1; i <= N; i++)
+            {
+                float tm = (i - 0.5f) / N, ym = phi + (psi - phi) * Smooth(tm);
+                yw[i] = phi + (psi - phi) * Smooth(i / (float)N);
+                nc[i] = P(nc[i - 1].X + nlen / N * MathF.Sin(na) * MathF.Cos(ym), nc[i - 1].Y + nlen / N * MathF.Cos(na));
+            }
+            var rNeck = new PointF[N + 1][]; var rMane = new PointF[N + 1][];
+            float nx = MathF.Cos(na), ny = -MathF.Sin(na);
+            for (int i = 0; i <= N; i++)
+            {
+                float t = i / (float)N, ww = w0 + (w1 - w0) * t, zb = zb0 * (1f - 0.28f * t), cy = MathF.Cos(yw[i]), sy = MathF.Sin(yw[i]);
+                rNeck[i] = Ring(nc[i].X, nc[i].Y, nx * cy * ww / 2, ny * ww / 2, -s * zb * sy, 0);
+                float hm = (0.13f * (1 - t) + 0.06f) * (bull ? 1.2f : 1f);
+                rMane[i] = Ring(nc[i].X + nx * cy * 0.36f * ww, nc[i].Y + ny * 0.36f * ww - 0.045f, 0, hm, -s * zb * 0.85f * sy, 0);
+            }
+            PointF top = nc[N];
+            float hmx = 0.10f * MathF.Sin(ha), hmy = 0.10f * MathF.Cos(ha);
+            (float X, float Y, float D) HP(float u, float v, float z)
+            {
+                float lx = hmx + u * MathF.Sin(ha) - v * MathF.Cos(ha), ly = hmy + u * MathF.Cos(ha) + v * MathF.Sin(ha);
+                return (top.X + lx * cp - s * z * sp, top.Y + ly, s * lx * sp + z * cp);
+            }
+            PointF[] HRing(float u, float v, float z, float au, float av, float bz)
+            {
+                const int m = 12;
+                var r = new PointF[m];
+                for (int i = 0; i < m; i++) { float t = i * MathF.Tau / m, cs = MathF.Cos(t), sg = MathF.Sin(t); var q = HP(u + cs * au, v + cs * av, z + sg * bz); r[i] = new PointF(q.X, q.Y); }
+                return r;
+            }
+            float ml = MuzzleLen(kind);
+            float sk = calf ? 0.20f : 0.17f, sh = calf ? 0.135f : 0.115f, sz = calf ? 0.075f : 0.095f;
+            var hd = new List<(float D, Action Paint)>();
+
+            // the skull
+            {
+                const int m = 7;
+                var rs = new PointF[m][];
+                for (int i = 0; i < m; i++) { float u = -sk + 2 * sk * i / (m - 1), r = MathF.Sqrt(MathF.Max(0.02f, 1 - (u / sk) * (u / sk))); rs[i] = HRing(u, 0, 0, 0, sh * r, sz * r); }
+                hd.Add((0f, () => { for (int i = 0; i < m - 1; i++) Hull(g, coat, rs[i], rs[i + 1]); }));
+            }
+            // the muzzle: broad, squared off at the nose, with the pale band and the dark nose pad
+            {
+                (float u, float top, float bot, float bz)[] ms = [(0f, 0.085f, -0.10f, 0.075f), (ml * 0.55f, 0.072f, -0.088f, 0.072f), (ml, 0.058f, -0.062f, 0.062f), (ml + 0.022f, 0.035f, -0.038f, 0.05f), (ml + 0.035f, 0.010f, -0.012f, 0.02f)];
+                var rm = new PointF[ms.Length][];
+                for (int i = 0; i < ms.Length; i++) rm[i] = HRing(ms[i].u, (ms[i].top + ms[i].bot) / 2, 0, 0, (ms[i].top - ms[i].bot) / 2, ms[i].bz);
+                (float u, float vc, float av, float bz)[] bs = [(ml - 0.09f, -0.015f, 0.055f, 0.067f), (ml - 0.045f, -0.011f, 0.054f, 0.068f), (ml, -0.0075f, 0.0525f, 0.066f)];
+                var rb = new PointF[bs.Length][];
+                for (int i = 0; i < bs.Length; i++) rb[i] = HRing(bs[i].u, bs[i].vc, 0, 0, bs[i].av, bs[i].bz);
+                (float u, float av, float bz)[] ns = [(ml - 0.03f, 0.030f, 0.040f), (ml + 0.01f, 0.0375f, 0.050f), (ml + 0.05f, 0.020f, 0.030f)];
+                var rn = new PointF[ns.Length][];
+                for (int i = 0; i < ns.Length; i++) rn[i] = HRing(ns[i].u, -0.0075f, 0, 0, ns[i].av, ns[i].bz);
+                Color band = Mix(coat, Color.FromArgb(190, 172, 156), 0.80f);
+                hd.Add((HP(ml * 0.5f, 0, 0).D, () =>
+                {
+                    for (int i = 0; i < ms.Length - 1; i++) Hull(g, coat, rm[i], rm[i + 1]);
+                    for (int i = 0; i < bs.Length - 1; i++) Hull(g, band, rb[i], rb[i + 1]);
+                    for (int i = 0; i < ns.Length - 1; i++) Hull(g, Nose, rn[i], rn[i + 1]);
+                }));
+            }
+            // the eyes: on the forward sides of the skull, drawn only where that side faces us
+            hd.Add((9f, () =>
+            {
+                for (int sd = -1; sd <= 1; sd += 2)
+                {
+                    float nlx = 0.5f * MathF.Sin(ha) - 0.3f * MathF.Cos(ha), zn = s * nlx * sp + sd * 0.85f * cp;
+                    if (zn < -0.25f) continue;
+                    var e = HP(0.075f, 0.05f, sd * 0.075f);
+                    float r = MathF.Max(0.029f, 1.5f * pw), wf = 0.4f + 0.6f * Math.Clamp((zn + 0.25f) / 1.0f, 0f, 1f);
+                    using var eb = new SolidBrush(Nose);
+                    g.FillEllipse(eb, e.X - r * wf, e.Y - r, 2 * r * wf, 2 * r);
+                    using var gl = new SolidBrush(Color.White);
+                    float gr = MathF.Max(0.009f, 0.65f * pw);
+                    g.FillEllipse(gl, e.X + r * wf * 0.15f, e.Y + r * 0.35f, 2 * gr, 2 * gr);
+                }
+            }));
+            // the ears: a round leaf each, the near one pink inside
+            float earAng = (f < 0.18f ? 95f : 118f) * MathF.PI / 180f;
+            for (int sd = -1; sd <= 1; sd += 2)
+            {
+                float ang = earAng + (sd < 0 ? 28f * MathF.PI / 180f : 0f), el = 0.15f;
+                float bu = -0.095f, bv = 0.08f, bzz = sd * 0.075f;
+                float tu = bu + el * MathF.Cos(ang), tv = bv + el * MathF.Sin(ang), tz = sd * (0.075f + 0.09f);
+                var re = new PointF[3][]; var ri = new PointF[3][];
+                for (int i = 0; i < 3; i++)
+                {
+                    float t = i / 2f, u = bu + (tu - bu) * t, v = bv + (tv - bv) * t, z = bzz + (tz - bzz) * t, rad = 0.040f * (1f - 0.55f * t * t);
+                    re[i] = HRing(u, v, z, 0, rad, rad * 0.85f);
+                    ri[i] = HRing(u, v, z + sd * 0.012f, 0, rad * 0.55f, rad * 0.5f);
+                }
+                Color ec = sd < 0 ? EarOut : coat, ic = sd < 0 ? Color.FromArgb(150, 110, 100) : EarIn;
+                float zn = sd * cp, vis = s * sp;
+                bool inner = zn > 0.15f || vis > 0.35f;
+                hd.Add((HP((bu + tu) / 2, (bv + tv) / 2, (bzz + tz) / 2).D, () =>
+                {
+                    Hull(g, ec, re[0], re[1]); Hull(g, ec, re[1], re[2]);
+                    if (inner) { Hull(g, ic, ri[0], ri[1]); Hull(g, ic, ri[1], ri[2]); }
+                }));
+            }
+            // the antlers
+            if (!calf)
+            {
+                bool away = s * sp < -0.4f;
+                for (int sd = -1; sd <= 1; sd += 2)
+                {
+                    int sdd = sd;
+                    float sc = bull ? 1.0f : 0.58f, asz = sdd < 0 ? sc * 0.90f : sc;
+                    PointF at = sdd < 0 ? P(-0.14f, 0.11f) : P(-0.02f, 0.09f);
+                    Color col = sdd < 0 ? AntlerFar : Antler;
+                    hd.Add((away ? 5f : -5f + sdd * 0.01f, () => PaintAntler3(g, HP, asz, col, at, bull, pw, sdd)));
+                }
+            }
+            hd.Sort((p, q) => p.D.CompareTo(q.D));
+
+            bool maneBehind = s * sp < -0.35f;
+            items.Add(((s > 0 || phiDeg < 40f) ? 1000f : -1000f, () =>
+            {
+                if (maneBehind) for (int i = 0; i < N; i++) Hull(g, Mane, rMane[i], rMane[i + 1]);
+                for (int i = 0; i < N; i++) Hull(g, coat, rNeck[i], rNeck[i + 1]);
+                if (!maneBehind) for (int i = 0; i < N; i++) Hull(g, Mane, rMane[i], rMane[i + 1]);
+                foreach (var it in hd) it.Paint();
+            }));
+        }
+
+        items.Sort((p, q) => p.D.CompareTo(q.D));
+        foreach (var it in items) it.Paint();
+    }
+
+    /// <summary>One antler in 3D: PaintAntler's curves, each point given a sideways place (the beam climbs up AND out, the brow tine stays near the middle of the face).</summary>
+    private static void PaintAntler3(Graphics g, Func<float, float, float, (float X, float Y, float D)> hp, float s, Color c, PointF at, bool bull, float pw, int zs)
+    {
+        float wBeam = MathF.Max(bull ? 0.050f : 0.034f, 2.3f * pw);
+        using var penB = new Pen(c, wBeam) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        using var penT = new Pen(c, MathF.Max(wBeam * 0.72f, 1.8f * pw)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        using var penTip = new Pen(c, MathF.Max(wBeam * 0.5f, 1.5f * pw)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        // sideways place from the height above the root: out and up to 0.6 of a head-length, then curving back in
+        float Zup(float y) { float yy = MathF.Max(0f, y * s); return zs * (0.06f + 0.60f * MathF.Min(yy, 0.6f) - 0.30f * MathF.Max(0f, yy - 0.6f)); }
+        PointF Pt(float x, float y, bool mid)
+        {
+            var q = hp(at.X + x * s, at.Y + y * s, mid ? zs * 0.05f : Zup(y));
+            return new PointF(q.X, q.Y);
+        }
+        PointF[] Cv(bool mid, params float[] v)
+        {
+            var r = new PointF[v.Length / 2];
+            for (int i = 0; i < r.Length; i++) r[i] = Pt(v[2 * i], v[2 * i + 1], mid);
+            return r;
+        }
+        g.DrawCurve(penB, Cv(false, 0, 0, -0.10f, 0.20f, -0.20f, 0.42f, -0.19f, 0.62f), 0.5f);
+        g.DrawCurve(penT, Cv(false, -0.19f, 0.62f, -0.06f, 0.80f, 0.14f, 0.90f), 0.5f);
+        g.DrawCurve(penT, Cv(true, 0.02f, 0.07f, 0.13f, 0.15f, 0.24f, 0.14f), 0.5f);                // brow tine over the face
+        using (var shovel = new SolidBrush(c))
+        using (var sp = new GraphicsPath())
+        {
+            sp.AddClosedCurve(Cv(true, 0.18f, 0.17f, 0.27f, 0.20f, 0.33f, 0.13f, 0.26f, 0.08f), 0.4f);
+            g.FillPath(shovel, sp);
+        }
+        g.DrawCurve(penT, Cv(false, -0.17f, 0.36f, -0.04f, 0.47f, 0.09f, 0.49f), 0.5f);
+        if (bull)
+        {
+            g.DrawCurve(penT, Cv(false, -0.20f, 0.52f, -0.33f, 0.65f, -0.36f, 0.78f), 0.5f);
+            g.DrawCurve(penTip, Cv(false, -0.10f, 0.76f, -0.13f, 0.92f, -0.09f, 1.04f), 0.5f);
+            g.DrawCurve(penTip, Cv(false, -0.24f, 0.30f, -0.36f, 0.40f, -0.40f, 0.52f), 0.5f);
+            using var palm = new SolidBrush(c);
+            using var pp = new GraphicsPath();
+            pp.AddClosedCurve(Cv(false, 0.08f, 0.84f, 0.20f, 0.97f, 0.32f, 0.92f, 0.28f, 0.80f, 0.16f, 0.78f), 0.4f);
+            g.FillPath(palm, pp);
+        }
+    }
+
     // ================================================================ the pose sheet (PECKWORKS_SHEET=reindeer;file.png)
 
     /// <summary>
@@ -730,7 +1233,7 @@ internal static class ReindeerArt
         foreach (ReindeerSet s in sets)
         {
             string nm = s.Kind.ToString();
-            int hp25 = (int)MathF.Round(0.25f * (HeadPages - 1)), hp60 = (int)MathF.Round(0.6f * (HeadPages - 1)), hp100 = HeadPages - 1, hp40 = (int)MathF.Round(0.4f * (HeadPages - 1));
+            int hp25 = (int)MathF.Round(0.25f * (HeadPages - 1)), hp60 = (int)MathF.Round(0.6f * (HeadPages - 1)), hp40 = (int)MathF.Round(0.4f * (HeadPages - 1));
             void Row(string label, RPage[] pages, int hp, int bg = Snow, int from = 0, int count = -1)
             {
                 var cells = new List<(ReindeerSet, RPage, RPage?, int)>();
@@ -748,9 +1251,6 @@ internal static class ReindeerArt
             Row("up", s.Up, hp25);
             Row("shake", s.Shake, hp40);
             Row("play (calf)", s.Gam, hp25);
-            var turn = new List<(ReindeerSet, RPage, RPage?, int)>();
-            for (int t = 0; t < TurnPages; t++) turn.Add((s, s.Turn[t], s.TurnHead[1, t], hp25));
-            rows.Add(($"{nm} turn", turn, Snow));
             var heads = new List<(ReindeerSet, RPage, RPage?, int)>();
             var blank = new RPage { S = Sprite.FromPixels(1, 1, [0u]), NX = 0, NY = 0 };
             for (int j = 0; j < HeadPages; j += 1) heads.Add((s, blank, s.Head[j, 0], j));
@@ -781,6 +1281,93 @@ internal static class ReindeerArt
                 {
                     int nxp = bx + s.BodyOx + (int)MathF.Round(b.NX * s.H), nyp = by + s.BodyOy - (int)MathF.Round(b.NY * s.H);
                     if (blankBody) { nxp = bx + s.BodyOx; nyp = by + s.BodyOy - (int)(0.6f * s.H); }
+                    Blit(pix, width, height, hd.S, nxp - hd.OX, nyp - hd.OY);
+                }
+            }
+            y0 += ch;
+        }
+        var data = bmp.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        var raw = new int[pix.Length];
+        Buffer.BlockCopy(pix, 0, raw, 0, pix.Length * 4);
+        System.Runtime.InteropServices.Marshal.Copy(raw, 0, data.Scan0, raw.Length);
+        bmp.UnlockBits(data);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            using var f = new Font("Segoe UI", 8f);
+            y0 = 4;
+            foreach (var row in rows)
+            {
+                using var br = new SolidBrush(row.Bg == Night ? Color.White : Color.FromArgb(40, 40, 60));
+                g.DrawString(row.Label, f, br, new RectangleF(2, y0 + 2, labelW - 4, 60));
+                y0 += ch;
+            }
+        }
+        bmp.Save(path, ImageFormat.Png);
+    }
+
+    private static RPage FlipPage(RPage p)
+    {
+        Sprite sp = p.S; int w = sp.Width, hh = sp.Height; ReadOnlySpan<uint> src = sp.Argb;
+        var px = new uint[w * hh];
+        for (int y = 0; y < hh; y++) for (int x = 0; x < w; x++) px[y * w + (w - 1 - x)] = src[y * w + x];
+        return new RPage { S = Sprite.FromPixels(w, hh, px), NX = -p.NX, NY = p.NY, OX = w - 1 - p.OX, OY = p.OY };
+    }
+
+    /// <summary>
+    /// The turn's pose sheet: for each animal, the half turn toward us (pages 0 to TurnSteps in two rows, the ends being the ordinary
+    /// standing pages, the last one mirrored), the half turn away from us, the head levels at the head-on page, and a night row.
+    /// </summary>
+    public static void WriteTurnSheet(string path, ReindeerSet[] sets)
+    {
+        const int Snow = unchecked((int)0xFFDEE9FC), Night = unchecked((int)0xFF14245C);
+        const int Cols = 11;
+        var rows = new List<(string Label, List<(ReindeerSet S, RPage B, RPage? Hd)> Cells, int Bg)>();
+        foreach (ReindeerSet s in sets)
+        {
+            string nm = s.Kind.ToString();
+            RPage Body(int side, int lv, int k)
+            {
+                if (k == 0) return s.Stand;
+                if (k == TurnSteps) return FlipPage(s.Stand);
+                return s.Fig[side, lv, k]!;
+            }
+            RPage? Head(int lv, int k) => k == 0 ? s.Head[TurnHp[lv], 0] : k == TurnSteps ? FlipPage(s.Head[TurnHp[lv], 0]) : null;
+            void Half(string label, int side, int lv, int bg)
+            {
+                for (int part = 0; part < 2; part++)
+                {
+                    var cells = new List<(ReindeerSet, RPage, RPage?)>();
+                    for (int k = part * 11; k < Math.Min(TurnSteps + 1, part * 11 + 11); k++) cells.Add((s, Body(side, lv, k), Head(lv, k)));
+                    rows.Add(($"{nm} {label} {(part == 0 ? "0-10" : "11-20")} (head level {lv})", cells, bg));
+                }
+            }
+            Half("turn toward us", 0, 2, Snow);
+            Half("turn away from us", 1, 2, Snow);
+            var lvls = new List<(ReindeerSet, RPage, RPage?)>();
+            for (int lv = 0; lv < TurnLevels; lv++) lvls.Add((s, s.Fig[0, lv, TurnSteps / 2]!, null));
+            for (int lv = 0; lv < TurnLevels; lv++) lvls.Add((s, s.Fig[1, lv, TurnSteps / 2]!, null));
+            rows.Add(($"{nm} head-on (toward us), then tail-on, head levels 0 to 6", lvls, Snow));
+            Half("turn toward us, night", 0, 1, Night);
+        }
+        int cw = 0, ch = 0, labelW = 150;
+        foreach (var s in sets) { cw = Math.Max(cw, s.FigW); ch = Math.Max(ch, s.FigH); }
+        int width = labelW + Cols * cw + 8, height = rows.Count * ch + 8;
+        var pix = new uint[width * height];
+        using var bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+        int y0 = 4;
+        foreach (var row in rows)
+        {
+            for (int y = y0; y < y0 + ch && y < height; y++) Array.Fill(pix, (uint)row.Bg, y * width, width);
+            for (int i = 0; i < row.Cells.Count; i++)
+            {
+                var (s, b, hd) = row.Cells[i];
+                int cx = labelW + (i % Cols) * cw + cw / 2, gy = y0 + ch - (s.FigH - s.FigOy) + 0;
+                Blit(pix, width, height, s.Shadow, cx - s.Shadow.Width / 2, gy - s.Shadow.Height / 2);
+                Blit(pix, width, height, b.S, cx - b.OX, gy - b.OY);
+                if (hd != null)
+                {
+                    RPage bodyRef = b;
+                    int nxp = cx + (int)MathF.Round(bodyRef.NX * s.H), nyp = gy - (int)MathF.Round(bodyRef.NY * s.H);
                     Blit(pix, width, height, hd.S, nxp - hd.OX, nyp - hd.OY);
                 }
             }
