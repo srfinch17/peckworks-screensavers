@@ -58,6 +58,7 @@ internal sealed class Raccoon : Happening
     private static readonly Color PawFar = Color.FromArgb(40, 34, 36);
     private static readonly Color Ink = Color.FromArgb(60, 50, 50);
     private static readonly Color AppleRed = Color.FromArgb(206, 42, 38);
+    private static readonly int[] LookSeq = [0, 0, 1, 2, 3, 4, 4, 3, 2, 1, 0, 2];   // the guilty glance's page order (a static: an array made in Draw was a per-frame allocation)
 
     private readonly ThanksgivingScenery _s;
     private readonly float _k;
@@ -212,8 +213,7 @@ internal sealed class Raccoon : Happening
         else if (t < tHop)
         {
             // The guilty glance: the head swings round to look back over the shoulder, then at us, then forward again (with the nut held to its chest, if it has one).
-            int[] seq = [0, 0, 1, 2, 3, 4, 4, 3, 2, 1, 0, 2];
-            page = (_nut != null ? _yawNut : _yaw)[seq[Math.Min(seq.Length - 1, (int)((t - tLook) / LookFor * seq.Length))]];
+            page = (_nut != null ? _yawNut : _yaw)[LookSeq[Math.Min(LookSeq.Length - 1, (int)((t - tLook) / LookFor * LookSeq.Length))]];
         }
         else if (t < tDrop)
         {

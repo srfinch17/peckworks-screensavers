@@ -57,6 +57,7 @@ namespace Thanksgiving;
 /// </summary>
 internal sealed class Possum
 {
+    private static readonly int[] SniffSeq = [0, 1, 2, 3, 2, 3, 2, 1];   // the sniff pages' order (a static: an array made in Draw was a per-frame allocation)
     private enum Doing { Hidden, Drop, Hang, PullUp, Descend, Dismount, Still, Walk, Turn, Take, Eat, Faint, Dead, Rise, Shake, Mount, Climb }
 
     private struct Sheet { public Sprite[] Pg; public int W, H; public float Cx, Cy; }
@@ -753,8 +754,7 @@ internal sealed class Possum
                 if (_idleKind < 1f) Ground1(fb, _walk, 0);
                 else if (_idleKind < 2f)
                 {
-                    int[] seq = [0, 1, 2, 3, 2, 3, 2, 1];
-                    Ground1(fb, _sniff, seq[(int)(_clock * 3.2f) % seq.Length]);
+                    Ground1(fb, _sniff, SniffSeq[(int)(_clock * 3.2f) % SniffSeq.Length]);
                 }
                 else Ground1(fb, _look, 0);
                 break;

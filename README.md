@@ -727,11 +727,13 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   away from the sun, and the roots run out from a rounded buttress. The squirrel runs to the foot, pitches up onto the bark (the clinging body swung up about its hind feet over half a second), climbs head-up over the hole and
   goes in head first (the same climb carried on up into the trunk, the hole's rim hiding it as it passes, tail last), stays a while out of sight,
   then its face comes up in the opening for a look, it comes head-first down the trunk and drops off onto the
-  ground. On the move it never flips:
-  a step into a pumpkin's foot goes round it on the open side, and a change of direction is a curl (the front
-  end plants, the back end comes round it with the tail whipped over, through the front view and off the other
-  way, momentum kept); from a standstill it rises, turns through a front view that is the same picture both
-  ways round, and sinks into its run.
+  ground. On the move it never flips and never slides:
+  a step into a pumpkin's foot goes round it on the open side; it never runs steeper than about 35 degrees on
+  the screen (a side-view body going straight up or down the screen slides), so a goal far up or down the patch
+  is reached by a diagonal to that row and a run along it; its heading bends rather than corners; and a change
+  of direction is a curl at once (the front end plants, the back end comes round it with the tail whipped over,
+  through the front view and off the other way, momentum kept, over half a second); from a standstill it rises,
+  turns through a front view that is the same picture both ways round, and sinks into its run.
 - **The nuts stay on the ground.** Every acorn that falls from the oak branches lies where it landed
   until a squirrel comes for it; the squirrel sits up and eats it, or carries it off a little way, digs
   it in and pats the mound flat, and that stash is its own. A squirrel that finds another's stash may dig
