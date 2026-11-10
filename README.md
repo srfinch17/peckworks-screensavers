@@ -697,7 +697,10 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   trunk and waddles about the patch, and if an acorn lies loose it walks over, takes it, sits up and eats it and
   wipes its face; then back to the foot and up. A threat on the ground (the raccoon, the coyotes' alarm) makes it
   do the famous thing: it keels over on its side with its legs stiff, mouth open, tongue out, lies there a while,
-  peeks with one eye, gets up and shakes. It never shares the trunk with a squirrel going to or from its hole.
+  peeks with one eye, gets up and shakes. It never shares the trunk with a squirrel going to or from its hole. It
+  bends in the middle to climb (the front half rears up the bark with its hands reaching, then the hind end follows)
+  and comes down the same way in reverse, and its tail is its own: a live chain of a dozen points that trails and
+  swings behind it on the ground, hangs when it climbs, and drapes from the branch when it hangs by it.
 - **The birds use the branches.** A junco or sparrow in the patch sometimes flies up to one of the oak
   branches in the top corners, flaring onto the wood with its feet forward, and sits there six to
   twenty-five seconds looking about, preening, pecking at the bark and hopping along the branch, then

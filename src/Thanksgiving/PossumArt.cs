@@ -63,6 +63,9 @@ internal static class PossumArt
         public float Wipe;                  // 0 none, 0..1 one paw sweeping over the face
         public float TailBase, TailCurl, TailS, TailWave, TailPhase;   // degrees along the tail, 180 straight back
         public PointF[]? Feet;              // four foot spots (far fore, far hind, near fore, near hind) when not Gait
+        public float Pitch;                 // degrees the FRONT half (chest, shoulders, head, forelegs) turns about the hip, - is nose up; the hind half stays (the mount and dismount)
+        public bool NoTail;                 // the tail is not painted into the page: the scene draws it live, as a chain (Possum.cs)
+        public bool FlatFeet;               // paint the pads flat as on a gait page even though Feet places them (the mount's pages)
         public bool Dead;                   // lying on its side, stiff
         public float Quiver;                // 0..1: the shake (the whole figure's lean, painted as a sideways lean)
     }
@@ -205,6 +208,158 @@ internal static class PossumArt
     {
         float r = deg * MathF.PI / 180f, c = MathF.Cos(r), s = MathF.Sin(r);
         return P(v.X * c - v.Y * s, v.X * s + v.Y * c);
+    }
+
+    private static float Sm(float t) { t = Math.Clamp(t, 0f, 1f); return t * t * (3f - 2f * t); }
+
+    private static PointF Lerp(PointF a, PointF b, float t) => P(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t);
+
+    /// <summary>
+    /// Where a point of the FRONT part of the body goes when the animal sits up, curls or PITCHES. A pitch is not a hinge: the
+    /// turn about the hip grows smoothly from nothing at the rump to all of it at the chest (so the spine is one curve through the
+    /// hip), and the back swells a little over the bend (a hump that grows with the pitch) the way a real back rounds when the
+    /// front end goes up. Sitting and curling turn everything by the same angle, as they always did.
+    /// </summary>
+    private static PointF Upper(in Pose q, float x, float y)
+    {
+        PointF hip = P(-0.58f, -0.44f);
+        float a = q.Bend - q.SitAng, hump = 0f;
+        if (q.Pitch != 0f)
+        {
+            float w = Sm((x + 0.75f) / 0.85f);                                   // 0 at the rump, 1 from the chest forward
+            a += q.Pitch * w;
+            hump = -0.16f * MathF.Abs(q.Pitch) / 90f * MathF.Sin(MathF.PI * w) * Math.Clamp((hip.Y - y) / 0.4f, 0f, 1f);
+        }
+        var v = Rot(P(x - hip.X, y - hip.Y), a);
+        return P(hip.X + v.X, hip.Y + v.Y + hump);
+    }
+
+    // ---- the live tail: where its root is, and the shape it would rest in ----
+
+    /// <summary>The number of points in the live tail's chain (so 11 pieces). Possum.cs steps the chain; this is its rest shape.</summary>
+    public const int TailPoints = 12;
+
+    /// <summary>Where the tail grows out of the body, in the body frame, for this pose (turned with the haunches, foreshortened with the body's yaw).</summary>
+    public static PointF TailRoot(in Pose q)
+    {
+        PointF r = P(-1.0f, -0.74f + q.Bob);
+        if (q.SitAng > 0f || q.Bend != 0f || q.Pitch != 0f) r = Upper(q, r.X, r.Y);
+        if (q.Yaw > 0.01f) r = P(r.X * (1f - 0.58f * q.Yaw), r.Y);
+        return r;
+    }
+
+    /// <summary>The painted tail's own curve (the pose's TailBase, TailCurl, TailS and TailWave) as "TailPoints" points from the root: the shape the live chain is gently pulled back toward, so it keeps the lazy curve and the wag but lags, swings and droops on its own.</summary>
+    public static PointF[] TailRest(in Pose q, float length = 2.0f)
+    {
+        int n = TailPoints - 1;
+        var s = new PointF[TailPoints];
+        s[0] = TailRoot(q);
+        float seg = length / n, xs = q.Yaw > 0.01f ? 1f - 0.58f * q.Yaw : 1f;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (i + 0.5f) / n;
+            float ang = q.TailBase + q.TailCurl * t + q.TailS * MathF.Sin(MathF.PI * t) + q.TailWave * MathF.Sin(q.TailPhase - i * 0.5f * 16f / n);
+            float r = ang * MathF.PI / 180f;
+            s[i + 1] = P(s[i].X + seg * MathF.Cos(r) * xs, s[i].Y + seg * MathF.Sin(r));
+        }
+        return s;
+    }
+
+    /// <summary>A body-frame point as pixels from the sheet's pivot, for a page painted by Page() with the frame turned "rot" (not mirrored).</summary>
+    public static PointF PageOffset(PointF b, float p, float rot) { var v = Rot(P(b.X, b.Y - PivotY), rot); return P(v.X * p, v.Y * p); }
+
+    /// <summary>The same for a hanging page painted by HangPage() (the wrap point is the pivot; swung "sway" degrees).</summary>
+    public static PointF HangOffset(PointF b, float p, float sway)
+    {
+        var v = Rot(P(b.X, b.Y - PivotY), 90f);
+        return Rot(P(v.X * p, v.Y * p + 2.3f * p), sway);
+    }
+
+    // ---- the mount and the dismount: a bend, not a rotation ----
+
+    private static PointF ToWorld(PointF b, PointF mid, float rot) { var v = Rot(P(b.X, b.Y - PivotY), rot); return P(mid.X + v.X, mid.Y + v.Y); }
+    private static PointF ToBody(PointF w, PointF mid, float rot) { var v = Rot(P(w.X - mid.X, w.Y - mid.Y), -rot); return P(v.X, v.Y + PivotY); }
+    private static PointF Reach(PointF joint, PointF foot, float r = 0.66f)
+    {
+        float dx = foot.X - joint.X, dy = foot.Y - joint.Y, l = MathF.Sqrt(dx * dx + dy * dy);
+        return l <= r ? foot : P(joint.X + dx * r / l, joint.Y + dy * r / l);          // a leg cannot stretch: the foot drags behind instead
+    }
+
+    /// <summary>The four gait feet of the rest page (far fore, far hind, near fore, near hind), body frame: the page every walk starts and ends on.</summary>
+    private static PointF[] RestFeet() => [Foot(0.26f, 0.5f), Foot(-0.64f, 0f), Foot(0.34f, 0f), Foot(-0.56f, 0.5f)];
+
+    /// <summary>
+    /// THE MOUNT (a possum going up a trunk, looked up first): it does NOT turn like a plank. It stands facing the bark, REARS (the
+    /// front half pitches up about the hip, the hands reaching up the bark, the hind feet still planted on the ground), then the hind
+    /// end FOLLOWS: the whole body rotates up while the pitch comes back to nothing as the body straightens along the bark, the hind
+    /// feet walking up after the front. "k" 0..1; 0 is the rest page and 1 is exactly the climb's first page (Walk(0) turned a
+    /// quarter). The body's middle travels from its start to the climb's by the fractions fx, fy; "dx" is that sideways distance in
+    /// units (the feet are worked out against it) and "rot" the whole body's turn.
+    /// </summary>
+    public static Pose Mount(float k, float dx, out float rot, out float fx, out float fy)
+    {
+        fx = Sm(k / 0.9f); fy = Sm((k - 0.3f) / 0.7f);
+        rot = -90f * Sm((k - 0.35f) / 0.65f);
+        float front = -90f * Sm(k / 0.4f);                                       // the front half's own angle: up the bark early, and it stays there
+        var q = Stand();
+        q.Gait = false; q.FlatFeet = true; q.NoTail = true;
+        q.Pitch = front - rot;
+        q.HeadAng = 9f - 18f * MathF.Sin(MathF.PI * k);                          // looks up the trunk as it goes
+        PointF mid = P(dx * fx, PivotY - 0.94f * fy), mid0 = P(0f, PivotY), mid1 = P(dx, PivotY - 0.94f);
+        var rest = RestFeet();
+        var feet = new PointF[4];
+        // the front legs: from the planted rest feet, reaching up along the front half (forward and a little to the belly side of the shoulder) and back to the rest feet
+        float a = Sm(k / 0.4f) * (1f - Sm((k - 0.6f) / 0.4f));
+        for (int i = 0; i < 4; i += 2)
+        {
+            PointF j = Upper(q, i == 0 ? 0.26f : 0.34f, -0.46f);
+            PointF up = Rot(P(0.42f, 0.22f), q.Pitch);
+            feet[i] = Reach(j, Lerp(rest[i], P(j.X + up.X, j.Y + up.Y), a));
+        }
+        // the hind legs: planted on the ground where they were, then walking up the bark after the body, never below the ground
+        float s = Sm((k - 0.3f) / 0.65f);
+        for (int i = 1; i < 4; i += 2)
+        {
+            PointF w0 = ToWorld(rest[i], mid0, 0f), w1 = ToWorld(rest[i], mid1, -90f), w = Lerp(w0, w1, s);
+            w.Y = MathF.Min(w.Y, 0f);
+            PointF j = Upper(q, i == 1 ? -0.64f : -0.56f, -0.46f);
+            feet[i] = Reach(j, ToBody(w, mid, rot));
+        }
+        q.Feet = feet;
+        q.Hands = a > 0.5f ? 1f : 0f;
+        return q;
+    }
+
+    /// <summary>
+    /// THE DISMOUNT: head first down the bark, then the front end reaches for the ground (the front half pitches out and down while the
+    /// hind end is still on the trunk), the hands land, and the hind end comes down after, until it stands on the rest page. The page is
+    /// painted unmirrored, facing right, the trunk to its left; "dx" is the trunk's distance to the left of the landing, "h" the
+    /// middle's height above the ground at the start, in units. "k" 0 is the descent's rest page (Walk(0) turned the other quarter).
+    /// </summary>
+    public static Pose Dismount(float k, float dx, float h, out float rot, out float fx, out float fy)
+    {
+        fx = Sm(k / 0.85f); fy = Sm((k - 0.2f) / 0.8f);
+        rot = 90f * (1f - Sm((k - 0.25f) / 0.75f));
+        float front = 90f * (1f - Sm(k / 0.55f));
+        var q = Stand();
+        q.Gait = false; q.FlatFeet = true; q.NoTail = true;
+        q.Pitch = front - rot;
+        PointF mid0 = P(-dx, -h), mid1 = P(0f, PivotY);
+        PointF mid = P(mid0.X + (mid1.X - mid0.X) * fx, mid0.Y + (mid1.Y - mid0.Y) * fy);
+        var rest = RestFeet();
+        var feet = new PointF[4];
+        float sf = Sm(k / 0.6f), sh = Sm((k - 0.55f) / 0.45f);
+        for (int i = 0; i < 4; i++)
+        {
+            bool fore = i is 0 or 2;
+            float s = fore ? sf : sh;
+            PointF w = Lerp(ToWorld(rest[i], mid0, 90f), ToWorld(rest[i], mid1, 0f), s);
+            w.Y = MathF.Min(w.Y, 0f);
+            PointF j = Upper(q, fore ? (i == 0 ? 0.26f : 0.34f) : (i == 1 ? -0.64f : -0.56f), -0.46f);
+            feet[i] = Reach(j, ToBody(w, mid, rot));
+        }
+        q.Feet = feet;
+        return q;
     }
 
     /// <summary>The tail: a chain of short pieces from "root", pink, thin, tapering a little, with a darker edge along its underside.</summary>
@@ -373,9 +528,8 @@ internal static class PossumArt
         if (q.Quiver != 0f) { g.TranslateTransform(0f, -PivotY); g.RotateTransform(7f * q.Quiver); g.TranslateTransform(0f, PivotY); }   // the shake: a lean about the feet
 
         // Where the upper body goes when it sits up or curls: turned about the hips.
-        PointF hip = P(-0.58f, -0.44f);
         float th = (q.Bend - q.SitAng);
-        PointF U(float x, float y) { var v = Rot(P(x - hip.X, y - hip.Y), th); return P(hip.X + v.X, hip.Y + v.Y); }
+        PointF U(float x, float y) => Upper(q, x, y);
         float b = q.Bob;
 
         // ---- the legs' spots ----
@@ -398,12 +552,12 @@ internal static class PossumArt
         }
         PointF shoulder0 = U(jt[0].X, jt[0].Y), shoulder1 = U(jt[2].X, jt[2].Y);
         PointF neck = U(0.02f, -0.80f + b);
-        float headAng = q.HeadAng + th;
+        float headAng = q.HeadAng + th + q.Pitch;
         // sitting up with a nut (or wiping): the hands go to the face, worked out from where the head ended up
         PointF M(float u, float v) { var r = Rot(P(u, v), headAng); return P(neck.X + r.X, neck.Y + r.Y); }
         bool toFace = q.Nut == 1 || q.Wipe > 0f;
         // A foot is a flat pink pad while it walks or sits (the hind ones always); a hand is round, fanned when open.
-        bool Flat(int i) => q.Gait && (i is 1 or 3 || q.SitAng <= 0f) && !(toFace && i is 0 or 2);
+        bool Flat(int i) => (q.Gait || q.FlatFeet) && (i is 1 or 3 || q.SitAng <= 0f && q.Hands < 0.5f) && !(toFace && i is 0 or 2);
         if (toFace)
         {
             ft[0] = M(0.86f, 0.30f); ft[2] = M(0.96f, 0.44f);
@@ -412,9 +566,8 @@ internal static class PossumArt
 
         // ---- the tail first, behind everything ----
         PointF tailRoot = P(-1.0f, -0.74f + b);
-        PointF[] spine;
         if (q.SitAng > 0f || q.Bend != 0f) tailRoot = U(-1.0f, -0.74f + b);
-        spine = Tail(g, tailRoot, q);
+        if (!q.NoTail) Tail(g, tailRoot, q);              // a live tail (NoTail) is drawn by the scene every frame, as a chain
 
         // ---- the far legs ----
         for (int i = 0; i < 2; i++)
@@ -422,7 +575,7 @@ internal static class PossumArt
             PointF j = i == 0 ? shoulder0 : U(jt[1].X, jt[1].Y);
             if (q.SitAng > 0f && i == 1) j = P(-0.55f, -0.40f);
             Bone(g, j, ft[i], 0.19f, 0.15f, LegFar);
-            Paw(g, ft[i], q.Hands, Flat(i), 0f);
+            Paw(g, ft[i], q.Hands, Flat(i), i is 0 or 2 ? q.Pitch : 0f);   // a reaching hand points along the front half
         }
 
         // ---- the body: grey, a darker back and a paler belly, one smooth shape each ----
@@ -437,7 +590,7 @@ internal static class PossumArt
             PointF j = i == 2 ? shoulder1 : U(jt[3].X, jt[3].Y);
             if (q.SitAng > 0f && i == 3) j = P(-0.50f, -0.40f);
             Bone(g, j, ft[i], 0.20f, 0.16f, Leg);
-            Paw(g, ft[i], q.Hands, Flat(i), 0f);
+            Paw(g, ft[i], q.Hands, Flat(i), i is 0 or 2 ? q.Pitch : 0f);   // a reaching hand points along the front half
         }
 
         // ---- the head, over the body ----
@@ -499,6 +652,19 @@ internal static class PossumArt
             ("turn 1", TurnPose(1f), 0f), ("faint .5", Faint(0.5f), 0f), ("faint 1", Faint(1f), 0f), ("dead", Dead(0f, false), 0f), ("dead peek", Dead(1f, true), 0f),
             ("shake", Shake(1f), 0f), ("climb down", Walk(0.2f), 90f), ("climb up", Walk(0.2f), -90f),
         };
+        // the mount and the dismount, a page every fifth of the way (the sheet pins each page's body middle, so the travel is not shown)
+        for (int m = 0; m <= 5; m++)
+        {
+            float kk = m / 5f;
+            var mq = Mount(kk, 2.3f, out float mr, out _, out _);
+            poses.Add(($"mount {kk:F1}", mq, mr));
+        }
+        for (int m = 0; m <= 5; m++)
+        {
+            float kk = m / 5f;
+            var dq = Dismount(kk, 2.3f, 2.0f, out float dr, out _, out _);
+            poses.Add(($"dismount {kk:F1}", dq, dr));
+        }
         int perRow = 4, rows = (poses.Count + 3 + 1 + perRow - 1) / perRow;
         using var sheet = new Bitmap(w * perRow, h * rows, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(sheet))

@@ -62,10 +62,11 @@ internal sealed class Possum
     private const double StartAt = 4.0;                                   // the possum's mind starts at a pinned 4.0 s like the patch's, so a seed is a scenario (unpinned, its first descent came at 48.5, 48.7 and 93.2 s on one seed)
     private enum Doing { Hidden, Drop, Hang, PullUp, Descend, Dismount, Still, Walk, Turn, Take, Eat, Faint, Dead, Rise, Shake, Mount, Climb }
 
-    private struct Sheet { public Sprite[] Pg; public int W, H; public float Cx, Cy; }
+    private struct Sheet { public Sprite[] Pg; public PointF[][]? Rest; public int W, H; public float Cx, Cy; }   // Rest: per page, the live tail's rest shape in pixels from the sheet's pivot (null: the tail is painted into the page)
 
     private const int WalkPages = 12, SwayPages = 7, Looks = 4;
-    private const float DropFor = 0.7f, TurnFor = 0.40f, MountFor = 0.5f;
+    private const float DropFor = 0.7f, TurnFor = 0.40f, MountFor = 0.6f;
+    private const int MountPages = 16;                 // the mount and the dismount: sixteen pages over 0.6 s, each with its own bend
 
     private readonly ThanksgivingScenery _s;
     private readonly Noticeboard _board;
@@ -88,7 +89,18 @@ internal sealed class Possum
     private volatile bool _ready;
 
     private Sheet _walk, _sniff, _look, _rise, _sitNut, _sitPlain, _wipe, _turn, _faint, _dead, _shake;
-    private Sheet _down, _up, _rotPos, _rotNeg;
+    private Sheet _down, _up, _mount, _dismount;
+    private readonly float[] _mFx = new float[MountPages], _mFy = new float[MountPages], _dFx = new float[MountPages], _dFy = new float[MountPages];   // how far along its travel each page's body middle is
+
+    // THE LIVE TAIL (his ask, 2026-11-09: "the opossum needs a tail that is independent of its body ... our animals can have working
+    // body parts, like tails"): not painted into the pages any more but a chain of points, drawn every frame. Its root is the body's
+    // tail root (the page tells where it is); every other point is pulled softly toward the tail's lazy resting curve, drooped by
+    // gravity, held to a fixed length, and so it LAGS when the body moves, SWINGS when it turns, DROOPS on the ground, HANGS when it
+    // climbs. Hanging by it, the tip is fixed up in the leaves and the root rides the body.
+    private readonly PointF[] _tp = new PointF[PossumArt.TailPoints], _tv = new PointF[PossumArt.TailPoints], _tt = new PointF[PossumArt.TailPoints];
+    private bool _tailLive;                            // false: the chain must start fresh from its rest shape (it was hidden, or the page had its tail painted in)
+    private float _tailDt;                             // seconds since the chain was last stepped
+    private PointF _anchor;                            // the hang: where the tail's tip is fixed
     private Sheet _hang, _crunch;
 
     private double _time;
@@ -263,11 +275,29 @@ internal sealed class Possum
 
     // ================================================================ painting (once)
 
-    private static Sheet Make(int n, int w, int h, float cx, float cy, Func<int, Sprite> page)
+    private static Sheet Make(int n, int w, int h, float cx, float cy, Func<int, Sprite> page, Func<int, PointF[]>? rest = null)
     {
         var sh = new Sheet { Pg = new Sprite[n], W = w, H = h, Cx = cx, Cy = cy };
-        for (int i = 0; i < n; i++) sh.Pg[i] = page(i);
+        if (rest != null) sh.Rest = new PointF[n][];
+        for (int i = 0; i < n; i++) { sh.Pg[i] = page(i); if (rest != null) sh.Rest![i] = rest(i); }
         return sh;
+    }
+
+    private static PossumArt.Pose Live(PossumArt.Pose q, bool live) { q.NoTail = live; return q; }
+
+    /// <summary>The tail's rest shape for a page painted by PossumArt.Page with the frame turned "rot", in pixels from the page's pivot.</summary>
+    private static PointF[] RestOf(PossumArt.Pose q, float p, float rot)
+    {
+        var r = PossumArt.TailRest(q);
+        for (int i = 0; i < r.Length; i++) r[i] = PossumArt.PageOffset(r[i], p, rot);
+        return r;
+    }
+
+    private static PointF[] HangRestOf(PossumArt.Pose q, float p, float sway)
+    {
+        var r = PossumArt.TailRest(q);
+        for (int i = 0; i < r.Length; i++) r[i] = PossumArt.HangOffset(r[i], p, sway);
+        return r;
     }
 
     private void Build()
@@ -276,7 +306,8 @@ internal sealed class Possum
         // The ground sheets: the tail to the left (3.1 units), the nose and a swinging head to the right, the sitting body above; the body's middle at (cx, cy).
         int gw = (int)(5.3f * p) + 4, gh = (int)(3.4f * p) + 4;
         float gcx = 3.5f * p + 2, gcy = 2.55f * p + 2;
-        Sheet G(int n, Func<int, PossumArt.Pose> pose) => Make(n, gw, gh, gcx, gcy, i => PossumArt.Page(pose(i), p, gw, gh, gcx, gcy));
+        Sheet G(int n, Func<int, PossumArt.Pose> pose, bool live = true) =>
+            Make(n, gw, gh, gcx, gcy, i => PossumArt.Page(Live(pose(i), live), p, gw, gh, gcx, gcy), live ? i => RestOf(pose(i), p, 0f) : null);
         _walk = G(WalkPages, i => PossumArt.Walk(i / (float)WalkPages));
         _sniff = G(4, i => PossumArt.Sniff(i / 3f));
         _look = G(1, _ => PossumArt.LookUp());
@@ -285,20 +316,29 @@ internal sealed class Possum
         _sitPlain = G(1, _ => PossumArt.Sit(1f, 0f, false));
         _wipe = G(3, i => PossumArt.Sit(1f, 0f, false, 0.3f + 0.35f * i));
         _turn = G(3, i => PossumArt.TurnPose((i + 1) / 3f));
-        _faint = G(2, i => PossumArt.Faint(0.5f + 0.5f * i));
-        _dead = G(3, i => i < 2 ? PossumArt.Dead(i, false) : PossumArt.Dead(0f, true));
-        _shake = G(2, i => PossumArt.Shake(i == 0 ? -1f : 1f));
+        _faint = G(2, i => PossumArt.Faint(0.5f + 0.5f * i), false);          // the faint, the dead and the shake keep a painted tail (the play-dead is left as it was)
+        _dead = G(3, i => i < 2 ? PossumArt.Dead(i, false) : PossumArt.Dead(0f, true), false);
+        _shake = G(2, i => PossumArt.Shake(i == 0 ? -1f : 1f), false);
 
-        // The trunk: the walk turned a quarter (head down, head up), and the pages between the level and the climb.
+        // The trunk: the walk turned a quarter (head down, head up), and the pages of the mount and the dismount between the level and the climb.
         int vw = (int)(3.2f * p) + 4, vh = (int)(5.4f * p) + 4;
         float vcx = vw / 2f;
-        _down = Make(WalkPages, vw, vh, vcx, 3.8f * p, i => PossumArt.Page(PossumArt.Walk(i / (float)WalkPages), p, vw, vh, vcx, 3.8f * p, 90f));
-        _up = Make(WalkPages, vw, vh, vcx, 1.8f * p, i => PossumArt.Page(PossumArt.Walk(i / (float)WalkPages), p, vw, vh, vcx, 1.8f * p, -90f));
+        _down = Make(WalkPages, vw, vh, vcx, 3.8f * p, i => PossumArt.Page(Live(PossumArt.Walk(i / (float)WalkPages), true), p, vw, vh, vcx, 3.8f * p, 90f), i => RestOf(PossumArt.Walk(i / (float)WalkPages), p, 90f));
+        _up = Make(WalkPages, vw, vh, vcx, 1.8f * p, i => PossumArt.Page(Live(PossumArt.Walk(i / (float)WalkPages), true), p, vw, vh, vcx, 1.8f * p, -90f), i => RestOf(PossumArt.Walk(i / (float)WalkPages), p, -90f));
         int rs = (int)(7.2f * p) + 4;
         float rc = rs / 2f;
-        float[] pos = [68f, 45f, 23f];
-        _rotPos = Make(3, rs, rs, rc, rc, i => PossumArt.Page(PossumArt.Walk(0f), p, rs, rs, rc, rc, pos[i]));
-        _rotNeg = Make(3, rs, rs, rc, rc, i => PossumArt.Page(PossumArt.Walk(0f), p, rs, rs, rc, rc, -pos[2 - i]));
+        // THE MOUNT: how far sideways the body's middle goes from the foot's standing spot to the climb's first page, and the dismount's mirror of it.
+        float ty = _foot.Y - 1.6f * p, mdx = (TrunkX(ty) - _foot.X) / p, ddx = (TrunkX(_foot.Y - 2.0f * p) - _foot.X) / p;
+        var mq = new PossumArt.Pose[MountPages]; var mr = new float[MountPages];
+        var dq = new PossumArt.Pose[MountPages]; var dr = new float[MountPages];
+        for (int i = 0; i < MountPages; i++)
+        {
+            float k = i / (float)(MountPages - 1);
+            mq[i] = PossumArt.Mount(k, mdx, out mr[i], out _mFx[i], out _mFy[i]);
+            dq[i] = PossumArt.Dismount(k, ddx, 2.0f, out dr[i], out _dFx[i], out _dFy[i]);
+        }
+        _mount = Make(MountPages, rs, rs, rc, rc, i => PossumArt.Page(mq[i], p, rs, rs, rc, rc, mr[i]), i => RestOf(mq[i], p, mr[i]));
+        _dismount = Make(MountPages, rs, rs, rc, rc, i => PossumArt.Page(dq[i], p, rs, rs, rc, rc, dr[i]), i => RestOf(dq[i], p, dr[i]));
 
         // The hang: the wrap point is the sheet's (cx, cy); seven sways, four looks, hands shut or open.
         int hw = (int)(4.6f * p) + 4, hh = (int)(6.0f * p) + 4;
@@ -306,9 +346,9 @@ internal sealed class Possum
         _hang = Make(SwayPages * Looks * 2, hw, hh, hcx, hcy, i =>
         {
             int sway = i / (Looks * 2), look = (i / 2) % Looks, hands = i % 2;
-            return PossumArt.HangPage(PossumArt.Hang(look, hands), p, hw, hh, hcx, hcy, (sway - 3) * 1.8f);
-        });
-        _crunch = Make(4, hw, hh, hcx, hcy, i => PossumArt.HangPage(PossumArt.Hang(0, 0f, 35f + 35f * i), p, hw, hh, hcx, hcy, 0f));
+            return PossumArt.HangPage(Live(PossumArt.Hang(look, hands), true), p, hw, hh, hcx, hcy, (sway - 3) * 1.8f);
+        }, i => HangRestOf(PossumArt.Hang((i / 2) % Looks, i % 2), p, ((i / (Looks * 2)) - 3) * 1.8f));
+        _crunch = Make(4, hw, hh, hcx, hcy, i => PossumArt.HangPage(Live(PossumArt.Hang(0, 0f, 35f + 35f * i), true), p, hw, hh, hcx, hcy, 0f), i => HangRestOf(PossumArt.Hang(0, 0f, 35f + 35f * i), p, 0f));
     }
 
     // ================================================================ living
@@ -323,7 +363,7 @@ internal sealed class Possum
 
     public void Update(float dt)
     {
-        _time += dt;
+        _time += dt; _tailDt += dt;
         if (!_ready || _time < StartAt) return;
         _mind.Tick(dt); _deadRest.Tick(dt); _clock += dt;
         if (_log != null && _mind.Doing != Doing.Hidden)
@@ -458,7 +498,9 @@ internal sealed class Possum
         float v = 0.075f * _u;
         _cy += v * dt; _pace.Walked += v * dt;
         _cx = TrunkX(_cy);
-        if (_cy >= _foot.Y - 1.45f * _p)
+        // The dismount takes over on the REST page (page 0), so its first page is the descent's last, exactly (no pop in the feet).
+        float lim = _foot.Y - 2.6f * _p;
+        if (_cy >= lim && (_pace.Page(_stride, WalkPages) == 0 || _cy >= lim + 1.6f * _p))
         {
             _dir = -1;
             Begin(Doing.Dismount, MountFor);
@@ -695,22 +737,96 @@ internal sealed class Possum
 
     // ================================================================ drawing
 
-    private void Stamp(FrameBuffer fb, in Sheet sh, int page, float px, float py, bool mirror, bool[]? stencil, byte[]? depth, int nearness)
+    /// <summary>
+    /// One stamp: the live tail first (behind the body), then the page. "mode" is how the tail behaves: 0 on the ground (it droops,
+    /// and never goes below "floorY"), 1 on the trunk (it hangs), 2 hanging by it (the tip is fixed at _anchor).
+    /// </summary>
+    private void Stamp(FrameBuffer fb, in Sheet sh, int page, float px, float py, bool mirror, bool[]? stencil, byte[]? depth, int nearness, int mode = 0, float floorY = float.MaxValue)
     {
         int left = (int)MathF.Round(px - (mirror ? sh.W - sh.Cx : sh.Cx));
         int top = (int)MathF.Round(py - sh.Cy);
-        sh.Pg[Math.Clamp(page, 0, sh.Pg.Length - 1)].Draw(fb, left, top, 1f, stencil, mirror, depth, nearness);
+        page = Math.Clamp(page, 0, sh.Pg.Length - 1);
+        if (sh.Rest != null) DrawTail(fb, sh.Rest[page], left, top, sh, mirror, stencil, depth, nearness, mode, floorY);
+        else _tailLive = false;
+        sh.Pg[page].Draw(fb, left, top, 1f, stencil, mirror, depth, nearness);
+    }
+
+    /// <summary>
+    /// Steps and draws the tail chain. The target of every point is the page's resting curve (mapped to the screen; mirrored when the
+    /// page is); each point is a spring toward its target (stiff near the root, loose at the tip), pulled down by gravity, then the
+    /// pieces are held to their length; the root is the body's own tail root. Hanging by it, the targets are the straight line from
+    /// the root to the fixed tip, bowed a little, and the chain only follows it with a lag (a bounce is a wobble down the tail).
+    /// </summary>
+    private void DrawTail(FrameBuffer fb, PointF[] rest, int left, int top, in Sheet sh, bool mirror, bool[]? stencil, byte[]? depth, int nearness, int mode, float floorY)
+    {
+        const int N = PossumArt.TailPoints;
+        float p = _p, sgn = mirror ? -1f : 1f;
+        float px = left + (mirror ? sh.W - sh.Cx : sh.Cx), py = top + sh.Cy;                // the page's pivot on the screen
+        for (int i = 0; i < N; i++) { _tt[i].X = px + sgn * rest[i].X; _tt[i].Y = py + rest[i].Y; }
+        float len = 2.0f * p, seg = len / (N - 1);
+        if (mode == 2)
+        {
+            float dx = _anchor.X - _tt[0].X, dy = _anchor.Y - _tt[0].Y, dist = MathF.Sqrt(dx * dx + dy * dy);
+            float bow = MathF.Min(0.45f * p, 0.5f * MathF.Sqrt(MathF.Max(0f, len * len - dist * dist)));
+            for (int i = 0; i < N; i++)
+            {
+                float t = i / (float)(N - 1);
+                _tt[i].X = _tt[0].X + dx * t - sgn * bow * MathF.Sin(MathF.PI * t);
+                _tt[i].Y = _tt[0].Y + dy * t;
+            }
+        }
+        if (!_tailLive)
+        {
+            for (int i = 0; i < N; i++) { _tp[i] = _tt[i]; _tv[i] = default; }
+            _tailLive = true; _tailDt = 0f;
+        }
+        float dt = MathF.Min(_tailDt, 0.1f); _tailDt = 0f;
+        int steps = Math.Max(1, (int)MathF.Ceiling(dt * 60f));
+        float h = dt / steps;
+        for (int s = 0; s < steps; s++)
+        {
+            for (int i = 1; i < N; i++)
+            {
+                float t = i / (float)(N - 1);
+                float w = mode == 2 ? 11f : 11f - 7f * t;                               // spring frequency, rad/s: stiff near the root, loose at the tip
+                float damp = 2f * 0.55f * w;
+                float ax = w * w * (_tt[i].X - _tp[i].X) - damp * _tv[i].X;
+                float ay = w * w * (_tt[i].Y - _tp[i].Y) - damp * _tv[i].Y + (mode == 2 ? 0f : 8f * p);   // gravity
+                _tv[i].X += ax * h; _tv[i].Y += ay * h;
+                _tp[i].X += _tv[i].X * h; _tp[i].Y += _tv[i].Y * h;
+                if (_tp[i].Y > floorY) { _tp[i].Y = floorY; if (_tv[i].Y > 0f) _tv[i].Y = 0f; }   // it lies on the ground, it does not sink through it
+            }
+            _tp[0] = _tt[0]; _tv[0] = default;
+            if (mode != 2)
+                for (int it = 0; it < 4; it++)                                             // hold every piece to its length, root first
+                    for (int i = 1; i < N; i++)
+                    {
+                        float dx = _tp[i].X - _tp[i - 1].X, dy = _tp[i].Y - _tp[i - 1].Y, l = MathF.Sqrt(dx * dx + dy * dy);
+                        if (l < 1e-4f) continue;
+                        float k = seg / l;
+                        _tp[i].X = _tp[i - 1].X + dx * k; _tp[i].Y = _tp[i - 1].Y + dy * k;
+                    }
+        }
+        // two passes (the darker underside, then the lighter pink along it) so no joint is painted over by the next piece's edge
+        for (int pass = 0; pass < 2; pass++)
+            for (int i = 0; i < N - 1; i++)
+            {
+                float f0 = i / (float)N;
+                float th = pass == 0 ? (0.15f - 0.07f * f0) * p * 1.15f : (0.115f - 0.055f * f0) * p * 1.15f;
+                float up = pass == 0 ? 0f : 0.012f * p;
+                fb.Line(new PointF(_tp[i].X, _tp[i].Y - up), new PointF(_tp[i + 1].X, _tp[i + 1].Y - up), pass == 0 ? PossumArt.TailEdge : PossumArt.TailPink, 1f, th, stencil, depth, nearness);
+            }
     }
 
     /// <summary>One stamp on the near ground: through the depth picture with the nearness of its own feet.</summary>
     private void Ground1(FrameBuffer fb, in Sheet sh, int page)
     {
-        Stamp(fb, sh, page, X, Y + PossumArt.PivotY * _p, _dir < 0, null, _s.NearDepth, _s.Nearness(Y));
+        Stamp(fb, sh, page, X, Y + PossumArt.PivotY * _p, _dir < 0, null, _s.NearDepth, _s.Nearness(Y), 0, Y + 0.03f * _p);
     }
 
     public void Draw(FrameBuffer fb)
     {
-        if (!_ready || _mind.Doing == Doing.Hidden) return;
+        if (!_ready || _mind.Doing == Doing.Hidden) { _tailLive = false; return; }
         float p = _p;
         switch (_mind.Doing)
         {
@@ -720,28 +836,28 @@ internal sealed class Possum
                 DrawHang(fb);
                 break;
             case Doing.Descend:
-                Stamp(fb, _down, _pace.Page(_stride, WalkPages), _cx, _cy, _dir < 0, _trunkOpen, null, 255);
+                Stamp(fb, _down, _pace.Page(_stride, WalkPages), _cx, _cy, _dir < 0, _trunkOpen, null, 255, 1);
                 break;
             case Doing.Climb:
-                Stamp(fb, _up, _pace.Page(_stride, WalkPages), _cx, _cy, _dir < 0, _trunkOpen, null, 255);
+                Stamp(fb, _up, _pace.Page(_stride, WalkPages), _cx, _cy, _dir < 0, _trunkOpen, null, 255, 1);
                 break;
             case Doing.Dismount:
             {
-                // From the trunk's face (head down) to the level: the quarter-turn pages, the body's middle moving to the ground spot.
+                // Head first down the bark, the front end bending out and down to the ground, the hind end after: the page's own travel fractions.
                 float k = Math.Clamp(_clock / MountFor, 0f, 1f);
-                float sx = _cx + (_foot.X - _cx) * k * k, sy = _cy + ((_foot.Y + PossumArt.PivotY * p) - _cy) * k;
-                if (k < 0.25f) Stamp(fb, _down, _pace.Page(_stride, WalkPages), sx, sy, true, _trunkOpen, null, 255);
-                else if (k < 1f) Stamp(fb, _rotPos, Math.Min(2, (int)((k - 0.25f) / 0.75f * 3f)), sx, sy, true, null, null, 255);
-                else Ground1(fb, _walk, 0);
+                int pg = (int)MathF.Round(k * (MountPages - 1));
+                float sx = _cx + (_foot.X - _cx) * _dFx[pg], sy = _cy + ((_foot.Y + PossumArt.PivotY * p) - _cy) * _dFy[pg];
+                Stamp(fb, _dismount, pg, sx, sy, true, null, null, 255, 0, _foot.Y + 0.03f * p);
                 break;
             }
             case Doing.Mount:
             {
+                // Rearing at the bark, then the hind end following up it: the last page is the climb's first, exactly.
                 float k = Math.Clamp(_clock / MountFor, 0f, 1f);
-                float ty = _foot.Y - 1.6f * p;
-                float sx = X + (TrunkX(ty) - X) * k * k, sy = (Y + PossumArt.PivotY * p) + (ty - (Y + PossumArt.PivotY * p)) * k;
-                if (k < 0.75f) Stamp(fb, _rotNeg, Math.Min(2, (int)(k / 0.75f * 3f)), sx, sy, false, null, null, 255);
-                else Stamp(fb, _up, 0, sx, sy, false, _trunkOpen, null, 255);
+                int pg = (int)MathF.Round(k * (MountPages - 1));
+                float ty = _foot.Y - 1.6f * p, y0 = Y + PossumArt.PivotY * p;
+                float sx = X + (TrunkX(ty) - X) * _mFx[pg], sy = y0 + (ty - y0) * _mFy[pg];
+                Stamp(fb, _mount, pg, sx, sy, false, null, null, 255, 0, Y + 0.03f * p);
                 break;
             }
             case Doing.Walk:
@@ -803,6 +919,7 @@ internal sealed class Possum
     {
         float p = _p, off;
         int page;
+        _anchor = new PointF(_hangX, _hangEdge - 0.65f * p);                             // the tail's tip is wrapped round a branch up in the leaves: fixed there
         if (_mind.Doing == Doing.Drop)
         {
             float s = Math.Clamp(_clock / DropFor, 0f, 1f);
@@ -822,15 +939,15 @@ internal sealed class Possum
             if (_clock < crunch)
             {
                 int pg = Math.Min(3, (int)(_clock / crunch * 4f));
-                Stamp(fb, _crunch, pg, _hangX, _hangEdge, _mirror, _s.OpenOfProps, null, 255);
+                Stamp(fb, _crunch, pg, _hangX, _hangEdge, _mirror, _s.OpenOfProps, null, 255, 2);
                 return;
             }
             float u = Math.Clamp((_clock - crunch) / rise, 0f, 1f);
             off = -4.6f * p * u * u;
-            Stamp(fb, _crunch, 3, _hangX, _hangEdge + off, _mirror, _s.OpenOfProps, null, 255);
+            Stamp(fb, _crunch, 3, _hangX, _hangEdge + off, _mirror, _s.OpenOfProps, null, 255, 2);
             return;
         }
-        Stamp(fb, _hang, page, _hangX, _hangEdge + off, _mirror, _s.OpenOfProps, null, 255);
+        Stamp(fb, _hang, page, _hangX, _hangEdge + off, _mirror, _s.OpenOfProps, null, 255, 2);
     }
 
     private static int HangIndex(int sway, int look, int hands) => (sway * Looks + look) * 2 + hands;
