@@ -80,12 +80,12 @@ internal struct Sheet
 internal sealed class Cast
 {
     // 48 run pages: at 16, a 132 px bound at 4.9 px a frame put the planted paw 5 px forward and back again every page (the animator's "creep").
-    public const int RunPages = 48, HopPages = 10, TurnPages = 3, RisePages = 5, DigPages = 8, MousePages = 8, CloudPages = 12, PeekPages = 4, AirPages = 8, MountPages = 4, ApplePages = 8, DazedPages = 24, LimbTurns = 8;   // 24 dazed pages: at 8 the slow loll held each page nine frames and stepped
+    public const int RunPages = 48, HopPages = 10, TurnPages = 10, RisePages = 5, DigPages = 8, MousePages = 8, CloudPages = 12, PeekPages = 4, AirPages = 8, MountPages = 12, ApplePages = 8, DazedPages = 24, LimbTurns = 8;   // 2026-11-09: the turn 3 to 10 pages and the mount 4 to 12, each over twice the time ("the squirrel 2d flipping and 90 turns")   // 24 dazed pages: at 8 the slow loll held each page nine frames and stepped
     public const float BoundLen = 2.2f;                 // the bound the run pages are painted at, in squirrel units: every run and climb is paged at it
     public const float Speed = 0.27f;                  // bounding, U per second (the fence squirrel's own pace)
     public const float ClimbSpeed = 0.34f;             // up a trunk: faster than on the ground, in body lengths a second
     public const float MouseSpeed = 0.19f;
-    public const float HopFor = 0.36f, TurnFor = 0.2f, RiseFor = 0.22f, MountFor = 0.12f;
+    public const float HopFor = 0.36f, TurnFor = 0.42f, RiseFor = 0.22f, MountFor = 0.40f;
 
     public readonly ThanksgivingScenery S;
     public readonly Noticeboard Board;                 // where a story tells the residents what is going on (a scuffle, a squirrel bolting)
@@ -146,18 +146,21 @@ internal sealed class Cast
             // The mount: the gathered crouch (the pose the rise pages begin from, so a sink runs straight into it) pitched up about
             // the feet over three pages, and the clinging climb pose on the last. (Built from the mid-air leap it lifted the body a
             // third of a length off the rail in one frame.) Played backward it is the dismount, ending in the same crouch.
+            // The mount (since 2026-11-09, as PatchLife's): the CLINGING body itself, the pose the climb's first page has, swung about
+            // its hind feet from level to upright, eased, twelve pages over 0.4 s. (The first version swung a sitting squirrel up in
+            // three jumps and switched to the cling on the last page: a card flipped up.) Played backward it is the dismount.
             Mount[a] = MakeSheet(MountPages, sq, sq, so, so, i =>
             {
-                var q = i < MountPages - 1 ? SquirrelArt.Sit(0.2f, 0, false, nut == 1) : SquirrelArt.Bound(0f, bound, cling: true);
-                q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; q.Rotate = -90f * (i + 1) / MountPages; return SquirrelArt.Page(q, k, sq, sq, so, so);
+                float f = (i + 1) / (float)MountPages, e = f * f * (3f - 2f * f);
+                var q = SquirrelArt.Bound(0f, bound, cling: true); q.Acorn = nut; q.Rotate = -90f * e; return SquirrelArt.Page(q, k, sq, sq, so, so);
             });
-            // The end of a head-first descent: the clinging pose, then the crouch pitching from head-down to level (mirrored at the stamp).
+            // The end of a head-first descent: the clinging pose pitching from head-down to level (mirrored at the stamp).
             MountDown[a] = MakeSheet(MountPages, sq, sq, so, so, i =>
             {
-                var q = i == 0 ? SquirrelArt.Bound(0f, bound, cling: true) : SquirrelArt.Sit(0.2f, 0, false, nut == 1);
-                q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; q.Rotate = 90f * (1f - (i + 1) / (float)MountPages); return SquirrelArt.Page(q, k, sq, sq, so, so);
+                float f = (i + 1) / (float)MountPages, e = f * f * (3f - 2f * f);
+                var q = SquirrelArt.Bound(0f, bound, cling: true); q.Acorn = nut; q.Rotate = 90f * (1f - e); return SquirrelArt.Page(q, k, sq, sq, so, so);
             });
-            Turn[a] = Ground(TurnPages, i => { var q = SquirrelArt.Turn(i * 0.25f, nut == 1); q.Acorn = nut == 1 ? 2 : 0; return q; });
+            Turn[a] = Ground(TurnPages, i => { var q = SquirrelArt.Turn(0.5f * (i + 1) / TurnPages, nut == 1); q.Acorn = nut == 1 ? 2 : 0; return q; });   // the profile coming round to the front view, ten steps; the caller plays it back mirrored
             Rise[a] = Ground(RisePages, i => { var q = SquirrelArt.Sit(0.2f + 0.8f * i / (RisePages - 1), 0, false, nut == 1); q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; return q; });
             for (int tail = 0; tail < 4; tail++)
             {
@@ -821,6 +824,8 @@ internal sealed class StoryDirector
     private readonly bool _quick;
 
     public Cast Cast => _cast;
+    /// <summary>Asked before a story is dealt: true holds the deal a second (a patch squirrel on a trunk, where the caper's squirrel climbs).</summary>
+    public Func<bool>? Hold;
     /// <summary>True while a story is on (the patch's own life keeps out of its way).</summary>
     public bool Playing => _on != null;
 
@@ -855,6 +860,7 @@ internal sealed class StoryDirector
             return;
         }
         if (!_cast.Ready || _time < _next) return;
+        if (Hold?.Invoke() == true) { _next = _time + 1; return; }
         // The deck: every story once before any repeats; a story that cannot begin now (a prop held, not able) waits its turn.
         if (_deck.Count == 0)
         {

@@ -174,6 +174,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _nuts = new NutField(_scenery, _rng, _board);
         _scenery.Nuts = _nuts;                     // the AcornDrop happening drops into it
         _life = new PatchLife(_scenery, settings.CritterCount, _rng, _board, _nuts);
+        _stories.Hold = () => _life.TrunkBusy(0) || _life.TrunkBusy(1);   // no story begins while a patch squirrel is on a trunk (the caper's squirrel climbs the left maple)
         _frenzyTest = Environment.GetEnvironmentVariable("PECKWORKS_NUTS") == "frenzy";   // test aid: the gust's shake and the frenzy at 5 s, once
         _yard = new FarmYard(_scenery, _rng, _board);   // last: its roll of the scene's dice comes after every older resident's, so none of theirs moved
         _possum = new Possum(_scenery, _rng, _board, _nuts, _life, _stories);   // after the yard: its one roll of the scene's dice comes after every older resident's

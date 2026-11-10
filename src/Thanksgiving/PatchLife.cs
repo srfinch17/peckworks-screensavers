@@ -90,6 +90,8 @@ internal sealed class PatchLife
         public bool Done;                           // a visitor that has left: dropped from the list after the frame
         public float PauseAt;                       // a squirrel's planned stop-start: the Travelled at which it sits up for a moment mid-run (0 none)
         public PointF? Resume;                      // the goal it goes on to after that pause
+        public PointF? Via;                         // a squirrel: the waypoint on the way to a steep goal (PlanVia), null when the goal is reached straight
+        public PointF ViaFor;                       // the goal that waypoint was planned for (a new goal plans again)
         public bool Dart;                           // this run ends in a curl straight back the other way, at speed (playful)
         public int Tree = -1;                       // the tree a Go is heading for (to den), and the one it is on
         public int ToPerch = -1;                    // the pumpkin a Go is heading for (to hop up on)
@@ -113,9 +115,10 @@ internal sealed class PatchLife
     private const float ShuffleFor = 0.28f, FlareFor = 0.30f, TakeOffFor = 0.25f;   // a shuffle hop's length; the last pages of a landing are a flare; the first of a drop are wing beats
 
     private const float BlendFor = 0.15f;           // a squirrel drops into its run, or sits up out of it, over nine frames (it used to pop in one)
-    private const int RisePages = 6, TurnPages = 6, CurlPages = 8, MountPages = 12, HopPages = 22;   // 12 mount pages over 0.42 s: at 4 over 0.25 the pitch onto the bark was a card flipped up in four jumps ("a 90 degree rotation")
-    private const float TurnRise = 0.12f, TurnFor = 0.30f;   // a sitting turn: rise to the sit (0.12 s), the narrowing pages, the flip, the widening (0.30), sink (0.12)
-    private const float CurlFor = 0.30f;            // the running curl: in and out again in a third of a second, never stopping
+    private const int RisePages = 6, TurnPages = 10, CurlPages = 12, MountPages = 12, HopPages = 22;   // 10 and 12 turn pages over 0.42 s: at 6 and 8 over 0.30 a turn was three frames a page, a card flipped ("the squirrel 2d flipping")   // 12 mount pages over 0.42 s: at 4 over 0.25 the pitch onto the bark was a card flipped up in four jumps ("a 90 degree rotation")
+    private const float TurnRise = 0.12f, TurnFor = 0.42f;   // a sitting turn: rise to the sit (0.12 s), the narrowing pages, the flip, the widening (0.42), sink (0.12)
+    private const float CurlFor = 0.42f;            // the running curl: in and out again, never stopping
+    private const float MaxSlope = 0.7f;            // the steepest a squirrel RUNS on the screen: rise over run, 35 degrees. A side-view body moving straight up or down the screen slides ("90 turns"); a steeper goal is reached by a planned waypoint (PlanVia)
     private const float MountFor = 0.42f, HopFor = 0.55f, ClimbSpeed = 0.13f;   // ClimbSpeed in U a second: the climb is seen, not flashed (0.20 was a third of a second)
     private const float StartAt = 4.0f;             // the critters' first frame, seconds: pinned, so a seed is a scenario (their start used to wait on the sheets' side-thread build and drifted 0.4 s between runs)
     private const int EnterPages = 10;
@@ -298,6 +301,25 @@ internal sealed class PatchLife
     /// goal, and a critter walking straight at its goal has no side to slide to), and one squirrel in a pocket between
     /// pumpkins drew five such goals in a row and sat refused for twelve seconds. Null when nothing can be reached.
     /// </summary>
+    /// <summary>
+    /// The waypoint for a steep goal: on the goal's row, out to the side the squirrel is going (or facing, if the goal is straight
+    /// above or below), far enough that the run to it is no steeper than MaxSlope. If the screen's edge is in the way it goes the
+    /// other way; if that spot is not standable it steps back toward the squirrel until one is. Null when the goal is reached
+    /// straight (shallow enough, or within a length and a half up or down).
+    /// </summary>
+    private PointF? PlanVia(Critter c)
+    {
+        float dx = c.Goal.X - c.X, dy = c.Goal.Y - c.Y;
+        if (MathF.Abs(dy) <= MaxSlope * MathF.Abs(dx) || MathF.Abs(dy) < 1.5f * _k) return null;
+        float run = MathF.Abs(dy) / MaxSlope;
+        int side = MathF.Abs(dx) > 0.5f * _k ? MathF.Sign(dx) : c.Dir;
+        float vx = Math.Clamp(c.X + side * run, 0.02f * _s.Width, 0.98f * _s.Width);
+        if (MathF.Abs(vx - c.X) < 0.6f * run) { side = -side; vx = Math.Clamp(c.X + side * run, 0.02f * _s.Width, 0.98f * _s.Width); }
+        float vy = c.Goal.Y;
+        for (int i = 0; i < 8 && !CanStand(vx, vy); i++) vx -= side * 0.4f * _k;
+        return CanStand(vx, vy) ? new PointF(vx, vy) : null;
+    }
+
     private PointF? RandomSpot(float x0, float x1, int tries, float? yNear = null, float yReach = 0f, float minDx = 0f, PointF? from = null)
     {
         float u = _s.U, xm = (x0 + x1) / 2;
@@ -853,7 +875,7 @@ internal sealed class PatchLife
     private bool GoDen(Critter c)
     {
         int tree = TreeFor(c, out PointF foot);
-        if (tree < 0) return false;
+        if (tree < 0 || Lull) return false;                                        // never during a story: the caper's squirrel climbs the left maple and three squirrels piled onto one foot (2026-11-09)
         c.Tree = tree; c.Mind.Begin(Doing.Go, 10f); c.Travelled = 0; c.PauseAt = 0; c.Dart = false; c.DenFoot = null;
         float dy = c.Y - foot.Y, side = c.X < foot.X ? -1f : 1f;
         var beside = new PointF(foot.X + side * MathF.Max(0.012f * _s.U, 1.1f * dy), c.Y);
@@ -1305,8 +1327,23 @@ internal sealed class PatchLife
                     if (other == null || other.Done || OnTree(other) || OnPumpkin(other)) { c.Pace.Halt(); c.Mind.Begin(Doing.Still, 1f); c.Clock = 0; c.ChaseId = -1; return; }
                     c.Goal = new PointF(other.X, other.Y);
                 }
-                float dx = c.Goal.X - c.X, dy = c.Goal.Y - c.Y;
+                // A squirrel never runs steeply: a goal more than 35 degrees up or down the screen is reached by a waypoint on the
+                // goal's row, a diagonal first and then along the row (a curl at the waypoint when it has run past). The waypoint
+                // is planned once per goal and dropped when the squirrel is within a length of it.
+                PointF aim = c.Goal;
+                if (c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Fetch or Doing.Raid or Doing.Carry or Doing.Leave)
+                {
+                    if (c.Via == null || c.ViaFor != c.Goal) { c.ViaFor = c.Goal; c.Via = PlanVia(c); }
+                    if (c.Via is PointF via)
+                    {
+                        if (MathF.Abs(via.X - c.X) < 1.2f * _k && MathF.Abs(via.Y - c.Y) < 1.2f * _k) c.Via = null;
+                        else aim = via;
+                    }
+                }
+                else c.Via = null;
+                float dx = aim.X - c.X, dy = aim.Y - c.Y;
                 float dist = MathF.Sqrt(dx * dx + dy * dy);
+                float pathLeft = c.Via is PointF v2 ? dist + MathF.Sqrt((c.Goal.X - v2.X) * (c.Goal.X - v2.X) + (c.Goal.Y - v2.Y) * (c.Goal.Y - v2.Y)) : dist;   // the slow-in reads the whole way left, not the leg to the waypoint
                 float arrive = c.Kind == Kind.Bird ? 0.2f * _b : c.Mind.Doing is Doing.Chase or Doing.Romp ? 1.8f * _k : c.Mind.Doing is Doing.Fetch or Doing.Raid ? 0.5f * _k : c.DenFoot != null ? 1f * _k : 0.25f * _m;
                 if (c.Mind.Doing == Doing.Romp && dist < arrive)
                 {
@@ -1378,12 +1415,17 @@ internal sealed class PatchLife
                 // The slow-in: the wanted speed falls with the distance left (2.5 a second: from a squirrel's full pace it begins
                 // easing about three lengths out, and arrives at a quarter pace; at 4 it braked in the last length and the stop was a halt).
                 // A dart does not slow: it curls back at speed.
-                c.Pace.Want = c.Dart || c.DenFoot != null ? speed : Math.Min(speed, MathF.Max(0.12f * speed, dist * 2.5f));   // the floor 0.12: at 0.25 the last two lengths were a creep at one speed, not an ease; a dart and the first leg to a tree do not slow
+                c.Pace.Want = c.Dart || c.DenFoot != null ? speed : Math.Min(speed, MathF.Max(0.12f * speed, pathLeft * 2.5f));   // the floor 0.12: at 0.25 the last two lengths were a creep at one speed, not an ease; a dart and the first leg to a tree do not slow
                 float want = MathF.Atan2(dy, dx);
-                c.Heading = Turn.Toward(c.Heading, want, 7f, dt);
+                c.Heading = Turn.Toward(c.Heading, want, dist < 2f * _k ? 7f : 3.5f, dt);   // 3.5 a second on the way: a bend the eye can follow (7 was a corner); 7 in the last two lengths so a goal beside it is never orbited
                 float err = MathF.IEEERemainder(want - c.Heading, MathF.Tau);
                 float step = c.Pace.Tick(dt);
                 if (step <= 0f) return;
+                // A REVERSAL IS A CURL, at once: a wanted heading more than 100 degrees off the way it is going means the goal is
+                // behind, and a squirrel on the move plants its forefeet and brings its back end round (CurlBack, the curl pages),
+                // never arcs round through straight up or down the screen (at the eased turning rate that arc was a side-view
+                // body sliding vertically for a third of a second: "90 turns").
+                if (c.Kind == Kind.Squirrel && MathF.Abs(err) > 1.75f && c.Pace.Speed > 0.03f * u) { CurlBack(c, step, dt); return; }
                 if (c.Kind == Kind.Squirrel)
                 {
                     // A bound PULSES: the body is fastest in flight (0.5 to 0.9 of the bound's page cycle) and slowest as it
