@@ -69,6 +69,7 @@ internal static class SquirrelArt
         public float Nib;                          // the mouth chewing, 0 to 1
         public float BodyScale = 1f;               // squash (under 1) or stretch (over 1) of the body along its length
         public float Rotate;                       // the whole picture turned about the feet's origin (degrees): -90 is head up a trunk
+        public float Pitch;                        // the FRONT half (chest, head, forelegs) turned about the hip, degrees, the hind half left where it is: the body BENDS in the middle (-90 reaches straight up a trunk from a level stance). A climb begins with this, not with the whole body tipping like a card (his line: "it should be able to BEND in the middle").
         public Coat Coat = Coat.Red;               // its colours
     }
 
@@ -334,6 +335,21 @@ internal static class SquirrelArt
         }
 
         PointF hip = q.Hip, chest = q.Chest;
+        if (q.Pitch != 0f)
+        {
+            // The bend: the front half swings about the hip. Chest, head and both forepaws turn together; the head keeps its
+            // own tilt on top; the back humps over the bend by how far it is bent (a spine is a curve, not a hinge).
+            float pr = q.Pitch * MathF.PI / 180f, cp = MathF.Cos(pr), sp = MathF.Sin(pr);
+            PointF Swing(PointF a) => P(hip.X + (a.X - hip.X) * cp + (a.Y - hip.Y) * sp, hip.Y - (a.X - hip.X) * sp + (a.Y - hip.Y) * cp);
+            q = new Pose
+            {
+                Hip = q.Hip, Chest = Swing(q.Chest), Head = Swing(q.Head), HeadTilt = q.HeadTilt - q.Pitch, HeadTurn = q.HeadTurn,
+                NearFore = Swing(q.NearFore), FarFore = Swing(q.FarFore), NearHind = q.NearHind, FarHind = q.FarHind,
+                Hump = q.Hump + 0.16f * MathF.Abs(q.Pitch) / 90f, TailBase = q.TailBase, TailCurl = q.TailCurl, TailWave = q.TailWave, TailWavePhase = q.TailWavePhase,
+                TailFlick = q.TailFlick, TailS = q.TailS, HindFlat = q.HindFlat, PawsUp = q.PawsUp, Acorn = q.Acorn, Nib = q.Nib, BodyScale = q.BodyScale, Rotate = q.Rotate, Coat = q.Coat,
+            };
+            chest = q.Chest;
+        }
         PointF mid = P((hip.X + chest.X) / 2 - q.Hump * 0.3f, (hip.Y + chest.Y) / 2 + q.Hump);
         float front = q.HeadTurn;                                          // 0 side view, 1 facing us
         float bw = 1f - 0.15f * front;                                     // a little narrower seen from the front (the chest and belly face us: a round body, not a slot)

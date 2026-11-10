@@ -46,15 +46,19 @@ internal static class TractorArt
     public const float BalerWheelX = 2.00f, BalerRearX = 1.27f;                     // the baler's axle, and where a finished bale comes out (the drum sits round 2.05: at 2.5 it was pressed into the rear wheel, "there is a hitch there")
     public const float RearR = 0.50f, FrontR = 0.28f, CartR = 0.30f, BalerR = 0.30f;   // wheel radii, in units
     public const float HitchX = 3.35f, HitchY = 0.40f;                              // the hitch pin: the implement's tongue ends here, and the implement pitches about it
-    public const int PitchPages = 7;                                                // the implement's pitch pages: -3.6 to +3.6 degrees in steps of 1.2 (a step is about a pixel at the drum)
-    public const float PitchStep = 1.2f;
+    public const int PitchPages = 11;                                                // the pitch pages (implement AND tractor body): -3.6 to +3.6 degrees in steps of 0.9 (a step is under a pixel at an implement's wheel)
+    public const float PitchStep = 1.2f;   // 11 pages of 1.2 degrees: -6 to +6 (a 5 px bump over a wheelbase is about 5 degrees; at 9 pages of 0.9 the bigger bumps clamped)
+    /// <summary>The page whose angle is nearest to deg (clamped to the pages there are).</summary>
+    public static int PageFor(float deg) => Math.Clamp((int)MathF.Round(deg / PitchStep) + PitchPages / 2, 0, PitchPages - 1);
     /// <summary>The pitch, in degrees, of page i (the middle page is level); positive lifts the implement's tail (screen angles run clockwise, and the tail is at the left of the right-heading sheet).</summary>
     public static float PitchOf(int i) => (i - PitchPages / 2) * PitchStep;
     /// <summary>Where a point of the implement's sheet (units) ends up under a pitch: turned about the hitch pin. For the wheels and the bales, which are stamped on separately.</summary>
-    public static (float X, float Y) Pitched(float x, float y, float pitchDeg)
+    public static (float X, float Y) Pitched(float x, float y, float pitchDeg) => About(HitchX, HitchY, x, y, pitchDeg);
+    /// <summary>Where a point (units, y up) ends up when the sheet is turned about a pivot by tailUpDeg: positive lifts the sheet's left (tail) end, the same turn the sheet's RotateTransform makes. The tractor's body turns about its REAR AXLE (nose up is a negative tailUpDeg).</summary>
+    public static (float X, float Y) About(float cx, float cy, float x, float y, float tailUpDeg)
     {
-        float a = pitchDeg * MathF.PI / 180f, dx = x - HitchX, dy = y - HitchY;
-        return (HitchX + dx * MathF.Cos(a) + dy * MathF.Sin(a), HitchY - dx * MathF.Sin(a) + dy * MathF.Cos(a));   // y is up: a positive pitch lifts the tail (dx negative), the same turn the sheet's RotateTransform makes
+        float a = tailUpDeg * MathF.PI / 180f, dx = x - cx, dy = y - cy;
+        return (cx + dx * MathF.Cos(a) + dy * MathF.Sin(a), cy - dx * MathF.Sin(a) + dy * MathF.Cos(a));   // y is up: a positive pitch lifts the tail (dx negative)
     }
 
     // The paint is old and dusty: every red and green is pulled a little toward grey (his line: "the non fall color
@@ -104,7 +108,7 @@ internal static class TractorArt
         public void Dispose() => Ink.Dispose();
     }
 
-    private static Sprite OnSheet(float T, bool flip, Action<Kit> paint, float pitchDeg = 0f)
+    private static Sprite OnSheet(float T, bool flip, Action<Kit> paint, float pitchDeg = 0f, float pivotX = HitchX, float pivotY = HitchY)
     {
         var (len, tall, gy) = Sheet(T);
         return Sprite.Paint(len, tall, g =>
@@ -112,8 +116,9 @@ internal static class TractorArt
             if (flip) { g.TranslateTransform(len, 0); g.ScaleTransform(-1, 1); }
             if (pitchDeg != 0f)
             {
-                // The implement turned about the hitch pin (screen angles run clockwise, y down: a positive pitch drops the tail at the left).
-                float px = 1 + HitchX * T, py = gy - HitchY * T;
+                // The sheet turned about its pivot (the hitch pin for an implement, the rear axle for the tractor). Screen angles run
+                // clockwise, y is down: a positive pitch RAISES the tail at the left.
+                float px = 1 + pivotX * T, py = gy - pivotY * T;
                 g.TranslateTransform(px, py); g.RotateTransform(pitchDeg); g.TranslateTransform(-px, -py);
             }
             using var k = new Kit(g, T, gy);
@@ -129,7 +134,7 @@ internal static class TractorArt
     /// bowl standing beside the hood on the cab's side, the black grille at the nose with its two lamps, and the front
     /// weights below it.
     /// </summary>
-    public static Sprite Tractor(float T, bool flip) => OnSheet(T, flip, k =>
+    public static Sprite Tractor(float T, bool flip, float pitchDeg = 0f) => OnSheet(T, flip, k =>
     {
         var g = k.G;
         Color white = Color.FromArgb(226, 222, 212), glass = Color.FromArgb(58, 66, 76), glassLit = Color.FromArgb(104, 116, 128), black = Color.FromArgb(32, 26, 24), chrome = Color.FromArgb(170, 170, 166), chromeLit = Color.FromArgb(214, 214, 210);
@@ -186,7 +191,7 @@ internal static class TractorArt
         using (var arm = new Pen(black, Math.Max(1f, T * 0.03f))) { g.DrawLine(arm, k.P(4.12f, 1.52f), k.P(4.26f, 1.52f)); }
         k.Box(black, k.R(4.24f, 1.44f, 4.30f, 1.60f));
         using (var wheel = new Pen(Color.FromArgb(40, 44, 50), Math.Max(1f, T * 0.035f))) g.DrawLine(wheel, k.P(3.92f, 1.34f), k.P(4.06f, 1.30f));
-    });
+    }, pitchDeg, RearX, RearR);
 
     /// <summary>The hay wagon (no wheels) on the shared sheet: an empty plank bed with slats. The bales it carries are not here: FieldWork stamps them in BaleSlots as they are loaded.</summary>
     public static Sprite Wagon(float T, bool flip, float pitchDeg = 0f) => OnSheet(T, flip, k =>

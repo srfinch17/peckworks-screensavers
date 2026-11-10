@@ -69,7 +69,7 @@ internal sealed class ThanksgivingScenery
     public required (PointF At, float Rx, float Ry) Pond { get; init; }   // the pond on the far slope: centre and half sizes
     public required (float X0, float X1, float Back, float Front) Paddock { get; init; }   // the horses', past the silos
     public required (float X0, float X1, float Back, float Front) PigPen { get; init; }    // the pigs', between the orchard and the windmill
-    public required (float X0, float X1, float Back, float Front) Pasture { get; init; }   // the cows', among the trees left of the house (no fence)
+    public required (float X0, float X1, float Back, float Front) Pasture { get; init; }   // the cows', among the trees left of the house, fenced in with rails like the paddock's (2026-11-09)
     public required (float X0, float X1, float Back, float Front) HenYard { get; init; }   // the hens', round the scarecrow between the porch and the doghouse
     /// <summary>How many U a metre is on the farm's hill (the house is 0.0154 U a metre: 7 m to its eaves); the stock and the dog are sized from it.</summary>
     public float HillMetresToU => 0.0154f;
@@ -266,6 +266,13 @@ internal static class ThanksgivingPainter
         // farther than everything that moves on the field (his line: "another set of trees closer to the foreground but not
         // in front of the highest branches"). Painted here, with the farm, so the lane's animals pass in front of them.
         List<(PointF At, float R)> farTrees = PaintFarTrees(g, w, u, nearRidge, farmFoot.X, barnFoot.X, scarecrowX, orchardX, orchardHalf, pond.At.X, pond.Rx, paddockX0, paddockX1, rng);
+        // THE COWS' FENCE (his line, 2026-11-09: "the cows should be fenced in somehow"): the pasture gets the paddock's rails
+        // exactly, the back rails here and the front rail stamped over the cows by FarmYard. Painted AFTER the far trees so
+        // the rails pass in FRONT of their trunks (the trees stand in the pasture's band, behind the cows), and BEFORE the
+        // "up to farm" copy, so the cows (drawn through OpenFromFarm) stand in front of the back rails. The house, the
+        // clothesline and the left maple are nearer than the fence and are painted over it later. The pond is NOT inside
+        // this fence: it lies on the hill's band past the paddock (0.812 W), the far side of the farm from the pasture.
+        PaintRails(g, pastureX0, pastureX1, Brushwork.RidgeYAt(nearRidge, (pastureX0 + pastureX1) / 2) + u * 0.014f, u, railWood, endPost: true);
         g.Flush();
         uint[] upToFarm = Brushwork.ToPixels(bmp);   // a second copy: "unchanged since here" = nothing stands in front of the farm (the scarecrow is part of it)
 
@@ -693,52 +700,182 @@ internal static class ThanksgivingPainter
     }
 
     /// <summary>
-    /// A pond (his ask: "a pond off in the distance"): the watering pond in the cows' pasture on the hill left of the
-    /// house, seen from low and far so it is a flat sliver of water. (On the far hill's slope it read as "that disc
-    /// thing above the horses", and a terrace round it only made a bigger disc: water reads as water where the ground
-    /// is flat, and the pasture's band is the flattest ground the farm has.) The water is an uneven oval, not a true
-    /// ellipse, holding the dusk sky, paler toward its far edge; a dark muddy bank along its near edge, thicker in the
-    /// middle, with a few stones; three thin ripple lines; the sun's shimmer as a soft vertical smear; cattails in two
-    /// clumps at the near bank and one lone at the far side.
+    /// A pond (his ask: "a pond off in the distance"): the watering pond on the hill's own band past the paddock, seen
+    /// from low and far so it is a flat sliver of water. Rewritten 2026-11-09 after "the pond doesn't look like a pond,
+    /// it just looks like a saucer on the ground". A saucer is an OUTLINE (a pen all the way round), a flat fill and a
+    /// flat mud ellipse. Real water has none of those, so what is here instead:
+    ///   1. NO LINE ON THE FAR EDGE. The water fades in from nothing over its far 40 percent (a soft alpha ramp), so the
+    ///      grass's own colour runs right up to it, the way a far shore does when you look across a pond.
+    ///   2. IT REFLECTS what is behind it. The far part is the dark hill and the far trees upside down and blurred (a dull
+    ///      mauve-brown with a few darker vertical smears, the trees' trunks), blending down through rose into the
+    ///      brightest sky-gold just short of the near edge (the sky is what the water mirrors toward you).
+    ///   3. THE NEAR BANK is a soft dark muddy crescent only along the near edge (a blurred copy of the water shifted down,
+    ///      minus the water), never a rim.
+    ///   4. THREE HIGHLIGHT STREAKS of different lengths at different offsets (not evenly spaced lines), and the sun's
+    ///      light as a soft vertical smear.
+    ///   5. CATTAILS AND REEDS stand IN the near edge, their feet in the water, with faint vertical smears of themselves
+    ///      under them.
+    ///   6. THREE DUCKS near the far edge: a dark body, a paler flank, a dot of head, each with a faint V of wake. At this
+    ///      size (the whole pond is about 100 px wide on a 1080p screen) they are specks that read as ducks by where they
+    ///      sit. They are painted, so they do not move (see the report: a yard Kind on the pond's own pen would swim them).
+    /// The soft parts are made per pixel in a small picture of just the pond (a mask of the water's outline, blurred),
+    /// then laid onto the backdrop once. Every mark is 2 px or more at 1080p, or it would only be noise.
+    /// What the pond passes in front of and behind: it is painted after the road and before the house, the barn and the
+    /// far trees, so those stand in front of it; the maples and branches are painted much later and cover it.
     /// </summary>
     private static void PaintPond(Graphics g, PointF at, float rx, float ry, float u)
     {
-        // The water: an uneven oval, a little wider at the left, with a shallow bay at the near right.
-        using (var path = new GraphicsPath())
+        // The water's outline: an uneven oval, a little wider at the left, with a shallow bay at the near right.
+        PointF[] outline = [
+            new PointF(at.X - rx * 1.0f, at.Y + ry * 0.1f), new PointF(at.X - rx * 0.7f, at.Y - ry * 0.8f), new PointF(at.X - rx * 0.1f, at.Y - ry * 1.0f),
+            new PointF(at.X + rx * 0.55f, at.Y - ry * 0.85f), new PointF(at.X + rx * 0.95f, at.Y - ry * 0.2f), new PointF(at.X + rx * 0.8f, at.Y + ry * 0.7f),
+            new PointF(at.X + rx * 0.3f, at.Y + ry * 0.75f), new PointF(at.X + rx * 0.05f, at.Y + ry * 1.0f), new PointF(at.X - rx * 0.5f, at.Y + ry * 0.9f)];
+
+        // The pond's own little picture: room for the water and the mud crescent below it.
+        int ox = (int)MathF.Floor(at.X - rx * 1.2f), oy = (int)MathF.Floor(at.Y - ry * 1.4f);
+        int pw = Math.Max(2, (int)MathF.Ceiling(rx * 2.4f) + 2), ph = Math.Max(2, (int)MathF.Ceiling(ry * 3.8f) + 2);
+        float[] water = Mask(outline, 0f, ox, oy, pw, ph);
+        float[] shifted = Mask(outline, ry * 0.6f, ox, oy, pw, ph);   // the same water, one bank-width nearer the eye
+        int blur = Math.Max(1, (int)MathF.Round(u * 0.0012f));
+        Blur(water, pw, ph, blur);
+        Blur(shifted, pw, ph, blur);
+
+        float top = at.Y - ry, span = Math.Max(0.5f, 2f * ry);
+        var layer = new Bitmap(pw, ph, PixelFormat.Format32bppArgb);
+        var data = layer.LockBits(new Rectangle(0, 0, pw, ph), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        var px = new int[pw * ph];
+        for (int y = 0; y < ph; y++)
+            for (int x = 0; x < pw; x++)
+            {
+                int i = y * pw + x;
+                float t = Math.Clamp((oy + y + 0.5f - top) / span, 0f, 1f);                  // 0 at the far edge, 1 at the near edge
+                float fx = (ox + x + 0.5f - at.X) / rx;                                       // -1 to 1 across the water
+                // 1. the far edge fades in from nothing; 3. the crescent is what the shifted water shows that the water does not
+                float wa = water[i] * Smooth(0.04f, 0.42f, t);
+                float ca = Math.Clamp(shifted[i] - water[i], 0f, 1f) * 0.8f;
+                // 2. the reflection, colour by colour from the far shore to the near edge
+                (float r, float gg, float b) c = t < 0.34f ? Mix((104, 62, 68), (150, 88, 92), t / 0.34f)
+                    : t < 0.62f ? Mix((150, 88, 92), (222, 142, 108), (t - 0.34f) / 0.28f)
+                    : t < 0.84f ? Mix((222, 142, 108), (252, 196, 126), (t - 0.62f) / 0.22f)
+                    : Mix((252, 196, 126), (206, 128, 92), (t - 0.84f) / 0.16f);
+                // the far trees' trunks and the hill's lumps, upside down: darker vertical smears in the far part only
+                float smear = 0.5f + 0.25f * MathF.Sin(fx * 23f + 1.1f) + 0.25f * MathF.Sin(fx * 9f + 0.4f);
+                float dark = 1f - 0.30f * smear * Math.Clamp(1f - t / 0.5f, 0f, 1f);
+                // the sun's light, a soft smear down the middle part of the water
+                float shim = MathF.Exp(-((fx + 0.15f) * (fx + 0.15f)) / 0.035f) * Smooth(0.25f, 0.55f, t) * (1f - Smooth(0.9f, 1f, t));
+                c = Mix((c.r * dark, c.gg * dark, c.b * dark), (255, 228, 176), 0.40f * shim);
+                // mud under the water's near edge, and the crescent beyond it
+                (float r, float gg, float b) mud = (84, 56, 40);
+                float outA = wa + ca * (1f - wa);
+                float rr = outA > 0.001f ? (c.r * wa + mud.r * ca * (1f - wa)) / outA : 0f;
+                float gn = outA > 0.001f ? (c.gg * wa + mud.gg * ca * (1f - wa)) / outA : 0f;
+                float bb = outA > 0.001f ? (c.b * wa + mud.b * ca * (1f - wa)) / outA : 0f;
+                px[i] = ((int)(outA * 255f + 0.5f) << 24) | ((int)Math.Clamp(rr, 0f, 255f) << 16) | ((int)Math.Clamp(gn, 0f, 255f) << 8) | (int)Math.Clamp(bb, 0f, 255f);
+            }
+        System.Runtime.InteropServices.Marshal.Copy(px, 0, data.Scan0, px.Length);
+        layer.UnlockBits(data);
+        g.DrawImage(layer, ox, oy, pw, ph);
+        layer.Dispose();
+
+        // 4. Three highlight streaks, different lengths and offsets, each only a pale glint on the reflection.
+        float sw = Math.Max(2f, u * 0.0019f);
+        using (var streak = new Pen(Color.FromArgb(150, 255, 226, 176), sw) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+        using (var dull = new Pen(Color.FromArgb(90, 255, 214, 168), sw) { StartCap = LineCap.Round, EndCap = LineCap.Round })
         {
-            path.AddClosedCurve([
-                new PointF(at.X - rx * 1.0f, at.Y + ry * 0.1f), new PointF(at.X - rx * 0.7f, at.Y - ry * 0.8f), new PointF(at.X - rx * 0.1f, at.Y - ry * 1.0f),
-                new PointF(at.X + rx * 0.55f, at.Y - ry * 0.85f), new PointF(at.X + rx * 0.95f, at.Y - ry * 0.2f), new PointF(at.X + rx * 0.8f, at.Y + ry * 0.7f),
-                new PointF(at.X + rx * 0.3f, at.Y + ry * 0.75f), new PointF(at.X + rx * 0.05f, at.Y + ry * 1.0f), new PointF(at.X - rx * 0.5f, at.Y + ry * 0.9f)], 0.6f);
-            using (var water = new LinearGradientBrush(new PointF(0, at.Y - ry), new PointF(0, at.Y + ry), Color.FromArgb(222, 150, 108), Color.FromArgb(132, 74, 92)))
-                g.FillPath(water, path);
-            // The near bank: the water's own edge drawn in mud, thicker at the middle of the near side.
-            using (var bank = new Pen(Color.FromArgb(70, 44, 32), Math.Max(1.5f, u * 0.0025f)))
-                g.DrawPath(bank, path);
-            using (var mud = new SolidBrush(Color.FromArgb(78, 50, 36)))
-                g.FillEllipse(mud, at.X - rx * 0.55f, at.Y + ry * 0.55f, rx * 1.1f, ry * 0.55f);
+            g.DrawLine(dull, at.X - rx * 0.46f, at.Y - ry * 0.05f, at.X - rx * 0.12f, at.Y - ry * 0.05f);   // the long dim one, up the water
+            g.DrawLine(streak, at.X + rx * 0.10f, at.Y + ry * 0.42f, at.X + rx * 0.52f, at.Y + ry * 0.42f); // the long bright one, nearer
+            g.DrawLine(streak, at.X - rx * 0.52f, at.Y + ry * 0.66f, at.X - rx * 0.38f, at.Y + ry * 0.66f); // the short one, nearest, to the left
         }
-        // Ripples: thin pale lines across the water, longer in the middle.
-        using (var ripple = new Pen(Color.FromArgb(120, 250, 210, 170), Math.Max(1f, u * 0.0012f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-            foreach (var (f, half) in new[] { (-0.45f, 0.35f), (-0.05f, 0.55f), (0.35f, 0.4f) })
-                g.DrawLine(ripple, at.X - rx * half + rx * 0.1f, at.Y + ry * f, at.X + rx * half, at.Y + ry * f);
-        // The sun's shimmer: a soft vertical smear of its light on the water.
-        using (var shimmer = new LinearGradientBrush(new PointF(at.X - rx * 0.12f, 0), new PointF(at.X + rx * 0.12f, 0), Color.FromArgb(0, 255, 230, 180), Color.FromArgb(0, 255, 230, 180)))
-        {
-            shimmer.InterpolationColors = new ColorBlend { Colors = [Color.FromArgb(0, 255, 230, 180), Color.FromArgb(110, 255, 230, 180), Color.FromArgb(0, 255, 230, 180)], Positions = [0f, 0.5f, 1f] };
-            g.FillRectangle(shimmer, at.X - rx * 0.12f, at.Y - ry * 0.7f, rx * 0.24f, ry * 1.4f);
-        }
-        // Stones at the near bank, and the cattails: two clumps near, one lone at the far left.
+
+        // Stones on the bank, at the near edge (small and few).
         using (var stone = new SolidBrush(Color.FromArgb(104, 90, 80)))
             foreach (var (f, sz) in new[] { (-0.3f, 1.0f), (0.45f, 0.7f), (0.62f, 0.5f) })
-                g.FillEllipse(stone, at.X + rx * f, at.Y + ry * 0.95f, u * 0.004f * sz, u * 0.0025f * sz);
-        using (var stalk = new Pen(Color.FromArgb(78, 60, 36), Math.Max(1f, u * 0.0012f)))
+                g.FillEllipse(stone, at.X + rx * f, at.Y + ry * 1.05f, Math.Max(2f, u * 0.004f * sz), Math.Max(1.5f, u * 0.0025f * sz));
+
+        // 5. Cattails and reeds standing IN the near edge: feet a little inside the water (so there is water below the
+        // foot for the smear of the reflection), one lone cattail at the far left in the grass.
+        float lw = Math.Max(1.5f, u * 0.0013f);
+        using (var stalk = new Pen(Color.FromArgb(78, 60, 36), lw))
+        using (var reed = new Pen(Color.FromArgb(150, 104, 96, 52), lw) { StartCap = LineCap.Round })
+        using (var smear = new Pen(Color.FromArgb(70, 70, 44, 40), lw))
         using (var head = new SolidBrush(Color.FromArgb(96, 60, 34)))
-            foreach (var (f, dy, lean) in new[] { (-0.78f, 0.75f, -0.4f), (-0.70f, 0.95f, 0.2f), (-0.62f, 0.85f, -0.1f), (0.70f, 0.85f, 0.3f), (0.78f, 1.0f, -0.2f), (0.86f, 0.9f, 0.4f), (-0.55f, -0.95f, 0.1f) })
+            foreach (var (f, dy, lean) in new[] { (-0.78f, 0.30f, -0.4f), (-0.70f, 0.45f, 0.2f), (-0.62f, 0.60f, -0.1f), (0.70f, 0.55f, 0.3f), (0.78f, 0.45f, -0.2f), (0.86f, 0.25f, 0.4f), (-0.55f, -0.95f, 0.1f) })
             {
                 float sx = at.X + rx * f, sy = at.Y + ry * dy, tall = u * (0.012f + 0.003f * MathF.Abs(lean));
+                if (dy > 0f)
+                {
+                    g.DrawLine(smear, sx, sy + u * 0.0012f, sx - u * 0.0008f * lean, sy + u * 0.0042f);                 // its reflection, a short faint vertical smear
+                    g.DrawLine(reed, sx + u * 0.0025f, sy, sx + u * 0.0025f + u * 0.0045f * lean, sy - tall * 1.15f);  // two reeds beside it, taller and thinner
+                    g.DrawLine(reed, sx - u * 0.0025f, sy, sx - u * 0.0025f - u * 0.0035f * lean, sy - tall * 0.9f);
+                }
                 g.DrawLine(stalk, sx, sy, sx + u * 0.002f * lean, sy - tall);
-                g.FillRectangle(head, sx + u * 0.002f * lean - u * 0.0009f, sy - tall, u * 0.0022f, u * 0.0045f);
+                g.FillRectangle(head, sx + u * 0.002f * lean - u * 0.0009f, sy - tall, Math.Max(2f, u * 0.0022f), Math.Max(3f, u * 0.0045f));
+            }
+
+        // 6. Three ducks near the far edge, each with a faint V of wake trailing behind it (+1 faces right, -1 left).
+        float bw = Math.Max(5f, u * 0.0052f), bh = Math.Max(3f, u * 0.0030f);
+        using (var wake = new Pen(Color.FromArgb(80, 255, 222, 182), Math.Max(1.2f, u * 0.0011f)))
+        using (var body = new SolidBrush(Color.FromArgb(66, 46, 42)))
+        using (var flank = new SolidBrush(Color.FromArgb(176, 150, 128)))
+        using (var cap = new SolidBrush(Color.FromArgb(34, 54, 46)))
+            foreach (var (f, dy, dir) in new[] { (-0.38f, -0.42f, 1), (0.04f, -0.18f, -1), (0.36f, -0.50f, 1) })
+            {
+                float cx = at.X + rx * f, cy = at.Y + ry * dy;
+                g.DrawLine(wake, cx - dir * bw * 0.45f, cy + bh * 0.30f, cx - dir * bw * 1.5f, cy + bh * 0.30f - bh * 0.6f);   // the V: two thin arms back and out
+                g.DrawLine(wake, cx - dir * bw * 0.45f, cy + bh * 0.30f, cx - dir * bw * 1.5f, cy + bh * 0.30f + bh * 0.6f);
+                g.FillEllipse(body, cx - bw / 2f, cy - bh / 2f, bw, bh);
+                g.FillEllipse(flank, cx - bw * 0.28f, cy + bh * 0.08f, bw * 0.50f, bh * 0.30f);
+                float hd = Math.Max(2f, u * 0.0022f);
+                g.FillEllipse(cap, cx + dir * bw * 0.42f - hd / 2f, cy - bh * 0.62f - hd / 2f, hd, hd);
+            }
+    }
+
+    /// <summary>The smoothstep: 0 below a, 1 above b, an S-shaped ramp between (no corner at either end).</summary>
+    private static float Smooth(float a, float b, float t) { float x = Math.Clamp((t - a) / (b - a), 0f, 1f); return x * x * (3f - 2f * x); }
+
+    /// <summary>A colour a fraction of the way from one to another.</summary>
+    private static (float r, float gg, float b) Mix((float r, float gg, float b) a, (float r, float gg, float b) b, float f) => (a.r + (b.r - a.r) * f, a.gg + (b.gg - a.gg) * f, a.b + (b.b - a.b) * f);
+
+    /// <summary>The outline filled in white on black, shifted down by dy, as coverage 0 to 1 per pixel of a small picture whose corner is (ox, oy).</summary>
+    private static float[] Mask(PointF[] outline, float dy, int ox, int oy, int pw, int ph)
+    {
+        using var bmp = new Bitmap(pw, ph, PixelFormat.Format32bppArgb);
+        using (var mg = Graphics.FromImage(bmp))
+        using (var path = new GraphicsPath())
+        {
+            mg.SmoothingMode = SmoothingMode.AntiAlias;
+            mg.Clear(Color.Black);
+            mg.TranslateTransform(-ox, -oy + dy);
+            path.AddClosedCurve(outline, 0.6f);
+            mg.FillPath(Brushes.White, path);
+        }
+        var d = bmp.LockBits(new Rectangle(0, 0, pw, ph), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        var raw = new int[pw * ph];
+        System.Runtime.InteropServices.Marshal.Copy(d.Scan0, raw, 0, raw.Length);
+        bmp.UnlockBits(d);
+        var m = new float[raw.Length];
+        for (int i = 0; i < m.Length; i++) m[i] = (raw[i] & 0xFF) / 255f;
+        return m;
+    }
+
+    /// <summary>A box blur of radius r, along x then along y: softens a mask's edge so the water melts into the grass.</summary>
+    private static void Blur(float[] a, int w, int h, int r)
+    {
+        var tmp = new float[a.Length];
+        float inv = 1f / (2 * r + 1);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float s = 0;
+                for (int k = -r; k <= r; k++) s += a[y * w + Math.Clamp(x + k, 0, w - 1)];
+                tmp[y * w + x] = s * inv;
+            }
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float s = 0;
+                for (int k = -r; k <= r; k++) s += tmp[Math.Clamp(y + k, 0, h - 1) * w + x];
+                a[y * w + x] = s * inv;
             }
     }
 
@@ -747,12 +884,13 @@ internal static class ThanksgivingPainter
     /// rails, in weathered grey wood. Painted in the backdrop as the BACK side of a pen; the yard stamps the front rail
     /// over its animals each frame (FarmYard.cs), so a horse stands between the two.
     /// </summary>
-    private static void PaintRails(Graphics g, float x0, float x1, float y, float u, Color wood)
+    private static void PaintRails(Graphics g, float x0, float x1, float y, float u, Color wood, bool endPost = false)
     {
         float tall = u * 0.016f;
         using var post = new Pen(wood, Math.Max(1f, u * 0.0025f));
         using var rail = new Pen(wood, Math.Max(1f, u * 0.0016f));
         for (float px = x0; px <= x1 + 0.5f; px += u * 0.016f) g.DrawLine(post, px, y - tall, px, y);
+        if (endPost) g.DrawLine(post, x1, y - tall, x1, y);   // the pasture's far end gets its own post (the paddock's span happens to end near one)
         g.DrawLine(rail, x0, y - tall * 0.78f, x1, y - tall * 0.78f);
         g.DrawLine(rail, x0, y - tall * 0.42f, x1, y - tall * 0.42f);
     }

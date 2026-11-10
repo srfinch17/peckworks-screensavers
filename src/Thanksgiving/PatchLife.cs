@@ -120,6 +120,7 @@ internal sealed class PatchLife
     private const int RisePages = 6, TurnPages = 10, CurlPages = 12, MountPages = 12, HopPages = 22;   // 10 and 12 turn pages over 0.42 s: at 6 and 8 over 0.30 a turn was three frames a page, a card flipped ("the squirrel 2d flipping")   // 12 mount pages over 0.42 s: at 4 over 0.25 the pitch onto the bark was a card flipped up in four jumps ("a 90 degree rotation")
     private const float TurnRise = 0.12f, TurnFor = 0.42f;   // a sitting turn: rise to the sit (0.12 s), the narrowing pages, the flip, the widening (0.42), sink (0.12)
     private const float CurlFor = 0.42f;            // the running curl: in and out again, never stopping
+    private const float Standoff = 0.012f;          // how far (in U) a squirrel's hind feet stand off a trunk before it climbs and after it comes down: TreeFor's foot goal, the mount pages' origin and the dismount's landing all use it
     private const float MaxSlope = 0.7f;            // the steepest a squirrel RUNS on the screen: rise over run, 35 degrees. A side-view body moving straight up or down the screen slides ("90 turns"); a steeper goal is reached by a planned waypoint (PlanVia)
     private const float MountFor = 0.42f, HopFor = 0.55f, ClimbSpeed = 0.13f;   // ClimbSpeed in U a second: the climb is seen, not flashed (0.20 was a third of a second)
     private const float StartAt = 4.0f;             // the critters' first frame, seconds: pinned, so a seed is a scenario (their start used to wait on the sheets' side-thread build and drifted 0.4 s between runs)
@@ -468,7 +469,7 @@ internal sealed class PatchLife
             PointF[] trunk = t == 0 ? _s.LeftTrunk : _s.RightTrunk;
             // The foot: just beside the trunk on the squirrel's side, on the trunk's own row (the ground's crest plus the trunk's stand).
             float side = c.X < trunk[0].X ? -1f : 1f;
-            foot = new PointF(trunk[0].X + side * 0.012f * _s.U, trunk[0].Y);
+            foot = new PointF(trunk[0].X + side * Standoff * _s.U, trunk[0].Y);
             if (MathF.Abs(foot.X - c.X) < 1.4f * _s.U && CanStand(foot.X, foot.Y) && Ground.LineClear(_ground, me, foot, 2f)) return t;
         }
         foot = default;
@@ -503,6 +504,30 @@ internal sealed class PatchLife
                 if (page.PixelAt(x, y) >> 24 != 0) { if (x < lo) lo = x; if (x > hi) hi = x; }
         return hi < 0 ? page.Width / 2 : (lo + hi) / 2;
     }
+
+    /// <summary>
+    /// The two angles of a mount page at f (0 to 1): the whole body's turn and the front half's bend. Up onto the bark: the
+    /// bend leads (reaching up) over the first 0.55, then the body turns up while the bend straightens. Down off it (the
+    /// dismount, drawn mirrored, head first): the front half bends level toward the ground first, then the body comes down.
+    /// </summary>
+    private static (float Rot, float Pitch) MountAngles(float f, bool up)
+    {
+        static float S(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3f - 2f * x); }
+        if (up)
+        {
+            if (f < 0.55f) return (0f, -90f * S(f / 0.55f));
+            float e = S((f - 0.55f) / 0.45f);
+            return (-90f * e, -90f * (1f - e));
+        }
+        else
+        {
+            if (f < 0.55f) return (90f, -90f * S(f / 0.55f));
+            float e = S((f - 0.55f) / 0.45f);
+            return (90f * (1f - e), -90f * (1f - e));
+        }
+    }
+
+    private static float Smooth01(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3f - 2f * x); }
 
     private static int HighestRow(Sprite page)
     {
@@ -585,8 +610,17 @@ internal sealed class PatchLife
             // The pitch onto the bark and off it: the CLINGING body (the same pose the climb's first page has, so the seam into the
             // climb is the same picture) swung about its hind feet from level to upright, eased (slow at both ends), twelve pages over
             // 0.42 s. The first version swung a SITTING squirrel up in four jumps and switched to the cling on the last page: a card flip.
-            sq.MountUp = Make(MountPages, sqw, sqw, so, so, i => { float f = (i + 1) / (float)MountPages, e = f * f * (3f - 2f * f); return SquirrelArt.Page(Cling(0, -90f * e), k, sqw, sqw, so, so); });
-            sq.MountDown = Make(MountPages, sqw, sqw, so, so, i => { float f = (i + 1) / (float)MountPages, e = f * f * (3f - 2f * f); return SquirrelArt.Page(Cling(0, 90f * (1f - e)), k, sqw, sqw, so, so); });
+            // The mount BENDS (his line: "it should be able to BEND in the middle so that it looks like it would look if an animal
+            // went to climb a tree"): first the front half reaches up the bark (Pitch 0 to -90 about the hip, the hind feet still on
+            // the ground, the back humped), then the hind end follows (the whole body turns up, Rotate 0 to -90, while the bend
+            // straightens, Pitch back to 0), ending on exactly the climb's first page. The dismount is the same the other way about:
+            // head down the trunk, the front half reaches for the ground and bends level, then the hind end comes down after it.
+            // The hind feet stand OFF the trunk (the den trip's foot goal, TreeFor's Standoff) while the front half reaches up, and jump
+            // the gap onto the bark as the body turns up: the DRAW moves the page's origin from where the run ended to the trunk's
+            // column over the second phase (see Doing.Mount in Draw), so the run's last position, the mount's first page and the
+            // climb's first page all agree on where the feet are.
+            sq.MountUp = Make(MountPages, sqw, sqw, so, so, i => { var (rot, pitch) = MountAngles((i + 1) / (float)MountPages, up: true); var q = Cling(0, rot); q.Pitch = pitch; return SquirrelArt.Page(q, k, sqw, sqw, so, so); });
+            sq.MountDown = Make(MountPages, sqw, sqw, so, so, i => { var (rot, pitch) = MountAngles((i + 1) / (float)MountPages, up: false); var q = Cling(0, rot); q.Pitch = pitch; return SquirrelArt.Page(q, k, sqw, sqw, so, so); });
             sq.MountUpCol = MiddleColumn(sq.MountUp.Pages[MountPages - 1]); sq.MountDownCol = MiddleColumn(sq.MountDown.Pages[0]);   // the upright page: the same picture as the climb's first, so the two seams meet
             _sq[v] = sq;
         }
@@ -1603,7 +1637,7 @@ internal sealed class PatchLife
                 break;
             }
             case Doing.Dismount:
-                if (c.Mind.Over) { c.Tree = -1; c.Mind.Begin(Doing.Still, 0.3f); c.Clock = 0; c.WasDown = false; c.Blend = 0; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} is down from the tree"); }   // a short sit: the trunk's foot is behind the front pumpkins, a long sit there is a tail out of a pumpkin
+                if (c.Mind.Over) { c.X = _s.TreeHoles[c.Tree].At.X - c.Dir * Standoff * _s.U; c.Tree = -1; c.Mind.Begin(Doing.Still, 0.3f); c.Clock = 0; c.WasDown = false; c.Blend = 0; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} is down from the tree"); }   // the feet landed a stand-off behind the trunk (the dismount's last page), so the sit is drawn there; a short sit: the trunk's foot is behind the front pumpkins
                 break;
         }
     }
@@ -1700,8 +1734,13 @@ internal sealed class PatchLife
                         switch (c.Mind.Doing)
                         {
                             case Doing.Mount:
-                                StampAt(fb, sq.MountUp, sq.MountUp.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], OverHole(sq.MountUp, sq.MountUpCol, mirror), c.Y, mirror, null, c);
+                            {
+                                // The feet stay where the run ended through the bend, then travel to the trunk's column as the hind end jumps up.
+                                float f = c.Clock / MountFor, e = f < 0.55f ? 0f : Smooth01((f - 0.55f) / 0.45f);
+                                float onTrunk = OverHole(sq.MountUp, sq.MountUpCol, mirror), x = c.X + (onTrunk - c.X) * e;
+                                StampAt(fb, sq.MountUp, sq.MountUp.Pages[Math.Clamp((int)(f * MountPages), 0, MountPages - 1)], x, c.Y, mirror, null, c);
                                 break;
+                            }
                             case Doing.Climb:
                             case Doing.Enter:
                             {
@@ -1730,8 +1769,14 @@ internal sealed class PatchLife
                                 break;
                             }
                             case Doing.Dismount:
-                                StampAt(fb, sq.MountDown, sq.MountDown.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], OverHole(sq.MountDown, sq.MountDownCol, mirror), c.Y, mirror, null, c);
+                            {
+                                // Head down the trunk: the front half reaches level toward the ground, then the hind end comes down and the feet
+                                // land a stand-off behind the trunk (where the Dismount's end puts c.X).
+                                float f = c.Clock / MountFor, e = f < 0.55f ? 0f : Smooth01((f - 0.55f) / 0.45f);
+                                float onTrunk = OverHole(sq.MountDown, sq.MountDownCol, mirror), landing = holeAt.X - c.Dir * Standoff * _s.U, x = onTrunk + (landing - onTrunk) * e;
+                                StampAt(fb, sq.MountDown, sq.MountDown.Pages[Math.Clamp((int)(f * MountPages), 0, MountPages - 1)], x, c.Y, mirror, null, c);
                                 break;
+                            }
                         }
                         break;
                     }

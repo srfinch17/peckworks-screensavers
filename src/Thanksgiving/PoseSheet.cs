@@ -52,6 +52,17 @@ internal static class PoseSheet
 
     private static SquirrelArt.Pose WithNut(SquirrelArt.Pose q) { q.Acorn = q.PawsUp ? 2 : 1; return q; }
 
+    /// <summary>A mount page at f: the front half bent up the bark first, then the whole body turning up (PatchLife.MountAngles' rule, repeated here for the sheet).</summary>
+    private static SquirrelArt.Pose Mount(float f)
+    {
+        static float S(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3f - 2f * x); }
+        var q = SquirrelArt.Bound(0f, 2.2f, cling: true);
+        q.TailBase = 172f; q.TailCurl = -12f; q.TailS = 6f; q.TailWave = 4f;
+        if (f < 0.55f) { q.Rotate = 0f; q.Pitch = -90f * S(f / 0.55f); }
+        else { float e = S((f - 0.55f) / 0.45f); q.Rotate = -90f * e; q.Pitch = -90f * (1f - e); }
+        return q;
+    }
+
     private static (string, Action<Graphics>)[] Squirrel()
     {
         (string Name, SquirrelArt.Pose Pose)[] poses =
@@ -63,6 +74,7 @@ internal static class PoseSheet
             ("turn 0.1", SquirrelArt.Turn(0.1f)), ("turn 0.2", SquirrelArt.Turn(0.2f)), ("turn 0.3", SquirrelArt.Turn(0.3f)), ("turn 0.4", SquirrelArt.Turn(0.4f)),
             ("turn 0.5 (front)", SquirrelArt.Turn(0.5f)), ("curl 0.2", SquirrelArt.Curl(0.2f)), ("curl 0.35", SquirrelArt.Curl(0.35f)), ("curl 0.5 (front)", SquirrelArt.Curl(0.5f)),
             ("chatter", SquirrelArt.Chatter(2, 1)), ("dazed", SquirrelArt.Dazed(12f)),
+            ("mount 0.25", Mount(0.25f)), ("mount 0.5", Mount(0.5f)), ("mount 0.7", Mount(0.7f)), ("mount 0.9", Mount(0.9f)),
         ];
         return poses.Select(p => (p.Name, (Action<Graphics>)(g => { if (p.Pose.Rotate != 0f) g.RotateTransform(p.Pose.Rotate); SquirrelArt.Paint(g, p.Pose); }))).ToArray();
     }

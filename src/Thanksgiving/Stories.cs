@@ -149,16 +149,22 @@ internal sealed class Cast
             // The mount (since 2026-11-09, as PatchLife's): the CLINGING body itself, the pose the climb's first page has, swung about
             // its hind feet from level to upright, eased, twelve pages over 0.4 s. (The first version swung a sitting squirrel up in
             // three jumps and switched to the cling on the last page: a card flipped up.) Played backward it is the dismount.
+            // The mount BENDS, as PatchLife's does (his line: "it should be able to BEND in the middle"): the front half reaches up
+            // the bark first (Pitch, the hind feet still down), then the hind end follows (Rotate) while the bend straightens.
+            static float S(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3f - 2f * x); }
             Mount[a] = MakeSheet(MountPages, sq, sq, so, so, i =>
             {
-                float f = (i + 1) / (float)MountPages, e = f * f * (3f - 2f * f);
-                var q = SquirrelArt.Bound(0f, bound, cling: true); q.Acorn = nut; q.Rotate = -90f * e; return SquirrelArt.Page(q, k, sq, sq, so, so);
+                float f = (i + 1) / (float)MountPages;
+                float rot = f < 0.55f ? 0f : -90f * S((f - 0.55f) / 0.45f), pitch = f < 0.55f ? -90f * S(f / 0.55f) : -90f * (1f - S((f - 0.55f) / 0.45f));
+                var q = SquirrelArt.Bound(0f, bound, cling: true); q.Acorn = nut; q.Rotate = rot; q.Pitch = pitch; return SquirrelArt.Page(q, k, sq, sq, so, so);
             });
-            // The end of a head-first descent: the clinging pose pitching from head-down to level (mirrored at the stamp).
+            // The end of a head-first descent (mirrored at the stamp): the front half bends level toward the ground first, then the
+            // hind end comes down after it.
             MountDown[a] = MakeSheet(MountPages, sq, sq, so, so, i =>
             {
-                float f = (i + 1) / (float)MountPages, e = f * f * (3f - 2f * f);
-                var q = SquirrelArt.Bound(0f, bound, cling: true); q.Acorn = nut; q.Rotate = 90f * (1f - e); return SquirrelArt.Page(q, k, sq, sq, so, so);
+                float f = (i + 1) / (float)MountPages;
+                float rot = f < 0.55f ? 90f : 90f * (1f - S((f - 0.55f) / 0.45f)), pitch = f < 0.55f ? -90f * S(f / 0.55f) : -90f * (1f - S((f - 0.55f) / 0.45f));
+                var q = SquirrelArt.Bound(0f, bound, cling: true); q.Acorn = nut; q.Rotate = rot; q.Pitch = pitch; return SquirrelArt.Page(q, k, sq, sq, so, so);
             });
             Turn[a] = Ground(TurnPages, i => { var q = SquirrelArt.Turn(0.5f * (i + 1) / TurnPages, nut == 1); q.Acorn = nut == 1 ? 2 : 0; return q; });   // the profile coming round to the front view, ten steps; the caller plays it back mirrored
             Rise[a] = Ground(RisePages, i => { var q = SquirrelArt.Sit(0.2f + 0.8f * i / (RisePages - 1), 0, false, nut == 1); q.Acorn = nut == 1 ? (q.PawsUp ? 2 : 1) : 0; return q; });

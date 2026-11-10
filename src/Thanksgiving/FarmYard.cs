@@ -95,7 +95,7 @@ internal sealed class FarmYard
     private readonly Sheets[] _sheets = new Sheets[5];       // by Kind
     private readonly Sheets[] _horseCoats = new Sheets[3], _cowCoats = new Sheets[2];
     private Sheets _henSheets = null!, _roosterSheets = null!;
-    private readonly Sprite _paddockFront, _penFront;
+    private readonly Sprite _paddockFront, _penFront, _pastureFront;
     private readonly PointF[] _road;
     private readonly float[] _roadLen;              // the road's cumulative length at each point
     private volatile bool _ready;
@@ -141,16 +141,24 @@ internal sealed class FarmYard
         for (int i = 1; i < _road.Length; i++) _roadLen[i] = _roadLen[i - 1] + Dist(_road[i - 1], _road[i]);
 
         // The front rail of the paddock and the front boards of the pig pen: stamped over the animals.
-        float railW = s.Paddock.X1 - s.Paddock.X0 + u * 0.02f, railH = u * 0.02f;
-        _paddockFront = Sprite.Paint((int)railW + 2, (int)railH + 2, g =>
+        // (The cows' pasture has the same rails, 2026-11-09: "the cows should be fenced in somehow". Same wood, same posts as the
+        // painter's back rails, so one function makes both fronts; endPost adds the post the span's last step may miss.)
+        Sprite RailFront(float x0, float x1, bool endPost)
         {
-            using var post = new Pen(Color.FromArgb(150, 132, 104), Math.Max(1f, u * 0.0025f));
-            using var rail = new Pen(Color.FromArgb(150, 132, 104), Math.Max(1f, u * 0.0016f));
-            float tall = u * 0.016f, y = railH;
-            for (float px = u * 0.01f; px <= railW - u * 0.01f + 0.5f; px += u * 0.016f) g.DrawLine(post, px, y - tall, px, y);
-            g.DrawLine(rail, u * 0.01f, y - tall * 0.78f, railW - u * 0.01f, y - tall * 0.78f);
-            g.DrawLine(rail, u * 0.01f, y - tall * 0.42f, railW - u * 0.01f, y - tall * 0.42f);
-        });
+            float railW = x1 - x0 + u * 0.02f, railH = u * 0.02f;
+            return Sprite.Paint((int)railW + 2, (int)railH + 2, g =>
+            {
+                using var post = new Pen(Color.FromArgb(150, 132, 104), Math.Max(1f, u * 0.0025f));
+                using var rail = new Pen(Color.FromArgb(150, 132, 104), Math.Max(1f, u * 0.0016f));
+                float tall = u * 0.016f, y = railH;
+                for (float px = u * 0.01f; px <= railW - u * 0.01f + 0.5f; px += u * 0.016f) g.DrawLine(post, px, y - tall, px, y);
+                if (endPost) g.DrawLine(post, railW - u * 0.01f, y - tall, railW - u * 0.01f, y);
+                g.DrawLine(rail, u * 0.01f, y - tall * 0.78f, railW - u * 0.01f, y - tall * 0.78f);
+                g.DrawLine(rail, u * 0.01f, y - tall * 0.42f, railW - u * 0.01f, y - tall * 0.42f);
+            });
+        }
+        _paddockFront = RailFront(s.Paddock.X0, s.Paddock.X1, false);
+        _pastureFront = RailFront(s.Pasture.X0, s.Pasture.X1, true);
         float penW = s.PigPen.X1 - s.PigPen.X0 + u * 0.01f, penH = u * 0.012f;
         _penFront = Sprite.Paint((int)penW + 2, (int)penH + 2, g =>
         {
@@ -733,6 +741,7 @@ internal sealed class FarmYard
         }
         // The pens' front sides, over the animals.
         _paddockFront.Draw(fb, (int)(_s.Paddock.X0 - _s.U * 0.01f), (int)(_s.Paddock.Front - _paddockFront.Height + 2), 1f, _s.OpenFromFarm);
+        _pastureFront.Draw(fb, (int)(_s.Pasture.X0 - _s.U * 0.01f), (int)(_s.Pasture.Front - _pastureFront.Height + 2), 1f, _s.OpenFromFarm);
         _penFront.Draw(fb, (int)(_s.PigPen.X0 - _s.U * 0.005f), (int)(_s.PigPen.Front - _penFront.Height + 2), 1f, _s.OpenFromFarm);
     }
 }
