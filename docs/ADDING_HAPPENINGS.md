@@ -1,13 +1,16 @@
 # Adding happenings to a screensaver
 
 A **happening** is one small thing that occurs now and then in a scene: a shooting star, a ghost
-rising from a grave, a firework. Halloween has nineteen, Thanksgiving eighteen; Christmas, Sakura and Sakura Dusk have
+rising from a grave, a firework. Halloween has nineteen, Thanksgiving eighteen, Christmas seventeen; Sakura and Sakura Dusk have
 twenty each. This page is the recipe for adding more, to any of them or to another screensaver in
 this repo.
 
 Think of a cuckoo clock. Most of the time the little door is shut. Now and then it opens, the
 bird does its routine, and the door shuts. Each happening is one bird. The **director** is the
 clockwork that decides when each door opens.
+
+A thing that should be there all the time, with a mind of its own (Christmas's fox, hares and snowman used to be
+happenings and are residents now), is not a happening: see `src/Christmas/Resident.cs` and `docs/MINDS.md`.
 
 ## The pieces
 
@@ -59,7 +62,7 @@ fixed to a prop) before writing one. They are the pattern.
    (the size unit: the screen height, or less on a tall screen). Something sized by height
    alone swallows a portrait monitor. Something that crosses the screen "in 11 seconds" runs
    twice as fast on a screen twice as wide, its legs a blur: give it a speed in `U` per second
-   and work the seconds out from the distance (`Fox.cs`, `ToyTrain.cs`).
+   and work the seconds out from the distance (`ToyTrain.cs`).
 3. **Anything standing on the ground asks the ground WHERE TO STAND, which is not the same as
    where the ground starts.** `s.Ground.YAt(x)` is the hill's crest: its FAR edge, the line it
    makes against whatever is behind it. Trees and houses are planted a little in front of that
@@ -175,7 +178,9 @@ To watch them all for real, play the showreel, every happening back to back:
 $env:PECKWORKS_HAPPENING = 'all'; Start-Process .\dist\Halloween.scr -ArgumentList /s; Remove-Item Env:PECKWORKS_HAPPENING
 ```
 
-(Moving the mouse closes it. Use a happening's name instead of `all` to loop just that one.)
+(Moving the mouse closes it. Use a happening's name instead of `all` to loop just that one. The word `none`
+plays no happening at all: a quiet scene, for looking at something else, such as a resident, without fireworks
+going off behind it.)
 
 ## Adding one happening to a saver that already has them
 
@@ -203,8 +208,8 @@ list, the facts, the wiring, two pattern happenings, and the helpers.
    own that a happening could be behind or in front of, one call right after the backdrop is
    copied will do (Halloween). If it has, the happenings need LAYERS, because they are not all
    at one depth: Christmas calls `Draw(fb, 0)` before Santa for the far ones (fireworks,
-   northern lights), `Draw(fb, 1)` after Santa and the bulb glows for the near ones (the fox,
-   the owl on its twig), and `Draw(fb, 2)` after the falling snow for frost on the glass. Each
+   northern lights), `Draw(fb, 1)` after Santa and the bulb glows for the near ones (the
+   owl on its twig, the rolling snowball), and `Draw(fb, 2)` after the falling snow for frost on the glass. Each
    happening says which it is with `Layer`. With a single call, a sleigh that flies behind a
    branch was painted over an owl sitting on that branch. For every happening ask: what in
    this scene moves, and am I in front of it or behind it? If a happening must

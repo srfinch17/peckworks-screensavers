@@ -250,6 +250,12 @@ These are in the code comments too; here they are in one place.
 | Ducks (`src/SakuraPond/Ducks.cs`) | calm, fussy (per visit); a duckling has none, the director picks for it | Cruise, Look, Dabble, Preen, Flap, Wait, Herd, Snatch (duckling: Follow, Lag, Scramble, Bump, Ride, Peck, Chase, Dabble, Bunch, Scatter) | the snake's head near the mother (Herd), a straggler (Wait), the family's cute-thing dice (one at a time; a duckling's drawn heading is its steering heading plus a one degree paddle sway, so a metric on the drawn heading and one on the steering heading agree; the director of the cute things is the family's own, outside the kit). Snatch (a chance meal of a tadpole or froglet within a tenth of the screen of the bill, from Cruise only, a `Snatch` seeded from the dials) is ended by any of them, through `Duck.Start` |
 | Tadpoles (`src/SakuraPond/Tadpoles.cs`) | none: a tadpole runs a small state machine of its own (`TadState`), not a `Mind<TDoing>`, and the clutch is its own director, outside the kit | hang, burst, scatter, graze, grow, dive, rise, leave as a froglet, or be eaten (`Exit.Eaten`, one `Hunter` at a time); the clutch moves house every 2 to 5 minutes between three haunts (`Clutch.Haunt`: Shore, Island, Open) and one tadpole ventures off alone about once a minute | every koi's head and middle whatever its depth, the turtles, the ducks' heads, the snake's head, the crayfish |
 | Frogs (`src/SakuraPond/Frog.cs`) | bold, restless (dealt); wet (seconds since it last sat: past twelve it wants out) | Sit (with croak, shift, pivot inside it), Snap (at a dragonfly, or at a froglet or shallow tadpole: one hop, eaten only if the snout lands on it), Leap, Swim (to a NEAR perch, the next pad or stone, 20 s at most), Float, Dive (at most two in one spell in the water), Climb | the snake's head, a koi's head or a turtle near a swimming frog, a lizard's nose near one on a rock or the bank, a swallow's shadow |
+| Christmas reindeer (`src/Christmas/ReindeerHerd.cs`, 2026-11-10) | timid, curious (dealt; the calf is more of both, the bull less timid); an `Attention` each | Graze (scan, paw three times, eat, chew), Look, Walk, Lie, Alert, Watch (the head follows Santa), Trot, Shake, Gambol (the calf's play) | any reaction cuts a graze after a scrape in progress is finished; a Flee gets a lying animal up fast; Gambol only by a danger; Watch by Santa leaving or a danger; each walk brakes onto the rest page first |
+| Christmas hares and fox (`FoxAndHares.cs`) | hares: timid, curious, play (dealt); the fox is one visitor that comes and goes | hares: Sit, Look, Nibble, Groom, Go, Hop, Tall, Thump, Binky, Bolt, Dive, Under, Peek; fox: Away, Go, Trot, Stand, Look, Sit, Asleep, Mouse (listen, leap, dive), Stalk, Dash, Chase, Skid, Nose, Dig, Leave | a Threat (the fox, the owl) and a Loud send a hare tall and then bolting; a thump (Friend) makes every hare in earshot bolt; the fox's chase ends at the burrow with a dig and a sit |
+| Christmas snowman (`YardSnowman.cs`) | one mind, no walking | Idle, Watch, HatTip, FixHat, Scan, Shiver, Snowflake, Yawn, Doze, WaveCabin, Shake, Jump, Search | most doings are cut by any reaction; a Loud makes him Jump, Santa overhead brings the HatTip, a Doze is cut only by a Loud or a Threat; HatTip, FixHat, Shake and Jump are never cut |
+| Christmas feeder birds (`FeederBirds.cs`) | timid, bold, lazy (dealt, from the kind: chickadee, cardinal, at most one jay); hunger | Away, Startle, Fly, Perch, Peck, Hop, Squabble, Sing, Bathe | a Threat sends every bird up at once; the jay's arrival scatters the table; a flush is posted for the rest |
+| Christmas log mice (`LogMice.cs`) | bold, curious, play (dealt); hunger (a mood that rises over about four minutes and sends a mouse to the bird table) | Home, Peek, Hop, Hold, Scurry, Rise, Sit, Wash, Fall, Dig, Plunge, Under, Pop, Box, Frozen | a Threat or Loud withdraws a peeking mouse and drops a sitting one to flee; a dash is never cut; a mouse under the snow hears nothing; a story LENDS the mice and the resident draws nothing of them |
+| Christmas otters (`Otters.cs`, `OttersMind.cs`) | playful, lazy, timid, curious (dealt) | Under, Surface, Haul, Rest, Gallop, Slide, Stand, Roll, Eat, Dive, Wrestle | a Threat or Loud sinks a surfaced otter at once and turns a gallop into a panicked run for the hole; Haul, Roll and Dive are never cut; a slide is cut only before the flop |
 
 The minnows' school mood (drift, rush, mill, and since round thirty-seven a dip to the deep bed and a graze
 there, the school's depth eased at a rate its pace can hide) and the dragonflies' doings are simpler clocks
@@ -578,3 +584,47 @@ listener's own state in the log before widening any reach.
   45 s rest after). It posts `Sense.Movement` at its feet while it walks (0.15 U); it reads Threat only. It never starts a
   trunk trip while `PatchLife.TrunkBusy(1)` (a squirrel on the right trunk) or while a story plays, and waits at the foot
   if a squirrel comes down meanwhile; the squirrels do not yet know about it (the reverse case is open).
+
+### Christmas (2026-11-10)
+
+The Christmas saver was rebuilt the way Thanksgiving was, and every animal in it runs on the parts above. All of
+them are `Resident`s (`src/Christmas/Resident.cs`): each has its own dice, reads the scene's one `Noticeboard`
+and is drawn through the shared `DepthQueue`. What each does with senses and movers, what it pins, and who is
+in reach of the pin:
+
+- The reindeer (`ReindeerHerd.cs`) each own an `Attention` and a gait machine beside the doing; every walk is a
+  `Pace` that leans in and `Brake`s onto the rest page, paged by the distance walked. Santa overhead is a
+  Movement notice from the scene, and the calf always lifts its head to follow him. They pin Movement at a
+  walking or trotting animal (reach 0.25 U, weight 0.3, only after it has walked more than 2 s, then a 6 s
+  rest) and Friend when one bolts (reach 0.6 U, weight 1, once per alarm, never again within 5 s). In reach:
+  the hares, the birds at the table, and the other reindeer.
+- The hares and the fox (`FoxAndHares.cs`) read Santa, Loud, Threat and each other's thumps. The fox pins Threat
+  while it stalks or chases (reach 0.35 U, weight 1, every 0.5 s) and a weaker one while it trots (0.2 U,
+  weight 0.4, every 0.8 s); a hare pins Friend at each of its two thumps (0.4 U, weight 0.6) and does not thump
+  again for 20 s after a flight. The hares hear the fox, the fox is in reach of the hares, and the thump is how
+  one hare's alarm becomes all of them bolting, with no herd code.
+- The snowman (`YardSnowman.cs`) only listens: he reads Movement, Loud, Threat and Santa, and pins nothing, so
+  nothing hears him. Every channel of his body (eyes, hands, mouth, squash) eases toward a goal the doing
+  writes, which is why two doings that disagree about the head glide from one to the other.
+- The birds (`FeederBirds.cs`) pin Movement when the whole flock flushes (0.4 U, weight 0.6, once per flush) and
+  Food where a flung seed lands (0.3 U, weight 0.5, never within 8 s of the last). In reach: the hares, the
+  mice, and the snowman if they sit within 0.4 U of the table.
+- The mice (`LogMice.cs`) move in dashes of a whole number of strides, so a dash always ends on the page where
+  all four feet are down. They pin Movement while they run (0.15 to 0.18 U, weight 0.3 to 0.35) and a Friend
+  squeak (0.20 U, weight 0.4, at most once in 3 s); a Food notice sends a hungry mouse foraging.
+- The otters (`Otters.cs`, `OttersMind.cs`) move in the flat plane of the ice and are drawn at nine yaws. They
+  pin Movement at a belly slide (0.3 U, weight 0.4, once per slide), Friend when one bolts for the hole (0.5 U,
+  weight 0.8, at most once in 15 s) and Food when one starts a fish (0.3 U, weight 0.8, once per fish). In
+  reach: the mice that come to the near rim of the pond, and a hare at the strip left of the pond.
+- Santa (`SantaRig.cs`) is not a resident. The scene pins him as a Movement notice once a second while he is on
+  screen (high in the sky, reach 1.6 U, weight 0.35), so the animals glance up rather than flee.
+
+`Story`, `StoryDirector` and `DepthQueue` now live in `Core/Stories.cs`, for any saver. Thanksgiving still uses
+its own older copy in `src/Thanksgiving/Stories.cs`: that is a known leftover, not a design. Two Christmas stories
+(`src/Christmas/Stories/`) borrow residents the way Thanksgiving's fawn story does: `MiceTrimTree` LENDS the log
+mice (they are inside the log and the resident draws nothing of them while it plays), and `SantaDelivery` takes
+Santa's reins (`SantaRig.Take` and `Release`). While a story plays the scene sets `Lull` on every resident, so
+each finishes what it is doing and keeps to quiet doings. `CarrotHeist` is a placeholder that never plays.
+Test aids: `PECKWORKS_STORY=1` starts the first story at 4 s (0 never plays one), `PECKWORKS_STORYPICK=<name>`
+plays one story every time, `PECKWORKS_STORYLOG=<file>` writes a line per story begun, and `PECKWORKS_MINDLOG=<file>`
+makes every Christmas resident and the Santa rig write their places and doings.

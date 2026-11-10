@@ -164,12 +164,21 @@ a fed koi was as hungry as before and went straight back for the next.
       Cast.cs                      the list of them all
       ShootingStar.cs, ...         each one: how long it lasts, and how it looks t seconds in
 
-  Christmas/                       falling snow, twinkling lights, and Santa
+  Christmas/                       falling snow, twinkling lights, a village, and a snowfield of residents
     Program.cs                     Main(), plus the definition
-    ChristmasScene.cs              backdrop + Santa's sleigh + twinkling lights + the shared engine dropping snow
-    ChristmasPainter.cs            paints the night sky, mountains, cabin, snowy pines, strings of lights
+    ChristmasScene.cs              backdrop + the live lights (stars, village and cabin windows, lamp, glitter, bulbs) + smoke + Santa + the residents through one depth queue + the stories + the noticeboard + the shared engine dropping snow
+    ChristmasPainter.cs            paints the low-horizon night, the village in the valley, the log cabin, the pines and their lights, the snowfield with its frozen pond and ice hole, the lamp post, the fallen log, the bird table, the tiny fir and the holly; hands back the facts and the depth picture (NearDepth)
     ChristmasSettings.cs           declares its knobs
-    Happenings/                    twenty small random events (a fox, a snowman, fireworks), one class per file
+    Resident.cs                    the base class of everything that lives in the scene (its own dice, painting on a helper thread, Lull, Stamp) and the shared mind log
+    ReindeerHerd.cs, ReindeerArt.cs      the grazing herd: minds and flip-books
+    FoxAndHares.cs, FoxAndHaresArt.cs, FoxAndHaresFoxArt.cs   the hares and the fox that stalks them
+    YardSnowman.cs, YardSnowmanArt.cs    the snowman who watches, drawn live from parts
+    FeederBirds.cs, FeederBirdsArt.cs    the birds of the bird table
+    LogMice.cs, LogMiceArt.cs, LogMiceDecor.cs   the mice of the fallen log, and the tiny fir's decorations
+    Otters.cs, OttersMind.cs, OttersArt.cs, OttersFx.cs   the otters on the pond: body, mind, pictures, small effects
+    SantaRig.cs, SantaArt.cs, SantaFigure.cs   Santa's flight as a rig of parts a story can take over, the pictures, and Santa on foot
+    Stories/                       SantaDelivery.cs, MiceTrimTree.cs, and CarrotHeist.cs (a placeholder that never plays)
+    Happenings/                    seventeen small random events (fireworks, the northern lights, an owl), one class per file
 
   Thanksgiving/                    falling maple leaves, a V of geese, chimney smoke, a scarecrow's scarf
     Program.cs                     Main(), plus the definition
@@ -445,7 +454,7 @@ out pixel by pixel sixty times a second. So `Sprite.cs` does what `GlyphAtlas` d
 Matrix characters: paint the thing **once** at startup onto a small see-through sheet, then stamp
 that sheet onto the frame wherever it is needed. To animate, paint a few sheets in different
 poses and stamp a different one each frame, like the pages of a flip-book. The bats have seven
-wing positions in three sizes; the sleigh has four gallop poses.
+wing positions in three sizes; Santa's reindeer each have a sixteen-page flying gallop of their own.
 
 A soft **glow** is also a sprite: a round patch of color, strong in the middle and fading to
 nothing at the edge. Stamping it at changing strength is what makes a jack-o'-lantern flicker, a
@@ -460,10 +469,10 @@ is only ever stamped on the "yes" pixels. Nothing has to know where the branches
 well above the pines, so in practice it is only the corner branches that cover him.)
 
 **Happenings** (in every painted saver) are small events that come and go: a shooting star, a
-ghost rising from a grave, a spider spinning a web, a snowman building itself. Think of a cuckoo clock: each happening is one bird behind
+ghost rising from a grave, a spider spinning a web, an owl blinking on a branch. Think of a cuckoo clock: each happening is one bird behind
 a little door, and a **director** (`Core/Happenings.cs`) is the clockwork that opens one door
 every few seconds. The director shuffles the happenings like a deck of cards and deals from it,
-so you see them all before any repeats. Christmas, Sakura and Sakura Dusk each have their own deck of twenty, Thanksgiving eighteen, none repeated.
+so you see them all before any repeats. Sakura and Sakura Dusk each have their own deck of twenty, Christmas seventeen, Thanksgiving eighteen, none repeated.
 Thanksgiving is the third saver in this mould (built 2026-11-04), and the quickest: the engine, the recipe and the two
 sister sets already existed, so the work was the backdrop, the facts, five live actors and the cast. Its acorn
 caper (`AcornCaper.cs`) is a third kind of thing: not a happening (it lasts forty seconds and has four actors)
@@ -483,6 +492,57 @@ stands. Anything that moves on the ground is then stamped with the nearness of i
 leaves out every pixel where the depth picture is nearer: a mouse walking behind a pumpkin is hidden by it,
 and in front of a smaller one it is not. That one array is what makes "throughout the patch" true for the
 patch's own critters (`PatchLife.cs`), the stories' actors, the strutting turkey and the rolling apple.
+
+**Christmas was rebuilt the same way** (2026-11-10): Thanksgiving's lessons, applied to a snowy night. The
+Santa-and-bulbs scene became a world with residents.
+
+*The depth picture, again.* `ChristmasPainter` paints each near prop (the lamp post, the fallen log, the bird
+table, the tiny fir, the holly, the drifts along the bottom edge) a second time, flat, into `NearDepth`, in a
+grey that says how near that prop's FOOT is (`Nearness(y)`: 1 at the far crest of the snow, 254 at the bottom
+edge). Anything that moves on the snowfield is drawn with `Stamp`, which takes a picture and the point where
+the animal's FEET are, and leaves out every pixel where a prop stands nearer than those feet. Think of
+cardboard cut-outs standing in rows on a table: each one hides what is in the rows behind it and nothing in
+front. The same scenery object also answers the questions that keep animals honest: `FieldScale` and `Metre`
+(how big one metre is at that height on the snow, so a reindeer, a fox and a mouse all keep their real
+proportions to the cabin's door), `FieldPoint` (a point on the snowfield by "across" and "how near") and
+`CanStand` (may feet go here? not on the ice, not inside a prop's foot).
+
+*The depth queue.* Thanksgiving drew each KIND of animal as a block, so whichever kind was drawn later
+always won, and a hare nearer than a reindeer ran "under" it. Christmas hands every animal to a
+`DepthQueue` (`Core/Stories.cs`) instead: each frame, every resident gives it one line per visible animal
+(where its feet are, and who to ask to draw it), and the queue sorts the lines from farthest to nearest
+(feet higher on the screen means farther) and calls each owner back in that order. Like lining children up
+for a school photo by height: nobody decides the order by hand, the rule does.
+
+*Residents.* Everything that lives in the scene all the time is a `Resident` (`Resident.cs`): the reindeer,
+the fox and hares, the snowman, the birds, the mice and the otters. A happening is a visitor for a few
+seconds; a resident is always somewhere, doing something. The base class gives each one its own dice (so
+adding a doing to the fox can never change what the reindeer roll), the noticeboard, painting of its
+flip-books on a helper thread while the snow is already falling (the scene leaves it alone until `Ready`),
+`Stamp`, and `Lull`, which the scene turns on while a story plays so that "the mouse" in a story is not
+any mouse.
+
+*The story director is now in the engine.* `Story` and `StoryDirector` live in `Core/Stories.cs`, so any
+saver can use them. The rule is the happenings' rule with a longer clock: `Begin` rolls all the dice and
+writes the script, and `Draw` draws from the story's time `t` alone, so a test can play any second of
+any story. The director deals the stories like a deck and shares the happenings' claims, so a story that
+needs the cabin waits while a happening is using it. (Thanksgiving still has its own older copy of this
+machinery in `src/Thanksgiving/Stories.cs`; moving it onto the engine's is a known leftover.)
+
+*Santa became a rig.* He used to be one picture of the whole team slid across the sky. Now (`SantaRig.cs`,
+`SantaArt.cs`) every reindeer is its own flip-book and the sleigh is a set of pages (Santa seated, waving,
+looking down, cracking the reins) at nine tilts; each frame the rig puts each part on a shared curve, a fixed
+distance behind the front, on its own beat, and joins them with traces and reins that sag and tighten. His
+place is an added-up distance along the path, never "time times speed", which is what lets a story take the
+reins: `SantaDelivery` calls `Take`, flies the parts down to the cabin's roof by hand (the rig is shrunk
+along a ladder of seven sizes, each its own set of pictures, because the cabin is farther away than the sky
+lane), and hands the reins back with `Release`. He is still stamped only on sky pixels, so he passes behind
+the corner branches, and where he crosses the moon he turns into a silhouette.
+
+*Live lights.* Besides the bulbs, the scene stamps glows (the same sprite trick) for the twinkling stars, the
+village's windows, the cabin's windows and the lamp post, sparkles on the snow, and the chimney's smoke
+(`Core/ChimneySmoke.cs`). Everything that happens in the scene (a firework, the owl, Santa going over) is
+pinned on the noticeboard, so the residents react to it.
 
 Each happening is one small class with one rule: it is told `t`, the number of seconds since it
 began, and works out the whole picture from that number alone. It keeps no notes from one frame

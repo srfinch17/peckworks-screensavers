@@ -546,16 +546,57 @@ Adding more happenings, here or to another screensaver, is a recipe:
 
 ## Christmas
 
-Snow falling on a snowy night: pines strung with pastel lights that twinkle, a log cabin with
-warm windows and a smoking chimney, snowy mountains, and a moon.
+Christmas Eve at a log cabin in the north woods, rebuilt the way Thanksgiving was: a painted world with
+animals living in it. Snow falls on a low horizon with a village glowing down in the valley and snowy
+mountains behind it. A big log cabin with warm windows and a smoking chimney stands among pines strung with
+pastel lights that twinkle. In front lies a snowfield with a frozen pond (and a hole in its ice), a lamp
+post, a fallen log, a bird table, a tiny fir tree and holly bushes, with bare branches reaching in from the
+top corners. Everything near is hidden correctly by whatever stands nearer than it, the same depth trick
+Thanksgiving uses for its pumpkins.
 
 ![Christmas](docs/images/christmas.png)
 
-- Santa's sleigh crosses the sky, passing behind the overhanging branches, pulled by four
-  galloping reindeer. Rudolph leads, and his red nose glows and sparkles.
-- Every bulb (pink, mint, baby blue, lavender, butter, peach) brightens and dims on its own rhythm.
-- The snow is the Sakura petal engine drawing soft white dots.
-- Twenty small **happenings** come and go at random, as in Halloween:
+- **The night is live.** The brighter stars twinkle, every lit window in the village wanders and now and then
+  goes dark for a while (somebody went to bed) and comes back, the cabin's windows glow like firelight, smoke
+  drifts from the chimney, the lamp post's flame gutters inside a halo, the snow glitters in flashes, and every
+  bulb (pink, mint, baby blue, lavender, butter, peach) brightens and dims on its own rhythm. The snow is the
+  Sakura petal engine drawing soft white dots.
+- **Santa's sleigh crosses the sky** behind the overhanging branches, pulled by four reindeer, Rudolph in front
+  with his red nose glowing. Each reindeer has its own flying gallop and drops stardust from the runners, the
+  team rises and dips along its path, and where it crosses the moon it turns into a silhouette. The flights
+  vary (along the top or a long diagonal, left to right or right to left). The animals look up as he goes over.
+- **Reindeer** (a bull with a wide rack, cows, and from three animals up a calf) graze on the snowfield: they
+  paw the snow with a foreleg and then nose down into the hole, walk, look up, lie down together, shake the
+  snow off, follow Santa across the sky with their heads and bolt for a short trot at a danger. The calf plays,
+  and now and then tries to fly like the ones overhead.
+- **Snowshoe hares and a red fox.** The hares sit with twitching noses, wash their faces, hop, stand tall to
+  look, and now and then spring into the air for joy. The fox is a visitor: it trots in, listens for a mouse
+  under the snow, leaps and dives in head first, sits, curls up to sleep under a thickening dusting of snow,
+  and goes away again. When it stalks a hare, the hare rears up, thumps twice (the other hares hear it and
+  bolt too) and zigzags to a burrow; the fox gallops after it and gives up at the hole. The hare always gets
+  away.
+- **A snowman** stands in the near snow and never walks, but he watches. He jumps at a bang and his hat flies
+  off, tips the hat to Santa, shivers, catches a snowflake on his carrot, yawns, dozes off and wakes with a
+  start, waves at the cabin, and shakes the snow off his arms.
+- **Birds at the bird table**: cardinals, chickadees and at most one bossy blue jay. They land on the tray, the
+  roof, the lamp's crossbar, the log, the tiny fir and the corner branches, peck, hop, sing, bathe in the snow,
+  squabble, scatter when the jay comes and all go up at once at a threat.
+- **Mice in the fallen log** come out slowly (a nose, whiskers, a head that looks both ways), run in dashes
+  with frozen stops between, sit up, wash their faces, fetch seeds, box nose to nose, dive into the snow and
+  tunnel when frightened, and bolt for the hole.
+- **Otters on the frozen pond** come and go through the hole in the ice: they surface, haul out over the rim,
+  gallop, run up and belly slide, stand up like periscopes, roll on their backs, eat a fish and wrestle.
+- They notice each other and the happenings. Fireworks and the toy train are loud, the owl is a threat, a
+  sliding snowball is something to glance at; a fox stalking or a bolting reindeer is read by the animals near
+  it. Nobody reacts to a kind of animal, only to what a notice says.
+- **Two stories** play now and then (one about every minute, dealt like a deck so each comes round before
+  any repeats): *Santa delivers* (the team lands on the cabin roof one reindeer after another, Santa climbs out
+  with his sack and goes down the chimney, the windows flicker, he comes back up sooty and pats himself clean,
+  and the team leaps off in a burst of stardust) and *the mice trim the tree* (three mice carry a bauble, a
+  coil of lights and a gold star to the tiny fir; the lights come on from the bottom, and the trimmed tree
+  stays lit for a few minutes). A third, *the carrot heist* (a hare steals the snowman's nose), is only a
+  placeholder so far and never plays.
+- Seventeen small **happenings** come and go at random, as in Halloween:
 
   | Where | What happens |
   |-------|--------------|
@@ -563,12 +604,15 @@ warm windows and a smoking chimney, snowy mountains, and a moon.
   | The moon | An ice halo with a faint rainbow forms around it. |
   | Santa | A present tumbles off the sleigh and lands in the snow. |
   | Far off | A toy train with lit windows crosses the valley. A reindeer stands on the mountain ridge. |
-  | The snow | A fox trots through and stops to sniff. A rabbit hops by. A snowman builds itself and waves. A snowball rolls across, growing. A clump of snow slides off a pine. |
+  | The snow | A snowball rolls across, growing. A clump of snow slides off a pine. |
   | The cabin and the lights | Smoke rings (and a heart) from the chimney. A wave of brightness runs through every light. The star on the tree flares and showers sparkles. |
   | The corners | Frost crystals grow across a corner of the glass. A snowy owl perches on a branch and blinks. |
 
-Settings: amount of snow, fall speed, breeze, flake size, and how often a surprise happens
-(0 turns them off).
+  (The fox, the rabbit and the snowman used to be happenings. They live in the scene all the time now.)
+
+Settings: amount of snow, fall speed, breeze, flake size, how often a surprise happens (0 turns them off),
+how often a story plays (0 turns them off), and how many reindeer (0 to 6, default 3), hares (0 to 6, default
+3; no hares means no fox), birds (0 to 10, default 5), mice (0 to 6, default 3) and otters (0 to 3, default 2).
 
 ## Thanksgiving
 
@@ -880,7 +924,7 @@ src/Sakura/                        the Sakura screensaver
 src/SakuraDusk/                    the Sakura Dusk screensaver
 src/SakuraPond/                    the Sakura Pond screensaver
 src/Halloween/                     the Halloween screensaver
-src/Christmas/                     the Christmas screensaver
+src/Christmas/                     the Christmas screensaver (the world, Santa, the residents, the stories)
 src/Thanksgiving/                  the Thanksgiving screensaver
 src/CabinByStream/                 the Cabin by Stream screensaver
 src/CotswoldBrook/                 retired: kept as a reference, not built (its RETIRED.md says why)
@@ -895,8 +939,8 @@ Time per frame (update + render):
 
 | Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Thanksgiving | Cabin by Stream |
 |------------|-------------|-------------|-------------|-------------|-------------|--------------|-----------------|
-| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  | about 3 ms   | about 2 ms      |
-| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms | about 12 ms  | about 9 ms      |
+| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | to be re-measured | about 3 ms   | about 2 ms      |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | to be re-measured | about 12 ms  | about 9 ms      |
 
 Under about 16 ms means the full 60 frames per second. Each frame waits for the screen's next
 refresh before the next one is drawn, so frames reach the screen evenly, one per refresh (an
@@ -933,11 +977,6 @@ their worst second. Six are dearer while they last: Red Fuji (about 7.5 ms more)
 director never lets two of them run at once and their costs never add up. At 1920x1080 none of
 them drops a frame.
 
-Christmas's happenings measure the same way: four minutes of ordinary play at 4K averaged 16.9 ms
-against 15.7 to 21.3 ms quiet in the same minutes. The two dearer ones are the northern lights
-(about 6 ms per frame more in their worst second at 4K, for 22 seconds) and the wave through the
-lights (about 5 ms more, for 8 seconds). Painting all twenty sets of sprites takes about two thirds
-of a second on a 4K screen (the fox alone about a fifth), which is why they are painted on a
-helper thread while the scene plays, and a happening is not dealt until it has been painted.
+Christmas (the rebuilt saver, its residents and its happenings): to be re-measured.
 
 Measure your own with `/snapshot`; the timing lands in `out.png.txt`.
