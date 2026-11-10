@@ -213,7 +213,7 @@ internal sealed class Pack
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             using var b = new SolidBrush(red); using var dk = new SolidBrush(redDark);
             float cx = sw / 2f, cy = sh / 2f;
-            g.FillEllipse(b, cx - 1.1f * _r, cy - 0.32f * _r, 2.2f * _r, 0.64f * _r);
+            g.FillEllipse(b, cx - 1.0f * _r, cy - 0.28f * _r, 2.0f * _r, 0.56f * _r);   // the pool a shade smaller: "a tiny bit less blood"
             for (int i = 0; i < 7; i++)                                                   // ragged lobes round the rim
             {
                 float a = MathF.Tau * i / 7f + 0.3f, lr = _r * (0.18f + 0.14f * (i % 3) / 2f);
@@ -458,20 +458,20 @@ internal sealed class Pack
                     // The joke lands: a splat on the lane under the rabbit and a fan of droplets off the catcher's mouth.
                     float feet = FeetY(r.X, r.Depth);
                     _stains.Add((r.X, feet, true, _time));
-                    Spray(c.X + c.Dir * _carryMouth.X * _k, feet - _carryMouth.Y * _k, feet, 14, c.Dir);
+                    Spray(c.X + c.Dir * _carryMouth.X * _k, feet - _carryMouth.Y * _k, feet, 10, c.Dir);   // 10 droplets (14 before his "a tiny bit less blood", 2026-11-09)
                     foreach (Coyote o in _pack) if (o != c && o.Mind.Doing != Doing.Away) { o.Mind.Begin(Doing.Play, PlayFor + 5f); o.Clock = 0; o.Act = Act.None; o.Goal = r.X + (o.X < r.X ? -1 : 1) * (0.8f + 0.6f * (float)_rng.NextDouble()) * _k; o.GoalDepth = r.Depth + 0.02f * (float)(_rng.NextDouble() - 0.5); }
                 }
                 break;
             }
             case Doing.Shake:
                 _dripClock += dt;
-                if (_dripClock > 0.12f)
+                if (_dripClock > 0.16f)
                 {
                     // Every shake flings a couple more droplets off the mouth, the way a cartoon dog shakes a wet toy.
                     _dripClock = 0f;
                     int pg = (int)(c.Clock * 2.2f * ShakePages) % ShakePages;
                     float feet = FeetY(c.X, c.Depth);
-                    Spray(c.X + c.Dir * _shakeMouth[pg].X * _k, feet - _shakeMouth[pg].Y * _k, feet, 2, c.Dir);
+                    Spray(c.X + c.Dir * _shakeMouth[pg].X * _k, feet - _shakeMouth[pg].Y * _k, feet, 1, c.Dir);
                 }
                 if (c.Mind.Over)
                 {
@@ -575,7 +575,7 @@ internal sealed class Pack
                 // Picks it up over the first half, flings it over the second: the carcass flies a short arc the way it faces.
                 if (c.Clock < 0.6f) { c.X = _carcassX - c.Dir * _carryMouth.X * _k; }
                 else if (_carrier < 0 && c.Clock >= 0.6f && c.Clock < 0.9f) { _carrier = i; c.Carrying = true; }
-                else if (c.Carrying && c.Clock >= 0.9f) { c.Carrying = false; _carrier = -1; _tossT = 0f; _tossFromX = c.X + c.Dir * _carryMouth.X * _k; _tossToX = _tossFromX + c.Dir * (0.5f + 0.4f * (float)_rng.NextDouble()) * _k; _carcassX = _tossFromX; Spray(_tossFromX, FeetY(c.X, c.Depth) - _carryMouth.Y * _k, FeetY(c.X, c.Depth), 4, c.Dir); }
+                else if (c.Carrying && c.Clock >= 0.9f) { c.Carrying = false; _carrier = -1; _tossT = 0f; _tossFromX = c.X + c.Dir * _carryMouth.X * _k; _tossToX = _tossFromX + c.Dir * (0.5f + 0.4f * (float)_rng.NextDouble()) * _k; _carcassX = _tossFromX; Spray(_tossFromX, FeetY(c.X, c.Depth) - _carryMouth.Y * _k, FeetY(c.X, c.Depth), 3, c.Dir); }
                 break;
             case Act.Carry:
                 if (c.Clock < 0.4f) c.X = _carcassX - c.Dir * _carryMouth.X * _k;
