@@ -688,6 +688,13 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   *The mouse parade*: four mice file across the patch with acorns in their mouths until a sparrow drops
   out of the maple and swoops low over the line; they scatter behind the nearest pumpkins, noses showing
   past the edges, while the sparrow sits on a pumpkin and looks about, then fall back into line.
+- **A possum lives in the right maple.** Most of the time it is out of sight in the crown. Now and then it
+  drops out of the leaves on its tail and hangs head down, swaying, looking at the patch and at us, opening and
+  shutting its hands, then curls up and pulls itself back into the leaves. Sometimes it comes head first down the
+  trunk and waddles about the patch, and if an acorn lies loose it walks over, takes it, sits up and eats it and
+  wipes its face; then back to the foot and up. A threat on the ground (the raccoon, the coyotes' alarm) makes it
+  do the famous thing: it keels over on its side with its legs stiff, mouth open, tongue out, lies there a while,
+  peeks with one eye, gets up and shakes. It never shares the trunk with a squirrel going to or from its hole.
 - **The birds use the branches.** A junco or sparrow in the patch sometimes flies up to one of the oak
   branches in the top corners, flaring onto the wood with its feet forward, and sits there six to
   twenty-five seconds looking about, preening, pecking at the bark and hopping along the branch, then

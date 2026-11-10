@@ -569,3 +569,12 @@ The reach rule held twice in this round: the howl reached the deer but not the d
 listener for it, and the dog's first listener missed the howl because the dog was resting after its bark at the
 pack's arrival, then because it was inside its house (`Home`, a doing the listener had not named). Read the
 listener's own state in the log before widening any reach.
+
+- The possum (`Possum.cs`, `PossumArt.cs`, added later on 2026-11-09): its own `Mind<Doing>` and dice taken LAST in the
+  scene's constructor. `Hidden`; `Drop`, `Hang`, `PullUp` (drawn through `OpenOfProps` so the tail's top vanishes into the
+  crown's leaves; a Threat within 0.4 U pulls it up fast); `Descend`, `Dismount`, `Walk`, `Turn`, `Mount`, `Climb` (plain
+  on the trunk, through the depth picture on the ground, with its own copy of the patch's `CanStand` test); `Take` and
+  `Eat` with a wipe (a loose nut within 0.3 U); `Faint`, `Dead`, `Rise`, `Shake` (a Threat within 0.3 U on the ground; a
+  45 s rest after). It posts `Sense.Movement` at its feet while it walks (0.15 U); it reads Threat only. It never starts a
+  trunk trip while `PatchLife.TrunkBusy(1)` (a squirrel on the right trunk) or while a story plays, and waits at the foot
+  if a squirrel comes down meanwhile; the squirrels do not yet know about it (the reverse case is open).

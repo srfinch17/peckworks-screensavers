@@ -64,6 +64,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
     private readonly PatchLife _life;              // the mice, birds and squirrel that live in the pumpkin patch
     private readonly FarmYard _yard;               // the stock on the hill and the farm dog (FarmYard.cs)
     private readonly NutField _nuts;               // the acorns on the ground (Nuts.cs): the squirrels' business
+    private readonly Possum _possum;               // the possum in the right maple: hangs by its tail, comes down, takes loose nuts, plays dead (Possum.cs)
     private readonly bool _frenzyTest;
     private readonly int _geeseDir;                // +1 the V flies right, -1 left
     private readonly float[] _flapPhase;           // each goose's own place in the flap, so they are not all in step
@@ -175,6 +176,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _life = new PatchLife(_scenery, settings.CritterCount, _rng, _board, _nuts);
         _frenzyTest = Environment.GetEnvironmentVariable("PECKWORKS_NUTS") == "frenzy";   // test aid: the gust's shake and the frenzy at 5 s, once
         _yard = new FarmYard(_scenery, _rng, _board);   // last: its roll of the scene's dice comes after every older resident's, so none of theirs moved
+        _possum = new Possum(_scenery, _rng, _board, _nuts, _life, _stories);   // after the yard: its one roll of the scene's dice comes after every older resident's
         string? notice = Environment.GetEnvironmentVariable("PECKWORKS_NOTICE");      // test aid: "Loud;0.5;0.72;0.8;3" posts that kind at (xf, yf) with reach in U at that second
         if (!string.IsNullOrEmpty(notice))
         {
@@ -523,6 +525,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         _nuts.Update(dt);
         if (_frenzyTest && _time >= 5.0 && _time - dt < 5.0) { _nuts.Shake(12); _life.Frenzy(); }
         _life.Update(dt);
+        _possum.Update(dt);
         _yard.Update(dt);
         _happenings.Update(elapsedSeconds);
     }
@@ -646,6 +649,7 @@ internal sealed class ThanksgivingScene : IScreensaverScene
         // 6a2. The patch's own life: mice, birds and a squirrel among the pumpkins, each hidden by the pumpkins nearer than it.
         _nuts.Draw(fb);                            // the acorns on the ground and any still falling, before the critters that go for them
         _life.Draw(fb);
+        _possum.Draw(fb);                          // the possum: on the trunk, on the ground among the pumpkins, or hanging from the crown's lower edge
 
         // 6b. The little scenes (Stories.cs): the squirrels, the mice, the dust, an apple on the
         //     near ground and the rail, in front of the fence (and behind the corn shock and the

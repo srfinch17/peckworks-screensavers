@@ -580,6 +580,18 @@ internal sealed class PatchLife
     // ================================================================ living
 
     private static bool OnTree(Critter c) => c.Mind.Doing is Doing.Mount or Doing.Climb or Doing.Enter or Doing.Den or Doing.Exit or Doing.Descend or Doing.Dismount;
+    /// <summary>
+    /// Is any critter on, or running for, this tree's trunk (0 left, 1 right)? READ ONLY, for the possum (Possum.cs), which
+    /// shares the right maple's trunk and never starts a climb while a squirrel is on it (or on its way to it: a Go that
+    /// carries the tree's number). Never writes anything.
+    /// </summary>
+    public bool TrunkBusy(int tree)
+    {
+        foreach (Critter c in _all)
+            if (c.Tree == tree && (OnTree(c) || c.Mind.Doing == Doing.Go)) return true;
+        return false;
+    }
+
     private static bool OnPumpkin(Critter c) => c.Mind.Doing is Doing.HopUp or Doing.Perch or Doing.HopDown;
 
     public void Update(float dt)
