@@ -86,7 +86,9 @@ internal sealed class ReindeerHerd : Resident
         public int Partner = -1, NzPhase; public bool NzLead; public float NzT, NzFor, NzBreath;   // touching noses
         public float BellowT; public bool BellowPosted;
         public Doing LastDoing = Doing.Graze, SeenDoing = Doing.Graze; public float DoingAge;
-        public float DriftAmp;                                                   // how much of the idle head drift is on (eased, so a head never jumps when it starts)
+        public int GamFrom, GamTo, PoseT; public float GamU, PlopT = -1;       // the calf's play poses are keys with drawn pages between them: where it is on the way, and which key it is heading for
+        public float AlertWait, AlertTry, EchoT, EchoDist; public int EchoDir;   // a fox alarm lifts heads once, staggered; the calf creeps after its mother
+        public float DriftAmp, VisitUntil; public double LastRestWalk = -99;                                                   // how much of the idle head drift is on (eased, so a head never jumps when it starts)
         public int BitesLeft;
         public int GPhase; public float GT, PawT, PawFor = PawTime, EatT; public int Scrapes;   // grazing: scan, paw, eat, chew
         public float MarkX, MarkA; public bool HasMark; public Sprite Mark = null!;             // the scraped hole in the snow (px, opacity)
@@ -95,7 +97,7 @@ internal sealed class ReindeerHerd : Resident
         public bool AfterUpShake, ForceGambol;
         public Reaction Pending; public Notice PendingCause;
         public bool JustGrazed;
-        public float Lift; public int Pose;                 // the calf's leaps: pixels off the ground and which pose page
+        public float Lift;                                  // the calf's leaps: pixels off the ground
         public int GPh, GN, GCount, GBouts; public float GG, GHomeX, GStay; public bool GOut, Fly;
         public float MarkDx;                                // how far ahead of the feet the nose lands when it is down, in heights
         public Fleck[] Fx = new Fleck[48];
@@ -103,6 +105,7 @@ internal sealed class ReindeerHerd : Resident
     }
 
     // ---- timings and speeds ----
+    private const float BiteTime = 0.26f, EarTime = 0.24f;   // a bite is a nod eased down and up (about 8 frames each way); an ear flick eases out and back
     private const float SettleFor = 0.40f, PawTime = 0.92f, DownTime = 2.5f, UpTime = 1.8f, ShakeTime = 1.0f;
     private const float NeckSpring = 55f, NeckDamp = 14.5f;      // the neck eases to where it is wanted like a damped spring
     private const float SpringFor = 0.52f, SpringGround = 0.10f, BoundFor = 0.34f, BoundGround = 0.05f, SkidFor = 0.40f;
@@ -125,6 +128,8 @@ internal sealed class ReindeerHerd : Resident
     private double _alarmAt = -1; private float _alarmFrom;
     private bool _forced, _santaWas, _passCalfOk;
     private double _ledCool = 40, _nextLie = 90; private int _watchRank;   // the herd walks on rarely; lying down one at a time; heads lift one after another
+    private double _alertCool = 20;               // a fox's alarm lifts the herd's heads at most once in 25 s
+    private int _home;                           // the open stretch the herd lives in now (OpenSnow's index)
     private int _passAdultSlots;                    // per Santa pass: how many adults may follow him with their heads (0 or 1, so one on average or less)
     private bool _firstUpdateLogged;
     private long _tUpdate, _tCollect, _tDraw; private double _tReport;   // cost instruments, only when the mind log is on
@@ -190,16 +195,20 @@ internal sealed class ReindeerHerd : Resident
         // THE ENTRANCE: the herd walks in from one side of the screen, the bull first and deepest in, each cow some seconds behind, the calf
         // trotting to keep up. (Not a side with the cabin in the way: the left side has the lane to 0.40 w, the right side from 0.72 w.)
         int enterDir = Rng.Next(2) == 0 ? 1 : -1;                         // 1: walking in from the left edge
+        _home = enterDir > 0 ? 0 : 1;                                     // the wide clear snow at the left, or (from the right) the stretch above the pond
+        float x0 = float.MaxValue, x1 = float.MinValue;
+        for (float x = s.Width * OpenSnow[_home].Lo; count > 0 && x <= s.Width * OpenSnow[_home].Hi; x += 3f) if (RestOk(x - 0.8f * href, href) && RestOk(x, href) && RestOk(x + 0.8f * href, href) && s.CanStand(x, _r[0].RowY, 0.45f * href)) { x0 = MathF.Min(x0, x); x1 = MathF.Max(x1, x); }
+        if (x1 < x0) { x0 = s.Width * OpenSnow[_home].Lo; x1 = s.Width * OpenSnow[_home].Hi; }
+        float deep = enterDir > 0 ? x1 : x0;
+        float[] offs = new float[count]; float cum = 0;
+        for (int i = 0; i < count; i++) { offs[i] = cum; cum += (i + 1 < count && _r[i + 1].Kind == ReindeerKind.Calf ? 2.1f : 2.8f) * href; }
+        float squeeze = cum - 2.8f * href > (x1 - x0) ? (x1 - x0) / (cum - 2.8f * href) : 1f;    // too many for the stretch: closer together
         for (int i = 0; i < count; i++)
         {
             Rein a = _r[i];
             a.Pace = new Pace(_walkV * 2.2f);
-            int rank = a.Kind == ReindeerKind.Bull ? 0 : a.Kind == ReindeerKind.Cow ? i : 99;   // order of arrival (the calf last)
-            if (a.Kind == ReindeerKind.Calf) rank = count - 1;
-            float depthFrac = Math.Max(0.07f, 0.34f - 0.115f * rank);       // how far in from the edge it ends up, a share of the width
-            float goal = enterDir > 0 ? s.Width * depthFrac : s.Width * (1f - depthFrac);
-            for (int tries = 0; tries < 60 && !OkSpot(goal, a.RowY, heights[i]); tries++) goal += enterDir * (tries % 2 == 0 ? -1 : 1) * (tries + 1) * heights[i] * 0.7f;
-            a.GoalX = goal;
+            int rank = a.Kind == ReindeerKind.Calf ? count - 1 : i;          // order of arrival (the calf last)
+            a.GoalX = Math.Clamp(deep - enterDir * offs[i] * squeeze, x0, x1);
             a.Dir = enterDir;
             a.X = enterDir > 0 ? -3f * heights[i] : s.Width + 3f * heights[i];
             a.Entering = true;
@@ -208,6 +217,7 @@ internal sealed class ReindeerHerd : Resident
             a.HasGoal = true;
         }
         for (int i = 0; i < count; i++) _log?.WriteLine($"Reindeer{i} {_r[i].Kind} H {heights[i]} enters {(enterDir > 0 ? "from the left" : "from the right")} after {_r[i].EnterDelay:F1} s to x {_r[i].GoalX:F0} row {_r[i].RowY:F0} width {s.Width} door {DoorLo:F0} {DoorHi:F0}");
+        _log?.WriteLine($"Reindeer zones: door {DoorLo:F0} {DoorHi:F0} snowman {s.SnowmanFoot.X:F0} +- {0.55f * s.SnowmanHeight:F0} feeder {s.FeederFoot.X:F0} +- {2.2f * s.FeederTray.Half:F0} lamp {s.LampFoot.X:F0} stretches {string.Join(" ", Array.ConvertAll(OpenSnow, z => $"{z.Lo * s.Width:F0}-{z.Hi * s.Width:F0}"))}");
         string? sheet = Environment.GetEnvironmentVariable("PECKWORKS_SHEET");
         float u = s.U;
         BuildInBackground(() =>
@@ -289,20 +299,44 @@ internal sealed class ReindeerHerd : Resident
 
     private static float FootY(Rein a) => a.RowY;
     private static float FootYAt(Rein a, float x) => a.RowY;
+    // THE LANE'S PLACES (second pass, after the film: "the bull grazed for 40 s directly behind the bird table, the cow and calf stood behind the
+    // snowman half covered"). The herd's band is farther off than the snowman and the bird table, so anything it does behind them is hidden. Four
+    // stretches of clear snow are where the herd LIVES (fractions of the width: the wide clear snow at the left, the stretch in front of the village
+    // above the pond, two small clear places at the right); the places behind or beside the snowman, the bird table, the lamp post and the cabin's front
+    // are NO-STOP: a walk may go past, nothing stops, grazes, lies, nuzzles or is born there.
+    private static readonly (float Lo, float Hi)[] OpenSnow = [(0.03f, 0.26f), (0.31f, 0.46f), (0.70f, 0.76f), (0.90f, 0.98f)];
+    /// <summary>Which open stretch x is inside (with "margin" pixels to spare at each end), or -1.</summary>
+    private int StretchOf(float x, float margin)
+    {
+        for (int k = 0; k < OpenSnow.Length; k++) if (x >= OpenSnow[k].Lo * S.Width + margin && x <= OpenSnow[k].Hi * S.Width - margin) return k;
+        return -1;
+    }
+    /// <summary>Is a body (middle at x, h pixels at the shoulder) hidden or crowded by the snowman, the bird table, the lamp post or the cabin's front? (Half a body of margin.)</summary>
+    private bool NoStopAt(float x, float h)
+    {
+        float m = 0.5f * h;
+        if (x > DoorLo - m && x < DoorHi + m) return true;
+        if (MathF.Abs(x - S.SnowmanFoot.X) < 0.55f * S.SnowmanHeight + m) return true;
+        if (MathF.Abs(x - S.FeederFoot.X) < 2.2f * S.FeederTray.Half + m) return true;
+        return MathF.Abs(x - S.LampFoot.X) < 1.4f * h + m;      // (a body length, 1.9 heights, each side of the post)
+    }
+    /// <summary>May something REST here (graze, lie, nuzzle, stand): inside an open stretch and clear of every no-stop place.</summary>
+    private bool RestOk(float x, float h) => StretchOf(x, 0.3f * h) >= 0 && !NoStopAt(x, h);
     private bool OkSpot(float x, float rowY, int h)
     {
-        if (x < S.Width * 0.04f || x > S.Width * 0.96f) return false;
-        return S.CanStand(x, rowY, 0.45f * h) && !NearDoor(x);
+        if (x < S.Width * 0.02f || x > S.Width * 0.98f) return false;
+        // A stop lands up to a stride (about 0.8 heights) either side of the goal the brake was aimed at, so a goal must have good ground on both
+        // sides of it too (first pass: a goal at the very edge of a stretch, a stop that came out beyond it, a walk begun again, 54 times in a minute).
+        return S.CanStand(x, rowY, 0.45f * h) && RestOk(x, h) && RestOk(x - 0.8f * h, h) && RestOk(x + 0.8f * h, h);
     }
-    /// <summary>Within 0.03 w of the cabin door's middle: nobody may REST in front of it.</summary>
-    // The whole front of the cabin and its woodpile, not only the door: the first herd stood three abreast across the windows for a minute.
+    /// <summary>The cabin's whole front and its woodpile, not only the door (the first herd stood three abreast across the windows for a minute).</summary>
     private float DoorLo => S.CabinFoot.X - S.CabinWall.Width * 0.95f;
     private float DoorHi => S.CabinFoot.X + S.CabinWall.Width * 0.70f;
     private bool NearDoor(float x) => x > DoorLo && x < DoorHi;
     private float Stride(Rein a) => a.TrotMode ? TrotStride(a) : 2 * ReindeerArt.WalkReach * a.Set.H / ReindeerArt.WalkDuty;
     private float TrotStride(Rein a) => 2 * ReindeerArt.TrotReach * a.Set.H / ReindeerArt.TrotDuty;
-    private float Lo(Rein a) => S.Width * 0.04f + 2f * a.Set.H;
-    private float Hi(Rein a) => S.Width * 0.96f - 2f * a.Set.H;
+    private float Lo(Rein a) => S.Width * 0.02f + 1.4f * a.Set.H;
+    private float Hi(Rein a) => S.Width * 0.98f - 1.4f * a.Set.H;
 
     // ================================================================ living
 
@@ -383,6 +417,7 @@ internal sealed class ReindeerHerd : Resident
         float H = set.H;
         if (a.Doing != a.SeenDoing) { a.SeenDoing = a.Doing; a.DoingAge = 0; } else a.DoingAge += dt;
         a.Timer -= dt; a.Clock += dt; a.Senses.Tick(dt); a.PostT -= dt; a.RestT -= dt; a.TurnCool -= dt; a.WatchRest -= dt; a.AlertT -= dt; a.GStay -= dt; a.LookT -= dt;
+        if (a.AlertWait > 0 && (a.AlertWait -= dt) <= 0) a.AlertTry = 1.5f;
         if (a.WatchWait > 0 && (a.WatchWait -= dt) <= 0) a.WatchTry = 1.5f;   // Santa's stagger is up: lift the head at the next break (up to 1.5 s)
         if (a.LieAfter > 0) a.LieAfter -= dt;
         UpdateFx(a, dt);
@@ -393,7 +428,7 @@ internal sealed class ReindeerHerd : Resident
         a.NeckV += ((want - a.NeckF) * NeckSpring - a.NeckV * NeckDamp) * dt;
         a.NeckF = Math.Clamp(a.NeckF + a.NeckV * dt, 0f, 1f);
         // The idle drift of a standing head is eased in and out (a head that starts to drift by half a page the frame a turn ends is a pop).
-        float driftWant = a.Gait is Gait.Stand or Gait.Lying && a.Doing != Doing.Alert && a.Doing != Doing.Watch && a.TurnReq == 0 ? 1f : 0f;
+        float driftWant = a.Gait is Gait.Stand or Gait.Lying && a.Doing != Doing.Alert && a.Doing != Doing.Watch && a.TurnReq == 0 && NeckWant(a) < 0.85f ? 1f : 0f;     // (the nose in the hole stays put: a drift across a page boundary was a flicker)
         a.DriftAmp += (driftWant - a.DriftAmp) * Math.Min(1f, dt * 2.5f);
         // A glance waiting for a break: lift the head now (never mid-scrape or mid-bite), or drop it if it took more than a second.
         if (a.LookPend)
@@ -402,7 +437,7 @@ internal sealed class ReindeerHerd : Resident
             else if (AtBreak(a)) { a.LookPend = false; a.LookT = 1.2f + 1.8f * a.Curious * (0.6f + 0.8f * (float)Rng.NextDouble()); a.EarT = 0; _log?.WriteLine($"{_time,8:F2} Reindeer{i} lifts its head for {a.LookT:F1} s"); }
         }
         // Bites with the nose in the hole: bursts of a few, each a quick tug up, a hold and an ease down, then chewing.
-        if (a.BiteT >= 0) { a.BiteT += dt; if (a.BiteT > 0.30f) { a.BiteT = -1; a.ChewT = 0; } }
+        if (a.BiteT >= 0) { a.BiteT += dt; if (a.BiteT > BiteTime) { a.BiteT = -1; a.ChewT = 0; } }
         if (a.ChewT >= 0) { a.ChewT += dt; if (a.ChewT > 1.5f) a.ChewT = -1; }
         if (a.Doing is Doing.Graze or Doing.Creep && a.GPhase == 2 && a.NeckF > 0.93f && a.BiteT < 0)
         {
@@ -416,7 +451,7 @@ internal sealed class ReindeerHerd : Resident
             }
         }
         if (a.Gait == Gait.Lying && a.ChewT < 0 && a.LieT > 2f && (float)Rng.NextDouble() < dt / 3.5f) a.ChewT = 0;   // a lying reindeer chews its cud
-        if (a.EarT >= 0) { a.EarT += dt; if (a.EarT > 0.16f) a.EarT = -1; }
+        if (a.EarT >= 0) { a.EarT += dt; if (a.EarT > EarTime) a.EarT = -1; }
         else { a.NextEar -= dt; if (a.NextEar <= 0) { a.EarT = 0; a.NextEar = 1.8f + 4f * (float)Rng.NextDouble(); } }
         // Breath: a small puff of white vapour from the nostrils every few seconds when still (it is cold).
         a.Breath -= dt;
@@ -438,6 +473,13 @@ internal sealed class ReindeerHerd : Resident
                 else r = Reaction.None;                              // a glance, a far-off bang: no reason to stop playing
             }
         }
+        if (r is Reaction.Freeze or Reaction.Flee && cause.Kind == Sense.Threat && a.Doing != Doing.Gambol)
+        {
+            // A fox about: unless it is within about three body lengths, the herd only lifts its heads, together, ONCE (and goes back to what it was
+            // doing); only a close fox makes them run. (Seed 7: three alarms in ten seconds cut the herd's day into one-second pieces.)
+            float dxf = cause.At.X - a.X, dyf = cause.At.Y - FootY(a);
+            if (MathF.Sqrt(dxf * dxf + dyf * dyf) > 3f * 1.9f * H) { if (_time >= _alertCool) HerdAlert(); r = Reaction.None; }
+        }
         if (r != Reaction.None)
         {
             if (r is Reaction.Look or Reaction.Approach) ReactLook(a, i, r, cause);     // a glance is the head only, taken at a break
@@ -450,6 +492,7 @@ internal sealed class ReindeerHerd : Resident
             }
         }
 
+        StepPose(a, dt);
         TickGait(a, i, dt);
 
         // ---- the pin: a walking animal in the open is a Movement for the others to glance at (a bout of at least 2 s, then a rest) ----
@@ -475,7 +518,7 @@ internal sealed class ReindeerHerd : Resident
             PickBody(a, out int bodyId);
             int figId = a.Gait == Gait.Turning ? (int)MathF.Round(Smooth(Math.Clamp(a.TurnT / a.TurnFor, 0f, 1f)) * ReindeerArt.TurnSteps) : 0;
             int hpg = Math.Clamp((int)MathF.Round(Math.Clamp(a.NeckF, 0f, 1f) * (ReindeerArt.HeadPages - 1)), 0, ReindeerArt.HeadPages - 1);
-            _log.WriteLine($"{_time,8:F3} Reindeer{i} x {a.X:F1} y {FootY(a):F1} v {a.Pace.Speed:F1} {a.Doing}/{a.Gait} neck {a.NeckF:F2} dir {a.Dir} body {bodyId} fig {figId} head {hpg} lift {a.Lift:F1} hk {(a.Gait == Gait.Turning ? 0 : a.ChewT >= 0 ? ((int)(a.ChewT * 3) % 2) : a.EarT >= 0 ? 2 : 0)}");
+            _log.WriteLine($"{_time,8:F3} Reindeer{i} x {a.X:F1} y {FootY(a):F1} v {a.Pace.Speed:F1} {a.Doing}/{a.Gait} neck {a.NeckF:F2} dir {a.Dir} body {bodyId} fig {figId} head {hpg} lift {a.Lift:F1} hk {HeadKind(a)}");
         }
     }
 
@@ -514,6 +557,18 @@ internal sealed class ReindeerHerd : Resident
         {
             case Gait.Rising:
                 a.GaitT += dt;
+                // Somebody stepped into the way while it was rising: it settles back down through the SAME pages (the rise played backward from where
+                // it is), instead of walking one frame and stopping (a rise-and-settle stutter).
+                if (a.WalkIntent && !a.Entering && a.Doing != Doing.Trot && AheadBlocked(a, i, a.Following ? a.FollowIdx : a.Doing == Doing.Nuzzle ? a.Partner : -1))
+                {
+                    float left = a.GaitFor - a.GaitT;
+                    StopWalk(a);
+                    a.BlockCool = 2f;
+                    if (a.Doing == Doing.Nuzzle) EndNuzzle(a, i, false);
+                    a.Gait = Gait.Settling; a.GaitT = Math.Clamp(left, 0f, a.GaitFor); a.GaitFor = a.TrotMode ? 0.2f : SettleFor;
+                    _log?.WriteLine($"{_time,8:F2} Reindeer{i} settles back (somebody stepped into the way) at {a.X:F0}");
+                    break;
+                }
                 if (a.GaitT >= a.GaitFor)
                 {
                     if (a.WalkIntent && a.Doing is Doing.Walk or Doing.Trot or Doing.Creep or Doing.Nuzzle) { a.Gait = Gait.Walking; a.Pace.Walked = 0; a.Pace.Want = a.WalkWant; }
@@ -545,6 +600,9 @@ internal sealed class ReindeerHerd : Resident
                 break;
             case Gait.Stand:
                 if (a.TurnReq != 0) TryTurn(a, dt);                     // a turn is waiting for the head to come up
+                break;
+            case Gait.Leaping:
+                if (a.Doing != Doing.Gambol && a.GamFrom == 0 && a.GamTo == 0 && a.PlopT < 0f) a.Gait = Gait.Stand;     // a play cut short: on its feet again
                 break;
             case Gait.Turning:
             {
@@ -610,6 +668,7 @@ internal sealed class ReindeerHerd : Resident
             if (k == i || k == ignore) continue;
             Rein o = _r[k];
             if (o.EnterDelay > 0) continue;                          // still beyond the edge of the screen
+            if (a.Doing == Doing.Trot && o.Doing == Doing.Trot) continue;      // a herd running together keeps its places by speed (WalkChecks), it does not stop for itself
             if (MathF.Abs(o.X - x) < ha + Half(o)) return true;
         }
         return false;
@@ -646,6 +705,24 @@ internal sealed class ReindeerHerd : Resident
     private static bool AtBreak(Rein a) => a.Gait != Gait.Pawing && a.BiteT < 0;
 
     // ================================================================ the walk
+
+    /// <summary>
+    /// The calf's play pose moves along drawn pages from one key pose to the next (never a jump): an edge takes 0.07 s; a target that changed
+    /// mid-edge is taken up at the end of it (or at once if it is the key just left).
+    /// </summary>
+    private void StepPose(Rein a, float dt)
+    {
+        if (a.GamFrom == a.GamTo)
+        {
+            if (a.PoseT == a.GamFrom) return;
+            int to = a.PoseT, lo = Math.Min(a.GamFrom, to), hi = Math.Max(a.GamFrom, to);
+            if (a.Set.GamEdge[lo, hi] == null) { a.GamFrom = a.GamTo = to; a.GamU = 0; return; }       // no drawn way between these two (not used by the script)
+            a.GamTo = to; a.GamU = 0;
+        }
+        else if (a.PoseT == a.GamFrom) { (a.GamFrom, a.GamTo) = (a.GamTo, a.GamFrom); a.GamU = 1f - a.GamU; }     // turned round on the way: back to the key it left
+        a.GamU += dt / 0.08f;
+        if (a.GamU >= 1f) { a.GamFrom = a.GamTo; a.GamU = 0; }
+    }
 
     /// <summary>What a walking animal checks every frame: is the road ahead standable and empty, is its errand done, did its time run out.</summary>
     private void WalkChecks(Rein a, int i, float H)
@@ -709,7 +786,7 @@ internal sealed class ReindeerHerd : Resident
     private float GapFor(Rein a)
     {
         float href = _r[_mom].Set.H;
-        return a.Kind == ReindeerKind.Calf ? 2.1f * href : 3.2f * href;
+        return a.Kind == ReindeerKind.Calf ? 2.1f * href : 2.8f * href;
     }
 
     // ================================================================ turning: head up FIRST, then the turn, then whatever is next
@@ -780,7 +857,7 @@ internal sealed class ReindeerHerd : Resident
         if (a.Doing is Doing.Walk or Doing.Trot)
         {
             if (wasTrot) { a.Doing = Doing.Look; a.Timer = 3f; a.ScanTurn = false; }       // after a flight: a look back at what it fled
-            else { a.Doing = Doing.Graze; a.GPhase = 0; a.GT = 0.3f + 0.5f * (float)Rng.NextDouble(); a.Timer = 999f; a.GCycles = 1 + (Rng.NextDouble() < 0.25 ? 1 : 0); }
+            else { a.Doing = Doing.Graze; a.GPhase = 0; a.GT = 0.3f + 0.5f * (float)Rng.NextDouble(); a.Timer = 999f; a.GCycles = 1 + (Rng.NextDouble() < 0.15 ? 1 : 0); }
         }
         else if (a.Doing == Doing.Creep) a.CPhase = 1;                                          // a creep step is over: the scrape comes next
         a.HasGoal = false; a.Following = false;
@@ -837,7 +914,7 @@ internal sealed class ReindeerHerd : Resident
         if (Idle(a) && a.LieAfter <= 0 && a.LieAfter > -0.5f && a.Doing is Doing.Graze or Doing.Look or Doing.Creep)
         {
             a.LieAfter = -1;
-            if (!NearDoor(a.X) && a.GPhase != 1) { BeginDown(a, i); return; }
+            if (RestOk(a.X, H) && a.GPhase != 1) { BeginDown(a, i); return; }
         }
         // The calf of a herd that walks on: it falls in behind (LedWalk's followers are started here when the one ahead is under way).
         if (a.FollowGo > 0) TickFollower(a, i, dt);
@@ -845,6 +922,22 @@ internal sealed class ReindeerHerd : Resident
         if (a.Doing is Doing.Graze or Doing.Creep && a.Gait is Gait.Stand or Gait.Pawing) ThinkGraze(a, i, dt);
         if (a.Doing == Doing.Nuzzle) ThinkNuzzle(a, i, dt);
 
+        // The herd's one head lift for a fox about (HerdAlert): at a natural break; one that is walking only lifts its head.
+        if (a.AlertTry > 0)
+        {
+            a.AlertTry -= dt;
+            if (Idle(a) && AtBreak(a) && a.Doing is Doing.Graze or Doing.Look or Doing.Creep or Doing.Nuzzle && a.GPhase != 1)
+            {
+                a.AlertTry = 0;
+                if (a.Doing == Doing.Nuzzle) EndNuzzle(a, i, false);
+                a.LastDoing = a.Doing; a.Doing = Doing.Alert; a.Timer = 3f + 2f * (float)Rng.NextDouble(); a.EarT = 0; a.LookPend = false;
+                _log?.WriteLine($"{_time,8:F2} Reindeer{i} lifts its head with the herd for {a.Timer:F1} s");
+            }
+            else if (a.Gait is Gait.Walking or Gait.Stopping or Gait.Rising) { a.LookT = MathF.Max(a.LookT, 3f); a.AlertTry = 0; }
+        }
+        // The calf creeps after its mother, a second behind her (not a walk of its own each time she steps on).
+        if (a.EchoT > 0 && (a.EchoT -= dt) <= 0 && Idle(a) && a.Doing is Doing.Graze or Doing.Look && a.GPhase != 1 && a.BlockCool <= 0)
+            StartCreep(a, i, a.EchoDir, a.EchoDist, 1, "after its mother");
         // A Santa pass: the head is lifted one animal after another (staggered), at a natural break.
         if (a.WatchTry > 0)
         {
@@ -855,26 +948,22 @@ internal sealed class ReindeerHerd : Resident
 
         if (!Idle(a)) return;
 
-        // The door rule: nobody rests in front of the cabin door; walk on past it. (First pass: a walk begun, stopped by "never walk
-        // into another adult" or the slow-speed settle, begun again, four times in a row: Rising 0.4 s, Walking 0.0 s, Settling 0.4 s.)
-        // Now: try the other end if the nearer one is blocked, and if both are, stand and look, with a rest of two seconds before trying again.
-        if (a.BlockCool <= 0 && NearDoor(a.X) && a.Doing is Doing.Graze or Doing.Look or Doing.Watch or Doing.Alert or Doing.Creep && !(a.Doing == Doing.Graze && a.GPhase == 1))
+        // THE PLACE RULE (the door rule, widened after the film): nothing rests where it is hidden or crowded (the snowman, the bird table, the lamp
+        // post, the cabin's front) or off the open snow, and a visitor whose time is up goes back to the herd's stretch. It walks to the nearest good place,
+        // preferring the herd's own stretch; if there is none free it stands and looks, and tries again in two seconds.
+        bool homesick = a.VisitUntil > 0 && _time > a.VisitUntil && StretchOf(a.X, 0f) != _home;
+        if (a.BlockCool <= 0 && a.DoingAge > 0.8f && _time - a.LastRestWalk > 4.0 && (!RestOk(a.X, H) || homesick) && a.Doing is Doing.Graze or Doing.Look or Doing.Watch or Doing.Alert or Doing.Creep or Doing.Bellow && !(a.Doing == Doing.Graze && a.GPhase == 1))
         {
-            int dir = a.X - DoorLo < DoorHi - a.X ? -1 : 1;
-            bool done = false;
-            for (int attempt = 0; attempt < 2 && !done; attempt++)
+            float goal = PickRest(a, i);
+            if (!float.IsNaN(goal))
             {
-                float goal = dir > 0 ? DoorHi + 2.2f * H : DoorLo - 2.2f * H;
-                if (goal >= Lo(a) && goal <= Hi(a) && OkSpot(goal, a.RowY, (int)H) && !PathBlocked(a, i, goal, -1))
-                {
-                    StartWalk(a, dir, false, goal);
-                    a.Timer = 999f;
-                    done = true;
-                }
-                else dir = -dir;
+                a.VisitUntil = 0; a.LastRestWalk = _time;
+                StartWalk(a, goal >= a.X ? 1 : -1, false, goal);
+                a.Timer = 999f;
+                _log?.WriteLine($"{_time,8:F2} Reindeer{i} walks to a place it may rest, x {goal:F0} (from {a.X:F0})");
+                return;
             }
-            if (done) return;
-            a.BlockCool = 2f; a.LookT = 2f; a.EarT = 0;               // both ways blocked: stand and look, try again in a moment
+            a.BlockCool = 2f; a.LookT = 2f; a.EarT = 0;               // nowhere free: stand and look, try again in a moment
         }
 
         // The calf keeps near its mother: it follows her loosely (Herd.cs) and sets off after a lag once it is wrong.
@@ -909,7 +998,7 @@ internal sealed class ReindeerHerd : Resident
                 {
                     if (k == i || _r[k].EnterDelay > 0) continue;
                     if (a.Kind != ReindeerKind.Calf && _r[k].Kind == ReindeerKind.Calf) continue;      // an adult ignores the calf
-                    float d = a.X - _r[k].X, room = (a.Kind == ReindeerKind.Calf ? 2.0f : 3.4f) * H;
+                    float d = a.X - _r[k].X, room = (a.Kind == ReindeerKind.Calf ? 2.0f : 2.4f) * H;
                     if (MathF.Abs(d) < room) push += d >= 0 ? room - d : -(room + d);
                 }
                 a.RoomCool = 4f;
@@ -950,7 +1039,7 @@ internal sealed class ReindeerHerd : Resident
         // Lying: not in the first 90 s, only one or two at a time (and somebody always stays on its feet), and far enough apart in time.
         int lying = 0, adultsStanding = 0;
         foreach (Rein o in _r) { if (o.Doing == Doing.Lie || o.Gait is Gait.Down or Gait.Lying or Gait.Up || o.LieAfter > 0) lying++; else if (o.Kind != ReindeerKind.Calf) adultsStanding++; }
-        bool lieOk = !calf && _r.Length >= 2 && _time > 90.0 && a.LieCool <= 0 && _time >= _nextLie && lying < Math.Max(1, Math.Min(2, _r.Length - 1)) && adultsStanding >= 1 && !NearDoor(a.X) && !playing;
+        bool lieOk = !calf && _r.Length >= 2 && _time > 90.0 && a.LieCool <= 0 && _time >= _nextLie && lying < Math.Max(1, Math.Min(2, _r.Length - 1)) && adultsStanding >= 1 && RestOk(a.X, a.Set.H) && !playing;
         bool ledOk = !calf && !playing && _time > 40.0 && _time >= _ledCool;
         int nuzzlePartner = !playing && a.NuzzleCool <= 0 && _time > 30.0 ? NuzzleCandidate(a, i) : -1;
         float followErr = 0f;
@@ -960,9 +1049,9 @@ internal sealed class ReindeerHerd : Resident
             if (ml.Gait is not (Gait.Down or Gait.Lying or Gait.Up) && ml.Doing != Doing.Gambol && a.BlockCool <= 0) followErr = Herd.FollowError(a.X, ml.X, ml.Dir, GapFor(a), 4.5f * a.Set.H);
         }
         float[] w = [
-            last == Doing.Graze ? 0.08f : 0.20f,                                             // 0 graze: eat in one place (scan, scrape, eat, chew)
-            last == Doing.Creep ? 0.08f : calf ? 0.18f : 0.24f,                              // 1 creep: drift on, a step and a scrape at a time
-            (last == Doing.Look ? 0.05f : 0.16f) + 0.10f * a.Timid,                          // 2 a slow look round
+            last == Doing.Graze ? 0.05f : 0.13f,                                             // 0 graze: eat in one place (scan, scrape, eat, chew)
+            last == Doing.Creep ? 0.08f : calf ? 0.22f : 0.30f,                              // 1 creep: drift on, a step and a scrape at a time
+            (last == Doing.Look ? 0.05f : 0.20f) + 0.10f * a.Timid,                          // 2 a slow look round
             lieOk ? 0.18f : 0f,                                                              // 3 lie down
             0.07f,                                                                           // 4 shake
             ledOk ? 0.16f : 0f,                                                              // 5 the herd walks on (led by this one)
@@ -989,7 +1078,7 @@ internal sealed class ReindeerHerd : Resident
                 a.Doing = Doing.Look; a.Timer = Organic.Jitter(Rng, 5.5f, 0.3f); a.ScanTotal = a.Timer; a.ScanPhase = 0; a.ScanTurn = Rng.NextDouble() < 0.45; a.EarT = 0;
                 break;
             case 3:
-                if (!NearDoor(a.X)) { BeginDown(a, i); AlarmLie(i); }
+                if (RestOk(a.X, a.Set.H)) { BeginDown(a, i); AlarmLie(i); }
                 else StartGraze(a);
                 break;
             case 4: a.Doing = Doing.Shake; break;
@@ -1003,10 +1092,27 @@ internal sealed class ReindeerHerd : Resident
         _log?.WriteLine($"{_time,8:F2} Reindeer{i} roll {a.Doing} (face {face}) x {a.X:F0}");
     }
 
+    /// <summary>
+    /// The nearest place this animal may rest, on the way it can walk: sampled every half a body length across the lane, scored by distance (in
+    /// heights), a heavy penalty outside the herd's own stretch, and a penalty for company (nobody within three heights). NaN: none free.
+    /// </summary>
+    private float PickRest(Rein a, int i)
+    {
+        float H = a.Set.H, best = float.NaN, bs = 1e9f;
+        for (float x = Lo(a); x <= Hi(a); x += 0.5f * H)
+        {
+            if (!OkSpot(x, a.RowY, (int)H) || MathF.Abs(x - a.X) < 1.2f * H || PathBlocked(a, i, x, -1)) continue;
+            float sc = MathF.Abs(x - a.X) / H + (StretchOf(x, 0f) == _home ? 0f : 9f);
+            foreach (Rein o in _r) if (o != a && o.EnterDelay <= 0 && MathF.Abs(o.X - x) < 2.6f * H) sc += 6f;
+            if (sc < bs) { bs = sc; best = x; }
+        }
+        return best;
+    }
+
     private void StartGraze(Rein a)
     {
         a.Doing = Doing.Graze; a.GPhase = 0; a.GT = 0.5f + 0.9f * (float)Rng.NextDouble(); a.Timer = 999f;
-        a.GCycles = 1 + (Rng.NextDouble() < 0.25 ? 1 : 0);
+        a.GCycles = 1 + (Rng.NextDouble() < 0.15 ? 1 : 0);
     }
 
     // ---- creeping: the way grazing animals drift forward ----
@@ -1020,6 +1126,9 @@ internal sealed class ReindeerHerd : Resident
         a.Doing = Doing.Creep; a.CSteps = steps; a.CPhase = 0; a.CDir = dir; a.CDist = dist; a.Timer = 999f;
         if (!CreepStep(a, i)) { a.Doing = Doing.Graze; return false; }
         _log?.WriteLine($"{_time,8:F2} Reindeer{i} creeps {steps} step(s) of {dist:F0} px ({why}) at x {a.X:F0}");
+        if (i == _mom && a.Kind != ReindeerKind.Calf)
+            foreach (Rein o in _r)
+                if (o.Kind == ReindeerKind.Calf && o.EnterDelay <= 0 && !o.Entering) { o.EchoT = 0.8f + 0.7f * (float)Rng.NextDouble(); o.EchoDir = a.CDir; o.EchoDist = MathF.Max(0.5f * dist, 0.5f * o.Set.H); }
         return true;
     }
 
@@ -1114,7 +1223,7 @@ internal sealed class ReindeerHerd : Resident
                     {
                         a.Gait = Gait.Stand;
                         if (a.Doing == Doing.Creep) CreepNext(a, i);
-                        else { a.GPhase = 2; a.EatT = Organic.Jitter(Rng, 4.6f); a.BitesLeft = 0; }
+                        else { a.GPhase = 2; a.EatT = Organic.Jitter(Rng, 3.4f); a.BitesLeft = 0; }
                     }
                     else a.PawFor = PawTime * (0.9f + 0.25f * (float)Rng.NextDouble());
                 }
@@ -1122,7 +1231,7 @@ internal sealed class ReindeerHerd : Resident
             }
             case 2:
                 a.EatT -= dt;
-                if (a.EatT <= 0 && a.BiteT < 0) { a.GPhase = 3; a.GT = 1.0f + 1.6f * (float)Rng.NextDouble(); a.ChewT = 0; }
+                if (a.EatT <= 0 && a.BiteT < 0) { a.GPhase = 3; a.GT = 0.8f + 1.0f * (float)Rng.NextDouble(); a.ChewT = 0; }
                 break;
             case 3:
                 a.GT -= dt;
@@ -1150,14 +1259,24 @@ internal sealed class ReindeerHerd : Resident
         float H = L.Set.H;
         for (int attempt = 0; attempt < 6; attempt++)
         {
-            int dir = Rng.Next(2) == 0 ? 1 : -1;
-            float gx = L.X + dir * (5f + 4f * (float)Rng.NextDouble()) * 1.9f * H;
-            if (gx < Lo(L) || gx > Hi(L) || !OkSpot(gx, L.RowY, (int)H) || PathBlocked(L, li, gx, -1)) continue;
+            // Where to: the other big stretch most of the time (the wide snow at the left and the stretch above the pond), now and then a visit
+            // by the leader ALONE to one of the two small clear places at the right (they hold one animal); from a visit, back to a big one.
+            int cur = StretchOf(L.X, 0f); if (cur < 0) cur = _home;
+            double rr = Rng.NextDouble();
+            int dest = cur <= 1 ? (rr < 0.72 ? 1 - cur : rr < 0.86 ? 2 : 3) : (rr < 0.5 ? 0 : 1);
+            bool visit = dest >= 2;
+            int dir = OpenSnow[dest].Lo * S.Width + 0.5f * (OpenSnow[dest].Hi - OpenSnow[dest].Lo) * S.Width >= L.X ? 1 : -1;
+            // the goal: the far end of that stretch's resting ground in the way it goes (the followers fill in behind)
+            float gx = float.NaN;
+            for (float x = dir > 0 ? OpenSnow[dest].Hi * S.Width : OpenSnow[dest].Lo * S.Width; dir > 0 ? x >= OpenSnow[dest].Lo * S.Width : x <= OpenSnow[dest].Hi * S.Width; x -= dir * 0.25f * H)
+                if (OkSpot(x, L.RowY, (int)H) && x >= Lo(L) && x <= Hi(L)) { gx = x; break; }
+            if (float.IsNaN(gx) || MathF.Abs(gx - L.X) < 3f * H || PathBlocked(L, li, gx, -1)) continue;
             // Who falls in: the adults behind it in the way it goes, standing or grazing, nearest first.
             int prev = li, rank = 0;
             bool[] taken = new bool[_r.Length]; taken[li] = true;
             for (;;)
             {
+                if (visit) break;
                 int best = -1; float bd = float.MaxValue;
                 for (int k = 0; k < _r.Length; k++)
                 {
@@ -1173,7 +1292,7 @@ internal sealed class ReindeerHerd : Resident
                 prev = best; rank++;
             }
             // The calf goes after its mother (whether she leads or follows) if it is behind the leader.
-            for (int k = 0; k < _r.Length; k++)
+            for (int k = 0; k < _r.Length && !visit; k++)
             {
                 Rein o = _r[k];
                 if (o.Kind != ReindeerKind.Calf || taken[k] || k == _mom && k == li || o.Entering || o.Doing is Doing.Lie or Doing.Gambol or Doing.Alert or Doing.Trot or Doing.Nuzzle || o.Gait is Gait.Down or Gait.Lying or Gait.Up) continue;
@@ -1183,8 +1302,9 @@ internal sealed class ReindeerHerd : Resident
             }
             StartWalk(L, dir, false, gx);
             L.Timer = 999f;
+            if (visit) L.VisitUntil = (float)(_time + 55 + 20 * Rng.NextDouble()); else { _home = dest; foreach (Rein o in _r) o.VisitUntil = 0; }
             _ledCool = _time + 70 + 40 * Rng.NextDouble();
-            _log?.WriteLine($"{_time,8:F2} Reindeer{li} leads the herd {dir} to x {gx:F0} with {rank} following");
+            _log?.WriteLine($"{_time,8:F2} Reindeer{li} {(visit ? "goes visiting" : "leads the herd")} {dir} to x {gx:F0} (stretch {dest}) with {rank} following");
             return true;
         }
         _ledCool = _time + 15;
@@ -1229,7 +1349,7 @@ internal sealed class ReindeerHerd : Resident
         for (int k = 0; k < _r.Length; k++)
         {
             Rein o = _r[k];
-            if (k == i || o.Entering || o.Gait != Gait.Stand || o.TurnReq != 0 || o.Doing is not (Doing.Graze or Doing.Look) || o.GPhase == 1 || NearDoor(o.X) || o.NuzzleCool > 0) continue;
+            if (k == i || o.Entering || o.Gait != Gait.Stand || o.TurnReq != 0 || o.Doing is not (Doing.Graze or Doing.Look) || o.GPhase == 1 || !RestOk(o.X, o.Set.H) || o.NuzzleCool > 0) continue;
             if (a.Kind == ReindeerKind.Calf && k != _mom) continue;            // the calf goes to its mother
             if (a.Kind != ReindeerKind.Calf && o.Kind == ReindeerKind.Calf && k != CalfOf(i)) continue;
             float d = MathF.Abs(o.X - a.X);
@@ -1325,6 +1445,50 @@ internal sealed class ReindeerHerd : Resident
 
     // ================================================================ reactions
 
+    /// <summary>A fox is about but not close: every animal lifts its head, one after another (a few tenths of a second apart), once; then it is over for 25 s.</summary>
+    private void HerdAlert()
+    {
+        _alertCool = _time + 25.0;
+        int rank = 0;
+        for (int k = 0; k < _r.Length; k++)
+        {
+            Rein o = _r[k];
+            if (o.Entering || o.Doing is Doing.Trot or Doing.Gambol or Doing.Alert) continue;
+            if (o.Gait is Gait.Down or Gait.Lying or Gait.Up) { o.AlertT = 4f; continue; }
+            o.AlertWait = 0.1f + 0.35f * rank++ + 0.2f * (float)Rng.NextDouble();
+        }
+        _log?.WriteLine($"{_time,8:F2} Reindeer herd alert: heads up once ({rank} animals)");
+    }
+
+    /// <summary>
+    /// Where a flight goes, decided BEFORE it starts from where the road is clear: the farthest place between 3.5 and 8 heights away, in the way
+    /// "away", that is open snow it may stand on, with nothing lying or standing in the road. NaN: it cannot run (it stands tall and watches instead).
+    /// </summary>
+    private float FleeGoal(Rein a, int i, int dir)
+    {
+        float H = a.Set.H;
+        for (float d = 8f; d >= 3.5f; d -= 0.5f)
+        {
+            float gx = a.X + dir * d * H;
+            if (gx < Lo(a) || gx > Hi(a) || !OkSpot(gx, a.RowY, (int)H)) continue;
+            bool ok = true;
+            for (float px = a.X; dir * (gx - px) > 0; px += dir * 0.6f * H) if (!S.CanStand(px, a.RowY, 0.3f * H)) { ok = false; break; }
+            for (int k = 0; k < _r.Length && ok; k++)
+            {
+                Rein o = _r[k];
+                if (k == i || o.EnterDelay > 0) continue;
+                float dd = (o.X - a.X) * dir;
+                bool runs = o.Doing == Doing.Trot;
+                if (!runs && dd > 0 && dd < d * H + Half(a) + Half(o)) ok = false;      // somebody standing or lying in the road
+                if (runs && o.HasGoal && MathF.Abs(o.GoalX - gx) < 2.2f * H) ok = false;
+            }
+            for (float px = a.X + dir * 1.2f * H; ok && dir * (gx - px) > -1.2f * H; px += dir * 1.2f * H)
+                if (S.Crowded(px, a.RowY, Half(a), this, -1, RowsTol)) ok = false;
+            if (ok) return gx;
+        }
+        return float.NaN;
+    }
+
     /// <summary>
     /// A LOOK (a glance at something, Santa excepted) is the HEAD and the ears, never a new body doing: it is held until the animal is at a
     /// natural break (the end of a scrape, between bites), dropped if that takes more than a second, and then the head lifts (about 1 to
@@ -1389,8 +1553,16 @@ internal sealed class ReindeerHerd : Resident
                 if (a.Gait == Gait.Walking) { a.Doing = Doing.Alert; a.Timer = 1f; a.Pending = Reaction.Flee; a.PendingCause = cause; a.PendingAt = _time; StopWalk(a); }   // brakes first, then goes the other way
                 else
                 {
-                    StartWalk(a, away, true);
-                    a.Timer = 2.2f + 1.3f * (float)Rng.NextDouble();
+                    float fg = FleeGoal(a, i, away);
+                    if (float.IsNaN(fg))
+                    {
+                        // No clear road to run: stand tall and watch (head high, ears forward) rather than start and stop.
+                        a.Doing = Doing.Alert; a.Timer = 3f + 2f * a.Timid; a.EarT = 0; a.LookX = cause.At.X; a.GPhase = 0;
+                        _log?.WriteLine($"{_time,8:F2} Reindeer{i} cannot run (no clear road), stands tall");
+                        break;
+                    }
+                    StartWalk(a, away, true, fg);
+                    a.Timer = 999f;
                     a.LookX = cause.At.X;
                 }
                 a.GPhase = 0;
@@ -1533,7 +1705,7 @@ internal sealed class ReindeerHerd : Resident
         float from = MathF.Min(a.X, x1), to = MathF.Max(a.X, x1);
         foreach (Rein o in _r)
         {
-            if (o == a) continue;
+            if (o == a || _force is "fly" or "gambol") continue;          // (the test dials let the calf play through the herd: a film of the play itself)
             float bl = 1.9f * o.Set.H + 0.3f * a.Set.H;                 // a body length of the other animal (nose to tail, antlers aside) and the calf's own half
             if (o.X > from - bl && o.X < to + bl) return false;
         }
@@ -1557,7 +1729,8 @@ internal sealed class ReindeerHerd : Resident
 
     private void AbortGambol(Rein a, string why)
     {
-        if (a.Gait == Gait.Leaping) a.Gait = Gait.Stand;
+        // Leaping stays on until the pose has come back to the stand through its drawn pages (TickGait): no jump from the air to the ground.
+        if (a.Gait == Gait.Leaping) { a.PoseT = 0; a.PlopT = -1; }
         a.Lift = 0; a.Doing = Doing.Look; a.Timer = 1f; a.Pace.Halt();
         if (a.Gait is Gait.Lying or Gait.Down) BeginUp(a, true);
         a.Doing = Doing.Look; a.GPh = 0; a.Fly = false;
@@ -1583,11 +1756,11 @@ internal sealed class ReindeerHerd : Resident
                 break;
             case 1:
                 a.Gait = Gait.Leaping;
-                if (a.GG < SpringGround) { a.Pose = 0; a.Lift = 0; }
+                if (a.GG < SpringGround) { a.PoseT = 1; a.Lift = 0; }
                 else
                 {
                     float q = (a.GG - SpringGround) / (SpringFor - SpringGround);
-                    a.Pose = 1; a.Lift = SpringLift * H * 4 * q * (1 - q);
+                    a.PoseT = 2; a.Lift = SpringLift * H * 4 * q * (1 - q);
                     a.X += a.Dir * SpringSpeed * H * dt;
                 }
                 if (a.GG >= SpringFor)
@@ -1601,23 +1774,24 @@ internal sealed class ReindeerHerd : Resident
             {
                 a.Gait = Gait.Leaping;
                 float spd = BoundSpeed * (a.Fly && a.GOut ? 1f + 0.18f * a.GN : 1f);
-                if (a.GG < BoundGround) { a.Pose = 3; a.Lift = 0; }
+                if (a.GG < BoundGround) { a.PoseT = 4; a.Lift = 0; }
                 else
                 {
                     float q = (a.GG - BoundGround) / (BoundFor - BoundGround);
-                    a.Pose = q < 0.55f ? 2 : 1; a.Lift = BoundLift * H * 4 * q * (1 - q);
+                    a.PoseT = q < 0.55f ? 3 : 2; a.Lift = BoundLift * H * 4 * q * (1 - q);
                     a.X += a.Dir * spd * H * dt;
                 }
                 if (a.GG >= BoundFor)
                 {
                     LandGlint(a, 0.6f);
                     a.GG = 0; a.GN++;
-                    if (a.GN >= a.GCount) { if (a.Fly && a.GOut) { a.GPh = 7; a.Lift = 0; } else { a.GPh = 3; a.Pose = 4; a.Lift = 0; } }
+                    if (a.GN >= a.GCount) { if (a.Fly && a.GOut) { a.GPh = 7; a.Lift = 0; } else { a.GPh = 3; a.PoseT = 5; a.Lift = 0; } }
                 }
                 break;
             }
             case 3:
-                a.Gait = Gait.Leaping; a.Pose = 4; a.Lift = 0;
+                a.Gait = Gait.Leaping; a.Lift = 0;
+                a.PoseT = a.GG < SkidFor ? 5 : 0;                      // the skid, then back to the stand through drawn pages
                 if (a.GG < SkidFor)
                 {
                     a.X += a.Dir * BoundSpeed * H * (1 - a.GG / SkidFor) * dt;
@@ -1625,8 +1799,8 @@ internal sealed class ReindeerHerd : Resident
                 }
                 else
                 {
-                    a.Gait = Gait.Stand;
-                    if (a.GG >= SkidFor + 0.2f)
+                    if (a.GamFrom == 0 && a.GamTo == 0) a.Gait = Gait.Stand;           // on its feet again: the pose has come all the way back
+                    if (a.Gait == Gait.Stand && a.GG >= SkidFor + 0.2f)
                     {
                         if (a.GOut) { a.GOut = false; BeginTurn(a, -a.Dir, false); a.GPh = 4; }
                         else if (--a.GBouts > 0 && BeginBout(a, 2)) { }
@@ -1649,7 +1823,7 @@ internal sealed class ReindeerHerd : Resident
             case 7:
             {
                 // TAKE-OFF: legs tucked, the lift eases out to FlyPeak while it still runs forward.
-                a.Gait = Gait.Leaping; a.Pose = 5;
+                a.Gait = Gait.Leaping; a.PoseT = 6;
                 float q = Math.Clamp(a.GG / 0.38f, 0f, 1f);
                 a.Lift = FlyPeak * H * (1 - (1 - q) * (1 - q));
                 a.X += a.Dir * 4.6f * H * (1f - 0.3f * q) * dt;
@@ -1665,7 +1839,7 @@ internal sealed class ReindeerHerd : Resident
             case 8:
             {
                 // HANG: half a second at the top, a little bob, sparkles drifting off it.
-                a.Gait = Gait.Leaping; a.Pose = 5;
+                a.Gait = Gait.Leaping; a.PoseT = 6;
                 a.Lift = FlyPeak * H + 0.03f * H * MathF.Sin(a.GG * 9f);
                 a.X += a.Dir * 2.0f * H * (1f - a.GG / 0.55f) * dt;
                 if (Rng.NextDouble() < dt * 22) Sparkle(a, 0.7f);
@@ -1674,18 +1848,23 @@ internal sealed class ReindeerHerd : Resident
             }
             case 9:
             {
-                a.Gait = Gait.Leaping; a.Pose = 2;
+                a.Gait = Gait.Leaping; a.PoseT = 6;                     // falls with the legs still tucked
                 float q = Math.Clamp(a.GG / 0.28f, 0f, 1f);
                 a.Lift = FlyPeak * H * (1 - q * q);
                 a.X += a.Dir * 1.0f * H * dt;
                 if (a.GG >= 0.28f)
                 {
-                    // PLOP: belly flat in the snow, a puff all round.
-                    a.Lift = 0; a.Gait = Gait.Lying; a.LieT = 0; a.Snow = 0; a.GPh = 11; a.GG = 0;
+                    // PLOP: the belly meets the snow, a puff all round, and the tucked body settles flat over a fifth of a second (the Plop pages).
+                    a.Lift = 0; a.GPh = 10; a.GG = 0; a.PlopT = 0;
                     Plop(a);
                 }
                 break;
             }
+            case 10:
+                a.Gait = Gait.Leaping; a.Lift = 0;
+                a.PlopT = Math.Clamp(a.GG / 0.22f, 0f, 1f);
+                if (a.GG >= 0.22f) { a.PlopT = -1; a.Gait = Gait.Lying; a.LieT = 0; a.Snow = 0; a.GPh = 11; a.GG = 0; a.GamFrom = a.GamTo = a.PoseT = 0; a.GamU = 0; }
+                break;
             case 11:
                 a.Gait = Gait.Lying;
                 if (a.GG >= 0.85f) { BeginUp(a, true); a.Doing = Doing.Gambol; a.GPh = 12; a.GG = 0; }
@@ -1781,14 +1960,45 @@ internal sealed class ReindeerHerd : Resident
     /// The body page for this frame. "id" names it for the mind log: book number times 100 plus the page (1 walk, 2 trot, 3 settle, 4 trot start/stop,
     /// 5 paw, 6 down, 7 up, 8 lying, 9 shake, 10 the calf's play, 0 and 3x07 the square stance).
     /// </summary>
+    /// <summary>
+    /// Which head picture: the jaw goes closed, half, open, half, closed while it chews (two and a half times a second); an ear flick goes out
+    /// half way, all the way, half way back. (Two pictures swapping three times a second was a jerk each time.) 0 closed, 1 open, 2 ear back,
+    /// 3 jaw half open, 4 ear half back.
+    /// </summary>
+    private static int HeadKind(Rein a)
+    {
+        if (a.Gait == Gait.Turning) return 0;
+        if (a.ChewT >= 0)
+        {
+            float open = 0.5f - 0.5f * MathF.Cos(MathF.Tau * (a.ChewT * 2.5f % 1f));
+            return open < 0.25f ? 0 : open < 0.75f ? 3 : 1;
+        }
+        if (a.EarT >= 0)
+        {
+            float e = MathF.Sin(MathF.PI * MathF.Min(1f, a.EarT / EarTime));
+            return e < 0.3f ? 0 : e < 0.8f ? 4 : 2;
+        }
+        return 0;
+    }
+
     private RPage PickBody(Rein a, out int id)
     {
         ReindeerSet s = a.Set;
-        id = 307;
+        id = 300 + ReindeerArt.SettlePages - 1;
         switch (a.Gait)
         {
             case Gait.Turning: return s.Stand;                       // (the turn's own pictures are chosen in DrawInner)
-            case Gait.Leaping: id = 1000 + a.Pose; return s.Gam[a.Pose];
+            case Gait.Leaping:
+            {
+                if (a.PlopT >= 0f) { int pp2 = Math.Clamp((int)MathF.Round(a.PlopT * (ReindeerArt.PlopPages - 1)), 0, ReindeerArt.PlopPages - 1); id = 1100 + pp2; return s.Plop[pp2]; }
+                if (a.GamFrom == a.GamTo) { id = 1000 + a.GamFrom; return s.Gam[a.GamFrom]; }
+                int lo2 = Math.Min(a.GamFrom, a.GamTo), hi2 = Math.Max(a.GamFrom, a.GamTo);
+                float uu = a.GamFrom < a.GamTo ? a.GamU : 1f - a.GamU;        // along the stored pages (lo to hi)
+                int ix = Math.Clamp((int)MathF.Round(uu * (ReindeerArt.GamInter + 1)), 0, ReindeerArt.GamInter + 1);
+                if (ix == 0) { id = 1000 + lo2; return s.Gam[lo2]; }
+                if (ix == ReindeerArt.GamInter + 1) { id = 1000 + hi2; return s.Gam[hi2]; }
+                id = 1200 + lo2 * 10 + ix; return s.GamEdge[lo2, hi2]![ix - 1];
+            }
             case Gait.Walking:
             case Gait.Stopping:
             {
@@ -1828,7 +2038,7 @@ internal sealed class ReindeerHerd : Resident
             {
                 // A fast oscillation that dies away: the quantised value picks the page.
                 float k = a.ShakeT / ShakeTime, amp = 1f - k * k;
-                float v = MathF.Sin(a.ShakeT * 2f * MathF.PI * 6.5f) * amp;
+                float v = MathF.Sin(a.ShakeT * 2f * MathF.PI * 4.2f) * amp;
                 int sp = Math.Clamp((int)MathF.Round((v + 1f) / 2f * (ReindeerArt.ShakePages - 1)), 0, ReindeerArt.ShakePages - 1);
                 id = 900 + sp;
                 return s.Shake[sp];
@@ -1838,7 +2048,7 @@ internal sealed class ReindeerHerd : Resident
     }
 
     private void Put(FrameBuffer fb, Sprite spr, float x, float y, int ox, int oy, bool mirror, byte nearness, float opacity = 1f) =>
-        spr.Draw(fb, (int)MathF.Round(x) - (mirror ? spr.Width - 1 - ox : ox), (int)MathF.Round(y) - oy, opacity, null, mirror, S.NearDepth, nearness);
+        spr.DrawSmooth(fb, x - (mirror ? spr.Width - 1 - ox : ox), y - oy, opacity, null, mirror, S.NearDepth, nearness);   // at a fraction of a pixel: a walk glides, and a head that eases between pages does not tick by whole pixels
 
     public override void DrawOne(FrameBuffer fb, int index)
     {
@@ -1885,19 +2095,14 @@ internal sealed class ReindeerHerd : Resident
 
         // 4. The head: the neck page, with the bite's tug off it, the chew's jaw, the ear flick.
         float f = a.NeckF;
-        f += 0.035f * a.DriftAmp * Organic.Drift(_time * 0.6, a.Restless);   // a standing head is never quite still (eased in and out: see DriftAmp)
-        if (a.BiteT >= 0)
-        {
-            float t = a.BiteT;
-            float tug = t < 0.07f ? t / 0.07f : t < 0.12f ? 1f : 1f - Smooth((t - 0.12f) / 0.18f);
-            f -= 0.10f * tug;
-        }
+        f += 0.020f * a.DriftAmp * Organic.Drift(_time * 0.6, a.Restless);   // a standing head is never quite still (eased in and out: see DriftAmp)
+        if (a.BiteT >= 0) f -= 0.12f * (0.5f - 0.5f * MathF.Cos(MathF.Tau * MathF.Min(1f, a.BiteT / BiteTime)));   // the nod: one smooth cosine, down and back
         f = Math.Clamp(f, 0f, 1f);
         float nx = a.X + (mirror ? -1 : 1) * pg.NX * H, ny = foot - pg.NY * H - lift;
         if (!fig)
         {
             int hp = Math.Clamp((int)MathF.Round(f * (ReindeerArt.HeadPages - 1)), 0, ReindeerArt.HeadPages - 1);
-            int kind = turning ? 0 : a.ChewT >= 0 ? ((int)(a.ChewT * 3) % 2) : a.EarT >= 0 ? 2 : 0;
+            int kind = HeadKind(a);
             RPage hpg = s.Head[hp, kind];
             Put(fb, hpg.S, nx, ny, hpg.OX, hpg.OY, mirror, near);
         }

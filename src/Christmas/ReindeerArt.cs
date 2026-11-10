@@ -73,7 +73,9 @@ internal sealed class ReindeerSet
     public RPage[] Down = new RPage[ReindeerArt.LiePages];        // lying down: forelegs fold first
     public RPage[] Up = new RPage[ReindeerArt.LiePages];          // getting up: the hind end first
     public RPage[] Shake = new RPage[ReindeerArt.ShakePages];     // the torso twisted from one side to the other
-    public RPage[] Gam = new RPage[ReindeerArt.GamPages];         // the calf's play poses
+    public RPage[] Gam = new RPage[ReindeerArt.GamKeys];          // the calf's play poses (key 0 is the square stance itself)
+    public RPage[]?[,] GamEdge = new RPage[]?[ReindeerArt.GamKeys, ReindeerArt.GamKeys];   // [a, b] with a < b: GamInter pages on the way from key a to key b (played backward for b to a)
+    public RPage[] Plop = new RPage[ReindeerArt.PlopPages];       // from the tucked pose in the air to lying flat in the snow (the end of its try at flying)
     public RPage[] TrotIn = new RPage[ReindeerArt.TrotInPages];     // the square stance to the trot's first page (and back): a start and a stop that share pages with the trot       // the square stance narrowed about the feet
     public RPage[,] Head = new RPage[ReindeerArt.HeadPages, ReindeerArt.HeadKinds];
     public RPage?[,,] Fig = new RPage?[2, ReindeerArt.TurnLevels, ReindeerArt.TurnSteps + 1];   // the turn: whole animals (body and head together) seen from every angle of a half turn; [side (0 toward us, 1 away), head pitch level, step]; steps 0 and TurnSteps are null (the ordinary standing pages are used there)
@@ -98,15 +100,19 @@ internal sealed class Pose
 
 internal static class ReindeerArt
 {
-    public const int WalkPages = 24, TrotPages = 16, SettlePages = 8, PawPages = 16, LiePages = 12, ShakePages = 9, GamPages = 6, TrotInPages = 6;
-    public const int HeadPages = 16, HeadKinds = 3;   // head kinds: 0 jaw closed, 1 jaw open (chewing), 2 near ear flicked back
+    // SILKY (the owner's standing line, 2026-11-10): a page is held about two frames at most while the body moves, so a transition of T seconds has
+    // about 30 T pages and a cycle 24 to 32. Every book is sampled from a pose function, so these are plain numbers: raise one and the page is simply built.
+    public const int WalkPages = 32, TrotPages = 24, SettlePages = 16, PawPages = 28, LiePages = 40, ShakePages = 17, GamKeys = 7, GamInter = 5, PlopPages = 8, TrotInPages = 10;
+    /// <summary>The calf's play poses are KEYS (0 stand, 1 load, 2 gather, 3 reach, 4 land, 5 skid, 6 tuck); between two keys a few drawn pages carry the body from one to the other, so no pose changes in one frame.</summary>
+    public static readonly (int A, int B)[] GamEdges = [(0, 1), (1, 2), (1, 4), (2, 3), (2, 4), (3, 4), (4, 5), (0, 5), (2, 5), (3, 5), (3, 6), (2, 6), (4, 6), (1, 3)];
+    public const int HeadPages = 24, HeadKinds = 5;   // head kinds: 0 jaw closed, 1 jaw open (chewing), 2 near ear flicked back, 3 jaw half open, 4 ear half back
     // THE TURN is a half turn drawn in TurnSteps steps of 9 degrees (page 0 is the side view facing one way, page TurnSteps the side view
     // facing the other, the three-quarter view toward us and the head-on view between). The head pitch is one of TurnLevels, each EXACTLY
     // one of the ordinary head pages (TurnHp), so the head of the standing animal and the head of the first turn page are the same picture.
     // (Second pass: ONE level, head page 4, a head carried up and level. The herd brings the head up BEFORE it turns and holds it there through
     // the turn, so seven levels were seven times the paint for nothing, and the build fell from six seconds to under two.)
-    public const int TurnSteps = 20, TurnLevels = 1;
-    public static readonly int[] TurnHp = [4];
+    public const int TurnSteps = 32, TurnLevels = 1;
+    public static readonly int[] TurnHp = [6];
     public static float TurnF(int level) => TurnHp[level] / (float)(HeadPages - 1);
     public static int TurnLevelOf(float f)
     {
@@ -134,6 +140,14 @@ internal static class ReindeerArt
     private static PointF P(float x, float y) => new(x, y);
     private static float Smooth(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3 - 2 * x); }
     private static PointF Lerp(PointF a, PointF b, float t) => new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t);
+
+    /// <summary>A pose part of the way (t 0 to 1) from a to b: every foot, the dips, the lift and the fold lerped; the tail changes at the half way.</summary>
+    private static Pose LerpPose(Pose a, Pose b, float t)
+    {
+        var f = new PointF[4];
+        for (int j = 0; j < 4; j++) f[j] = Lerp(a.Feet[j], b.Feet[j], t);
+        return new Pose { Feet = f, WD = a.WD + (b.WD - a.WD) * t, CD = a.CD + (b.CD - a.CD) * t, Lift = a.Lift + (b.Lift - a.Lift) * t, FoldF = a.FoldF + (b.FoldF - a.FoldF) * t, FoldH = a.FoldH + (b.FoldH - a.FoldH) * t, Tail = t > 0.5f ? b.Tail : a.Tail };
+    }
 
     public static PointF[] SquareFeet() => [P(-0.05f, 0), P(0.05f, 0), P(-0.10f, 0), P(0.11f, 0)];
 
@@ -289,7 +303,8 @@ internal static class ReindeerArt
             for (int n = 0; n < 4; n++)
             {
                 int j = order[n];
-                float kj = Math.Clamp((i + 1 - 2 * n) / 2f, 0f, 1f);
+                float per = SettlePages / 4f;
+                float kj = Smooth(Math.Clamp((i + 1 - per * n) / per, 0f, 1f));          // each foot moves slow, fast, slow, one after another
                 feet[j] = P(rest[j].X + (square[j].X - rest[j].X) * kj, rest[j].Y * (1 - kj) + 0.05f * MathF.Sin(MathF.PI * kj));
             }
             float dip = 0.010f * (1 - k);
@@ -330,11 +345,22 @@ internal static class ReindeerArt
                 (Gf(0.05f, 0.14f, 0.0f), 0f, 0.06f, 1),
                 (Gf(0.10f, 0.04f, 0.26f), -0.01f, 0.0f, 1),
             ];
-            for (int t = 0; t < GamPages; t++)
+            var keys = new Pose[GamKeys];
+            keys[0] = new Pose();
+            for (int t = 0; t < gam.Length; t++)
             {
                 var (gf, gwd, gcd, gt) = gam[t];
-                set.Gam[t] = Body(new Pose { Feet = gf, WD = gwd, CD = gcd, Tail = gt });
+                keys[t + 1] = new Pose { Feet = gf, WD = gwd, CD = gcd, Tail = gt };
             }
+            for (int k = 0; k < GamKeys; k++) set.Gam[k] = Body(keys[k]);
+            foreach (var (ea, eb) in GamEdges)
+            {
+                var pages = new RPage[GamInter];
+                for (int m = 0; m < GamInter; m++) pages[m] = Body(LerpPose(keys[ea], keys[eb], (m + 1) / (float)(GamInter + 1)));
+                set.GamEdge[ea, eb] = pages;
+            }
+            var lie = new Pose { WD = 0.40f, CD = 0.40f, FoldF = 1, FoldH = 1 };
+            for (int m = 0; m < PlopPages; m++) set.Plop[m] = Body(LerpPose(keys[6], lie, m / (float)(PlopPages - 1)));
         }
         long msBodies = swT.ElapsedMilliseconds;
         for (int j = 0; j < HeadPages; j++)
@@ -368,6 +394,7 @@ internal static class ReindeerArt
                     set.Fig[side, lv, k] = page;
                 }
         long msTurn = swT.ElapsedMilliseconds;
+        if (Environment.GetEnvironmentVariable("PECKWORKS_TURNDIAG") == "1") DiagTurn(set);
         Timing = $"{kind}: bodies {msBodies} ms, heads {msHeads - msBodies} ms, turn pages {msTurn - msHeads} ms";
         // The shadows: a flat soft ellipse on the snow, blue because it is night and the snow is lit by the moon and the sky.
         set.Shadow = ShadowSprite(h, 1.30f);
@@ -381,6 +408,35 @@ internal static class ReindeerArt
             PaintCap(g, new Pose { WD = 0.40f, CD = 0.40f, FoldF = 1, FoldH = 1 }, kind);
         }, out set.CapLie.OX, out set.CapLie.OY);
         return set;
+    }
+
+    /// <summary>Test aid (PECKWORKS_TURNDIAG=1): how the first turn pages differ from the standing picture, colour by colour, written to the mind log.</summary>
+    private static void DiagTurn(ReindeerSet set)
+    {
+        var log = Christmas.MindLog.Open();
+        if (log == null) return;
+        uint[] Comp(RPage body, RPage? head)
+        {
+            var buf = new uint[set.FigW * set.FigH];
+            Blit(buf, set.FigW, set.FigH, body.S, set.FigOx - body.OX, set.FigOy - body.OY);
+            if (head != null) Blit(buf, set.FigW, set.FigH, head.S, set.FigOx + (int)MathF.Round(body.NX * set.H) - head.OX, set.FigOy - (int)MathF.Round(body.NY * set.H) - head.OY);
+            return buf;
+        }
+        uint[] st = Comp(set.Stand, set.Head[TurnHp[0], 0]);
+        for (int k = 1; k <= 3; k++)
+        {
+            RPage f = set.Fig[0, 0, k]!;
+            var fb = new uint[set.FigW * set.FigH];
+            Blit(fb, set.FigW, set.FigH, f.S, set.FigOx - f.OX, set.FigOy - f.OY);
+            double dr = 0, dg = 0, db = 0; int both = 0, onlyS = 0, onlyF = 0;
+            for (int i = 0; i < st.Length; i++)
+            {
+                bool a = (st[i] >> 24) != 0, b = (fb[i] >> 24) != 0;
+                if (a && b) { both++; dr += (int)((fb[i] >> 16) & 255) - (int)((st[i] >> 16) & 255); dg += (int)((fb[i] >> 8) & 255) - (int)((st[i] >> 8) & 255); db += (int)(fb[i] & 255) - (int)(st[i] & 255); }
+                else if (a) onlyS++; else if (b) onlyF++;
+            }
+            log.WriteLine($"TURNDIAG {set.Kind} page {k}: overlap {both} px, only standing {onlyS}, only turn {onlyF}, mean turn minus standing R {dr / Math.Max(both, 1):F1} G {dg / Math.Max(both, 1):F1} B {db / Math.Max(both, 1):F1}");
+        }
     }
 
     private static int _naps;
@@ -734,17 +790,18 @@ internal static class ReindeerArt
             mp.AddClosedCurve([P(0.0f, 0.085f), P(ml * 0.55f, 0.072f), P(ml, 0.058f), P(ml + 0.035f, 0.0f), P(ml, -0.062f), P(ml * 0.55f, -0.088f), P(0.02f, -0.10f), P(-0.07f, -0.07f)], 0.4f);
             g.FillPath(muzzle, mp);
         }
-        if (kind == 1)
+        if (kind == 1 || kind == 3)
         {
+            float jf = kind == 1 ? 1f : 0.5f;                       // half open: the same wedge, half as deep
             using var jaw = new SolidBrush(dark);
-            g.FillPolygon(jaw, [P(0.04f, -0.07f), P(ml - 0.02f, -0.085f), P(ml + 0.01f, -0.035f), P(ml - 0.04f, -0.04f)]);
+            g.FillPolygon(jaw, [P(0.04f, -0.07f), P(ml - 0.02f, -0.07f - 0.015f * jf), P(ml + 0.01f, -0.04f + 0.005f * jf), P(ml - 0.04f, -0.04f)]);
         }
         using (var ring = new SolidBrush(Color.FromArgb(205, 190, 172, 156)))
             g.FillPolygon(ring, [P(ml - 0.09f, 0.040f), P(ml, 0.045f), P(ml + 0.035f, 0.0f), P(ml, -0.06f), P(ml - 0.09f, -0.07f)]);
         using (var nose = new SolidBrush(Nose)) g.FillEllipse(nose, ml - 0.035f, -0.045f, 0.085f, 0.075f);
         using (var eye = new SolidBrush(Nose)) g.FillEllipse(eye, 0.045f, 0.018f, MathF.Max(0.058f, 3.0f * pw), MathF.Max(0.058f, 3.0f * pw));
         using (var glint = new SolidBrush(Color.White)) g.FillEllipse(glint, 0.066f, 0.050f, MathF.Max(0.018f, 1.3f * pw), MathF.Max(0.018f, 1.3f * pw));
-        EarAt(-0.09f, 0.085f, earBase + (kind == 2 ? 52f : 0f), 0.15f, coat, EarIn);        // the near ear, flicked back for kind 2
+        EarAt(-0.09f, 0.085f, earBase + (kind == 2 ? 52f : kind == 4 ? 26f : 0f), 0.15f, coat, EarIn);        // the near ear, flicked back for kind 2
         g.Restore(st);
     }
 
@@ -981,6 +1038,23 @@ internal static class ReindeerArt
             {
                 for (int i = 0; i < n - 1; i++) Hull(g, coat, rBase[i], rBase[i + 1]);
                 for (int i = 0; i < n - 1; i++) Layers(i);
+                // THE SAME SHADING AS THE STANDING PICTURE (PaintBody): the haunch and the shoulder as soft darker masses on the flank, which fade as
+                // the animal turns away from the side view (the first turn page used to lose them: a visible step from the standing page).
+                float fade = MathF.Max(0f, c * c * c);
+                if (fade > 0.02f)
+                {
+                    void Mass(Color col, params float[] v)
+                    {
+                        var pts = new PointF[v.Length / 2];
+                        for (int q = 0; q < pts.Length; q++) { var w2 = warp.Q(v[2 * q], v[2 * q + 1]); pts[q] = P(w2.X * c, w2.Y); }
+                        using var path = new GraphicsPath();
+                        path.AddClosedCurve(pts, 0.5f);
+                        using var br = new SolidBrush(Color.FromArgb((int)(col.A * fade), col));
+                        g.FillPath(br, path);
+                    }
+                    Mass(Color.FromArgb(60, dark), -0.58f, 0.78f, -0.40f, 0.82f, -0.30f, 0.64f, -0.46f, 0.52f, -0.62f, 0.60f);
+                    Mass(Color.FromArgb(55, dark), 0.10f, 0.74f, 0.34f, 0.80f, 0.46f, 0.64f, 0.34f, 0.50f, 0.14f, 0.56f);
+                }
             }));
         else
         {
@@ -1351,13 +1425,13 @@ internal static class ReindeerArt
                     rows.Add(($"{nm} {label} {(part == 0 ? "0-10" : "11-20")} (head level {lv})", cells, bg));
                 }
             }
-            Half("turn toward us", 0, 2, Snow);
-            Half("turn away from us", 1, 2, Snow);
+            Half("turn toward us", 0, 0, Snow);
+            Half("turn away from us", 1, 0, Snow);
             var lvls = new List<(ReindeerSet, RPage, RPage?)>();
             for (int lv = 0; lv < TurnLevels; lv++) lvls.Add((s, s.Fig[0, lv, TurnSteps / 2]!, null));
             for (int lv = 0; lv < TurnLevels; lv++) lvls.Add((s, s.Fig[1, lv, TurnSteps / 2]!, null));
             rows.Add(($"{nm} head-on (toward us), then tail-on, head levels 0 to 6", lvls, Snow));
-            Half("turn toward us, night", 0, 1, Night);
+            Half("turn toward us, night", 0, 0, Night);
         }
         int cw = 0, ch = 0, labelW = 150;
         foreach (var s in sets) { cw = Math.Max(cw, s.FigW); ch = Math.Max(ch, s.FigH); }
