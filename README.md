@@ -717,8 +717,8 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   a hole up each trunk. Every maple's crown is a ring of leafy lobes, each shaded on its own: deep crimson
   underneath, orange on its body and gold where the low sun catches its top, with the lit side facing the sun
   (so the left trees are lit from the right and the right trees from the left); a long shadow lies on the turf
-  away from the sun, and the roots run out from a rounded buttress. The squirrel runs to the foot, pitches up onto the bark, climbs head-up to the hole and
-  goes in head first (seen from behind, shrinking down into the dark, tail last), stays a while out of sight,
+  away from the sun, and the roots run out from a rounded buttress. The squirrel runs to the foot, pitches up onto the bark (the clinging body swung up about its hind feet over half a second), climbs head-up over the hole and
+  goes in head first (the same climb carried on up into the trunk, the hole's rim hiding it as it passes, tail last), stays a while out of sight,
   then its face comes up in the opening for a look, it comes head-first down the trunk and drops off onto the
   ground. On the move it never flips:
   a step into a pumpkin's foot goes round it on the open side, and a change of direction is a curl (the front

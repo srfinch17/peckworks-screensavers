@@ -113,13 +113,13 @@ internal sealed class PatchLife
     private const float ShuffleFor = 0.28f, FlareFor = 0.30f, TakeOffFor = 0.25f;   // a shuffle hop's length; the last pages of a landing are a flare; the first of a drop are wing beats
 
     private const float BlendFor = 0.15f;           // a squirrel drops into its run, or sits up out of it, over nine frames (it used to pop in one)
-    private const int RisePages = 6, TurnPages = 6, CurlPages = 8, MountPages = 4, HopPages = 22;
+    private const int RisePages = 6, TurnPages = 6, CurlPages = 8, MountPages = 12, HopPages = 22;   // 12 mount pages over 0.42 s: at 4 over 0.25 the pitch onto the bark was a card flipped up in four jumps ("a 90 degree rotation")
     private const float TurnRise = 0.12f, TurnFor = 0.30f;   // a sitting turn: rise to the sit (0.12 s), the narrowing pages, the flip, the widening (0.30), sink (0.12)
     private const float CurlFor = 0.30f;            // the running curl: in and out again in a third of a second, never stopping
-    private const float MountFor = 0.25f, HopFor = 0.55f, ClimbSpeed = 0.13f;   // ClimbSpeed in U a second: the climb is seen, not flashed (0.20 was a third of a second)
+    private const float MountFor = 0.42f, HopFor = 0.55f, ClimbSpeed = 0.13f;   // ClimbSpeed in U a second: the climb is seen, not flashed (0.20 was a third of a second)
     private const float StartAt = 4.0f;             // the critters' first frame, seconds: pinned, so a seed is a scenario (their start used to wait on the sheets' side-thread build and drifted 0.4 s between runs)
     private const int EnterPages = 10;
-    private const float EnterFor = 0.6f, ExitFor = 1.2f;    // going in: the rear view shrinking down the hole; coming out: the face growing in it, then a look round
+    private const float ExitFor = 1.2f;                     // coming out: the face growing in the hole, then a look round. (Going IN has no pages of its own since 2026-11-09: it is the climb carried on up into the trunk, see Doing.Enter.)
 
     private struct Sheet { public Sprite[] Pages; public int W, H, Ox, By; }
 
@@ -127,8 +127,10 @@ internal sealed class PatchLife
     private sealed class SqSheets
     {
         public float K;                             // pixels to the squirrel unit for this variant
-        public Sheet Run, RunNut, Look, Dig, Rise, Turn, Eat, Curl, Hop, Up, Down, MountUp, MountDown, Enter, Exit;
+        public Sheet Run, RunNut, Look, Dig, Rise, Turn, Eat, Curl, Hop, Up, Down, MountUp, MountDown, Exit;
         public int UpFoot, DownHead;                // in the climbing sheets, how far below the sheet's origin the feet (Up) or the head (Down) actually are: measured off the painted page, so the climb is anchored where the body is
+        public int UpHead;                          // in the head-up climbing sheet, how far ABOVE the origin the top of the head is (the first row painted): the entry into the hole begins when that row reaches the hole's bottom rim
+        public int UpCol, DownCol, MountUpCol, MountDownCol;   // the painted body's middle column on each climbing sheet (measured): the climb is stamped so that column runs up the hole's middle, so the body goes INTO the hole, not up the bark beside it
         public Sheet[] Sit = new Sheet[4];
     }
     private static readonly (SquirrelArt.Coat Coat, float Scale)[] Variants = [(SquirrelArt.Coat.Red, 1.0f), (SquirrelArt.Coat.Grey, 1.08f), (SquirrelArt.Coat.Fox, 0.94f)];
@@ -462,6 +464,24 @@ internal sealed class PatchLife
     // ================================================================ painting (once)
 
     /// <summary>The lowest row of a page that has any paint in it (the bottom of the body on that page).</summary>
+    /// <summary>The middle column of what is painted on a page (the body's spine, for an upright squirrel).</summary>
+    private static int MiddleColumn(Sprite page)
+    {
+        int lo = page.Width, hi = -1;
+        for (int y = 0; y < page.Height; y++)
+            for (int x = 0; x < page.Width; x++)
+                if (page.PixelAt(x, y) >> 24 != 0) { if (x < lo) lo = x; if (x > hi) hi = x; }
+        return hi < 0 ? page.Width / 2 : (lo + hi) / 2;
+    }
+
+    private static int HighestRow(Sprite page)
+    {
+        for (int y = 0; y < page.Height; y++)
+            for (int x = 0; x < page.Width; x++)
+                if (page.PixelAt(x, y) >> 24 != 0) return y;
+        return 0;
+    }
+
     private static int LowestRow(Sprite page)
     {
         for (int y = page.Height - 1; y >= 0; y--)
@@ -515,12 +535,16 @@ internal sealed class PatchLife
             sq.Up = Make(32, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3, i => SquirrelArt.Page(Cling(i, -90f), k, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3));
             sq.Down = Make(32, cw, ch, 3, (int)(1.75f * k) + 3, i => SquirrelArt.Page(Cling(i, 90f), k, cw, ch, 3, (int)(1.75f * k) + 3));
             // Where the body really is on those pages: the feet are the lowest painted row of the head-up page, the head the lowest of the head-down page (the first cut guessed 1.75 k and the climb's first frame jumped 59 px from the mount's last).
-            sq.UpFoot = LowestRow(sq.Up.Pages[0]) - sq.Up.By;
+            // The head-up climb is anchored at its ORIGIN: the clinging pose's hind feet sit at the pose's origin, and the whole
+            // picture turns about it, so the origin IS the hind feet. (The first version anchored by the lowest painted row, which on
+            // a head-up squirrel is the TAIL'S TIP hanging below the feet: the climb's first frame sat 0.8 of a length above the
+            // mount's last.) Head-first down, the lowest row really is the head.
+            sq.UpFoot = 0;
             sq.DownHead = LowestRow(sq.Down.Pages[0]) - sq.Down.By;
-            // Going in: the rear view, ever smaller about the head (the hole's middle), the last page a third the size. Coming
-            // out: the sitting front view (the symmetric middle of the turn) growing from a third to full, the head at the hole.
+            sq.UpHead = sq.Up.By - HighestRow(sq.Up.Pages[0]);
+            sq.UpCol = MiddleColumn(sq.Up.Pages[0]); sq.DownCol = MiddleColumn(sq.Down.Pages[0]);
+            // Coming out: the sitting front view (the symmetric middle of the turn) growing from a third to full, the head at the hole.
             int ew = (int)(2.0f * k) + 6, eo = ew / 2, eb = (int)(1.3f * k) + 3;
-            sq.Enter = Make(EnterPages, ew, ew, eo, eb, i => { float sc = 1f - 0.68f * i / (EnterPages - 1f); return Sprite.Paint(ew, ew, g => { g.TranslateTransform(eo, eb); g.ScaleTransform(k * sc, -k * sc); SquirrelArt.PaintRear(g, coat); }); });
             sq.Exit = Make(EnterPages, ew, ew, eo, eb, i =>
             {
                 float sc = 0.32f + 0.68f * i / (EnterPages - 1f);
@@ -528,8 +552,12 @@ internal sealed class PatchLife
                 return Sprite.Paint(ew, ew, g => { g.TranslateTransform(eo, eb); g.ScaleTransform(k * sc, -k * sc); g.TranslateTransform(-q.Head.X, -q.Head.Y); SquirrelArt.Paint(g, q); });
             });
             int sqw = (int)(4.0f * k) + 6, so = sqw / 2;
-            sq.MountUp = Make(MountPages, sqw, sqw, so, so, i => { var q = i < MountPages - 1 ? SquirrelArt.Sit(0.2f, 0, false, false) : SquirrelArt.Bound(0f, 2.2f, cling: true); q.Rotate = -90f * (i + 1) / MountPages; q.Coat = coat; return SquirrelArt.Page(q, k, sqw, sqw, so, so); });
-            sq.MountDown = Make(MountPages, sqw, sqw, so, so, i => { var q = i == 0 ? SquirrelArt.Bound(0f, 2.2f, cling: true) : SquirrelArt.Sit(0.2f, 0, false, false); q.Rotate = 90f * (1f - (i + 1) / (float)MountPages); q.Coat = coat; return SquirrelArt.Page(q, k, sqw, sqw, so, so); });
+            // The pitch onto the bark and off it: the CLINGING body (the same pose the climb's first page has, so the seam into the
+            // climb is the same picture) swung about its hind feet from level to upright, eased (slow at both ends), twelve pages over
+            // 0.42 s. The first version swung a SITTING squirrel up in four jumps and switched to the cling on the last page: a card flip.
+            sq.MountUp = Make(MountPages, sqw, sqw, so, so, i => { float f = (i + 1) / (float)MountPages, e = f * f * (3f - 2f * f); return SquirrelArt.Page(Cling(0, -90f * e), k, sqw, sqw, so, so); });
+            sq.MountDown = Make(MountPages, sqw, sqw, so, so, i => { float f = (i + 1) / (float)MountPages, e = f * f * (3f - 2f * f); return SquirrelArt.Page(Cling(0, 90f * (1f - e)), k, sqw, sqw, so, so); });
+            sq.MountUpCol = MiddleColumn(sq.MountUp.Pages[MountPages - 1]); sq.MountDownCol = MiddleColumn(sq.MountDown.Pages[0]);   // the upright page: the same picture as the climb's first, so the two seams meet
             _sq[v] = sq;
         }
 
@@ -1442,17 +1470,30 @@ internal sealed class PatchLife
                 break;
             case Doing.Climb:
             {
-                // Up the trunk at a steady pace, the pages by the distance climbed, until the head is at the hole; then it goes in.
-                float k = _sq[c.Look].K;
+                // Up the trunk at a steady pace, the pages by the distance climbed, on the OUTSIDE of the bark (nothing hides it),
+                // until the top of its head reaches the hole's bottom rim; then it goes in.
+                SqSheets sq = _sq[c.Look];
                 float d = ClimbSpeed * u * dt;
                 c.Up += d; c.Travelled += d;
-                float hole = _s.TreeHoles[c.Tree].At.Y;
-                if (c.Y - c.Up < hole + 1.25f * k) { c.Mind.Begin(Doing.Enter, EnterFor); c.Clock = 0; }   // the head (about 1.2 lengths above the feet on the cling page) is at the hole
+                var (at, hw) = _s.TreeHoles[c.Tree];
+                float rim = at.Y + hw * 16f / 11f, headTop = c.Y - sq.UpFoot - c.Up - sq.UpHead;
+                if (headTop <= rim)
+                {
+                    // ENTERING is the same climb carried on up INTO the trunk: the body keeps climbing at the same pace and the den
+                    // stencil hides whatever has passed the rim, so it goes in head first and the tail is the last thing seen,
+                    // exactly as long as the body takes to pass the rim. (The first version switched here to a separate set of
+                    // "rear view shrinking into the dark" pages at the hole's middle: "warps into the tree hole".)
+                    c.Mind.Begin(Doing.Enter, (sq.UpHead + sq.UpFoot + 0.3f * sq.K) / (ClimbSpeed * u)); c.Clock = 0;
+                }
                 break;
             }
             case Doing.Enter:
+            {
+                float d = ClimbSpeed * u * dt;
+                c.Up += d; c.Travelled += d;
                 if (c.Mind.Over) { c.Mind.Begin(Doing.Den, 6f + 14f * (float)_rng.NextDouble()); c.Clock = 0; _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} dens in tree {c.Tree}"); }
                 break;
+            }
             case Doing.Den:
                 break;                                                              // out of sight; Decide ends it
             case Doing.Exit:
@@ -1460,7 +1501,7 @@ internal sealed class PatchLife
                 {
                     // Out of the hole: head-first down the trunk from the hole's bottom rim, then off the bark.
                     var (at, hw) = _s.TreeHoles[c.Tree];
-                    c.Up = c.Y - (at.Y + hw * 16f / 11f) - 0.1f * _sq[c.Look].K;
+                    c.Up = c.Y - (at.Y + hw * 16f / 11f) + 0.2f * _sq[c.Look].K;    // the head starts just inside the rim and comes out of it as the descent begins (the stencil uncovers it); at 0.7 of a length inside there was a fifth of a second with nothing in view between the face in the hole and the head at the rim
                     c.Dir = -c.Dir;                                                  // the head-down pages face the other way from the climb's: the facing is handed over HERE, so the sit at the foot faces the way the body came down (it used to flip at the foot)
                     c.Mind.Begin(Doing.Descend, 30f); c.Clock = 0;
                 }
@@ -1555,27 +1596,25 @@ internal sealed class PatchLife
                         bool mirror = c.Dir < 0;
                         // The climb runs up the HOLE's own line (the trunk's middle at the hole), so what the stencil hides is inside the
                         // hole and the tree, never bark beside it; the feet's side of the line is the side the body came up on.
+                        // Every climbing page is stamped so that its painted body's middle column runs up the HOLE's middle: what the
+                        // den stencil then hides is the body going into the hole, never bark beside it. StampAt puts the sheet's origin
+                        // column at x; unmirrored, a page column c lands at x - Ox + c; mirrored at x + Ox - 1 - c.
                         PointF holeAt = _s.TreeHoles[c.Tree].At;
-                        float Edge(float y, bool m) => holeAt.X + (m ? 1f : -1f) * 0.15f * TrunkHalf(c.Tree, y);
+                        float OverHole(in Sheet sh, int col, bool m) => m ? holeAt.X - sh.Ox + 1 + col : holeAt.X + sh.Ox - col;
                         switch (c.Mind.Doing)
                         {
                             case Doing.Mount:
-                                StampAt(fb, sq.MountUp, sq.MountUp.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], Edge(c.Y, mirror), c.Y, mirror, null, c);
+                                StampAt(fb, sq.MountUp, sq.MountUp.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], OverHole(sq.MountUp, sq.MountUpCol, mirror), c.Y, mirror, null, c);
                                 break;
                             case Doing.Climb:
-                            {
-                                float y = c.Y - sq.UpFoot - c.Up;                                       // anchored by the measured feet: at Up 0 they stand on the ground (the mount's last page is this page at the foot)
-                                float cyc = c.Travelled / (2.2f * k);
-                                StampAt(fb, sq.Up, sq.Up.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], Edge(y, mirror), y, mirror, _denMask, c);
-                                break;
-                            }
                             case Doing.Enter:
                             {
-                                // Head in first: seen from behind at the hole, shrinking down it into the dark (the light falls away with the size).
-                                float q = Math.Clamp(c.Clock / EnterFor, 0f, 0.999f);
-                                int pg = (int)(q * EnterPages);
-                                var (at, _) = _s.TreeHoles[c.Tree];
-                                StampAt(fb, sq.Enter, sq.Enter.Pages[pg], at.X, at.Y, false, null, c, 256 - (int)(190 * q));
+                                // The climb, anchored by the measured feet (at Up 0 they stand on the ground; the mount's last page is this
+                                // page at the foot). On the outside of the bark nothing hides it; once it is entering, the den stencil hides
+                                // what has passed the hole's rim, so it goes in head first and the tail last.
+                                float y = c.Y - sq.UpFoot - c.Up;
+                                float cyc = c.Travelled / (2.2f * k);
+                                StampAt(fb, sq.Up, sq.Up.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], OverHole(sq.Up, sq.UpCol, mirror), y, mirror, c.Mind.Doing == Doing.Enter ? _denMask : null, c);
                                 break;
                             }
                             case Doing.Exit:
@@ -1591,11 +1630,11 @@ internal sealed class PatchLife
                             {
                                 float y = c.Y - sq.DownHead - c.Up;                                     // head-first: anchored by the measured head, at the foot when Up is 0
                                 float cyc = c.Travelled / (2.2f * k);
-                                StampAt(fb, sq.Down, sq.Down.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], Edge(y, mirror), y, mirror, _denMask, c);   // Dir was handed over at the exit
+                                StampAt(fb, sq.Down, sq.Down.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], OverHole(sq.Down, sq.DownCol, mirror), y, mirror, _denMask, c);   // Dir was handed over at the exit
                                 break;
                             }
                             case Doing.Dismount:
-                                StampAt(fb, sq.MountDown, sq.MountDown.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], Edge(c.Y, mirror), c.Y, mirror, null, c);
+                                StampAt(fb, sq.MountDown, sq.MountDown.Pages[Math.Clamp((int)(c.Clock / MountFor * MountPages), 0, MountPages - 1)], OverHole(sq.MountDown, sq.MountDownCol, mirror), c.Y, mirror, null, c);
                                 break;
                         }
                         break;
