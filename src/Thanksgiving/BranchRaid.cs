@@ -266,9 +266,9 @@ internal sealed class BranchRaid : Story
         Add(Ph.RunIn, run, dir, false, p.XStart, YAt(p, p.XStart) + FootSink, xs, ys);
         Add(Ph.RiseUp, Cast.RiseFor, dir);
         Add(Ph.Sit, 0.5f, dir);
-        Add(Ph.ToFront, 0.12f, dir);
+        Add(Ph.ToFront, Cast.TurnFor, dir);
         Add(Ph.Front, 0.9f, dir);
-        Add(Ph.FromFront, 0.12f, dir);
+        Add(Ph.FromFront, Cast.TurnFor, dir);
         Add(Ph.SinkDown, Cast.RiseFor, dir);
         float scrabble = t;
         float chatFor = 2.1f;
@@ -284,17 +284,17 @@ internal sealed class BranchRaid : Story
             Add(Ph.MountBack, 0.3f, dir);
             Add(Ph.RiseUp, Cast.RiseFor, dir);
             Add(Ph.Sit, 0.3f, dir);
-            Add(Ph.ToFront, 0.12f, dir);
+            Add(Ph.ToFront, Cast.TurnFor, dir);
             Add(Ph.Front, 0.9f, dir);
-            Add(Ph.FromFront, 0.12f, dout);
+            Add(Ph.FromFront, Cast.TurnFor, dout);
         }
         else
         {
             Add(Ph.RiseUp, Cast.RiseFor, dir, true);
             Add(Ph.Sit, 2.2f, dir, true);
-            Add(Ph.ToFront, 0.12f, dir);
+            Add(Ph.ToFront, Cast.TurnFor, dir);
             Add(Ph.Front, 0.4f, dir);
-            Add(Ph.FromFront, 0.12f, dout);
+            Add(Ph.FromFront, Cast.TurnFor, dout);
         }
         Add(Ph.SinkDown, Cast.RiseFor, dout);
         float outRun = Cast.Dist(new PointF(xs, ys), new PointF(p.XStart, YAt(p, p.XStart) + FootSink)) / (Cast.Speed * u * 1.15f);

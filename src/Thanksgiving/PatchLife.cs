@@ -91,6 +91,7 @@ internal sealed class PatchLife
         public float PauseAt;                       // a squirrel's planned stop-start: the Travelled at which it sits up for a moment mid-run (0 none)
         public PointF? Resume;                      // the goal it goes on to after that pause
         public PointF? Via;                         // a squirrel: the waypoint on the way to a steep goal (PlanVia), null when the goal is reached straight
+        public int Curls;                           // curls since the goal was set: two drop the waypoint, a third ends the doing (a squirrel that curled back and forth on the spot for minutes, the nemesis's finding)
         public PointF ViaFor;                       // the goal that waypoint was planned for (a new goal plans again)
         public bool Dart;                           // this run ends in a curl straight back the other way, at speed (playful)
         public int Tree = -1;                       // the tree a Go is heading for (to den), and the one it is on
@@ -650,7 +651,7 @@ internal sealed class PatchLife
             // than the senses' own reach (a bird on a wire sees the whole lane), and it works from a pumpkin's shoulder too. A
             // timid bird also takes to a branch when a squirrel bounds right at it. Once up, a bird on a branch listens.
             if (c.Kind == Kind.Bird && c.Mind.Doing is not (Doing.Fly or Doing.Branch)
-                && _board.Nearest(Sense.Threat, new PointF(c.X, c.Y), 1.0f * _s.U) is Notice) BeginUp(c);
+                && _board.NearestInReach(Sense.Threat, new PointF(c.X, c.Y), 1.0f * _s.U) is Notice) BeginUp(c);   // within the notice's OWN reach as well: the dog's hunt on the far hill (0.08 U) sent every patch bird up
             else if (c.Kind == Kind.Bird && c.Mind.Doing == Doing.Branch) ListenOnBranch(c);
             // A squirrel on the move is a thing the mice and birds notice: it tells the board every third of a second.
             if (c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Fetch or Doing.Carry or Doing.Raid or Doing.Chase or Doing.Leave or Doing.Romp && c.Clock >= c.NextPost)
@@ -685,7 +686,8 @@ internal sealed class PatchLife
                 // The turn on the spot: the body rises to the sit, narrows through the front view, flips, widens, and sinks; the
                 // doing's own clock waits so nothing else moves meanwhile. The running curl has no rise and no sink, and keeps
                 // moving: it carries on along the old way, dying out by the middle, and gathers out along the new way.
-                float was = c.TurnT; c.TurnT += dt; c.Mind.Left += dt;
+                float was = c.TurnT; c.TurnT += dt;
+                if (!c.Curl) c.Mind.Left += dt;                                    // a sitting turn holds the doing's clock; a running curl does NOT (a curl that froze the timer could loop for ever)
                 float rise = c.Curl ? 0f : TurnRise, span = c.Curl ? CurlFor : TurnFor;
                 float mid = rise + span / 2;
                 if (c.Curl)
@@ -699,7 +701,7 @@ internal sealed class PatchLife
                 if (c.TurnT >= rise + span + rise)
                 {
                     c.Turning = false; c.Blend = 0;
-                    if (c.Curl) { c.Curl = false; c.Pace.Resume(0.6f * c.TurnV); c.Heading = MathF.Atan2(c.Goal.Y - c.Y, c.Goal.X - c.X); }
+                    if (c.Curl) { c.Curl = false; c.Pace.Resume(0.6f * c.TurnV); PointF aim = c.Via ?? c.Goal; c.Heading = MathF.Atan2(aim.Y - c.Y, aim.X - c.X); }   // toward the WAYPOINT when there is one (aimed at the goal behind it, it curled again at once: the loop)
                     if (c.HopAfterTurn) { c.HopAfterTurn = false; c.Mind.Begin(Doing.HopDown, HopFor); c.Clock = 0; }   // on a pumpkin top: turned round, now the hop down the far side
                     if (c.Mind.Doing == Doing.HopUp) c.Clock = 0;                      // a hop up that waited for the turn starts its pages now
                 }
@@ -844,6 +846,17 @@ internal sealed class PatchLife
     /// </summary>
     private void CurlBack(Critter c, float stepThisFrame = 0f, float dt = 1f / 60)
     {
+        // A cap on curls per goal: the second drops the waypoint (it was the thing being argued over), the third ends the doing
+        // in a sit. A squirrel that keeps finding its aim behind it has a goal it cannot steer to; sitting beats spinning.
+        c.Curls++;
+        if (c.Curls == 2) c.Via = null;
+        if (c.Curls >= 3)
+        {
+            c.Pace.Halt(); c.Via = null; c.Curls = 0; c.Turning = false; c.Curl = false;
+            c.Mind.Begin(Doing.Still, 0.6f + 0.6f * (float)_rng.NextDouble()); c.Clock = 0;
+            _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} gives up a goal it kept curling at, at {c.X:F0},{c.Y:F0}");
+            return;
+        }
         c.Turning = true; c.Curl = true; c.TurnT = 0;
         c.TurnV = MathF.Max(stepThisFrame > 0f ? stepThisFrame / dt : c.Pace.Speed, 0.1f * _s.U);   // the speed the body actually had (the bound's pulse runs it up to 1.45 times its pace)
         c.Pace.Halt();
@@ -1339,7 +1352,7 @@ internal sealed class PatchLife
                 PointF aim = c.Goal;
                 if (c.Kind == Kind.Squirrel && c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Fetch or Doing.Raid or Doing.Carry or Doing.Leave)
                 {
-                    if (c.Via == null || c.ViaFor != c.Goal) { c.ViaFor = c.Goal; c.Via = PlanVia(c); }
+                    if (c.Via == null && c.ViaFor != c.Goal || c.Via != null && c.ViaFor != c.Goal) { c.ViaFor = c.Goal; c.Via = PlanVia(c); c.Curls = 0; }
                     if (c.Via is PointF via)
                     {
                         if (MathF.Abs(via.X - c.X) < 1.2f * _k && MathF.Abs(via.Y - c.Y) < 1.2f * _k) c.Via = null;
@@ -1600,13 +1613,19 @@ internal sealed class PatchLife
         page.Draw(fb, left, (int)MathF.Round(y) - sh.By, 1f, stencil, mirror, _s.NearDepth, NearnessOf(c), shade);
     }
 
+    /// <summary>A guest on the near ground drawn in the critters' own far-to-near order (the possum, when it is on the ground): its feet's y and its draw call. Set by the scene each frame; null when there is none.</summary>
+    public Action<FrameBuffer>? Guest;
+    public float GuestY;
+
     public void Draw(FrameBuffer fb)
     {
         if (!_ready) return;
-        // Far to near.
+        // Far to near. The guest takes its turn by its own feet's y, so a nearer squirrel is drawn over it and a farther one under.
         _all.Sort((a, b) => a.Y.CompareTo(b.Y));
+        bool guestDrawn = Guest == null;
         foreach (Critter c in _all)
         {
+            if (!guestDrawn && GuestY <= c.Y) { Guest!(fb); guestDrawn = true; }
             if (c.Kind == Kind.Bird && IsHigh(c)) continue;                         // a bird above the ground's crest is drawn in the second pass below
             switch (c.Kind)
             {
@@ -1738,6 +1757,7 @@ internal sealed class PatchLife
                 }
             }
         }
+        if (!guestDrawn) Guest!(fb);                                                // the guest is nearer than every critter: last
         // The second pass (2026-11-09): the birds up in the branches, and the birds flying to or from them above the fence line, in
         // front of the whole patch and of every pumpkin (no depth stencil), after the ground pass. The falling leaves are drawn
         // later by the scene, so they still fall in front of a bird on its branch.

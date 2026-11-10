@@ -58,6 +58,8 @@ namespace Thanksgiving;
 internal sealed class Possum
 {
     private static readonly int[] SniffSeq = [0, 1, 2, 3, 2, 3, 2, 1];   // the sniff pages' order (a static: an array made in Draw was a per-frame allocation)
+    private static readonly int[] ChewSeq = [0, 1, 2, 1];                 // the chew pages' order, likewise
+    private const double StartAt = 4.0;                                   // the possum's mind starts at a pinned 4.0 s like the patch's, so a seed is a scenario (unpinned, its first descent came at 48.5, 48.7 and 93.2 s on one seed)
     private enum Doing { Hidden, Drop, Hang, PullUp, Descend, Dismount, Still, Walk, Turn, Take, Eat, Faint, Dead, Rise, Shake, Mount, Climb }
 
     private struct Sheet { public Sprite[] Pg; public int W, H; public float Cx, Cy; }
@@ -322,7 +324,7 @@ internal sealed class Possum
     public void Update(float dt)
     {
         _time += dt;
-        if (!_ready) return;
+        if (!_ready || _time < StartAt) return;
         _mind.Tick(dt); _deadRest.Tick(dt); _clock += dt;
         if (_log != null && _mind.Doing != Doing.Hidden)
             _log.WriteLine($"{_time,8:F3} possum frame x {(OnTrunk ? _cx : InHang ? _hangX : X):F1} y {(OnTrunk ? _cy : InHang ? _hangEdge : Y):F1} v {_pace.Speed:F2} {_mind.Doing} d{_dir}");
@@ -365,6 +367,9 @@ internal sealed class Possum
     private bool _wantDown, _moved;
     private bool OnTrunk => _mind.Doing is Doing.Descend or Doing.Climb or Doing.Mount or Doing.Dismount;
     private bool InHang => _mind.Doing is Doing.Drop or Doing.Hang or Doing.PullUp;
+    /// <summary>On the near ground among the patch's critters: drawn in THEIR far-to-near order (PatchLife.Guest), not after them all.</summary>
+    public bool AmongCritters => _ready && _mind.Doing != Doing.Hidden && !OnTrunk && !InHang;
+    public float FeetY => Y;
 
     // ---------------------------------------------------------------- hidden: the choice
 
@@ -546,8 +551,9 @@ internal sealed class Possum
         // At the foot with a squirrel on the trunk: wait, looking up at the tree.
         if (_goalKind == 2 && Dist(new PointF(X, Y), _foot) < 2.4f * _p)
         {
-            if (!Quiet && !_stories.Playing) { Begin(Doing.Still, 0.5f); _idleKind = 2; return; }
-            if (_stories.Playing) { Begin(Doing.Still, 1.0f); _idleKind = 2; return; }
+            // Only a squirrel on the trunk holds it here (a story does not: it climbs home through one), and it waits facing the
+            // tree, head up, with a varying timer so it does not stand frozen in one page (it stood 44 s facing away in walk page 0).
+            if (_life.TrunkBusy(1)) { _dir = _foot.X >= X ? 1 : -1; Begin(Doing.Still, 0.6f + 0.8f * (float)_rng.NextDouble()); _idleKind = 2; return; }
             if (_dir < 0) { BeginTurn(1); return; }
             StartMount(); return;
         }
@@ -768,8 +774,7 @@ internal sealed class Possum
                 if (c < 0.5f) Ground1(fb, _rise, Math.Min(1, (int)(c / 0.25f)));                                       // up onto the haunches
                 else if (c < chewEnd)
                 {
-                    int[] seq = [0, 1, 2, 1];                                                                         // the nut dips to the mouth and the jaw works
-                    Ground1(fb, _sitNut, seq[(int)(c * 7f) % seq.Length]);
+                    Ground1(fb, _sitNut, ChewSeq[(int)(c * 7f) % ChewSeq.Length]);                                      // the nut dips to the mouth and the jaw works
                 }
                 else if (c < wipeEnd) Ground1(fb, _wipe, (int)((c - chewEnd) * 5f) % 3);                              // wiping its face with a paw
                 else if (c < wipeEnd + 0.15f) Ground1(fb, _sitPlain, 0);

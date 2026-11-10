@@ -93,6 +93,23 @@ public sealed class Noticeboard
         return best;
     }
 
+    /// <summary>
+    /// The nearest notice of a kind within "within" of me THAT ALSO REACHES me: its distance is no more than its own Reach.
+    /// Nearest ignores the reach (a listener that looks far sees far); this is for a listener that should not hear a small
+    /// noise from across the scene (a dog's hunt on a far hill, posted at 0.08 U, sent every bird in the near patch up).
+    /// </summary>
+    public Notice? NearestInReach(Sense kind, PointF me, float within)
+    {
+        Notice? best = null; float bestD = within;
+        foreach (Notice n in _live)
+        {
+            if (n.Kind != kind) continue;
+            float dx = n.At.X - me.X, dy = n.At.Y - me.Y, d = MathF.Sqrt(dx * dx + dy * dy);
+            if (d < bestD && d <= n.Reach) { best = n; bestD = d; }
+        }
+        return best;
+    }
+
     /// <summary>Drops everything (a scene reset).</summary>
     public void Clear() => _live.Clear();
 }

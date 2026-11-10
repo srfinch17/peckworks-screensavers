@@ -185,6 +185,7 @@ internal sealed class DeerHerd
 
     private readonly ThanksgivingScenery _s;
     private readonly Random _rng;
+    private readonly Random _play = new(4241);         // the gambol's own dice: a new roll on the herd's would move every older roll
     private readonly Noticeboard _board;
     private readonly Animal[] _deer;
     private readonly string? _test = Environment.GetEnvironmentVariable("PECKWORKS_DEER");
@@ -747,10 +748,10 @@ internal sealed class DeerHerd
     private void StartGambol(Animal a, Animal doe)
     {
         a.Doing = Doing.Gambol;
-        a.GBouts = 1 + (_rng.NextDouble() < 0.35 ? 1 : 0);
+        a.GBouts = 1 + (_play.NextDouble() < 0.35 ? 1 : 0);
         a.GHomeDepth = a.Depth;
         a.Pace.Halt();
-        BeginBout(a, 3 + _rng.Next(2));
+        BeginBout(a, 3 + _play.Next(2));
         _log?.WriteLine($"{_time,8:F2} deer1 gambol begins: bouts {a.GBouts} springs {a.GCount} x {a.X:F0} doe {doe.X:F0}");
     }
 
@@ -859,7 +860,7 @@ internal sealed class DeerHerd
                     doe.Doing = Doing.Look; doe.Timer = 1.8f; doe.TailT = 0; doe.EarT = 0;
                     if (doe.Dir != toFawn) BeginTurn(doe, toFawn);
                 }
-                _nextGambol = _time + 50 + 40 * _rng.NextDouble();
+                _nextGambol = _time + 50 + 40 * _play.NextDouble();
                 _log?.WriteLine($"{_time,8:F2} deer1 gambol over: looks at her mother, x {a.X:F0}");
                 break;
         }

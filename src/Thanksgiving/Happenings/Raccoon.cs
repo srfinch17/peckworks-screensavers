@@ -207,7 +207,7 @@ internal sealed class Raccoon : Happening
         }
         else if (t < tLook)
         {
-            if (_nut != null && !_nutTaken && _s.Nuts != null) { _s.Nuts.Take(_nut); _nutTaken = true; }   // the paws close on the nut as it rises: off the ground, into its hands
+            if (_nut != null && !_nutTaken && _s.Nuts != null) { if (_nut.State == NutField.State.Loose) { _s.Nuts.Take(_nut); _nutTaken = true; } else _nut = null; }   // the paws close on the nut as it rises, if it is STILL lying there (a squirrel or the possum may have taken it meanwhile: then empty-pawed)
             page = (_nut != null ? _riseNut : _rise)[Math.Min(RisePages - 1, (int)((t - tRise) / RiseFor * RisePages))];
         }
         else if (t < tHop)

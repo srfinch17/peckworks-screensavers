@@ -604,7 +604,7 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   doorway. One cow at a time folds down onto the grass (front knees first) and lies chewing for a while,
   then rises hind end first. Every one of them has a mind from the shared kit (a doing with a timer
   and weighted dice, a pace that eases, a pen it keeps to), jointed legs on a proper walk cycle paged by
-  the distance walked, a turn through three narrowing pages, a head that eases down to the grass and
+  the distance walked, a turn through five narrowing pages, a head that eases down to the grass and
   nods, and a tail on its own clock; and every one is sized by the hill's one scale (a 7 m house, a
   2.4 m horse, a 1 m dog, a 0.4 m hen), stamped behind the field and in front of the hill, inside its
   fence (the near rails are stamped over the animals).
@@ -885,7 +885,7 @@ Time per frame (update + render):
 | Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Thanksgiving | Cabin by Stream |
 |------------|-------------|-------------|-------------|-------------|-------------|--------------|-----------------|
 | 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 4 ms  | about 3 ms   | about 2 ms      |
-| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms | about 10 ms  | about 9 ms      |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 15 ms | about 12 ms  | about 9 ms      |
 
 Under about 16 ms means the full 60 frames per second. Each frame waits for the screen's next
 refresh before the next one is drawn, so frames reach the screen evenly, one per refresh (an

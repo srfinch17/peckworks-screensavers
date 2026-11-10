@@ -649,8 +649,12 @@ internal sealed class ThanksgivingScene : IScreensaverScene
 
         // 6a2. The patch's own life: mice, birds and a squirrel among the pumpkins, each hidden by the pumpkins nearer than it.
         _nuts.Draw(fb);                            // the acorns on the ground and any still falling, before the critters that go for them
+        // The possum: on the ground among the pumpkins it is the patch's GUEST, drawn in the critters' own far-to-near order by its
+        // feet's y (drawn after them all, a nearer squirrel ran under it); on the trunk or hanging from the crown it is drawn here.
+        bool possumOnGround = _possum.AmongCritters;
+        _life.Guest = possumOnGround ? _possum.Draw : null; _life.GuestY = _possum.FeetY;
         _life.Draw(fb);
-        _possum.Draw(fb);                          // the possum: on the trunk, on the ground among the pumpkins, or hanging from the crown's lower edge
+        if (!possumOnGround) _possum.Draw(fb);
 
         // 6b. The little scenes (Stories.cs): the squirrels, the mice, the dust, an apple on the
         //     near ground and the rail, in front of the fence (and behind the corn shock and the

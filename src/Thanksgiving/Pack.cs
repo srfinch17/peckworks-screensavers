@@ -128,6 +128,7 @@ internal sealed class Pack
     // from the catcher's mouth with every shake and every toss, each landing on the lane as a speck, and all the stains
     // fading away a couple of minutes later. The gore rolls its own dice, so the pack behaves exactly as it did before.
     private readonly Random _gore = new(1917);
+    private readonly Random _alarm = new(1931);        // the thump alarm's own dice
     private readonly Sprite _splat, _speck, _drop;
     private readonly List<(float X, float Y, bool Big, double Born)> _stains = new();   // on the lane; Y is the ground under the middle
     private readonly List<Drop> _drops = new();                                        // in the air
@@ -624,7 +625,7 @@ internal sealed class Pack
             float dx = n.At.X - r.X, dy = n.At.Y - FeetY(r.X, r.Depth);
             if (MathF.Sqrt(dx * dx + dy * dy) > n.Reach) continue;
             r.HeardAt = n.Posted; r.Fear = from.Fear; r.Dir = from.Fear.X >= r.X ? 1 : -1;
-            r.AlertFor = 0.3f + 0.5f * (float)_rng.NextDouble() * (1f - r.Timid);       // the timid ones bolt first
+            r.AlertFor = 0.3f + 0.5f * (float)_alarm.NextDouble() * (1f - r.Timid);     // the timid ones bolt first (the alarm's own dice: a new roll on the pack's would move every older roll)
             r.Mind.Begin(RDoing.Alert, r.AlertFor + 1f); r.Clock = 0; r.Pace.Halt();
             Log($"rabbit{j} hears thump from rabbit{Array.IndexOf(_rabbits, from)} ({MathF.Sqrt(dx * dx + dy * dy):F0} px away), sits tall, bolts in {r.AlertFor:F2} s");
             return;

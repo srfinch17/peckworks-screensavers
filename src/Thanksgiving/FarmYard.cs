@@ -31,7 +31,7 @@ namespace Thanksgiving;
 ///  - THE DOG'S GAMES, by a Playful dial dealt at birth: it chases its own TAIL (Spin: the turn pages run round and round, speeding up, then Dizzy:
 ///    a sit with the head swaying, then a shake), and it chases a HEN (Hunt at a run, Pull up, then Slink home with its tail down; the rooster
 ///    stands its ground while the dog hunts and charges the dog when it pulls up). While it hunts it posts Sense.Threat at itself (0.08 U); the hens
-///    run from it by their own old rule (they look at the dog, not the board), the horses, cows and pigs listen to nothing, and the patch is far out of reach.
+///    run from it by their own old rule (they look at the dog, not the board), the horses, cows and pigs listen to nothing. The patch is NOT out of reach of a plain Nearest lookup (a bird looking 1.0 U heard this 0.08 U hunt and went up): the patch's birds read the board with NearestInReach, which honours a notice's own reach.
 ///  - THE ROOSTER CROWS every minute or two (Crow: neck up and back, beak open, a quiver), posts Sense.Loud at 0.09 U, the hens in reach LOOK up
 ///    (Look) and the dog, if sitting, either barks once back or pricks up and looks.
 ///  - A COW LIES DOWN, one at a time (Fold, Lie, Rise: front knees first then the hind end; chewing the cud on the grass; up hind end first).
@@ -47,6 +47,7 @@ internal sealed class FarmYard
     {
         public Kind Kind;
         public int Look;                            // which coat; for the hens, 0 is the rooster
+        public int Id;                              // its number at birth, for the log (two cows shared a coat and a name)
         public float X, Y;                          // the feet
         public int Dir = 1;
         public float GoalX, GoalY;
@@ -115,7 +116,7 @@ internal sealed class FarmYard
         int n = 0;
         void Add(Kind kind, int look, (float, float, float, float) p, float accel)
         {
-            var b = new Beast { Kind = kind, Look = look, Pen = p, Busy = busy[n], Timid = timid[n], Dir = _rng.Next(2) == 0 ? 1 : -1 };
+            var b = new Beast { Kind = kind, Look = look, Id = n, Pen = p, Busy = busy[n], Timid = timid[n], Dir = _rng.Next(2) == 0 ? 1 : -1 };
             n++;
             b.X = p.Item1 + (p.Item2 - p.Item1) * (0.25f + 0.5f * (float)_rng.NextDouble());
             b.Y = p.Item3 + (p.Item4 - p.Item3) * (float)_rng.NextDouble();
@@ -245,7 +246,7 @@ internal sealed class FarmYard
         {
             b.Mind.Tick(dt);
             b.Clock += dt;
-            _log?.WriteLine($"{_time,8:F3} yard {b.Kind.ToString().ToLowerInvariant()}{b.Look} frame x {b.X:F1} y {b.Y:F1} v {b.Pace.Speed:F2} {b.Mind.Doing}{(b.TurnT >= 0f ? " turn" : "")}");
+            _log?.WriteLine($"{_time,8:F3} yard {b.Kind.ToString().ToLowerInvariant()}{b.Id} frame x {b.X:F1} y {b.Y:F1} v {b.Pace.Speed:F2} {b.Mind.Doing}{(b.TurnT >= 0f ? " turn" : "")}");
             // The head eases between up and down: a horse lifts its head over a second, it does not snap.
             float wantHead = b.Mind.Doing is Doing.Graze or Doing.Peck ? 1f : 0f;
             b.Head += (wantHead - b.Head) * Math.Min(1f, dt * 3f);
