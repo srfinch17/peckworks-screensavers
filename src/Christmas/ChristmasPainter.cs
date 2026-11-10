@@ -241,6 +241,7 @@ internal static class ChristmasPainter
         using (var valley = new LinearGradientBrush(new PointF(0, horizon - 1), new PointF(0, h * 0.80f),
                    Color.FromArgb(104, 128, 184), Color.FromArgb(158, 180, 226)))
             g.FillRectangle(valley, 0, horizon, w, h - horizon);
+        PaintTrack(g, w, horizon + u * 0.008f, u, rng);   // BEFORE the valley's copy is taken: the train is drawn over whatever is in that copy, so it runs ON the rails
         g.Flush();
         uint[] upToValley = Brushwork.ToPixels(bmp);   // a second stencil copy: "unchanged since here" = the valley floor is still clear (for the toy train)
 
@@ -427,6 +428,52 @@ internal static class ChristmasPainter
         g.FillEllipse(sea, x - r * 0.55f, y - r * 0.50f, r * 0.60f, r * 0.50f);
         g.FillEllipse(sea, x + r * 0.05f, y - r * 0.20f, r * 0.50f, r * 0.62f);
         g.FillEllipse(sea, x - r * 0.40f, y + r * 0.25f, r * 0.44f, r * 0.34f);
+    }
+
+    /// <summary>
+    /// The railway the toy train runs on, along the foot of the mountains
+    /// (his line: "that train in the back is great except it needs a
+    /// track"). We see it from far off and from the side, so it is small:
+    /// a low bank of snow the line is built up on, a row of dark sleepers
+    /// (the wooden cross-beams) showing as short ticks under the rail, the
+    /// rail itself as one thin steel line with a paler glint along its top
+    /// where the moon catches it, and a telegraph pole every so often with
+    /// a sagging wire between them, which is what makes a far-off line of
+    /// track read as a railway and not as a pencil stroke. "railY" is where
+    /// the train's wheels sit (ToyTrain.cs uses the same number).
+    /// </summary>
+    private static void PaintTrack(Graphics g, int w, float railY, float u, Random rng)
+    {
+        float bank = Math.Max(2f, u * 0.007f);
+        using (var snow = new SolidBrush(Color.FromArgb(150, 172, 222)))
+            g.FillRectangle(snow, 0, railY, w, bank);                                    // the built-up bed, a shade paler than the valley floor behind it
+        using (var lit = new SolidBrush(Color.FromArgb(170, 204, 220, 250)))
+            g.FillRectangle(lit, 0, railY + bank * 0.15f, w, Math.Max(1f, bank * 0.3f)); // its moonlit top
+        using (var tie = new SolidBrush(Color.FromArgb(54, 46, 62)))
+            for (float x = 0; x < w; x += Math.Max(3f, u * 0.0075f))
+                g.FillRectangle(tie, x, railY, Math.Max(1f, u * 0.0022f), Math.Max(1.5f, bank * 0.42f));
+        using (var rail = new Pen(Color.FromArgb(40, 44, 66), Math.Max(1f, u * 0.0016f)))
+            g.DrawLine(rail, 0, railY, w, railY);
+        using (var glint = new Pen(Color.FromArgb(120, 206, 220, 250), Math.Max(1f, u * 0.0008f)))
+            g.DrawLine(glint, 0, railY - Math.Max(1f, u * 0.0012f), w, railY - Math.Max(1f, u * 0.0012f));
+
+        // Telegraph poles on the far side of the line, and the wire between them. A hanging wire sags in the
+        // middle of each span and is tied up at the poles: 4 * t * (1 - t) is zero at both ends and one halfway.
+        float tall = u * 0.030f, gap = u * 0.17f, first = (float)rng.NextDouble() * gap;
+        using var wood = new Pen(Color.FromArgb(50, 44, 60), Math.Max(1f, u * 0.0018f));
+        using var wire = new Pen(Color.FromArgb(110, 40, 44, 66), 1f);
+        for (float x = first - gap; x < w + gap; x += gap)
+        {
+            g.DrawLine(wood, x, railY, x, railY - tall);
+            g.DrawLine(wood, x - tall * 0.16f, railY - tall * 0.86f, x + tall * 0.16f, railY - tall * 0.86f);   // the crossarm
+            var span = new PointF[9];
+            for (int i = 0; i < span.Length; i++)
+            {
+                float t = i / (float)(span.Length - 1);
+                span[i] = new PointF(x + gap * t, railY - tall * 0.86f + tall * 0.22f * 4 * t * (1 - t));
+            }
+            g.DrawLines(wire, span);
+        }
     }
 
     // ================================================================ the valley
