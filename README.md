@@ -607,7 +607,7 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   the distance walked, a turn through five narrowing pages, a head that eases down to the grass and
   nods, and a tail on its own clock; and every one is sized by the hill's one scale (a 7 m house, a
   2.4 m horse, a 1 m dog, a 0.4 m hen), stamped behind the field and in front of the hill, inside its
-  fence (the near rails are stamped over the animals).
+  fence (the near rails are stamped over the animals). The cows' pasture is fenced like the paddock now (the back rails in the backdrop, the front rail stamped over the cows), and the pond past the paddock reads as water: no rim, the far edge fading into the grass, the hill's colours reflected in the far part and the sky's gold near, a soft muddy crescent at the near bank, reeds standing in the edge, and three ducks with little wakes.
 - A flock of wild turkeys lives in the field behind the fence: they peck at the stubble, wander a
   few steps, stand and look about, and the tom fans his tail now and then; when he does, the
   curious hens walk over and stand watching him, and a bale dropped by the baler draws them over
@@ -631,7 +631,7 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   the hay wagon and picks them up as it passes: as the wagon's tail clears a bale the loader swings it
   up whole onto the bed, and the stack grows three, two and one. The deer lift their
   heads as it goes by and the timid ones trot off; each bale it drops draws the turkeys over to
-  scratch at the loose hay.
+  scratch at the loose hay. The lane has bumps (four to seven humps and a dip or two, the same every pass): the tractor rides them on its own wheels, rising and tipping as each wheel crosses, and the baler or wagon behind it meets the same bump about a second later on its own wheel and tips about the hitch pin, so the two move as two machines joined at one point.
 - **A pack of coyotes, and the rabbits they hunt**, on the far lane at the very back of the field. The
   rabbits are always there, tiny, sitting and grazing and hopping about. Every few minutes the pack
   trots in: the coyotes roam, stop, sit, dig at the ground, and now and then one gives chase at a
@@ -724,7 +724,7 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   a hole up each trunk. Every maple's crown is a ring of leafy lobes, each shaded on its own: deep crimson
   underneath, orange on its body and gold where the low sun catches its top, with the lit side facing the sun
   (so the left trees are lit from the right and the right trees from the left); a long shadow lies on the turf
-  away from the sun, and the roots run out from a rounded buttress. The squirrel runs to the foot, pitches up onto the bark (the clinging body swung up about its hind feet over half a second), climbs head-up over the hole and
+  away from the sun, and the roots run out from a rounded buttress. The squirrel runs to the foot, pitches up onto the bark by BENDING in the middle (the front half rears up the trunk with the hind feet still planted a stand-off behind it, then the hind end jumps the gap as the body swings vertical, half a second in all), climbs head-up over the hole and
   goes in head first (the same climb carried on up into the trunk, the hole's rim hiding it as it passes, tail last), stays a while out of sight,
   then its face comes up in the opening for a look, it comes head-first down the trunk and drops off onto the
   ground. On the move it never flips and never slides:
