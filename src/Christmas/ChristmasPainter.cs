@@ -101,8 +101,12 @@ internal sealed class ChristmasScenery
     /// a reindeer 1.1 m at the shoulder, a fox 0.40, a hare 0.25. Compare a
     /// new animal to the lamp post (3 m) and the cabin's door (1.9 m) before
     /// anyone else does.
+    /// The slope is steeper than FieldScale's (0.36 at the crest, not 0.5):
+    /// the cabin up there is painted at about 37 pixels to the metre at
+    /// 1080p, and a reindeer walking past its door has to match the door.
+    /// (The first herd was sized by FieldScale and stood as tall as the roof.)
     /// </summary>
-    public float Metre(float y) => 0.10f * U * FieldScale(y);
+    public float Metre(float y) => 0.10f * U * (0.36f + 0.64f * Math.Clamp((y - CrestMin) / (Height - CrestMin), 0f, 1f));
 
     /// <summary>
     /// True if an animal may STAND with its feet at (x, y): on the screen's
