@@ -124,8 +124,7 @@ internal sealed class PatchLife
     private const float MaxSlope = 0.7f;            // the steepest a squirrel RUNS on the screen: rise over run, 35 degrees. A side-view body moving straight up or down the screen slides ("90 turns"); a steeper goal is reached by a planned waypoint (PlanVia)
     private const float MountFor = 0.42f, HopFor = 0.55f, ClimbSpeed = 0.13f;   // ClimbSpeed in U a second: the climb is seen, not flashed (0.20 was a third of a second)
     private const float StartAt = 4.0f;             // the critters' first frame, seconds: pinned, so a seed is a scenario (their start used to wait on the sheets' side-thread build and drifted 0.4 s between runs)
-    private const int EnterPages = 10;
-    private const float ExitFor = 1.2f;                     // coming out: the face growing in the hole, then a look round. (Going IN has no pages of its own since 2026-11-09: it is the climb carried on up into the trunk, see Doing.Enter.)
+    private const float ExitFor = 0.4f;                     // a moment inside the leaves before the head comes out (the den trip goes into the CROWN since 2026-11-10, not the hole: see the trunk stencil)
 
     private struct Sheet { public Sprite[] Pages; public int W, H, Ox, By; }
 
@@ -133,7 +132,7 @@ internal sealed class PatchLife
     private sealed class SqSheets
     {
         public float K;                             // pixels to the squirrel unit for this variant
-        public Sheet Run, RunNut, Look, Dig, Rise, Turn, Eat, Curl, Hop, Up, Down, MountUp, MountDown, Exit;
+        public Sheet Run, RunNut, Look, Dig, Rise, Turn, Eat, Curl, Hop, Up, Down, MountUp, MountDown;
         public int UpFoot, DownHead;                // in the climbing sheets, how far below the sheet's origin the feet (Up) or the head (Down) actually are: measured off the painted page, so the climb is anchored where the body is
         public int UpHead;                          // in the head-up climbing sheet, how far ABOVE the origin the top of the head is (the first row painted): the entry into the hole begins when that row reaches the hole's bottom rim
         public int UpCol, DownCol, MountUpCol, MountDownCol;   // the painted body's middle column on each climbing sheet (measured): the climb is stamped so that column runs up the hole's middle, so the body goes INTO the hole, not up the bark beside it
@@ -150,8 +149,7 @@ internal sealed class PatchLife
     private readonly float _k, _m, _b;
     private readonly Ground.Solid _ground;
     private readonly NutField _nuts;                // the acorns on the ground (Nuts.cs)
-    private readonly bool[] _denMask;               // the stencil for a squirrel climbing into or out of a tree hole: hands off inside the trunk above the hole's bottom rim (the part of the body that is inside the tree)
-    private readonly bool[] _denMaskHole;           // the stencil for the face in the opening: hands off everywhere BUT the holes' openings (a face growing in the dark is seen only through the hole)
+    private readonly bool[] _trunkMask;             // the stencil for a squirrel on the BACK of a trunk: hands off where the trunk's bark is, so the bark hides what is behind it and the tail and feet show past its edges
     private Sheet _mouseRun, _mouseStill;
     private readonly SqSheets[] _sq = new SqSheets[Variants.Length];
     private const int LookPages = 4;                // Look: the head coming up into the look over four pages (page 0 the plain sit, page 3 the full look); it used to snap
@@ -184,30 +182,23 @@ internal sealed class PatchLife
         // width at each height, and the hole's opening). A climbing body drawn over the bark is hidden exactly where it
         // has gone into the tree; nothing beside the trunk is touched. (A flat band across the trunk and the air beside it
         // cut the squirrel along a line: "sliding up through some pocket dimension".)
-        _denMask = new bool[s.Width * s.Height];
-        Array.Fill(_denMask, true);
-        for (int t = 0; t < s.TreeHoles.Count; t++)
+        // THE TRUNK STENCIL (2026-11-10). The den trip no longer goes into the HOLE (a flat sprite sliding up a flat trunk and
+        // vanishing behind a line read as "levitate up into a dimensional portal and disappear", however smooth the seams). A
+        // squirrel climbs the way real ones do: it SPIRALS round the trunk, passing BEHIND it (the bark hides it, its tail and
+        // feet showing past the edges), and goes up INTO THE LEAVES, which hide it as leaves do. This stencil is the bark: hands
+        // off inside the trunk's silhouette for its whole height, from the ground to the crown.
+        _trunkMask = new bool[s.Width * s.Height];
+        Array.Fill(_trunkMask, true);
+        for (int t = 0; t < 2; t++)
         {
-            var (at, hw) = s.TreeHoles[t];
-            float hh = hw * 16f / 11f;
-            int y1 = Math.Clamp((int)(at.Y + hh), 0, s.Height - 1);
+            PointF[] trunk = t == 0 ? s.LeftTrunk : s.RightTrunk;
+            int y1 = Math.Clamp((int)(trunk[0].Y + s.U * 0.03f), 0, s.Height - 1);
             for (int y = 0; y < y1; y++)
             {
-                float cx = TrunkX(t, y), half = TrunkHalf(t, y) * 1.05f;
+                float cx = TrunkX(t, y), half = TrunkHalf(t, y) * 1.0f;
                 int x0 = Math.Max(0, (int)(cx - half)), x1 = Math.Min(s.Width - 1, (int)(cx + half));
-                for (int x = x0; x <= x1; x++) _denMask[y * s.Width + x] = false;
+                for (int x = x0; x <= x1; x++) _trunkMask[y * s.Width + x] = false;
             }
-        }
-        _denMaskHole = new bool[s.Width * s.Height];
-        foreach (var (at, hw) in s.TreeHoles)
-        {
-            float hh = hw * 16f / 11f;
-            for (int y = Math.Max(0, (int)(at.Y - hh)); y <= Math.Min(s.Height - 1, (int)(at.Y + hh)); y++)
-                for (int x = Math.Max(0, (int)(at.X - hw)); x <= Math.Min(s.Width - 1, (int)(at.X + hw)); x++)
-                {
-                    float dx = (x - at.X) / hw, dy = (y - at.Y) / hh;
-                    if (dx * dx + dy * dy <= 1f) _denMaskHole[y * s.Width + x] = true;
-                }
         }
         int mice = (count + 1) / 2, birds = count / 3, squirrels = Math.Max(0, count - mice - birds);
         if (count >= 4 && squirrels < 2) { squirrels = 2; mice = Math.Max(1, count - birds - 2); }   // two squirrels at least (one alone has no one to romp with); the mice give one up
@@ -529,6 +520,26 @@ internal sealed class PatchLife
 
     private static float Smooth01(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3f - 2f * x); }
 
+    /// <summary>The y of a maple crown's lower edge over its trunk: where a climbing squirrel goes into the leaves.</summary>
+    private float CrownEdge(int tree) { var (at, r) = tree == 0 ? _s.LeftMaple : _s.RightMaple; return at.Y + 0.72f * r; }
+
+    /// <summary>
+    /// Where a squirrel on a trunk is drawn, and through what. The climb SPIRALS: over the height from the foot to the crown it
+    /// goes three quarters of the way round the trunk (front, the near side, the back, the far side), so its x swings across the
+    /// trunk by the trunk's half width, and on the back half it is stamped through the trunk stencil (the bark hides its body,
+    /// the tail and feet show past the edges). Above the crown's edge it is stamped through the props' stencil (the leaves hide
+    /// it). "y" is the sheet's anchor row (the feet for a head-up climb, the head for a head-down one).
+    /// </summary>
+    private (float X, bool[]? Stencil) OnTrunkPlace(Critter c, float y, float bodyTop, float centreX)
+    {
+        float height = MathF.Max(1f, c.Y - CrownEdge(c.Tree));
+        float frac = Math.Clamp(c.Up / height, 0f, 1f);
+        float theta = 0.75f * MathF.Tau * frac;
+        float x = centreX + c.Dir * MathF.Sin(theta) * (TrunkHalf(c.Tree, y) + 0.35f * _sq[c.Look].K);   // at the sides the body sticks out a third of a length past the bark (swinging only to the half width, the bark hid the whole squirrel for most of the climb)
+        bool[]? stencil = bodyTop <= CrownEdge(c.Tree) ? _s.OpenOfProps : MathF.Cos(theta) < 0f ? _trunkMask : null;
+        return (x, stencil);
+    }
+
     private static int HighestRow(Sprite page)
     {
         for (int y = 0; y < page.Height; y++)
@@ -598,14 +609,6 @@ internal sealed class PatchLife
             sq.DownHead = LowestRow(sq.Down.Pages[0]) - sq.Down.By;
             sq.UpHead = sq.Up.By - HighestRow(sq.Up.Pages[0]);
             sq.UpCol = MiddleColumn(sq.Up.Pages[0]); sq.DownCol = MiddleColumn(sq.Down.Pages[0]);
-            // Coming out: the sitting front view (the symmetric middle of the turn) growing from a third to full, the head at the hole.
-            int ew = (int)(2.0f * k) + 6, eo = ew / 2, eb = (int)(1.3f * k) + 3;
-            sq.Exit = Make(EnterPages, ew, ew, eo, eb, i =>
-            {
-                float sc = 0.32f + 0.68f * i / (EnterPages - 1f);
-                var q = SquirrelArt.Turn(0.5f, false); q.Coat = coat;
-                return Sprite.Paint(ew, ew, g => { g.TranslateTransform(eo, eb); g.ScaleTransform(k * sc, -k * sc); g.TranslateTransform(-q.Head.X, -q.Head.Y); SquirrelArt.Paint(g, q); });
-            });
             int sqw = (int)(4.0f * k) + 6, so = sqw / 2;
             // The pitch onto the bark and off it: the CLINGING body (the same pose the climb's first page has, so the seam into the
             // climb is the same picture) swung about its hind feet from level to upright, eased (slow at both ends), twelve pages over
@@ -1598,14 +1601,12 @@ internal sealed class PatchLife
                 SqSheets sq = _sq[c.Look];
                 float d = ClimbSpeed * u * dt;
                 c.Up += d; c.Travelled += d;
-                var (at, hw) = _s.TreeHoles[c.Tree];
-                float rim = at.Y + hw * 16f / 11f, headTop = c.Y - sq.UpFoot - c.Up - sq.UpHead;
-                if (headTop <= rim)
+                float edge = CrownEdge(c.Tree), headTop = c.Y - sq.UpFoot - c.Up - sq.UpHead;
+                if (headTop <= edge)
                 {
-                    // ENTERING is the same climb carried on up INTO the trunk: the body keeps climbing at the same pace and the den
-                    // stencil hides whatever has passed the rim, so it goes in head first and the tail is the last thing seen,
-                    // exactly as long as the body takes to pass the rim. (The first version switched here to a separate set of
-                    // "rear view shrinking into the dark" pages at the hole's middle: "warps into the tree hole".)
+                    // ENTERING THE LEAVES is the same climb carried on: the body keeps climbing at the same pace and the props' stencil
+                    // (the painted leaves) hides whatever has passed into the crown, so it goes in head first and the tail is the
+                    // last thing seen, exactly as long as the body takes to pass the crown's edge.
                     c.Mind.Begin(Doing.Enter, (sq.UpHead + sq.UpFoot + 0.3f * sq.K) / (ClimbSpeed * u)); c.Clock = 0;
                 }
                 break;
@@ -1622,9 +1623,8 @@ internal sealed class PatchLife
             case Doing.Exit:
                 if (c.Mind.Over)
                 {
-                    // Out of the hole: head-first down the trunk from the hole's bottom rim, then off the bark.
-                    var (at, hw) = _s.TreeHoles[c.Tree];
-                    c.Up = c.Y - (at.Y + hw * 16f / 11f) + 0.2f * _sq[c.Look].K;    // the head starts just inside the rim and comes out of it as the descent begins (the stencil uncovers it); at 0.7 of a length inside there was a fifth of a second with nothing in view between the face in the hole and the head at the rim
+                    // Out of the leaves: head-first down the trunk from the crown's edge, round the trunk the other way, then off the bark.
+                    c.Up = c.Y - CrownEdge(c.Tree) + 0.2f * _sq[c.Look].K;          // the head starts just inside the leaves and comes out of them as the descent begins (the stencil uncovers it)
                     c.Dir = -c.Dir;                                                  // the head-down pages face the other way from the climb's: the facing is handed over HERE, so the sit at the foot faces the way the body came down (it used to flip at the foot)
                     c.Mind.Begin(Doing.Descend, 30f); c.Clock = 0;
                 }
@@ -1726,9 +1726,9 @@ internal sealed class PatchLife
                         bool mirror = c.Dir < 0;
                         // The climb runs up the HOLE's own line (the trunk's middle at the hole), so what the stencil hides is inside the
                         // hole and the tree, never bark beside it; the feet's side of the line is the side the body came up on.
-                        // Every climbing page is stamped so that its painted body's middle column runs up the HOLE's middle: what the
-                        // den stencil then hides is the body going into the hole, never bark beside it. StampAt puts the sheet's origin
-                        // column at x; unmirrored, a page column c lands at x - Ox + c; mirrored at x + Ox - 1 - c.
+                        // Every climbing page is stamped so that its painted body's middle column runs up the trunk's middle (the hole's
+                        // column, which is the trunk's), and the spiral swings it from there (OnTrunkPlace). StampAt puts the sheet's
+                        // origin column at x; unmirrored, a page column c lands at x - Ox + c; mirrored at x + Ox - 1 - c.
                         PointF holeAt = _s.TreeHoles[c.Tree].At;
                         float OverHole(in Sheet sh, int col, bool m) => m ? holeAt.X - sh.Ox + 1 + col : holeAt.X + sh.Ox - col;
                         switch (c.Mind.Doing)
@@ -1749,23 +1749,18 @@ internal sealed class PatchLife
                                 // what has passed the hole's rim, so it goes in head first and the tail last.
                                 float y = c.Y - sq.UpFoot - c.Up;
                                 float cyc = c.Travelled / (2.2f * k);
-                                StampAt(fb, sq.Up, sq.Up.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], OverHole(sq.Up, sq.UpCol, mirror), y, mirror, c.Mind.Doing == Doing.Enter ? _denMask : null, c);
+                                var (x, stencil) = OnTrunkPlace(c, y, y - sq.UpHead, OverHole(sq.Up, sq.UpCol, mirror));
+                                StampAt(fb, sq.Up, sq.Up.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], x, y, mirror, stencil, c);
                                 break;
                             }
                             case Doing.Exit:
-                            {
-                                // The face coming up out of the dark, growing to full size in the opening, then held there for the look round.
-                                float q = Math.Clamp(c.Clock / (ExitFor * 0.5f), 0f, 0.999f);
-                                int pg = (int)(q * EnterPages);
-                                var (at, _) = _s.TreeHoles[c.Tree];
-                                StampAt(fb, sq.Exit, sq.Exit.Pages[pg], at.X, at.Y, false, _denMaskHole, c, 70 + (int)(186 * q));
-                                break;
-                            }
+                                break;                                                                  // inside the leaves still (a moment's pause before the head comes out)
                             case Doing.Descend:
                             {
                                 float y = c.Y - sq.DownHead - c.Up;                                     // head-first: anchored by the measured head, at the foot when Up is 0
                                 float cyc = c.Travelled / (2.2f * k);
-                                StampAt(fb, sq.Down, sq.Down.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], OverHole(sq.Down, sq.DownCol, mirror), y, mirror, _denMask, c);   // Dir was handed over at the exit
+                                var (x, stencil) = OnTrunkPlace(c, y, y - sq.Down.By, OverHole(sq.Down, sq.DownCol, mirror));   // the body's top is the sheet's top row (the tail's tip, head down)
+                                StampAt(fb, sq.Down, sq.Down.Pages[(int)((cyc - MathF.Floor(cyc)) * 32) % 32], x, y, mirror, stencil, c);   // Dir was handed over at the exit
                                 break;
                             }
                             case Doing.Dismount:

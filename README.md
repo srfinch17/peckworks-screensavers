@@ -726,13 +726,17 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   speed for the fun of it, hops up onto a pumpkin to sit on its top and look about, and romps after the other
   squirrel, which bolts a little way and is chased again, a few legs of the game, and then both sit up. A
   timid one flicks its tail more and dens more. A squirrel never hides behind a pumpkin: it hides in a TREE.
-  The two inner maples are big old trees, thick tapered boles with bark and limbs dividing into the crown, and
-  a hole up each trunk. Every maple's crown is a ring of leafy lobes, each shaded on its own: deep crimson
-  underneath, orange on its body and gold where the low sun catches its top, with the lit side facing the sun
-  (so the left trees are lit from the right and the right trees from the left); a long shadow lies on the turf
-  away from the sun, and the roots run out from a rounded buttress. The squirrel runs to the foot, pitches up onto the bark by BENDING in the middle (the front half rears up the trunk with the hind feet still planted a stand-off behind it, then the hind end jumps the gap as the body swings vertical, half a second in all), climbs head-up over the hole and
-  goes in head first (the same climb carried on up into the trunk, the hole's rim hiding it as it passes, tail last), stays a while out of sight,
-  then its face comes up in the opening for a look, it comes head-first down the trunk and drops off onto the
+  The two inner maples are big old trees, thick tapered boles with bark and limbs dividing into the crown. Every maple's
+  crown is a ring of leafy lobes, each shaded on its own: deep crimson underneath, orange on its body and gold where the
+  low sun catches its top, with the lit side facing the sun (so the left trees are lit from the right and the right trees
+  from the left); a long shadow lies on the turf away from the sun, and the roots run out from a rounded buttress. The
+  squirrel runs to the foot, pitches up onto the bark by BENDING in the middle (the front half rears up the trunk with the
+  hind feet still planted a stand-off behind it, then the hind end jumps the gap as the body swings vertical, half a
+  second in all), and climbs the way squirrels climb: SPIRALLING round the trunk, out past the bark on the near side,
+  behind it with only the tail showing past the edges, out again on the far side higher up, and up INTO THE LEAVES, which
+  hide it. (It used to go into the hole in the trunk; a flat body sliding up a flat trunk and vanishing behind a line
+  read as "levitate up into a dimensional portal", so the hole is just a hole now.) It stays a while out of sight in the
+  crown, then comes head-first down out of the leaves, round the trunk the other way, and bends level onto the
   ground. On the move it never flips and never slides:
   a step into a pumpkin's foot goes round it on the open side; it never runs steeper than about 35 degrees on
   the screen (a side-view body going straight up or down the screen slides), so a goal far up or down the patch
