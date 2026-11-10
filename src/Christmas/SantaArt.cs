@@ -11,6 +11,7 @@ internal sealed class ReinPage
     public float HarX, HarY;        // the harness ring at the shoulder: where a trace is tied on
     public int FeetY;               // the lowest painted row (the hooves), from the page centre: how far above the roof the centre rides when it stands
     public int[] RowFirst = [], RowLast = [];   // for each row, the first and last painted column: a stamp walks only that stretch (a reindeer is a quarter of its page)
+    public int[] ColFirst = [], ColLast = [];   // the same for each COLUMN: the sheared stamp (a smooth tilt and a sub-pixel height) walks columns
 }
 
 /// <summary>One page of the sleigh with Santa in one of his poses, turned to one of the tilts (spots in pixels from the page's centre).</summary>
@@ -22,6 +23,7 @@ internal sealed class SleighPage
     public float RunnerX, RunnerY;  // the back of the runners: where the stardust comes from
     public float SeatX, SeatY;      // the middle of the seat, on the floor: where he stands up from
     public int[] RowFirst = [], RowLast = [];   // the painted stretch of each row (see ReinPage)
+    public int[] ColFirst = [], ColLast = [];   // the painted stretch of each column (see ReinPage)
 }
 
 /// <summary>
@@ -61,9 +63,13 @@ internal sealed class SleighPage
 /// </summary>
 internal sealed class SantaArt
 {
-    public const int FlyPages = 16, LandPages = 7, PawPages = 12;
-    public const float PitchStep = 0.18f, TiltStep = 0.075f;
-    public const int Pitches = 5, Tilts = 9;                // reindeer pitch steps (-2..2) and sleigh tilt steps (-4..4)
+    public const int FlyPages = 20, LandPages = 7, PawPages = 12;
+    // 20 pages and a beat of 1.5 a second is 30 pages a second: at 60 frames a second every page is held EXACTLY two frames
+    // (at 30 it is one page a frame). 16 pages at 1.55 a beat held pages for 2,2,3,2,2,3 frames: an uneven judder.
+    // The tilt is a THREE page choice (steps of 0.24 rad) plus a smooth SHEAR at draw time (SantaRig.StampShear) for
+    // whatever is left over (at most 0.12 rad), so the tilt never pops from one drawn page to the next.
+    public const float PitchStep = 0.24f, TiltStep = 0.15f;
+    public const int Pitches = 3, Tilts = 5;                // reindeer pitch steps (-1..1) and sleigh tilt steps (-2..2)
     public const int PoseCount = 8;                         // see SleighPose
 
     /// <summary>The sleigh's poses. The last two are for the story: Santa is out of the seat (with and without the sack).</summary>
@@ -89,6 +95,8 @@ internal sealed class SantaArt
     private static readonly Color Ink = Color.FromArgb(30, 22, 24);
 
     public ReinPage[] Look = null!;                         // standing, the head turning back over the shoulder: level, thrown back, looking behind
+    public ReinPage[] Mid = null!, Hover = null!;           // the gallop at 0.72 and 0.45 of its reach, level: a team slowing into a hover steps down through them
+    public const float MidAmp = 0.72f, HoverAmp = 0.45f;
     public const int LookPages = 3;
     public long Bytes;                                      // the pictures' memory, for the report
     public int RunnerFeet;                                  // how far below the sleigh page's centre its runners reach (measured off the pixels)
@@ -110,7 +118,14 @@ internal sealed class SantaArt
         {
             Fly[pi] = new ReinPage[FlyPages];
             for (int k = 0; k < FlyPages; k++)
-                Fly[pi][k] = PaintReindeer(new RPose(Phase: k / (float)FlyPages, Amp: 1f, Bob: 0.02f * MathF.Sin(MathF.Tau * k / FlyPages), HeadUp: 0.10f * MathF.Sin(MathF.Tau * (k / (float)FlyPages - 0.15f)), Paw: -1f), (pi - 2) * PitchStep);
+                Fly[pi][k] = PaintReindeer(new RPose(Phase: k / (float)FlyPages, Amp: 1f, Bob: 0.026f * MathF.Sin(MathF.Tau * k / FlyPages), HeadUp: 0.12f * MathF.Sin(MathF.Tau * (k / (float)FlyPages - 0.15f)), Paw: -1f), (pi - 1) * PitchStep);
+        }
+        Mid = new ReinPage[FlyPages]; Hover = new ReinPage[FlyPages];
+        for (int k = 0; k < FlyPages; k++)
+        {
+            float ph = k / (float)FlyPages;
+            Mid[k] = PaintReindeer(new RPose(Phase: ph, Amp: MidAmp, Bob: 0.02f * MathF.Sin(MathF.Tau * ph), HeadUp: 0.08f * MathF.Sin(MathF.Tau * (ph - 0.15f)), Paw: -1f), 0f);
+            Hover[k] = PaintReindeer(new RPose(Phase: ph, Amp: HoverAmp, Bob: 0.02f * MathF.Sin(MathF.Tau * ph), HeadUp: 0.05f * MathF.Sin(MathF.Tau * (ph - 0.15f)), Paw: -1f), 0f);
         }
         Land = new ReinPage[LandPages];
         for (int k = 0; k < LandPages; k++)
@@ -147,6 +162,8 @@ internal sealed class SantaArt
         long bytes = 0;
         foreach (var row in Fly) foreach (var p in row) bytes += p.Img.Width * p.Img.Height * 4L;
         foreach (var p in Land) bytes += p.Img.Width * p.Img.Height * 4L;
+        foreach (var p in Mid) bytes += p.Img.Width * p.Img.Height * 4L;
+        foreach (var p in Hover) bytes += p.Img.Width * p.Img.Height * 4L;
         foreach (var p in Paw) bytes += p.Img.Width * p.Img.Height * 4L;
         foreach (var p in Dip) bytes += p.Img.Width * p.Img.Height * 4L;
         foreach (var p in Look) bytes += p.Img.Width * p.Img.Height * 4L;
@@ -319,8 +336,11 @@ internal sealed class SantaArt
                 g.DrawLine(strap, Pt(cc.X + perp.X * 0.07f, cc.Y + perp.Y * 0.07f), Pt(0.13f, 0.11f));
                 g.DrawLine(strap, Pt(0.05f, -0.115f - arch), Pt(0.03f, 0.115f - arch * 0.4f));
             }
-            using (var bell = new SolidBrush(Gold)) g.FillEllipse(bell, cc.X + perp.X * 0.085f - 0.034f, cc.Y + perp.Y * 0.085f - 0.03f, 0.068f, 0.068f);
-            using (var shine = new SolidBrush(Color.FromArgb(255, 255, 236))) g.FillEllipse(shine, cc.X + perp.X * 0.085f - 0.014f, cc.Y + perp.Y * 0.085f - 0.018f, 0.022f, 0.022f);
+            // The bell hangs from the collar and swings a quarter of a beat BEHIND the body's bob (a pendulum with lag), so it never moves in step with the page.
+            float swing = MathF.Max(0.35f, p.Amp) * MathF.Sin(MathF.Tau * (p.Phase - 0.32f));
+            float bx = cc.X + perp.X * 0.085f - 0.045f * swing, by = cc.Y + perp.Y * 0.085f + 0.012f * MathF.Abs(swing);
+            using (var bell = new SolidBrush(Gold)) g.FillEllipse(bell, bx - 0.034f, by - 0.03f, 0.068f, 0.068f);
+            using (var shine = new SolidBrush(Color.FromArgb(255, 255, 236))) g.FillEllipse(shine, bx - 0.014f, by - 0.018f, 0.022f, 0.022f);
             using (var ring = new SolidBrush(Gold)) g.FillEllipse(ring, 0.085f, -0.035f, 0.04f, 0.04f);
 
             // Near fore leg over everything (it is the one that paws).
@@ -344,7 +364,8 @@ internal sealed class SantaArt
         }
         PointF n = ToPx(noseAt), h = ToPx(harAt);
         Spans(img, out int[] first, out int[] last);
-        return new ReinPage { Img = img, NoseX = n.X, NoseY = n.Y, HarX = h.X, HarY = h.Y, FeetY = LowestRow(img, c / 2), RowFirst = first, RowLast = last };
+        ColSpans(img, out int[] cf, out int[] cl);
+        return new ReinPage { Img = img, NoseX = n.X, NoseY = n.Y, HarX = h.X, HarY = h.Y, FeetY = LowestRow(img, c / 2), RowFirst = first, RowLast = last, ColFirst = cf, ColLast = cl };
     }
 
     /// <summary>For each row of a picture, the first and last column that holds any paint (-1 / width when the row is empty).</summary>
@@ -357,6 +378,19 @@ internal sealed class SantaArt
             for (int x = 0; x < img.Width; x++)
                 if ((img.PixelAt(x, y) >> 24) != 0) { if (f == img.Width) f = x; l = x; }
             first[y] = f; last[y] = l;
+        }
+    }
+
+    /// <summary>For each column of a picture, the first and last row that holds any paint (first &gt; last when the column is empty).</summary>
+    internal static void ColSpans(Sprite img, out int[] first, out int[] last)
+    {
+        first = new int[img.Width]; last = new int[img.Width];
+        for (int x = 0; x < img.Width; x++)
+        {
+            int f = img.Height, l = -1;
+            for (int y = 0; y < img.Height; y++)
+                if ((img.PixelAt(x, y) >> 24) != 0) { if (f == img.Height) f = y; l = y; }
+            first[x] = f; last[x] = l;
         }
     }
 
@@ -501,7 +535,8 @@ internal sealed class SantaArt
         }
         PointF hd = ToPx(hand.X, hand.Y), hi = ToPx(0.78f, -0.04f), ru = ToPx(-0.66f, 0.50f), se = ToPx(0.0f, 0.02f);
         Spans(img, out int[] first, out int[] last);
-        return new SleighPage { Img = img, HandX = hd.X, HandY = hd.Y, HitchX = hi.X, HitchY = hi.Y, RunnerX = ru.X, RunnerY = ru.Y, SeatX = se.X, SeatY = se.Y, RowFirst = first, RowLast = last };
+        ColSpans(img, out int[] cf, out int[] cl);
+        return new SleighPage { ColFirst = cf, ColLast = cl, Img = img, HandX = hd.X, HandY = hd.Y, HitchX = hi.X, HitchY = hi.Y, RunnerX = ru.X, RunnerY = ru.Y, SeatX = se.X, SeatY = se.Y, RowFirst = first, RowLast = last };
     }
 
     // ==================================================================
@@ -518,13 +553,15 @@ internal sealed class SantaArt
         var rows = new List<(string Name, List<(Sprite Img, int Cx, int Cy)> Pages)>();
         int rc = ReinCanvas / 2, sc = SleighCanvas / 2;
         void Add(string name, IEnumerable<(Sprite, int, int)> pages) => rows.Add((name, [.. pages]));
-        for (int pi = 0; pi < Pitches; pi += 2) Add($"fly pitch {pi - 2}", Fly[pi].Select(p => (p.Img, rc, rc)));
+        for (int pi = 0; pi < Pitches; pi++) Add($"fly pitch {pi - 1}", Fly[pi].Select(p => (p.Img, rc, rc)));
+        Add("mid gait (0.72)", Mid.Select(p => (p.Img, rc, rc)));
+        Add("hover gait (0.45)", Hover.Select(p => (p.Img, rc, rc)));
         Add("land (reach to stand)", Land.Select(p => (p.Img, rc, rc)));
-        Add("paw", Paw.Select(p => (p.Img, rc, rc)));
-        Add("dip (head down to paw height)", Dip.Select(p => (p.Img, rc, rc)));
-        Add("sleigh poses, tilt 0", Sleigh.Select(p => (p[Tilts / 2].Img, sc, sc)));
+        if (Paw.Length > 0) Add("paw", Paw.Select(p => (p.Img, rc, rc)));
+        if (Dip.Length > 0) Add("dip (head down to paw height)", Dip.Select(p => (p.Img, rc, rc)));
+        Add("sleigh poses, tilt 0", Sleigh.Where(p => p != null).Select(p => (p[Tilts / 2].Img, sc, sc)));
         Add("sleigh tilts, pose 0", Sleigh[0].Select(p => (p.Img, sc, sc)));
-        Figure.AddSheetRows(rows);
+        if (Figure != null) Figure.AddSheetRows(rows);
 
         int cell = SleighCanvas + 4, perRow = Math.Max(1, 1800 / cell);
         int total = 0;

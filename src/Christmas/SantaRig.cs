@@ -7,32 +7,39 @@ namespace Christmas;
 internal struct TeamMember
 {
     public float X, Y;          // the middle of its body, in pixels
-    public float Pitch;         // radians, nose down positive (the rig picks the nearest drawn tilt)
-    public int Book;            // 0 = flying gallop, 1 = landing (reach to stand), 2 = pawing, 3 = standing with the head dipping
+    public float Pitch;         // radians, nose down positive (the nearest drawn tilt is a page, the rest a smooth shear)
+    public int Book;            // 0 = flying gallop, 1 = landing (reach to stand), 2 = pawing, 3 = standing with the head dipping, 4 = looking back, 5 = mid gait (0.72 of the reach), 6 = hover gait (0.45)
     public float Page;          // the page in that book (the whole part counts; a gallop wraps)
-    public int PitchIdx;        // the drawn tilt in use (kept so a path that wobbles across a boundary does not flicker)
+    public int PitchIdx;        // unused since the tilt became page plus shear (kept so a story that sets it still builds)
 }
 
 /// <summary>
-/// SANTA: the sleigh, the team of four reindeer with Rudolph in front, and the flight
+/// SANTA: the sleigh, the team of NINE (four pairs, two abreast, and Rudolph alone in front), and the flight
 /// across the sky. (Moved out of ChristmasScene.cs on 2026-11-10 so that a story can take
-/// the reins; rebuilt the same day as a rig of separate parts.)
+/// the reins; rebuilt the same day as a rig of separate parts; the team grew from five to nine the same evening.)
 ///
 /// THE PARTS. SantaArt.cs paints every picture once: each reindeer is its own flip-book of
-/// a flying gallop (16 pages, jointed legs), the sleigh is a set of pages (Santa seated,
-/// waving, looking down, cracking the reins) at nine tilts. Here each frame the rig puts
-/// each part where the PATH says, on its own beat, and joins them with lines (the traces
-/// and the reins) that sag when the team eases and tighten when it stretches.
+/// a flying gallop (20 pages, jointed legs), the sleigh is a set of pages (Santa seated,
+/// waving, looking down, cracking the reins) at five tilts. Here each frame the rig puts
+/// each part where the PATH says, on its own beat, and joins them with lines (the gang line, the tugs
+/// and the reins) that sag when the team eases and tighten when it stretches. The nine reindeer SHARE
+/// one set of pictures (the far one of a pair is the same picture tinted darker and bluer at draw time).
 ///
 /// THE PATH. A gentle curve: a straight line across the sky (along the top, or a long
 /// diagonal that crosses the moon) with two slow waves added, so the team rises and dips.
 /// Every part is placed on the SAME curve a fixed distance behind the front (the
-/// reindeer behind Rudolph follow the path he took, like carriages behind an engine),
-/// and the sleigh's tilt is the slope of the curve under it, eased: the team ripples and
-/// the sleigh sways after it with a little lag.
+/// reindeer behind Rudolph follow the path he took, like carriages behind an engine, or beads on a string:
+/// each takes the path of the one in front), and is tilted along its own bit of the curve. The sleigh's tilt is the slope of
+/// the curve under it, eased, and its height is a damped spring after the path's height: it lags a rise and
+/// overshoots a little on a dip.
 ///
-/// POSITION IS AN ADDED-UP DISTANCE (_d), never "time times speed": a story can take the
+/// POSITION IS AN ADDED-UP DISTANCE (_d), never "time times speed": a story can take over the
 /// reins (Take), move the parts by hand, and give them back (Release).
+///
+/// SMOOTHNESS (the owner begged for it): the beat is 20 pages at 1.5 a second, so at 60 frames a second every
+/// page is held exactly two frames (the old 16 pages at 1.55 held them 2,2,3,2,2,3: a judder); a reindeer's tilt is
+/// the nearest of three drawn pages plus a SHEAR at draw time (StampShear), so a tilt that drifts never pops, and the
+/// stamp places a picture to a fraction of a pixel, so a bob is a glide.
 ///
 /// He is only stamped onto sky pixels (the painter hands over a stencil that says which
 /// pixels are sky), so he passes behind the branches that reach in from the top corners,
@@ -47,14 +54,18 @@ internal struct TeamMember
 internal sealed class SantaRig
 {
     // ---- The team's layout along the path, in s units from the FRONT point D (forward is positive; dy is down).
-    //      Two rows of two (the near reindeer of a pair is a little lower and a little ahead, which is how a
-    //      pair looks from the side), Rudolph the near one in front. ----
-    private static readonly float[] Dx = [0.12f, -0.10f, -1.13f, -1.35f];
-    private static readonly float[] Dy = [0.13f, -0.03f, 0.13f, -0.03f];
-    private static readonly float[] PhaseOff = [0f, 0.37f, 0.13f, 0.62f];      // each reindeer's own place in the beat, so the team ripples
-    private const float SleighBack = -2.62f;                                     // the sleigh's centre, behind the front point (s)
-    private const float GaitRate = 1.55f;                                        // gallop beats a second
-    private const float MoonFocus = -1.9f;                                       // which point of the rig is aimed at the moon (s behind the front)
+    //      NINE reindeer: member 0 is Rudolph; pair p (1 to 4) is member 2p-1 (the NEAR one, drawn nearer the eye) and 2p (the FAR
+    //      one). Seen from the side a pair is two reindeer side by side, so the far one is drawn a little behind (0.22 s, a third
+    //      of a body length) and a little above (0.12 s) the near one: both heads and both racks show, and the far one is a shade
+    //      darker and bluer (farther off, at night). Pairs are 1.3 s apart (a reindeer is about 1 s long at full stretch), so the
+    //      whole rig, nose to the sleigh's tail, is about 8.2 s: a quarter of the screen width at 1080p. ----
+    public const int Members = 9;
+    public static readonly float[] Dx = [0f, -1.55f, -1.77f, -2.85f, -3.07f, -4.15f, -4.37f, -5.45f, -5.67f];
+    public static readonly float[] Dy = [0.05f, 0.10f, -0.02f, 0.10f, -0.02f, 0.10f, -0.02f, 0.10f, -0.02f];
+    /// <summary>Each reindeer's own place in the beat (golden-ratio fractions: no two are in step, and a pair's two are about 0.38 of a beat apart).</summary>
+    public static readonly float[] PhaseOff = [0f, 0.618f, 0.236f, 0.854f, 0.472f, 0.090f, 0.708f, 0.326f, 0.944f];
+    public const float SleighBack = -6.9f;                                       // the sleigh's centre, behind the front point (s)
+    private const float GaitRate = 1.5f;                                         // gallop beats a second: 20 pages at 1.5 is 30 pages a second, two frames a page at 60
     private const int Motes = 72;                                                // the stardust ring buffer
 
     private readonly ChristmasScenery _scenery;
@@ -84,13 +95,18 @@ internal sealed class SantaRig
     private double _pause = 1.0, _d, _len, _p0x, _p0y, _tx, _ty, _nx, _ny, _a1, _l1, _ph1, _a2, _l2, _ph2, _speed, _dir;
     private double _nextEvent = 3.0, _evStart, _evEnd;
     private int _evKind;                                                          // 0 none, 1 wave, 2 look down, 3 crack the reins
-    /// <summary>How taut the traces are, 0 (hanging slack) to 1 (straight). The flight beats it with the gallop; a story sets it by hand.</summary>
+    /// <summary>How taut the traces are, 0 (hanging slack) to 1 (straight). The flight beats it with the gallop; a story sets LineTension by hand.</summary>
     public float Tension = 0.5f;
+    /// <summary>How taut each stretch of the gang line is (0 slack, 1 straight): 0 Rudolph to pair 1, 1 pair 1 to 2, 2 pair 2 to 3, 3 pair 3 to 4, 4 pair 4 to the sleigh. The flight sets all five from the beat (each a little after the one in front); a story sets them by hand.</summary>
+    public readonly float[] LineTension = [0.5f, 0.5f, 0.5f, 0.5f, 0.5f];
     private int _sleighIdx = SantaArt.Tilts / 2;
-    private readonly float[] _prevX = new float[5], _prevY = new float[5];
+    private float _sleighRes;                       // the part of the sleigh's tilt the drawn page does not carry (a shear at draw time, as a slope)
+    private double _sprY, _sprV; private bool _sprInit;                           // the sleigh's own height: a spring after the path (lag and a little overshoot on the dips)
+    private readonly float[] _prevX = new float[Members + 1], _prevY = new float[Members + 1];
+    private readonly PointF[] _ring = new PointF[Members], _mid = new PointF[5];
 
     // ---- What a story may set when it has the reins (Directed). Flight sets the same things from the path. ----
-    public readonly TeamMember[] Team = new TeamMember[4];
+    public readonly TeamMember[] Team = new TeamMember[Members];
     public float SleighX, SleighY, SleighTilt;
     public SantaArt.SleighPose Pose;
     public bool Mirror;                                                           // true: flying to the left
@@ -163,7 +179,6 @@ internal sealed class SantaRig
         _rng = new Random(HappeningDirector.SceneRandom().Next());
         _force = Environment.GetEnvironmentVariable("PECKWORKS_SANTA") ?? "";
         _quickStory = Environment.GetEnvironmentVariable("PECKWORKS_STORY") == "1";
-        for (int i = 0; i < 4; i++) Team[i].PitchIdx = SantaArt.Pitches / 2;
         if (_quickStory) _pause = 3600;       // a test that asks for the story at 4 s must find him off screen
         if (_force == "off") _pause = 1e9;    // test: no flights at all (the "without me" timing)
 
@@ -211,7 +226,7 @@ internal sealed class SantaRig
                     string roofSheet = Path.Combine(Path.GetDirectoryName(sheet[6..]) ?? ".", Path.GetFileNameWithoutExtension(sheet[6..]) + "_roof.png");
                     _ladder[roof]!.WriteSheet(roofSheet);
                 }
-                if (_log != null) _log.WriteLine(FormattableString.Invariant($"0.000;Santa;art;flight and roof sizes built in {sw.ElapsedMilliseconds} ms, {(_ladder[0]!.Bytes + _ladder[roof]!.Bytes) / 1048576.0:F1} MB"));
+                if (_log != null) _log.WriteLine(FormattableString.Invariant($"0.000;Santa;art;flight and roof sizes built in {sw.ElapsedMilliseconds} ms, {(_ladder[0]!.Bytes + _ladder[roof]!.Bytes) / 1048576.0:F1} MB (flight size {_ladder[0]!.Bytes / 1048576.0:F1} MB, roof size {_ladder[roof]!.Bytes / 1048576.0:F1} MB)"));
                 // A test that asks for the story at 4 s needs the rest ready by then; a real run waits until a story asks.
                 if (_quickStory && Interlocked.CompareExchange(ref _ladderState, 1, 0) == 0) BuildMiddleRungs();
             }
@@ -284,7 +299,7 @@ internal sealed class SantaRig
             PathAt(dc, out _, out float py);
             _p0y -= py - yMoon;                // the path's wave puts it off by "py - yMoon" there: slide the whole path back
         }
-        _d = -0.8 * _s;
+        _d = -0.8 * _s; _sprInit = false;
         _speed = _u * (0.082 + 0.012 * _rng.NextDouble());
         _flying = true;
         _evKind = 0; _nextEvent = _time + 2.0 + 3.0 * _rng.NextDouble();
@@ -301,8 +316,8 @@ internal sealed class SantaRig
         if (_log != null && ++_costFrames % 600 == 0)
         {
             double ms = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-            _log.WriteLine(FormattableString.Invariant($"{_time:F1};Santa;cost;rig update+draw average {_costTicks * ms / 600:F3} ms a frame over the last 600, worst single call {_costWorst * ms:F3} ms"));
-            _costTicks = 0; _costWorst = 0;
+            _log.WriteLine(FormattableString.Invariant($"{_time:F1};Santa;cost;rig update+draw average {_costTicks * ms / 600:F3} ms a frame over the last 600 frames (all frames, in view or not), {(_costViewFrames > 0 ? _costViewTicks * ms / _costViewFrames : 0):F3} ms a frame over the {_costViewFrames} frames with the rig drawn, worst single call {_costWorst * ms:F3} ms"));
+            _costTicks = 0; _costWorst = 0; _costViewTicks = 0; _costViewFrames = 0;
         }
     }
 
@@ -322,12 +337,11 @@ internal sealed class SantaRig
             {
                 _d += _speed * (1.0 + 0.04 * Math.Sin(_time * 0.9)) * dt;
                 LayOutFlight(dt);
-                if (_d - 3.7 * _s > _len) _flying = false;
+                if (_d - 7.9 * _s > _len) _flying = false;
                 if (!_flying) _pause = _quickStory ? 3600 : 5 + 7 * _rng.NextDouble();
             }
         }
 
-        // The sleigh's tilt (kept by hysteresis so a boundary is crossed once) and the stardust.
         EmitDust(dt);
         UpdateFacts();
     }
@@ -335,18 +349,26 @@ internal sealed class SantaRig
     /// <summary>Puts the parts where the path says: each reindeer a fixed distance behind the front point, the sleigh behind them, tilted by the slope under it.</summary>
     private void LayOutFlight(float dt)
     {
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < Members; i++)
         {
+            // BEADS ON A STRING: every reindeer sits on the SAME curve a fixed distance behind Rudolph, so each takes the path of
+            // the one in front, and is tilted along its own bit of it.
             PathAt(_d + Dx[i] * _s, out float x, out float y);   // the path's distance grows in the direction of travel, so "forward" is plus
             ref TeamMember m = ref Team[i];
             m.X = x; m.Y = y + Dy[i] * _s;
             m.Pitch = AngleAt(_d + Dx[i] * _s) * 0.9f;
             m.Book = 0;
-            m.Page = (float)(((_gait + PhaseOff[i]) % 1.0) * SantaArt.FlyPages);
+            m.Page = (float)(((_gait + PhaseOff[i]) % 1.0) * SantaArt.FlyPages) + 0.3f;     // the 0.3 keeps a page change away from a whole number: no frame-rounding flicker
         }
-        // The sleigh, with a lag: its tilt eases toward the slope under it.
+        // The sleigh: its tilt eases toward the slope under it, and its height is a damped spring after the path's height
+        // (it lags a few pixels behind a rise and overshoots a little on a dip, like a heavy thing on a line).
         PathAt(_d + SleighBack * _s, out float sx, out float sy);
-        SleighX = sx; SleighY = sy;
+        if (!_sprInit) { _sprY = sy; _sprV = 0; _sprInit = true; }
+        const double Om = 5.5, Ze = 0.55;
+        double sdt = Math.Min(dt, 0.05);
+        _sprV += (Om * Om * (sy - _sprY) - 2 * Ze * Om * _sprV) * sdt;
+        _sprY += _sprV * sdt;
+        SleighX = sx; SleighY = (float)_sprY;
         float target = AngleAt(_d + SleighBack * _s);
         float k = 1f - MathF.Exp(-dt * 3.5f);
         SleighTilt += (target - SleighTilt) * k;
@@ -368,9 +390,12 @@ internal sealed class SantaRig
             else Pose = a < 0.3 ? SantaArt.SleighPose.CrackUp : SantaArt.SleighPose.CrackDown;
             if (_time >= _evEnd) { _evKind = 0; _nextEvent = _time + 3.5 + 5.0 * _rng.NextDouble(); }
         }
-        // The traces: taut at the stretch of the front pair's beat, slack at the gather; a crack snaps them taut.
+        // The lines: taut at the stretch of the front pair's beat, slack at the gather; a crack snaps them taut. Each stretch
+        // of the gang line tightens a little after the one in front of it (the pull travels back down the line).
         Tension = 0.5f + 0.5f * MathF.Cos(MathF.Tau * (float)((_gait + PhaseOff[0] + 0.5) % 1.0));
         if (_evKind == 3) Tension = 1f;
+        for (int j = 0; j < 5; j++)
+            LineTension[j] = _evKind == 3 ? 1f : 0.5f + 0.5f * MathF.Cos(MathF.Tau * (float)((_gait + PhaseOff[0] + 0.5 - 0.045 * j + 1.0) % 1.0));
     }
 
     // ==================================================================
@@ -394,7 +419,7 @@ internal sealed class SantaRig
     {
         if (Art == null) return default;
         ReinPage pg = PageOf(Team[0], false);
-        return new PointF(Team[0].X + (Mirror ? -pg.NoseX : pg.NoseX), Team[0].Y + pg.NoseY);
+        return new PointF(Team[0].X + (Mirror ? -pg.NoseX : pg.NoseX), Team[0].Y + pg.NoseY + pg.NoseX * ShearOf(Team[0]));
     }
 
     internal ReinPage PageOf(TeamMember m, bool quantise)
@@ -407,23 +432,46 @@ internal sealed class SantaRig
             case 3: return art.Dip[Math.Clamp(page, 0, SantaArt.DipPages - 1)];
             case 1: return art.Land[Math.Clamp(page, 0, SantaArt.LandPages - 1)];
             case 2: return art.Paw[((page % SantaArt.PawPages) + SantaArt.PawPages) % SantaArt.PawPages];
+            case 5: return art.Mid[((page % SantaArt.FlyPages) + SantaArt.FlyPages) % SantaArt.FlyPages];
+            case 6: return art.Hover[((page % SantaArt.FlyPages) + SantaArt.FlyPages) % SantaArt.FlyPages];
             default:
-                int idx = m.PitchIdx;
-                return art.Fly[Math.Clamp(idx, 0, SantaArt.Pitches - 1)][((page % SantaArt.FlyPages) + SantaArt.FlyPages) % SantaArt.FlyPages];
+                int half = SantaArt.Pitches / 2;
+                int idx = Math.Clamp((int)MathF.Round(m.Pitch / SantaArt.PitchStep), -half, half) + half;
+                return art.Fly[idx][((page % SantaArt.FlyPages) + SantaArt.FlyPages) % SantaArt.FlyPages];
         }
     }
 
-    /// <summary>The nearest drawn tilt, staying with the current one until the angle is clearly nearer another (stops flicker at a boundary).</summary>
-    private static int Quant(float angle, float step, int half, int current)
+    /// <summary>
+    /// The tilt a reindeer's page does NOT carry, as a slope (tan of an angle). A gallop page is drawn at the nearest of
+    /// three tilts; the rest (at most 0.12 rad) is a shear at draw time, so a tilt that drifts is smooth, never a pop.
+    /// The other books are drawn level and take the whole tilt (held to a quarter radian).
+    /// </summary>
+    internal static float ShearOf(TeamMember m)
     {
-        float x = angle / step;
-        if (MathF.Abs(x - (current - half)) < 0.62f) return current;
-        return Math.Clamp((int)MathF.Round(x), -half, half) + half;
+        float res;
+        if (m.Book == 0)
+        {
+            int half = SantaArt.Pitches / 2;
+            int idx = Math.Clamp((int)MathF.Round(m.Pitch / SantaArt.PitchStep), -half, half);
+            res = m.Pitch - idx * SantaArt.PitchStep;
+        }
+        else res = Math.Clamp(m.Pitch, -0.25f, 0.25f);
+        return MathF.Tan(Math.Clamp(res, -0.3f, 0.3f));
+    }
+
+    /// <summary>The sleigh page nearest the tilt, and the shear that carries the rest.</summary>
+    private void PickSleigh()
+    {
+        int half = SantaArt.Tilts / 2;
+        int k = Math.Clamp((int)MathF.Round(SleighTilt / SantaArt.TiltStep), -half, half);
+        _sleighIdx = k + half;
+        _sleighRes = MathF.Tan(Math.Clamp(SleighTilt - k * SantaArt.TiltStep, -0.2f, 0.2f));
     }
 
     /// <summary>The sleigh picture for the pose and tilt in use (the middle rungs of the ladder paint only three poses: any other falls back to the seated one).</summary>
     private SleighPage SleighPageNow()
     {
+        PickSleigh();
         var row = Art!.Sleigh[(int)Pose] ?? Art.Sleigh[0];
         return row[Math.Clamp(_sleighIdx, 0, SantaArt.Tilts - 1)];
     }
@@ -442,7 +490,7 @@ internal sealed class SantaRig
         if (!show) return;
         _emit += dt * DustRate;
         var page = SleighPageNow();
-        float ox = SleighX + (Mirror ? -page.RunnerX : page.RunnerX), oy = SleighY + page.RunnerY;
+        float ox = SleighX + (Mirror ? -page.RunnerX : page.RunnerX), oy = SleighY + page.RunnerY + page.RunnerX * _sleighRes;
         while (_emit >= 1f)
         {
             _emit -= 1f;
@@ -481,15 +529,15 @@ internal sealed class SantaRig
     private void WriteLog()
     {
         string mode = Directed ? "directed" : _flying ? "flying" : "pause";
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < Members; i++)
         {
             float sp = MathF.Sqrt((Team[i].X - _prevX[i]) * (Team[i].X - _prevX[i]) + (Team[i].Y - _prevY[i]) * (Team[i].Y - _prevY[i])) / MathF.Max(1e-4f, 1f / 60f);
-            _log!.WriteLine(FormattableString.Invariant($"{_time:F3};Santa;{i};{Team[i].X:F1};{Team[i].Y:F1};{sp:F1};{mode};book{Team[i].Book};{Team[i].Page:F1}"));
+            _log!.WriteLine(FormattableString.Invariant($"{_time:F3};Santa;{i};{Team[i].X:F3};{Team[i].Y:F3};{sp:F1};{mode};book{Team[i].Book};{Team[i].Page:F1};pitch={Team[i].Pitch:F4}"));
             _prevX[i] = Team[i].X; _prevY[i] = Team[i].Y;
         }
-        float ss = MathF.Sqrt((SleighX - _prevX[4]) * (SleighX - _prevX[4]) + (SleighY - _prevY[4]) * (SleighY - _prevY[4])) * 60f;
-        _log!.WriteLine(FormattableString.Invariant($"{_time:F3};Santa;sleigh;{SleighX:F1};{SleighY:F1};{ss:F1};{mode};{Pose};tilt={_sleighIdx}"));
-        _prevX[4] = SleighX; _prevY[4] = SleighY;
+        float ss = MathF.Sqrt((SleighX - _prevX[Members]) * (SleighX - _prevX[Members]) + (SleighY - _prevY[Members]) * (SleighY - _prevY[Members])) * 60f;
+        _log!.WriteLine(FormattableString.Invariant($"{_time:F3};Santa;sleigh;{SleighX:F3};{SleighY:F3};{ss:F1};{mode};{Pose};tilt={SleighTilt:F4}"));
+        _prevX[Members] = SleighX; _prevY[Members] = SleighY;
     }
 
     // ==================================================================
@@ -497,7 +545,7 @@ internal sealed class SantaRig
     // ==================================================================
 
     // Cost meter (only when PECKWORKS_MINDLOG is on): the rig's own time per frame, so its cost does not have to be dug out of the whole scene's noise.
-    private long _costTicks, _costWorst, _costFrames;
+    private long _costTicks, _costWorst, _costFrames, _costViewTicks, _costViewFrames;
     private void Meter(long start)
     {
         if (_log == null) return;
@@ -510,57 +558,113 @@ internal sealed class SantaRig
         if (Directed || !Ready || !_flying) return;
         long t0 = _log != null ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
         DrawRig(fb, _scenery.IsSky, true);
-        Meter(t0);
+        if (_log != null)
+        {
+            long d = System.Diagnostics.Stopwatch.GetTimestamp() - t0;
+            _costTicks += d; if (d > _costWorst) _costWorst = d;
+            if (_scenery.SantaOnScreen) { _costViewTicks += d; _costViewFrames++; }
+        }
     }
 
-    /// <summary>The coat tints of the four reindeer (red, green, blue multipliers out of 256): Rudolph a touch redder-brown, the others a little different from each other, so the team are not clones.</summary>
-    private static readonly int[] TintR = [276, 240, 258, 232], TintG = [236, 238, 252, 230], TintB = [212, 246, 238, 228];
+    /// <summary>
+    /// The coat tints (red, green, blue multipliers out of 256). Rudolph a touch redder-brown, the near ones a little different
+    /// from each other, so the team are not clones; the FAR one of each pair is its mate's tint dimmed and pushed toward blue
+    /// (it is farther off, and it is night).
+    /// </summary>
+    private static readonly int[] TintR, TintG, TintB;
+    static SantaRig()
+    {
+        int[] nr = [276, 250, 262, 238, 256], ng = [236, 238, 246, 236, 240], nb = [212, 232, 228, 244, 220];
+        TintR = new int[Members]; TintG = new int[Members]; TintB = new int[Members];
+        for (int i = 0; i < Members; i++)
+        {
+            int p = (i + 1) / 2; bool far = i > 0 && i % 2 == 0;
+            TintR[i] = far ? nr[p] * 184 >> 8 : nr[p]; TintG[i] = far ? ng[p] * 206 >> 8 : ng[p]; TintB[i] = far ? nb[p] * 248 >> 8 : nb[p];
+        }
+    }
     private const int MoonShade = 62;                                              // out of 256: how dark a thing is where it crosses the moon
 
     /// <summary>
-    /// Stamps one picture through a stencil, tinted (mr, mg, mb out of 256), and over the MOON's disc darkened
-    /// to a silhouette (each pixel it draws is asked whether it lies inside the disc: there are no stencil
-    /// arrays for that). Same blend as Sprite.Draw: result = old + (new - old) * alpha.
+    /// Stamps one picture through a stencil, tinted (mr, mg, mb out of 256), SHEARED and placed to a fraction of a pixel,
+    /// and over the MOON's disc darkened to a silhouette (each pixel it draws is asked whether it lies inside the disc).
+    ///
+    /// THE SHEAR. A plain stamp drops the picture on whole pixels: a bob of a pixel and a half is a hop of one or two, and a
+    /// tilt that changes by a tenth of a radian swaps to a different page (a pop). Here each COLUMN of the picture is moved up
+    /// or down by its own amount, "fy + (distance from the middle) * tan(tilt)", and a fraction of a pixel is shown by blending
+    /// the column with itself moved one row (so a bob is a glide). A small rotation of a picture IS, to a good approximation, a
+    /// shear of this kind (for 0.12 rad the difference is under a pixel). Where one of the two rows being blended is empty the
+    /// other's colour is taken whole, so the edge never bleeds dark. Same blend as Sprite.Draw: result = old + (new - old) * alpha.
     /// </summary>
-    private void Stamp(FrameBuffer fb, Sprite sp, int[] first, int[] last, float cx, float cy, bool mirror, int mr, int mg, int mb, bool[] stencil)
+    private void StampShear(FrameBuffer fb, Sprite sp, int[] colFirst, int[] colLast, float cx, float cy, bool mirror, float tan, int mr, int mg, int mb, bool[] stencil)
     {
-        int w = sp.Width, h = sp.Height;
-        int left = (int)MathF.Round(cx) - w / 2, top = (int)MathF.Round(cy) - h / 2;
-        int x0 = Math.Max(0, -left), x1 = Math.Min(w, fb.Width - left), y0 = Math.Max(0, -top), y1 = Math.Min(h, fb.Height - top);
-        bool moon = left < _moonR && left + w > _moonL && top < _moonB && top + h > _moonT;
+        int w = sp.Width, h = sp.Height, fw = fb.Width, fh = fb.Height;
+        int left = (int)MathF.Round(cx) - w / 2;
+        float topf = cy - h / 2f;
+        int topi = (int)MathF.Floor(topf);
+        float fy = topf - topi, reach = MathF.Abs(tan) * w * 0.5f + 2f;
+        if (left >= fw || left + w <= 0 || topi + h + reach < 0 || topi - reach >= fh) return;
+        bool moon = left < _moonR && left + w > _moonL && topi - reach < _moonB && topi + h + reach > _moonT;
         bool plain = mr == 256 && mg == 256 && mb == 256;
         ReadOnlySpan<uint> src = sp.Argb;
         uint[] frame = fb.Pixels;
-        for (int sy = y0; sy < y1; sy++)
+        float half = w * 0.5f;
+        for (int sx = 0; sx < w; sx++)
         {
-            int row = sy * w, dst = (top + sy) * fb.Width + left;
-            // Only the painted stretch of this row (mirrored: counted from the other edge).
-            int xa = Math.Max(x0, mirror ? w - 1 - last[sy] : first[sy]), xb = Math.Min(x1, mirror ? w - first[sy] : last[sy] + 1);
-            for (int sx = xa; sx < xb; sx++)
+            int f = colFirst[sx], l = colLast[sx];
+            if (f > l) continue;
+            int dcol = left + (mirror ? w - 1 - sx : sx);
+            if ((uint)dcol >= (uint)fw) continue;
+            float shift = fy + (sx + 0.5f - half) * tan;
+            int si = (int)MathF.Floor(shift), k8 = (int)((shift - si) * 256f), j8 = 256 - k8;
+            for (int r = f; r <= l + 1; r++)
             {
-                uint c = src[row + (mirror ? w - 1 - sx : sx)];
-                int a = (int)(c >> 24);
-                if (a == 0 || !stencil[dst + sx]) continue;
-                int cr = (int)((c >> 16) & 0xFF), cg = (int)((c >> 8) & 0xFF), cb = (int)(c & 0xFF);
-                if (plain && !moon) { /* no tint: the colours are as painted */ }
+                int dy = topi + si + r;
+                if ((uint)dy >= (uint)fh) continue;
+                uint c0 = r < h ? src[r * w + sx] : 0u, c1 = r > 0 ? src[(r - 1) * w + sx] : 0u;
+                int a0 = (int)(c0 >> 24), a1 = (int)(c1 >> 24);
+                int a = (a0 * j8 + a1 * k8) >> 8;
+                if (a == 0) continue;
+                int di = dy * fw + dcol;
+                if (!stencil[di]) continue;
+                int cr, cg, cb;
+                if (a1 == 0 || a0 == 0)
+                {
+                    uint c = a1 == 0 ? c0 : c1;
+                    cr = (int)((c >> 16) & 0xFF); cg = (int)((c >> 8) & 0xFF); cb = (int)(c & 0xFF);
+                }
                 else
+                {
+                    cr = (int)((((c0 >> 16) & 0xFF) * (uint)j8 + ((c1 >> 16) & 0xFF) * (uint)k8) >> 8);
+                    cg = (int)((((c0 >> 8) & 0xFF) * (uint)j8 + ((c1 >> 8) & 0xFF) * (uint)k8) >> 8);
+                    cb = (int)(((c0 & 0xFF) * (uint)j8 + (c1 & 0xFF) * (uint)k8) >> 8);
+                }
+                if (!plain || moon)
                 {
                     int tr = mr, tg = mg, tb = mb;
                     if (moon)
                     {
-                        float dx = left + sx + 0.5f - _moonX, dy = top + sy + 0.5f - _moonY;
-                        if (dx * dx + dy * dy < _moonR2) { tr = tr * MoonShade >> 8; tg = tg * MoonShade >> 8; tb = tb * MoonShade >> 8; }
+                        float ddx = dcol + 0.5f - _moonX, ddy = dy + 0.5f - _moonY;
+                        if (ddx * ddx + ddy * ddy < _moonR2) { tr = tr * MoonShade >> 8; tg = tg * MoonShade >> 8; tb = tb * MoonShade >> 8; }
                     }
                     cr = Math.Min(255, cr * tr >> 8); cg = Math.Min(255, cg * tg >> 8); cb = Math.Min(255, cb * tb >> 8);
                 }
-                uint bg = frame[dst + sx];
+                uint bg = frame[di];
                 int br = (int)((bg >> 16) & 0xFF), bgn = (int)((bg >> 8) & 0xFF), bb = (int)(bg & 0xFF);
-                frame[dst + sx] = (uint)(((br + ((cr - br) * a >> 8)) << 16) | ((bgn + ((cg - bgn) * a >> 8)) << 8) | (bb + ((cb - bb) * a >> 8)));
+                frame[di] = (uint)(((br + ((cr - br) * a >> 8)) << 16) | ((bgn + ((cg - bgn) * a >> 8)) << 8) | (bb + ((cb - bb) * a >> 8)));
             }
         }
     }
 
-    /// <summary>Draws the whole rig (stardust, sleigh, lines, team, the nose's shine) through "stencil". sky = true: through the sky stencil, with the moon silhouette.</summary>
+    private void StampMember(FrameBuffer fb, int i, bool[] stencil)
+    {
+        TeamMember m = Team[i];
+        ReinPage pg = PageOf(m, true);
+        StampShear(fb, pg.Img, pg.ColFirst, pg.ColLast, m.X, m.Y, Mirror, ShearOf(m), TintR[i], TintG[i], TintB[i], stencil);
+    }
+
+    private static float Dist(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
+
+    /// <summary>Draws the whole rig (stardust, sleigh, gang line, team, the nose's shine) through "stencil". sky = true: through the sky stencil, with the moon silhouette.</summary>
     public void DrawRig(FrameBuffer fb, bool[] stencil, bool sky)
     {
         var art = Art;
@@ -578,39 +682,47 @@ internal sealed class SantaRig
         }
 
         // 2. The sleigh.
-        _sleighIdx = Quant(SleighTilt, SantaArt.TiltStep, SantaArt.Tilts / 2, _sleighIdx);
         SleighPage sg = SleighPageNow();
-        Stamp(fb, sg.Img, sg.RowFirst, sg.RowLast, SleighX, SleighY, Mirror, 256, 256, 256, stencil);
+        StampShear(fb, sg.Img, sg.ColFirst, sg.ColLast, SleighX, SleighY, Mirror, _sleighRes, 256, 256, 256, stencil);
 
-        // 3. The traces and the reins (before the team, so the animals hide their own ends).
+        // 3. DRAW ORDER of the team, fixed: the FAR reindeer of every pair first (they are farther off), then the gang line and the
+        //    tugs (so a line is over the far animals and under the near ones), then the NEAR reindeer from the back of the team to
+        //    the front (each one's rump is over the nose behind it), then Rudolph last, alone in front.
+        for (int i = Members - 1; i >= 2; i -= 2) StampMember(fb, i, stencil);
+
+        // The harness rings, in the world (the tilt's shear carries the ring's height too), and the middle of each pair.
+        for (int i = 0; i < Members; i++)
+        {
+            ReinPage pg = PageOf(Team[i], true);
+            _ring[i] = new PointF(Team[i].X + dir * pg.HarX, Team[i].Y + pg.HarY + pg.HarX * ShearOf(Team[i]));
+        }
+        _mid[0] = _ring[0];
+        for (int p = 1; p <= 4; p++) _mid[p] = new PointF((_ring[2 * p - 1].X + _ring[2 * p].X) * 0.5f, (_ring[2 * p - 1].Y + _ring[2 * p].Y) * 0.5f);
+
         float line = MathF.Max(1.1f, s * 0.02f);
-        Color cord = Color.FromArgb(226, 184, 104);
-        for (int i = 0; i < 4; i++) Team[i].PitchIdx = Team[i].Book == 0 ? Quant(Team[i].Pitch, SantaArt.PitchStep, SantaArt.Pitches / 2, Team[i].PitchIdx) : SantaArt.Pitches / 2;
+        Color cord = Color.FromArgb(226, 184, 104), tug = Color.FromArgb(214, 170, 96);
         if (ShowTraces)
         {
-            PointF hitch = new(SleighX + dir * sg.HitchX, SleighY + sg.HitchY);
-            PointF Ring(int i) { ReinPage p = PageOf(Team[i], true); return new PointF(Team[i].X + dir * p.HarX, Team[i].Y + p.HarY); }
-            float sagA = (0.015f + 0.085f * (1f - Tension)) * s;
-            Cord(fb, hitch, Ring(2), sagA, cord, line, stencil);
-            Cord(fb, hitch, Ring(3), sagA * 1.15f, cord, line, stencil);
-            Cord(fb, Ring(2), Ring(0), sagA * 0.9f, cord, line, stencil);
-            Cord(fb, Ring(3), Ring(1), sagA, cord, line, stencil);
+            // THE GANG LINE runs down the middle of the team from the sleigh's hitch to Rudolph, between the pairs; each
+            // reindeer's collar is tied to it by a short TUG line. Slack lines sag, taut ones straighten.
+            PointF hitch = new(SleighX + dir * sg.HitchX, SleighY + sg.HitchY + sg.HitchX * _sleighRes);
+            for (int k = 0; k < 4; k++) Cord(fb, _mid[k + 1], _mid[k], Sag(k, Dist(_mid[k], _mid[k + 1]), s), cord, line * 1.25f, stencil);
+            Cord(fb, hitch, _mid[4], Sag(4, Dist(hitch, _mid[4]), s), cord, line * 1.25f, stencil);
+            for (int p = 1; p <= 4; p++)
+            {
+                float tg = (0.01f + 0.05f * (1f - LineTension[p - 1])) * s;
+                Cord(fb, _mid[p], _ring[2 * p - 1], tg, tug, line * 0.85f, stencil);
+                Cord(fb, _mid[p], _ring[2 * p], tg, tug, line * 0.85f, stencil);
+            }
         }
         if (ShowReins && Pose != SantaArt.SleighPose.EmptyNoSack && Pose != SantaArt.SleighPose.EmptySack)
         {
-            PointF hand = new(SleighX + dir * sg.HandX, SleighY + sg.HandY);
-            PointF ring = new(Team[2].X + dir * PageOf(Team[2], true).HarX, Team[2].Y + PageOf(Team[2], true).HarY);
-            Cord(fb, hand, ring, (0.03f + 0.10f * (1f - Tension)) * s, Color.FromArgb(150, 104, 70), line, stencil);
+            PointF hand = new(SleighX + dir * sg.HandX, SleighY + sg.HandY + sg.HandX * _sleighRes);
+            Cord(fb, hand, _mid[4], (0.03f + 0.10f * (1f - LineTension[4])) * s, Color.FromArgb(150, 104, 70), line, stencil);
         }
 
-        // 4. The team, far to near: the back row first, the far one of each pair before the near one.
-        for (int n = 3; n >= 0; n--)
-        {
-            TeamMember m = Team[n];
-            ReinPage pg = PageOf(m, true);
-            int shade = n == 1 || n == 3 ? 226 : 256;                      // the far one of each pair a shade darker
-            Stamp(fb, pg.Img, pg.RowFirst, pg.RowLast, m.X, m.Y, Mirror, TintR[n] * shade >> 8, TintG[n] * shade >> 8, TintB[n] * shade >> 8, stencil);
-        }
+        for (int i = Members - 2; i >= 1; i -= 2) StampMember(fb, i, stencil);
+        StampMember(fb, 0, stencil);
 
         // 5. Rudolph's nose. Its shine goes through the same stencil as everything else, pixel by pixel,
         //    so a twig in front of him hides exactly the part of the glow it covers. The nose sprites come in
@@ -623,6 +735,9 @@ internal sealed class SantaRig
         float glint = MathF.Pow(MathF.Max(0, MathF.Sin((float)(_time * 2.1 % Math.Tau))), 8);
         _noseSparkle[_set].DrawCentered(fb, nose.X, nose.Y, glint, stencil);
     }
+
+    /// <summary>How far a stretch of the gang line hangs below its straight line: more when slack, and more for a longer stretch.</summary>
+    private float Sag(int seg, float len, float s) => (0.012f + 0.085f * (1f - LineTension[seg])) * MathF.Min(len, 2.2f * s) * 0.5f;
 
     /// <summary>A line from a to b that hangs in a curve: "sag" pixels lower in the middle (a parabola, in seven short straight pieces).</summary>
     private void Cord(FrameBuffer fb, PointF a, PointF b, float sag, Color c, float width, bool[] stencil)

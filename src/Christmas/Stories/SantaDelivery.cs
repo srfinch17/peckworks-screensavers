@@ -4,17 +4,18 @@ using Peckworks.Screensavers.Core.Minds;
 namespace Christmas.Stories;
 
 /// <summary>
-/// SANTA DELIVERS (about 40 seconds). The team comes in low from the right on a long
-/// descending curve and lands on the cabin's snowy roof, one reindeer after another, each
-/// with a puff of snow, the sleigh sliding in behind them until its runners rest on the
-/// ridge, left of the chimney. Santa stands up, shoulders his sack, turns, climbs over the
+/// SANTA DELIVERS (about 40 seconds). The team of NINE (four pairs and Rudolph) comes in low from the right on a
+/// long descending curve. The roof is short, so only the SLEIGH and the REAR PAIR land on it (the pair with a puff of snow
+/// each, the sleigh sliding in behind them until its runners rest on the ridge, left of the chimney); Rudolph and the other
+/// three pairs overshoot the eave and hold station in the air beyond it, in a gentle hover: a slow collected canter on the
+/// spot, bodies bobbing out of step, the gang line taut back to the sleigh and Rudolph's nose glowing out in front. Santa stands up, shoulders his sack, turns, climbs over the
 /// sleigh's back, hops onto the chimney and goes down it feet first, sticking at the
 /// belly. The cabin's windows flicker and brighten one after the other, a little Santa-with-
 /// a-sack shadow crosses the right window and the lights on the family's tree blink. The
 /// back pair of reindeer look round over their shoulders at the chimney. He comes back up
 /// hat first, sooty, pats himself clean, turns, hops back into the sleigh, cracks the
 /// reins, and the team leaps off the roof in order and climbs away to the upper left in
-/// a burst of stardust.
+/// a burst of stardust (Rudolph leans in, the gang line tightens pair by pair, the sleigh lifts off last).
 ///
 /// PERSPECTIVE. The cabin is farther away than the sky lane Santa flies in, so the whole
 /// rig SHRINKS as it comes down to it (to 0.62 of its flying size) and grows again on the
@@ -69,14 +70,22 @@ internal sealed class SantaDelivery : Story
     private const float TWave = 31.3f;
     private const float TCrack = 32.5f;
     private const float TDep = 32.9f;                   // the team starts to run
-    private const float Rate = 1.55f;                   // gallop beats a second (the same as the flight)
 
-    // Where each part of the team sits behind Rudolph, in s: in flight, and on the roof (the roof is shorter than the team, so they huddle).
-    private static readonly float[] OffFlight = [0f, 0.22f, 1.25f, 1.47f], OffLand = [0f, 0.30f, 1.0f, 1.28f];
-    private static readonly float[] DyFlight = [0.13f, -0.03f, 0.13f, -0.03f], DyLand = [0f, -0.05f, 0f, -0.05f];
-    private static readonly float[] PhaseOff = [0f, 0.37f, 0.13f, 0.62f];
-    private const float SleighFlight = 2.74f, SleighLand = 2.56f;
-    private const float RudolphFinal = -2.0f;           // where Rudolph stands, in roof s from the cabin's middle (the front pair just past the eave)
+    // Where each part of the team sits behind Rudolph, in s (the same spacing in the air and on the roof: the team never huddles;
+    // the roof is simply not where most of it is). Member 0 is Rudolph, pair p is members 2p-1 (near) and 2p (far); member 9 is the sleigh.
+    private const int M = SantaRig.Members, SleighIdx = M;                           // 9 reindeer; the sleigh is "member 9"
+    private static readonly float[] Off = MakeOff(), DyStory = MakeDy();
+    private static float[] MakeOff() { var a = new float[M + 1]; for (int i = 0; i < M; i++) a[i] = -SantaRig.Dx[i]; a[M] = -SantaRig.SleighBack; return a; }
+    /// <summary>Heights on the roof: the NEAR reindeer of the rear pair stands with its hooves on the ridge, the far one a hair higher (farther along the roof).</summary>
+    private static float[] MakeDy() { var a = new float[M]; for (int i = 0; i < M; i++) a[i] = SantaRig.Dy[i] - 0.10f; return a; }
+    private static readonly float[] PhaseOff = SantaRig.PhaseOff;
+    private const float Rate = 1.5f;                    // gallop beats a second (the same as the flight)
+    private const float HoverRate = 0.33f;              // the hover's beat as a fraction of the gallop's (0.5 a second: a page every six frames)
+    private const float TbMin = 1.8f;
+    private const float RestSleighFromLeft = 2.25f;     // the sleigh's rest, in roof s from the ridge's left end (the rear pair a little ahead of it, the rest past the eave)
+    private const float LiftMax = 0.9f;                 // how high the hovering team rides above the ridge, in roof s, at the far end of the team
+    private static bool Stands(int i) => i >= M - 2 && i < M;            // the rear pair (members 7 and 8) stand on the ridge
+    private static float Delay(int i) => i == SleighIdx ? 0.45f : 0.09f * ((i + 1) / 2);   // at the getaway the pull travels back down the line: Rudolph first, the sleigh last
 
     private struct Ev { public float T0, X, Y, Vx, Vy, Life; public byte Kind; }   // a puff: where and when it starts, how it moves, how long it lives; kinds below
     private const byte KSnow = 0, KSnowBig = 1, KSpark = 2, KSoot = 3, KVapour = 4;
@@ -90,10 +99,15 @@ internal sealed class SantaDelivery : Story
     private Ev[] _ev = [];
 
     // Geometry, worked out in Begin from the scenery's facts and its pixels.
-    private float _sky, _sR, _u, _cx, _ridgeY, _ridgeL, _ridgeR, _rimX, _rimY, _rx0, _rxF, _xTd, _xEdge, _v, _tStop, _vmax, _acc, _tAcc, _hMax, _xShrink;
+    private float _sky, _sR, _u, _cx, _ridgeY, _ridgeL, _ridgeR, _rimX, _rimY, _rx0, _rxF, _xB, _xTd, _xEdge, _v, _tStop, _vmax, _acc, _tAcc, _hMax, _xShrink;
     private float _hMaxS, _xTdS, _xStartS, _feetR, _runnerR;
     private float _tStopAll, _vLeap;
-    private readonly float[] _tH = new float[4], _tSw = new float[4], _tTd = new float[4], _tEdge = new float[4];
+    private readonly float[] _tH = new float[M], _tSw = new float[M], _tTd = new float[M], _tEdge = new float[M], _xRest = new float[M + 1];
+    // The hovering members' beat: a phase that adds up their own speed (so the gallop slows into the hover without a hitch), and the
+    // moments they step from the gallop to the middle gait to the hover gait (at the gather of their own beat, where the pictures differ least).
+    private const int PhiHz = 120;
+    private float[][] _phi = [];
+    private readonly List<(float T, int Level)>[] _lv = new List<(float, int)>[M];
     private float _sx, _sy, _sTilt;
     private int _lastPin;
     private bool _burst1, _burst2, _loud;
@@ -181,15 +195,28 @@ internal sealed class SantaDelivery : Story
         _rimY = (cap >= 0 ? cap : _sc.ChimneyTop.Y) + 2f;                      // boots two pixels into the cap's snow
 
         _xTd = _ridgeR; _xEdge = _ridgeL;
-        _rxF = _cx + RudolphFinal * _sR;                                          // where Rudolph ends up standing
+        // THE LAYOUT, worked back from where the SLEIGH rests: its runners on the ridge, 2.25 roof s in from the left end; the rear
+        // pair 1.45 s ahead of it on the ridge; the other three pairs and Rudolph beyond the eave, in the air.
+        float xRestS = _ridgeL + RestSleighFromLeft * _sR;
+        _rxF = xRestS - Off[SleighIdx] * _sR;                                     // where Rudolph ends up hovering
+        for (int i = 0; i <= M; i++) _xRest[i] = _rxF + Off[i] * _sR;
         _rx0 = _sc.Width + 0.8f * _sky;                                           // where he starts: his nose just off the right edge
         _xShrink = _sc.Width;                                                     // the rig starts to shrink as Rudolph comes on screen
-        _v = (_rx0 - _xTd) / TApp;
-        _tStop = 2f * (_xTd - _rxF) / _v;                                         // a steady braking run along the ridge
-        _vmax = 1.95f * _v; _tAcc = 2.4f; _acc = _vmax / _tAcc;
+        // The sleigh touches down at the ridge's right end (its right end 0.9 s inside it) and skids to its rest while the team brakes.
+        float db = MathF.Max(0.8f * _sR, _ridgeR - 0.9f * _sR - xRestS);          // the braking distance, the same for every part (the team is one rigid line)
+        _v = (_rx0 - _rxF - db) / TApp;
+        _tStop = 2f * db / _v;
+        if (_tStop < TbMin)                                                       // too brisk a stop: brake over longer, and solve v and the distance together
+        {
+            _tStop = TbMin;
+            db = (_tStop / 2f) * (_rx0 - _rxF) / (TApp + _tStop / 2f);
+            _v = (_rx0 - _rxF - db) / TApp;
+        }
+        _xB = _rxF + db;                                                          // Rudolph begins to brake here
+        _vmax = 1.95f * _v; _tAcc = 2.0f; _acc = _vmax / _tAcc;
         _hMax = 0.20f * _sc.Height;
-        _xTdS = _rxF + SleighLand * _sR;
-        _xStartS = _rx0 + SleighFlight * _sky;
+        _xTdS = xRestS + db;
+        _xStartS = _rx0 + Off[SleighIdx] * _sky;
         _hMaxS = _hMax * (_xStartS - _xTdS) / (_rx0 - _xTd) * 0.9f;
         _vLeap = 0.45f * _v;
         _tStopAll = TApp + _tStop + 0.4f;
@@ -203,15 +230,16 @@ internal sealed class SantaDelivery : Story
         for (int y = Math.Max(0, cutY); y < h; y++)
             for (int x = Math.Max(0, x0); x <= Math.Min(w - 1, x1); x++) _clip[y * w + x] = false;
 
-        // ---- Scan the clock for the moments that depend on the curve ----
-        for (int i = 0; i < 4; i++)
+        // ---- Scan the clock for the moments that depend on the curve (only the two that STAND on the roof touch it) ----
+        for (int i = 0; i < M; i++)
         {
             _tH[i] = _tTd[i] = TDep; _tEdge[i] = 1e9f;
+            if (!Stands(i)) continue;
             bool gotH = false, gotTd = false;
             for (float t = 0; t < TDep; t += 1f / 240f)
             {
-                float x = RX(t) + Off(i, t);
-                float hh = HeightAt(x, t, false);
+                float x = XOf(i, t);
+                float hh = Height(i, x, t);
                 if (!gotH && hh < 0.22f * _sky * 0.7f) { _tH[i] = t; gotH = true; }
                 if (!gotTd && hh < 0.5f) { _tTd[i] = t; gotTd = true; break; }
             }
@@ -219,15 +247,16 @@ internal sealed class SantaDelivery : Story
             float phase = Frac(_tH[i] * Rate + PhaseOff[i]);
             _tSw[i] = _tH[i] + Frac(0.5f - phase) / Rate;
             for (float t = TDep; t < TDep + 12f; t += 1f / 240f)
-                if (RX(t) + Off(i, t) <= _xEdge) { _tEdge[i] = t; break; }
+                if (XOf(i, t) <= _xEdge) { _tEdge[i] = t; break; }
         }
+        BuildGait();
 
         BuildEvents();
         _rig.Take();
         _rig.Mirror = true;
         _rig.ShowTraces = true;
         Place(0f);
-        return TDep + 7.0f;
+        return TDep + 10.5f;                                                      // the nine take longer to clear the screen than the four did
     }
 
     private static float Frac(float x) => x - MathF.Floor(x);
@@ -272,55 +301,60 @@ internal sealed class SantaDelivery : Story
             if (t <= TApp) return _rx0 - _v * t;
             float tau = t - TApp;
             if (tau >= _tStop) return _rxF;
-            return _xTd - (_v * tau - 0.5f * (_v / _tStop) * tau * tau);
+            return _xB - (_v * tau - 0.5f * (_v / _tStop) * tau * tau);
         }
         float d = t - TDep;
         if (d < _tAcc) return _rxF - 0.5f * _acc * d * d;
         return _rxF - 0.5f * _acc * _tAcc * _tAcc - _vmax * (d - _tAcc);
     }
 
-    /// <summary>How close the team is to its roof formation: 0 in flight, 1 huddled on the roof (eased over a few lengths of travel, so the spacing never jumps).</summary>
-    private float Huddle(float t)
+    /// <summary>One part's x at t: Rudolph's x plus its own place behind him (the team is one line), and at the getaway the part starts a moment after the one in front.</summary>
+    private float XOf(int i, float t) => RX(t < TDep ? t : t - Delay(i)) + Off[i] * S(t);
+
+    /// <summary>The climb away: height gained after "dx" pixels of travel from the start. Quadratic at first (it leaves the roof slowly, ground effect), then a steady, steepening climb.</summary>
+    private float Climb(float dx)
     {
-        float rx = RX(t);
-        if (t < TDep) return Smooth((_xTd + 4f * _sR - rx) / (4f * _sR));
-        return 1f - Smooth((_rxF - rx) / (4f * _sR));
+        if (dx <= 0f) return 0f;
+        float e = dx / _sky;
+        return _sky * (0.40f * e * e / (e + 0.8f) + 0.02f * e * e);
     }
 
-    private float Off(int i, float t) => Lerp(OffFlight[i], OffLand[i], Huddle(t)) * S(t);
-    private float Dy(int i, float t) => Lerp(DyFlight[i], DyLand[i], Huddle(t)) * S(t);
+    /// <summary>The hovering team's lift above the ridge for a given x: nothing over the roof, rising smoothly past the eave to LiftMax (a gentle slope up toward Rudolph).</summary>
+    private float Lift(float x) => LiftMax * _sR * Smooth((_ridgeL + 0.5f * _sR - x) / (4.5f * _sR));
 
     /// <summary>
-    /// The curve, as a height above the roof for each x. On the way in it is a smooth bowl that
-    /// comes in flat at the roof's end (so a touchdown is a glide-in, not a plunge); on the way
-    /// out it climbs, steeper and steeper, up and away to the left. (Its pixel sizes do not depend
-    /// on the rig's current rung, so a change of rung never moves it.)
+    /// The curve, as a height above the roof for member i (the sleigh is member 9) standing at x at time t. On the way in it is a smooth
+    /// bowl that comes in flat at the roof's end (so a touchdown is a glide-in, not a plunge); beyond the eave the hovering members
+    /// ride up the lift slope; on the way out each part climbs after it has travelled, smoothly, from where it stood.
+    /// (Its pixel sizes do not depend on the rig's current rung, so a change of rung never moves it.)
     /// </summary>
-    private float HeightAt(float x, float t, bool sleigh)
+    private float Height(int i, float x, float t)
     {
-        if (t < TDep)
+        // ONE formula at every t (a formula that switched at the getaway made the slope jump for a frame): the descent's bowl, the
+        // hover slope, and the climb, each zero where it does not apply.
+        bool sleigh = i == SleighIdx;
+        float td = sleigh ? _xTdS : _xTd, start = sleigh ? _xStartS : _rx0, top = sleigh ? _hMaxS : _hMax;
+        float hgt = 0f;
+        if (x > td)
         {
-            float td = sleigh ? _xTdS : _xTd, start = sleigh ? _xStartS : _rx0, top = sleigh ? _hMaxS : _hMax;
-            if (x <= td) return 0f;
             float k = (x - td) / (start - td);
-            float hgt = top * k * k;
-            return hgt + 0.12f * _sR * MathF.Sin(x * 0.011f) * Clamp01(hgt / (0.8f * _sR));
+            hgt = top * k * k;
+            hgt += 0.12f * _sR * MathF.Sin(x * 0.011f) * Clamp01(hgt / (0.8f * _sR));
         }
-        float e = (_xEdge - x) / _sky;
-        if (e <= 0f) return 0f;
-        return _sky * (0.35f * e + 0.02f * e * e);
+        float x0 = MathF.Min(_xRest[i], _xEdge);                  // the roof's own parts start to climb at the eave; the ones already in the air at once
+        return hgt + (sleigh ? 0f : Lift(x)) + Climb(x0 - x);
     }
 
     /// <summary>The angle of the curve at x (nose down positive), from two points a little ahead and behind.</summary>
-    private float Slope(float x, float t, bool sleigh, float reach)
+    private float Slope(int i, float x, float t, float reach)
     {
         float e = reach * S(t);
-        return MathF.Atan2(HeightAt(x + e, t, sleigh) - HeightAt(x - e, t, sleigh), 2f * e);
+        return MathF.Atan2(Height(i, x + e, t) - Height(i, x - e, t), 2f * e);
     }
 
     private float SpeedOf(int i, float t)
     {
-        float a = RX(t) + Off(i, t), b = RX(t - 0.04f) + Off(i, t - 0.04f);
+        float a = XOf(i, t), b = XOf(i, t - 0.04f);
         return MathF.Max(0f, (b - a) / 0.04f);
     }
 
@@ -329,20 +363,69 @@ internal sealed class SantaDelivery : Story
 
     private void SleighAt(float t, out float x, out float y, out float tilt)
     {
-        float rx = RX(t);
-        float huddle = Huddle(t);
-        x = rx + Lerp(SleighFlight, SleighLand, huddle) * S(t);
+        x = XOf(SleighIdx, t);
         // The runners rest on the ridge's snow (measured: the lowest painted row of the sleigh's picture), no hovering.
-        y = _ridgeY + 1f - _runnerR * K(t) / SantaRig.Ks[^1] - HeightAt(x, t, true);
-        tilt = Slope(x, t, true, 0.9f);
+        y = _ridgeY + 1f - _runnerR * K(t) / SantaRig.Ks[^1] - Height(SleighIdx, x, t);
+        tilt = Slope(SleighIdx, x, t, 0.9f);
     }
 
-    /// <summary>Which book and page a reindeer shows at t (the gallop, the landing reach, the dip of the head, the paw, the look back).</summary>
+    /// <summary>How much a hovering member bobs at t: 0 in flight and while standing, 1 once the team has settled into its hover, easing out as the getaway begins.</summary>
+    private float HoverWeight(float t)
+    {
+        float inn = Smooth((t - (TApp + 0.4f * _tStop)) / 1.8f);
+        return inn * (1f - Smooth((t - TDep) / 0.9f));
+    }
+
+    /// <summary>
+    /// The hover members' beat, worked out once in Begin. Phase adds up speed (the gallop slows into a slow tread and speeds up again at the
+    /// getaway without a hitch), and the gait steps down through three pictures (gallop, 0.72, 0.45 of the reach) at the GATHER of the
+    /// member's own beat, where two gaits differ by under three pixels, and back up again at the getaway.
+    /// </summary>
+    private void BuildGait()
+    {
+        int n = (int)((TDep + 14f) * PhiHz) + 2;
+        if (_phi.Length != M) _phi = new float[M][];
+        for (int i = 0; i < M; i++)
+        {
+            var phi = _phi[i] != null && _phi[i].Length == n ? _phi[i] : new float[n];
+            _phi[i] = phi;
+            var list = new List<(float, int)> { (0f, 0) };
+            _lv[i] = list;
+            float p = 0f; int lvl = 0;
+            for (int k = 0; k < n; k++)
+            {
+                float t = k / (float)PhiHz;
+                float sf = Clamp01(SpeedOf(i, t) / _v);
+                phi[k] = p;
+                p += Rate * (HoverRate + (1f - HoverRate) * sf) / PhiHz;
+                if (Stands(i)) continue;
+                int target = sf > 0.75f ? 0 : sf > 0.40f ? 1 : 2;
+                if (target != lvl && Frac(p + PhaseOff[i]) * SantaArt.FlyPages < 1f) { lvl = target; list.Add((t, lvl)); }
+            }
+        }
+    }
+
+    private float PhiAt(int i, float t)
+    {
+        float f = Math.Clamp(t, 0f, (_phi[i].Length - 2) / (float)PhiHz) * PhiHz;
+        int k = (int)f; float r = f - k;
+        return _phi[i][k] + (_phi[i][k + 1] - _phi[i][k]) * r;
+    }
+
+    /// <summary>Which book and page a reindeer shows at t (the gallop, the landing reach, the dip of the head, the paw, the look back; for the hovering ones the three gaits).</summary>
     private void Pose(int i, float t, out int book, out float page)
     {
+        if (!Stands(i))
+        {
+            int lvl = 0;
+            foreach (var (tt, l) in _lv[i]) { if (tt <= t) lvl = l; else break; }
+            book = lvl == 0 ? 0 : lvl == 1 ? 5 : 6;
+            page = Frac(PhiAt(i, t) + PhaseOff[i]) * SantaArt.FlyPages + 0.3f;
+            return;
+        }
         if (t < TDep)
         {
-            if (t < _tSw[i]) { book = 0; page = Frac(t * Rate + PhaseOff[i]) * SantaArt.FlyPages; return; }
+            if (t < _tSw[i]) { book = 0; page = Frac(t * Rate + PhaseOff[i]) * SantaArt.FlyPages + 0.3f; return; }
             if (t < _tStopAll)
             {
                 book = 1;
@@ -359,13 +442,13 @@ internal sealed class SantaDelivery : Story
             return;
         }
         book = 0;
-        page = Frac(0.5f + (t - _tEdge[i]) * Rate) * SantaArt.FlyPages;
+        page = Frac(0.5f + (t - _tEdge[i]) * Rate) * SantaArt.FlyPages + 0.3f;
     }
 
     /// <summary>How far a back reindeer's head is turned to look at Santa at the chimney, 0 (forward) to 1 (looking behind), eased in and out.</summary>
     private static float LookBack(int i, float t)
     {
-        float d = 0.15f * (i - 2);
+        float d = 0.15f * (i - 7);
         float a = Smooth((t - THop - d) / 0.5f) * (1f - Smooth((t - (TIn + 1.2f) - d) / 0.5f));            // while he climbs to the chimney and goes in
         float b = Smooth((t - (TOut - 0.5f) - d) / 0.5f) * (1f - Smooth((t - (THopBack + 0.6f) - d) / 0.5f));   // and while he comes back up
         return MathF.Max(a, b);
@@ -376,9 +459,9 @@ internal sealed class SantaDelivery : Story
     {
         book = 3; page = 0;
         if (t > TDep - 1.6f) return;                              // quiet before the getaway
-        if (i < 2)
+        if (i == M - 1)                                           // the far one of the rear pair paws; the near one sniffs and looks round
         {
-            float t0 = _tStopAll + 0.3f + 0.7f * i, c = t - t0;
+            float t0 = _tStopAll + 0.3f + 0.7f * 0, c = t - t0;
             if (c < 0) return;
             c %= 11.5f;
             if (c < 0.6f) { page = (SantaArt.DipPages - 1) * Smooth(c / 0.6f); return; }
@@ -388,19 +471,26 @@ internal sealed class SantaDelivery : Story
         }
         float look = LookBack(i, t);
         if (look > 0.02f) { book = 4; page = look * (SantaArt.LookPages - 1) + 0.02f; return; }
-        float n = (t - _tStopAll - 1.0f - 1.3f * (i - 2)) % 7.3f;
+        float n = (t - _tStopAll - 1.0f) % 7.3f;
         if (n >= 0f && n < 2.4f) page = 2.2f * MathF.Pow(MathF.Sin(MathF.PI * n / 2.4f), 2f);
     }
 
     private TeamMember Member(int i, float t)
     {
-        float x = RX(t) + Off(i, t);
+        float x = XOf(i, t);
         TeamMember m = default;
         m.X = x;
-        m.Y = RoofC(t) + Dy(i, t) - HeightAt(x, t, false);
-        m.Pitch = Slope(x, t, false, 0.3f) * 0.9f;
-        m.PitchIdx = SantaArt.Pitches / 2;
+        m.Y = RoofC(t) + DyStory[i] * S(t) - Height(i, x, t);
+        m.Pitch = Slope(i, x, t, 0.9f) * 0.9f;
         Pose(i, t, out m.Book, out m.Page);
+        if (!Stands(i))
+        {
+            // Hovering: each bobs a little, out of step with the rest, in proportion to how far out in the air it is (a slow rise and fall of about three seconds).
+            float inAir = Clamp01(Lift(x) / (0.35f * LiftMax * _sR));
+            m.Y -= 0.07f * S(t) * HoverWeight(t) * inAir * MathF.Sin(MathF.Tau * (t / 3.1f) + 1.9f * i);
+            // Rudolph leans in just before the getaway: nose down, then up again as the team gets moving.
+            if (i == 0) m.Pitch += 0.15f * Smooth((t - (TDep - 0.8f)) / 0.7f) * (1f - Smooth((t - (TDep + 0.5f)) / 0.9f));
+        }
         return m;
     }
 
@@ -427,39 +517,46 @@ internal sealed class SantaDelivery : Story
         }
 
         // Touchdowns and the braking run: a puff of snow where each reindeer's hooves first meet the roof, and little skids after.
-        for (int i = 0; i < 4; i++)
+        for (int i = M - 2; i < M; i++)                                           // the rear pair, the only reindeer on the roof
         {
             float tt = _tTd[i];
-            float x = RX(tt) + Off(i, tt);
+            float x = XOf(i, tt);
             Puff(tt, x - 0.15f * S(tt), _ridgeY, 8, 0.20f, true);
             for (int k = 1; k <= 3; k++)
             {
                 float ts = tt + (_tStopAll - tt) * k / 4f;
-                Puff(ts, RX(ts) + Off(i, ts), _ridgeY, 3, 0.10f, false);
+                Puff(ts, XOf(i, ts), _ridgeY, 3, 0.10f, false);
             }
         }
         // The sleigh sliding in: a little stardust off its runners as they meet the snow.
         {
-            float ts = TApp + _tStop * 0.8f;
-            SleighAt(ts, out float sx, out _, out _);
-            for (int k = 0; k < 5; k++) Add(ts + 0.12f * k, sx + (R() - 0.5f) * 1.2f * _sR, _ridgeY - 0.1f * _sR, (R() - 0.5f) * 0.05f * _u, -0.03f * _u, 0.9f, KSpark);
+            // The runners meet the snow at the moment the braking begins (TApp): a puff of snow and stardust, then skids as it slows.
+            SleighAt(TApp, out float tx, out _, out _);
+            Puff(TApp, tx + 0.5f * _sR, _ridgeY, 10, 0.22f, true);
+            for (int k = 1; k <= 5; k++)
+            {
+                float ts = TApp + _tStop * k / 6f;
+                SleighAt(ts, out float sx, out _, out _);
+                Puff(ts, sx + 0.55f * _sR, _ridgeY, 4, 0.10f, false);
+                Add(ts, sx + (R() - 0.5f) * 1.2f * _sR, _ridgeY - 0.1f * _sR, (R() - 0.5f) * 0.05f * _u, -0.03f * _u, 0.9f, KSpark);
+            }
         }
         // Pawing: three flicks of snow from the hoof on every scrape of the front pair.
-        for (int i = 0; i < 2; i++)
+        for (int i = M - 1; i < M; i++)
             for (int round = 0; round < 3; round++)
             {
-                float t0 = _tStopAll + 0.3f + 0.7f * i + round * 11.5f;
+                float t0 = _tStopAll + 0.3f + round * 11.5f;
                 if (t0 + 4.2f > TDep - 1.6f) break;
-                float hx = RX(t0 + 1f) + Off(i, t0 + 1f) - 0.24f * _sR;
+                float hx = XOf(i, t0 + 1f) - 0.24f * _sR;
                 for (int cyc = 0; cyc < 3; cyc++)
                     for (int k = 0; k < 3; k++)
                         Add(t0 + 0.6f + cyc + 0.62f + 0.05f * k, hx, _ridgeY, (-0.02f - 0.05f * R()) * _u, (-0.10f - 0.10f * R()) * _u, 0.45f + 0.2f * R(), KSnow);
             }
         // Breath: a little vapour from each nose every few seconds while standing (it is cold).
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < M; i++)
             for (int k = 0; ; k++)
             {
-                float tb = _tStopAll + 0.8f + 2.9f * k + 0.7f * i;
+                float tb = _tStopAll + 0.8f + 2.9f * k + 0.43f * i;
                 if (tb > TDep - 0.4f) break;
                 TeamMember m = Member(i, tb);
                 ReinPage pg = _rig.PageOf(m, false);
@@ -471,7 +568,7 @@ internal sealed class SantaDelivery : Story
         Puff2(list, TOut - 0.2f, 6, rnd);
         for (int k = 0; k < 4; k++) Puff2(list, TDust + 0.3f * k + 0.1f, 5, rnd, true);
         // The getaway: snow kicked up behind each reindeer as it runs, and a burst where it leaves the roof.
-        for (int i = 0; i < 4; i++)
+        for (int i = M - 2; i < M; i++)
         {
             float te = _tEdge[i];
             if (te > 1e8f) continue;
@@ -479,9 +576,16 @@ internal sealed class SantaDelivery : Story
             {
                 float ts = te - 0.65f + 0.15f * k;
                 if (ts < TDep) continue;
-                Puff(ts, RX(ts) + Off(i, ts) + 0.15f * S(ts), _ridgeY, 4, 0.14f, false);
+                Puff(ts, XOf(i, ts) + 0.15f * S(ts), _ridgeY, 4, 0.14f, false);
             }
-            Puff(te, RX(te) + Off(i, te), _ridgeY, 8, 0.24f, true);
+            Puff(te, XOf(i, te), _ridgeY, 8, 0.24f, true);
+        }
+        // The sleigh's getaway: it slides along the ridge dragged by the line (snow kicked up behind its runners all the way), and lifts off at the eave in a burst.
+        for (float ts = TDep + Delay(SleighIdx) + 0.15f; ts < TDep + 6f; ts += 0.28f)
+        {
+            SleighAt(ts, out float sx, out float sy, out _);
+            if (sy < _ridgeY - 0.9f * _sR && ts > TDep + 1f) break;                // it has left the roof
+            Puff(ts, sx + 0.6f * _sR, _ridgeY, 3, 0.12f, ts > TDep + 1.0f);
         }
         list.Sort((a, b) => a.T0.CompareTo(b.T0));
         _ev = [.. list];
@@ -506,15 +610,29 @@ internal sealed class SantaDelivery : Story
     private void Place(float t)
     {
         _rig.UseSet(SetIdx(t));
-        for (int i = 0; i < 4; i++) _rig.Team[i] = Member(i, t);
+        for (int i = 0; i < M; i++) _rig.Team[i] = Member(i, t);
         SleighAt(t, out _sx, out _sy, out _sTilt);
         _rig.SleighX = _sx; _rig.SleighY = _sy; _rig.SleighTilt = _sTilt;
         _rig.Pose = SleighPose(t);
         _rig.Mirror = true;
-        // Traces: taut with the beat while flying, slack while standing, taut for the getaway.
-        if (t < _tStopAll - 0.5f) _rig.Tension = 0.5f + 0.5f * MathF.Cos(MathF.Tau * Frac(t * Rate + 0.5f));
-        else if (t < TCrack) _rig.Tension = Lerp(_rig.Tension, 0.1f, 0.08f);
-        else _rig.Tension = 1f;
+        // The gang line: slack and taut with the beat while flying (each stretch a little after the one in front); in the hover it is TAUT
+        // back to the sleigh with a slow breath; at the getaway each stretch snaps taut pair by pair, Rudolph's first.
+        for (int k = 0; k < 5; k++)
+        {
+            float tn;
+            if (t < TApp) tn = 0.5f + 0.5f * MathF.Cos(MathF.Tau * (Frac(t * Rate + 0.5f) - 0.045f * k));
+            else
+            {
+                float hov = 0.86f + 0.07f * MathF.Sin(t * 1.3f + 1.1f * k);
+                float flight = 0.5f + 0.5f * MathF.Cos(MathF.Tau * (Frac(t * Rate + 0.5f) - 0.045f * k));
+                tn = Lerp(flight, hov, HoverWeight(t) > 0f || t < TDep ? Smooth((t - TApp) / 1.5f) : 0f);
+                float tt = TDep - 0.5f + 0.2f * k;                          // Rudolph's stretch first, the sleigh's last
+                if (t >= TDep - 0.8f) tn = Lerp(tn, 1f, Smooth((t - tt) / 0.35f));
+                if (t >= TDep + 3f) tn = Lerp(tn, flight, Smooth((t - TDep - 3f) / 1.5f));
+            }
+            _rig.LineTension[k] = tn;
+        }
+        _rig.Tension = _rig.LineTension[0];
         _rig.DustRate = t < _tStopAll ? 70f : t < TDep ? 10f : (t < TDep + 5f ? 150f : 70f);
     }
 
@@ -537,7 +655,7 @@ internal sealed class SantaDelivery : Story
         int sec = (int)t;
         PointF roof = new(_cx, _ridgeY);
         if (sec != _lastPin && t > 3f) { _lastPin = sec; _w.Board.Post(Sense.Movement, roof, 1.0f * _u, 0.6f, _rig); }
-        if (!_loud && t >= _tTd[0]) { _loud = true; _w.Board.Post(Sense.Loud, roof, 0.5f * _u, 0.5f, _rig); }
+        if (!_loud && t >= _tTd[M - 1]) { _loud = true; _w.Board.Post(Sense.Loud, roof, 0.5f * _u, 0.5f, _rig); }
         // A sparkle burst when the sack refills as he sits, and one for the getaway.
         if (!_burst1 && t >= TSit) { _burst1 = true; _rig.Burst(_sx - 0.45f * _sR, _sy - 0.2f * _sR, 18, 0.16f * _u); }
         if (!_burst2 && t >= TDep + 0.3f) { _burst2 = true; _rig.Burst(_sx, _sy + 0.3f * _sR, 28, 0.22f * _u); }
