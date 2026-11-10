@@ -95,8 +95,11 @@ internal sealed class SantaArt
     private static readonly Color Ink = Color.FromArgb(30, 22, 24);
 
     public ReinPage[] Look = null!;                         // standing, the head turning back over the shoulder: level, thrown back, looking behind
-    public ReinPage[] Mid = null!, Hover = null!;           // the gallop at 0.72 and 0.45 of its reach, level: a team slowing into a hover steps down through them
-    public const float MidAmp = 0.72f, HoverAmp = 0.45f;
+    /// <summary>The gallop at 0.86, 0.72, 0.58 and 0.45 of its reach, level (books 5 to 8): a team slowing into a hover steps down through them ONE AT A TIME, at the gather of its beat, so no leg moves more than about a pixel between two pages.</summary>
+    public ReinPage[][] Gait = null!;
+    public static readonly float[] GaitAmps = [0.86f, 0.72f, 0.58f, 0.45f];
+    public ReinPage[] Settle = null!;                       // the hover gait's legs coming down to stand, from the gather (book 9)
+    public const int SettlePages = 6;
     public const int LookPages = 3;
     public long Bytes;                                      // the pictures' memory, for the report
     public int RunnerFeet;                                  // how far below the sleigh page's centre its runners reach (measured off the pixels)
@@ -120,13 +123,20 @@ internal sealed class SantaArt
             for (int k = 0; k < FlyPages; k++)
                 Fly[pi][k] = PaintReindeer(new RPose(Phase: k / (float)FlyPages, Amp: 1f, Bob: 0.026f * MathF.Sin(MathF.Tau * k / FlyPages), HeadUp: 0.12f * MathF.Sin(MathF.Tau * (k / (float)FlyPages - 0.15f)), Paw: -1f), (pi - 1) * PitchStep);
         }
-        Mid = new ReinPage[FlyPages]; Hover = new ReinPage[FlyPages];
-        for (int k = 0; k < FlyPages; k++)
+        Gait = new ReinPage[GaitAmps.Length][];
+        for (int lv = 0; lv < GaitAmps.Length; lv++)
         {
-            float ph = k / (float)FlyPages;
-            Mid[k] = PaintReindeer(new RPose(Phase: ph, Amp: MidAmp, Bob: 0.02f * MathF.Sin(MathF.Tau * ph), HeadUp: 0.08f * MathF.Sin(MathF.Tau * (ph - 0.15f)), Paw: -1f), 0f);
-            Hover[k] = PaintReindeer(new RPose(Phase: ph, Amp: HoverAmp, Bob: 0.02f * MathF.Sin(MathF.Tau * ph), HeadUp: 0.05f * MathF.Sin(MathF.Tau * (ph - 0.15f)), Paw: -1f), 0f);
+            Gait[lv] = new ReinPage[FlyPages];
+            for (int k = 0; k < FlyPages; k++)
+            {
+                float ph = k / (float)FlyPages;
+                // The head nods with the beat (a slow, deep nod in the hover) and the body bobs a little.
+                Gait[lv][k] = PaintReindeer(new RPose(Phase: ph, Amp: GaitAmps[lv], Bob: 0.024f * MathF.Sin(MathF.Tau * ph), HeadUp: 0.16f * MathF.Sin(MathF.Tau * (ph - 0.15f)), Paw: -1f), 0f);
+            }
         }
+        Settle = new ReinPage[SettlePages];
+        for (int k = 0; k < SettlePages; k++)
+            Settle[k] = PaintReindeer(new RPose(Phase: 0f, Amp: GaitAmps[^1] * (1f - k / (float)(SettlePages - 1)), Bob: 0f, HeadUp: 0f, Paw: -1f), 0f);
         Land = new ReinPage[LandPages];
         for (int k = 0; k < LandPages; k++)
             Land[k] = PaintReindeer(new RPose(Phase: 0.5f, Amp: 1f - k / (float)(LandPages - 1), Bob: 0f, HeadUp: 0.10f * (1f - k / (float)(LandPages - 1)), Paw: -1f), 0f);
@@ -162,8 +172,8 @@ internal sealed class SantaArt
         long bytes = 0;
         foreach (var row in Fly) foreach (var p in row) bytes += p.Img.Width * p.Img.Height * 4L;
         foreach (var p in Land) bytes += p.Img.Width * p.Img.Height * 4L;
-        foreach (var p in Mid) bytes += p.Img.Width * p.Img.Height * 4L;
-        foreach (var p in Hover) bytes += p.Img.Width * p.Img.Height * 4L;
+        foreach (var g in Gait) foreach (var p in g) bytes += p.Img.Width * p.Img.Height * 4L;
+        foreach (var p in Settle) bytes += p.Img.Width * p.Img.Height * 4L;
         foreach (var p in Paw) bytes += p.Img.Width * p.Img.Height * 4L;
         foreach (var p in Dip) bytes += p.Img.Width * p.Img.Height * 4L;
         foreach (var p in Look) bytes += p.Img.Width * p.Img.Height * 4L;
@@ -554,8 +564,8 @@ internal sealed class SantaArt
         int rc = ReinCanvas / 2, sc = SleighCanvas / 2;
         void Add(string name, IEnumerable<(Sprite, int, int)> pages) => rows.Add((name, [.. pages]));
         for (int pi = 0; pi < Pitches; pi++) Add($"fly pitch {pi - 1}", Fly[pi].Select(p => (p.Img, rc, rc)));
-        Add("mid gait (0.72)", Mid.Select(p => (p.Img, rc, rc)));
-        Add("hover gait (0.45)", Hover.Select(p => (p.Img, rc, rc)));
+        for (int lv = 0; lv < Gait.Length; lv++) Add($"gait {GaitAmps[lv]:F2}", Gait[lv].Select(p => (p.Img, rc, rc)));
+        Add("settle (hover legs to stand)", Settle.Select(p => (p.Img, rc, rc)));
         Add("land (reach to stand)", Land.Select(p => (p.Img, rc, rc)));
         if (Paw.Length > 0) Add("paw", Paw.Select(p => (p.Img, rc, rc)));
         if (Dip.Length > 0) Add("dip (head down to paw height)", Dip.Select(p => (p.Img, rc, rc)));

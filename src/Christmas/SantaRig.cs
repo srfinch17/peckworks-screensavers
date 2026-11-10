@@ -8,7 +8,7 @@ internal struct TeamMember
 {
     public float X, Y;          // the middle of its body, in pixels
     public float Pitch;         // radians, nose down positive (the nearest drawn tilt is a page, the rest a smooth shear)
-    public int Book;            // 0 = flying gallop, 1 = landing (reach to stand), 2 = pawing, 3 = standing with the head dipping, 4 = looking back, 5 = mid gait (0.72 of the reach), 6 = hover gait (0.45)
+    public int Book;            // 0 = flying gallop, 1 = landing (reach to stand), 2 = pawing, 3 = standing with the head dipping, 4 = looking back, 5 to 8 = the gait at 0.86, 0.72, 0.58, 0.45 of its reach, 9 = the hover legs coming down to stand
     public float Page;          // the page in that book (the whole part counts; a gallop wraps)
     public int PitchIdx;        // unused since the tilt became page plus shear (kept so a story that sets it still builds)
 }
@@ -338,7 +338,7 @@ internal sealed class SantaRig
                 _d += _speed * (1.0 + 0.04 * Math.Sin(_time * 0.9)) * dt;
                 LayOutFlight(dt);
                 if (_d - 7.9 * _s > _len) _flying = false;
-                if (!_flying) _pause = _quickStory ? 3600 : 45 + 60 * _rng.NextDouble();   // SANTA IS AN EVENT (the first review: at 5 to 12 s he was on screen more than half the time, wallpaper, and the main reason every animal kept looking up)
+                if (!_flying) _pause = _quickStory ? 3600 : 45 + 60 * _rng.NextDouble();
             }
         }
 
@@ -432,8 +432,8 @@ internal sealed class SantaRig
             case 3: return art.Dip[Math.Clamp(page, 0, SantaArt.DipPages - 1)];
             case 1: return art.Land[Math.Clamp(page, 0, SantaArt.LandPages - 1)];
             case 2: return art.Paw[((page % SantaArt.PawPages) + SantaArt.PawPages) % SantaArt.PawPages];
-            case 5: return art.Mid[((page % SantaArt.FlyPages) + SantaArt.FlyPages) % SantaArt.FlyPages];
-            case 6: return art.Hover[((page % SantaArt.FlyPages) + SantaArt.FlyPages) % SantaArt.FlyPages];
+            case 5: case 6: case 7: case 8: return art.Gait[m.Book - 5][((page % SantaArt.FlyPages) + SantaArt.FlyPages) % SantaArt.FlyPages];
+            case 9: return art.Settle[Math.Clamp(page, 0, SantaArt.SettlePages - 1)];
             default:
                 int half = SantaArt.Pitches / 2;
                 int idx = Math.Clamp((int)MathF.Round(m.Pitch / SantaArt.PitchStep), -half, half) + half;
@@ -558,6 +558,7 @@ internal sealed class SantaRig
         if (Directed || !Ready || !_flying) return;
         long t0 = _log != null ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
         DrawRig(fb, _scenery.IsSky, true);
+        if (!_noPool) DrawPool(fb);
         if (_log != null)
         {
             long d = System.Diagnostics.Stopwatch.GetTimestamp() - t0;
@@ -585,7 +586,8 @@ internal sealed class SantaRig
     private const int MoonShade = 62;                                              // out of 256: how dark a thing is where it crosses the moon
 
     /// <summary>
-    /// Stamps one picture through a stencil, tinted (mr, mg, mb out of 256), SHEARED and placed to a fraction of a pixel,
+    /// Stamps one picture through a stencil, tinted (mr, mg, mb out of 256), SHEARED and placed to a fraction of a pixel in BOTH directions
+    /// (vertically by blending a column with itself moved a row, horizontally by splitting each pixel's weight between two neighbouring columns),
     /// and over the MOON's disc darkened to a silhouette (each pixel it draws is asked whether it lies inside the disc).
     ///
     /// THE SHEAR. A plain stamp drops the picture on whole pixels: a bob of a pixel and a half is a hop of one or two, and a
@@ -598,7 +600,8 @@ internal sealed class SantaRig
     private void StampShear(FrameBuffer fb, Sprite sp, int[] colFirst, int[] colLast, float cx, float cy, bool mirror, float tan, int mr, int mg, int mb, bool[] stencil)
     {
         int w = sp.Width, h = sp.Height, fw = fb.Width, fh = fb.Height;
-        int left = (int)MathF.Round(cx) - w / 2;
+        int cxi = (int)MathF.Floor(cx), wr = (int)((cx - cxi) * 256f), wl = 256 - wr;      // the picture sits between two pixel columns: its weight is split between them
+        int left = cxi - w / 2;
         float topf = cy - h / 2f;
         int topi = (int)MathF.Floor(topf);
         float fy = topf - topi, reach = MathF.Abs(tan) * w * 0.5f + 2f;
@@ -625,7 +628,8 @@ internal sealed class SantaRig
                 int a = (a0 * j8 + a1 * k8) >> 8;
                 if (a == 0) continue;
                 int di = dy * fw + dcol;
-                if (!stencil[di]) continue;
+                bool ok1 = stencil[di] && wl > 0, ok2 = wr > 0 && dcol + 1 < fw && stencil[di + 1];
+                if (!ok1 && !ok2) continue;
                 int cr, cg, cb;
                 if (a1 == 0 || a0 == 0)
                 {
@@ -648,9 +652,20 @@ internal sealed class SantaRig
                     }
                     cr = Math.Min(255, cr * tr >> 8); cg = Math.Min(255, cg * tg >> 8); cb = Math.Min(255, cb * tb >> 8);
                 }
-                uint bg = frame[di];
-                int br = (int)((bg >> 16) & 0xFF), bgn = (int)((bg >> 8) & 0xFF), bb = (int)(bg & 0xFF);
-                frame[di] = (uint)(((br + ((cr - br) * a >> 8)) << 16) | ((bgn + ((cg - bgn) * a >> 8)) << 8) | (bb + ((cb - bb) * a >> 8)));
+                if (ok1)
+                {
+                    int a1x = a * wl >> 8;
+                    uint bg = frame[di];
+                    int br = (int)((bg >> 16) & 0xFF), bgn = (int)((bg >> 8) & 0xFF), bb = (int)(bg & 0xFF);
+                    frame[di] = (uint)(((br + ((cr - br) * a1x >> 8)) << 16) | ((bgn + ((cg - bgn) * a1x >> 8)) << 8) | (bb + ((cb - bb) * a1x >> 8)));
+                }
+                if (ok2)
+                {
+                    int a2x = a * wr >> 8;
+                    uint bg = frame[di + 1];
+                    int br = (int)((bg >> 16) & 0xFF), bgn = (int)((bg >> 8) & 0xFF), bb = (int)(bg & 0xFF);
+                    frame[di + 1] = (uint)(((br + ((cr - br) * a2x >> 8)) << 16) | ((bgn + ((cg - bgn) * a2x >> 8)) << 8) | (bb + ((cb - bb) * a2x >> 8)));
+                }
             }
         }
     }
@@ -661,6 +676,60 @@ internal sealed class SantaRig
         ReinPage pg = PageOf(m, true);
         StampShear(fb, pg.Img, pg.ColFirst, pg.ColLast, m.X, m.Y, Mirror, ShearOf(m), TintR[i], TintG[i], TintB[i], stencil);
     }
+
+    // ---- RUDOLPH'S LIGHT ON THE SNOW: one soft, wide pool of red that slides across the snowfield beneath him as he passes. ----
+    private readonly bool _noPool = Environment.GetEnvironmentVariable("PECKWORKS_NOPOOL") == "1";    // test: the same flight without the pool, for a with-and-without crop
+    private byte[]? _poolA;                                      // the pool's shape, painted once: 0 to 255 across an ellipse
+    private int _poolW, _poolH;
+    private const float PoolMax = 0.10f;                         // the strongest it ever is, as an alpha (under 30 out of 255)
+
+    /// <summary>
+    /// The pool lies on the snowfield only (below the hill's crest, and only on pixels that are still snow-bright, so it never
+    /// stains a pine, the cabin or a prop), at a fixed depth down the field, and follows his x. It is strongest when he is low in
+    /// the sky and fades as he climbs. Light is solid to nothing, so it simply tints the snow.
+    /// </summary>
+    private void DrawPool(FrameBuffer fb)
+    {
+        PointF nose = _scenery.SantaNose;
+        float low = 1f - Math.Clamp((nose.Y / _h - 0.05f) / 0.40f, 0f, 1f);
+        float amp = PoolMax * (0.30f + 0.70f * low);
+        if (amp < 0.01f) return;
+        if (_poolA == null)
+        {
+            _poolW = (int)(_w * 0.15f); _poolH = (int)(_h * 0.055f);
+            _poolA = new byte[_poolW * _poolH];
+            for (int y = 0; y < _poolH; y++)
+                for (int x = 0; x < _poolW; x++)
+                {
+                    float dx = (x + 0.5f) / _poolW * 2f - 1f, dy = (y + 0.5f) / _poolH * 2f - 1f, d = MathF.Sqrt(dx * dx + dy * dy);
+                    float f = MathF.Max(0f, 1f - d); _poolA[y * _poolW + x] = (byte)(255f * f * f * (3f - 2f * f));
+                }
+        }
+        int cx = (int)nose.X, cy = (int)(_h * 0.80f);
+        int left = cx - _poolW / 2, top = cy - _poolH / 2;
+        uint[] px = fb.Pixels;
+        _poolCrest ??= new int[_poolW];
+        for (int sx = 0; sx < _poolW; sx++) _poolCrest[sx] = (uint)(left + sx) < (uint)fb.Width ? (int)_scenery.Ground.YAt(left + sx) + 4 : int.MaxValue;
+        // Row by row (the frame is stored in rows: walking down a column would touch a new cache line every pixel).
+        for (int sy = 0; sy < _poolH; sy++)
+        {
+            int y = top + sy;
+            if ((uint)y >= (uint)fb.Height) continue;
+            int rowA = sy * _poolW, rowP = y * fb.Width + left;
+            for (int sx = 0; sx < _poolW; sx++)
+            {
+                int pa = _poolA[rowA + sx];
+                if (pa == 0 || y < _poolCrest[sx]) continue;
+                uint p = px[rowP + sx];
+                int pr = (int)((p >> 16) & 0xFF), pg = (int)((p >> 8) & 0xFF), pb = (int)(p & 0xFF);
+                if (pr < 150 || pg < 160 || pb < 200) continue;            // not snow: leave it alone
+                int a = (int)(pa * amp);                                    // 0 to 255 * amp, still an alpha out of 256 (at most about 25)
+                px[rowP + sx] = (uint)(((pr + ((255 - pr) * a >> 8)) << 16) | ((pg + ((72 - pg) * a >> 8)) << 8) | (pb + ((64 - pb) * a >> 8)));
+            }
+        }
+    }
+
+    private int[]? _poolCrest;
 
     private static float Dist(PointF a, PointF b) => MathF.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
 
