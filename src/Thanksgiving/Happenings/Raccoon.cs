@@ -30,6 +30,15 @@ namespace Thanksgiving.Happenings;
 /// It stands on the walk line (WalkY), nearer than the small pumpkins behind
 /// it, so it is drawn in front of them. Both directions are the same sticker
 /// turned over (Sprite.Draw's mirror), so a leftward walk needs no second set.
+///
+/// THE NUTS (his ask, 2026-11-09: "raccoon will sometimes grab nuts too if it
+/// finds them"): when it begins, it looks at the acorns lying on the ground
+/// (the scene's NutField) near where it would stop; if one is within reach it
+/// stops with its nose at THAT nut instead of the pumpkin, and when it rears
+/// up it comes up with the nut in its paws and holds it to its chest through
+/// the guilty look, nibbling; the nut is taken off the ground as it rises and
+/// is gone (eaten) by the time it startles. The stop, and so the whole
+/// timetable, is worked out again for that showing (Timetable).
 /// </summary>
 internal sealed class Raccoon : Happening
 {
@@ -58,8 +67,12 @@ internal sealed class Raccoon : Happening
     private readonly Sprite _sniffA, _sniffB;
     private readonly Sprite[] _rise = new Sprite[RisePages], _drop = new Sprite[RisePages];
     private readonly Sprite[] _yaw = new Sprite[YawPages];
+    private readonly Sprite[] _riseNut = new Sprite[RisePages], _yawNut = new Sprite[YawPages];   // the same, with an acorn in its paws
 
-    private readonly float _total, _v0, _stride, _stopX, _startX, _tIn, _tOut, _a;
+    private readonly float _v0, _startX, _defaultStop;
+    private float _total, _stride, _stopX, _tIn, _tOut, _a;
+    private NutField.Nut? _nut;                   // the acorn this showing takes, or null
+    private bool _nutTaken;                       // the take happens once, when it rears up (Draw works from t, so a flag remembers it was done)
 
     public override float Seconds => _total;
     public override int Layer => 1;
@@ -85,17 +98,10 @@ internal sealed class Raccoon : Happening
             float d = MathF.Abs(at.X - s.StageLeft.X);
             if (d < best) { best = d; sniff = at.X; }
         }
-        _stopX = sniff - NoseRel.X * _k;
+        _defaultStop = sniff - NoseRel.X * _k;
         _startX = -1.7f * _k;
-        float dist = _stopX - _startX;
         _v0 = Cruise * s.U;
-        _a = dist / _v0 - Ramp / 2;                                                  // when the slowing starts
-        _tIn = _a + Ramp;
-        float wanted = 0.55f * _k;
-        int strides = Math.Max(1, (int)MathF.Round(dist / wanted));
-        _stride = dist / strides;
-        _tOut = dist / _v0 + Ramp / 2;
-        _total = _tIn + SniffFor + RiseFor + LookFor + HopFor + DropFor + _tOut;
+        Timetable(_defaultStop);
 
         float st = _stride / _k;
         for (int i = 0; i < WalkPages; i++)
@@ -114,6 +120,44 @@ internal sealed class Raccoon : Happening
         }
         float[] yaws = [1f, 0.5f, 0f, -0.5f, -1f];
         for (int i = 0; i < YawPages; i++) _yaw[i] = Page(0f, 1f, 0f, 0f, yaws[i], 0, st);
+        for (int i = 0; i < RisePages; i++) _riseNut[i] = Page(0f, rise[i], Math.Max(0f, 1f - rise[i] * 2.2f), 0f, 1f, 3, st);
+        for (int i = 0; i < YawPages; i++) _yawNut[i] = Page(0f, 1f, 0f, 0f, yaws[i], 3, st);
+    }
+
+    /// <summary>The timetable for a stop at stopX: when the slowing starts, the stride that fits the walk, and the whole showing's length.</summary>
+    private void Timetable(float stopX)
+    {
+        _stopX = stopX;
+        float dist = _stopX - _startX;
+        _a = dist / _v0 - Ramp / 2;                                                  // when the slowing starts
+        _tIn = _a + Ramp;
+        float wanted = 0.55f * _k;
+        int strides = Math.Max(1, (int)MathF.Round(dist / wanted));
+        _stride = dist / strides;
+        _tOut = dist / _v0 + Ramp / 2;
+        _total = _tIn + SniffFor + RiseFor + LookFor + HopFor + DropFor + _tOut;
+    }
+
+    public override void Begin(Random rng)
+    {
+        // A nut to grab? One lying loose within a body length and a half of where it would stop anyway, on the walk line's
+        // own stretch (not up in the patch: its paws reach the ground at its nose).
+        _nut = null; _nutTaken = false;
+        float stop = _defaultStop;
+        NutField? nuts = _s.Nuts;
+        if (nuts != null)
+        {
+            float noseX = _defaultStop + NoseRel.X * _k, walk = _s.WalkY(noseX);
+            NutField.Nut? best = null; float bestD = 1.5f * _k;
+            foreach (NutField.Nut nut in nuts.All)
+            {
+                if (nut.State != NutField.State.Loose) continue;
+                float d = MathF.Abs(nut.X - noseX);
+                if (d < bestD && MathF.Abs(nut.Y - _s.WalkY(nut.X)) < 0.04f * _s.U) { best = nut; bestD = d; }
+            }
+            if (best != null) { _nut = best; stop = best.X - NoseRel.X * _k; }
+        }
+        Timetable(stop);
     }
 
     // ----------------------------------------------------------------- timing
@@ -160,15 +204,20 @@ internal sealed class Raccoon : Happening
             if (u < 0.4f) page = _sniff[Math.Min(SniffPages - 1, (int)(u / 0.4f * SniffPages))];
             else page = ((int)((u - 0.4f) * 8) & 1) == 0 && u < SniffFor - 0.2f ? _sniffA : (u < SniffFor - 0.2f ? _sniffB : _sniff[SniffPages - 1]);   // sniffs about eight times a second
         }
-        else if (t < tLook) page = _rise[Math.Min(RisePages - 1, (int)((t - tRise) / RiseFor * RisePages))];
+        else if (t < tLook)
+        {
+            if (_nut != null && !_nutTaken && _s.Nuts != null) { _s.Nuts.Take(_nut); _nutTaken = true; }   // the paws close on the nut as it rises: off the ground, into its hands
+            page = (_nut != null ? _riseNut : _rise)[Math.Min(RisePages - 1, (int)((t - tRise) / RiseFor * RisePages))];
+        }
         else if (t < tHop)
         {
-            // The guilty glance: the head swings round to look back over the shoulder, then at us, then forward again.
+            // The guilty glance: the head swings round to look back over the shoulder, then at us, then forward again (with the nut held to its chest, if it has one).
             int[] seq = [0, 0, 1, 2, 3, 4, 4, 3, 2, 1, 0, 2];
-            page = _yaw[seq[Math.Min(seq.Length - 1, (int)((t - tLook) / LookFor * seq.Length))]];
+            page = (_nut != null ? _yawNut : _yaw)[seq[Math.Min(seq.Length - 1, (int)((t - tLook) / LookFor * seq.Length))]];
         }
         else if (t < tDrop)
         {
+            if (_nut != null && _nutTaken && _nut.State == NutField.State.Carried) _nut.State = NutField.State.Gone;   // eaten during the look
             // Startled: a little hop that turns it round, looking at us as it goes.
             float s = (t - tHop) / HopFor;
             lift = 4f * s * (1 - s) * 0.35f * _k;
@@ -294,7 +343,7 @@ internal sealed class Raccoon : Happening
 
         PointF nearHindW = WalkFoot(-0.28f, 0f), nearFrontW = WalkFoot(0.30f, 0.25f), farHindW = WalkFoot(-0.28f, 0.5f), farFrontW = WalkFoot(0.30f, 0.75f);
         PointF nearHindS = P(hipS.X + 0.26f, 0.035f), farHindS = P(hipS.X + 0.16f, 0.035f);
-        bool pawsOn = apple == 1;                                                       // hands busy with the apple
+        bool pawsOn = apple == 1 || apple == 3;                                         // hands busy with the apple, or the acorn
         PointF nearFront = pawsOn ? Lerp(nearFrontW, pawTarget, Math.Max(e, 0.9f * (nose > 0 ? 1 : 0))) : Lerp(nearFrontW, pawTarget, e);
         PointF farFront = Lerp(farFrontW, P(pawTarget.X + 0.05f, pawTarget.Y + 0.01f), e);
         // the sniffing pages reach the paws toward the apple a little too
@@ -366,6 +415,14 @@ internal sealed class Raccoon : Happening
             Apple(acornPaws, 0.135f);
             Ell(acornPaws.X - 0.10f, acornPaws.Y - 0.09f, 0.04f, 0.032f, Paw);            // little dark hands round it
             Ell(acornPaws.X + 0.08f, acornPaws.Y - 0.10f, 0.04f, 0.032f, Paw);
+        }
+        else if (apple == 3)
+        {
+            // An acorn in its paws: a brown nut with a darker cap and a stalk, smaller than the apple was, the hands round it.
+            Ell(acornPaws.X, acornPaws.Y - 0.02f, 0.06f, 0.075f, Color.FromArgb(150, 102, 52));
+            Ell(acornPaws.X, acornPaws.Y + 0.04f, 0.068f, 0.035f, Color.FromArgb(92, 58, 30));
+            Ell(acornPaws.X - 0.08f, acornPaws.Y - 0.05f, 0.035f, 0.028f, Paw);
+            Ell(acornPaws.X + 0.07f, acornPaws.Y - 0.06f, 0.035f, 0.028f, Paw);
         }
     }
 }
