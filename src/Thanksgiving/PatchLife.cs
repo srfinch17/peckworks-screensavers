@@ -315,9 +315,15 @@ internal sealed class PatchLife
         int side = MathF.Abs(dx) > 0.5f * _k ? MathF.Sign(dx) : c.Dir;
         float vx = Math.Clamp(c.X + side * run, 0.02f * _s.Width, 0.98f * _s.Width);
         if (MathF.Abs(vx - c.X) < 0.6f * run) { side = -side; vx = Math.Clamp(c.X + side * run, 0.02f * _s.Width, 0.98f * _s.Width); }
-        float vy = c.Goal.Y;
-        for (int i = 0; i < 8 && !CanStand(vx, vy); i++) vx -= side * 0.4f * _k;
-        return CanStand(vx, vy) ? new PointF(vx, vy) : null;
+        // The goal's own row first; if nothing stands there (a pumpkin's foot is inside its keep-out ring, and the goal of a hop
+        // up onto one IS its foot), rows a little above and below it, each tried stepping back toward the squirrel.
+        foreach (float rowOff in (float[])[0f, 0.6f * _k, -0.6f * _k, 1.2f * _k, -1.2f * _k])
+        {
+            float vy = c.Goal.Y + rowOff, tx = vx;
+            for (int i = 0; i < 8 && !CanStand(tx, vy); i++) tx -= side * 0.4f * _k;
+            if (CanStand(tx, vy) && MathF.Abs(tx - c.X) >= 0.5f * run) return new PointF(tx, vy);
+        }
+        return null;
     }
 
     private PointF? RandomSpot(float x0, float x1, int tries, float? yNear = null, float yReach = 0f, float minDx = 0f, PointF? from = null)
@@ -878,7 +884,7 @@ internal sealed class PatchLife
         if (tree < 0 || Lull) return false;                                        // never during a story: the caper's squirrel climbs the left maple and three squirrels piled onto one foot (2026-11-09)
         c.Tree = tree; c.Mind.Begin(Doing.Go, 10f); c.Travelled = 0; c.PauseAt = 0; c.Dart = false; c.DenFoot = null;
         float dy = c.Y - foot.Y, side = c.X < foot.X ? -1f : 1f;
-        var beside = new PointF(foot.X + side * MathF.Max(0.012f * _s.U, 1.1f * dy), c.Y);
+        var beside = new PointF(foot.X + side * MathF.Max(0.012f * _s.U, 1.5f * dy), c.Y);   // 1.5 times the rise: the diagonal up to the foot is 34 degrees (at 1.1 it was 42, a steep slide the slope cap could not plan round: the foot is not standable ground)
         if (dy > 0.02f * _s.U && CanStand(beside.X, beside.Y) && Ground.LineClear(_ground, new PointF(c.X, c.Y), beside, 2f) && Ground.LineClear(_ground, beside, foot, 2f)) { c.Goal = beside; c.DenFoot = foot; }
         else c.Goal = foot;
         Head(c);
