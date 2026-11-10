@@ -175,7 +175,7 @@ internal sealed class LogMice : Resident
     {
         if (int.TryParse(Environment.GetEnvironmentVariable("PECKWORKS_MICECOUNT"), out int forced)) count = forced;    // test aid: 0 = the scene without the mice (the cost baseline)
         _count = Math.Clamp(count, 0, 6);
-        _unit = MathF.Max(2.4f, 0.0252f * S.U);      // storybook factor 2.8 (a 9 cm mouse, 25 cm on screen): 2.2 was too small to carry ears and a face
+        _unit = MathF.Max(2.4f, 0.0215f * S.U);      // storybook factor 2.4 (a 9 cm mouse, 21 cm on screen): 2.2 was too small to carry ears and a face, and at 2.8 a mouse stood half as long as a hare
         _force = Environment.GetEnvironmentVariable("PECKWORKS_MICE");
         _log = MindLog.Open();
         Decor = new TreeDecor(S);
