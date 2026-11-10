@@ -519,10 +519,10 @@ internal static partial class FoxAndHaresArt
     public static FPose FDig(float t)
     {
         var q = FStand(0.1f);
-        q.NeckAng = -8f; q.HeadAng = -62f; q.Pitch = -6f + 3f * MathF.Sin(MathF.Tau * t); q.Body = P(0f, 0.30f);
+        q.NeckAng = -20f; q.HeadAng = -64f; q.Pitch = -5f + 3f * MathF.Sin(MathF.Tau * t); q.Body = P(0f, 0.29f - 0.012f * MathF.Sin(MathF.Tau * t));
         q.FootFF = P(0.24f, 0f);
-        if (t < 0.5f) q.FootFN = P(Lerp(0.44f, 0.20f, t / 0.5f), 0f);                                   // scrape: back along the snow
-        else q.FootFN = P(Lerp(0.20f, 0.44f, Sm((t - 0.5f) / 0.5f)), 0.14f * MathF.Sin(MathF.PI * (t - 0.5f) / 0.5f));   // recover: lifted, forward
+        if (t < 0.5f) q.FootFN = P(Lerp(0.27f, 0.12f, Sm(t / 0.5f)), 0f);                               // scrape: back along the snow
+        else q.FootFN = P(Lerp(0.12f, 0.27f, Sm((t - 0.5f) / 0.5f)), 0.14f * MathF.Sin(MathF.PI * (t - 0.5f) / 0.5f));   // recover: lifted, forward (the cycle starts and ends on the resting paw)
         q.EarF = 24f; q.EarN = 24f; q.TailAng = -6f + 4f * MathF.Sin(MathF.Tau * t); q.TailCurl = 4f;
         return q;
     }
@@ -545,6 +545,16 @@ internal static partial class FoxAndHaresArt
         return q;
     }
 
+    /// <summary>A trot's rest page easing into a stand: the body settles first, the BRUSH and the EARS arrive a few pages later (follow-through).</summary>
+    public static FPose FSettle(float restPhase, float s)
+    {
+        var a = FTrot(restPhase, FoxTrotStride); var b = FStand(0.1f);
+        var q = FLerp(a, b, Sm(s));
+        float e = Sm(Math.Clamp((s - 0.35f) / 0.65f, 0f, 1f));
+        q.TailAng = Lerp(a.TailAng, b.TailAng, e); q.TailCurl = Lerp(a.TailCurl, b.TailCurl, e); q.EarF = Lerp(a.EarF, b.EarF, e); q.EarN = Lerp(a.EarN, b.EarN, e);
+        return q;
+    }
+
     /// <summary>
     /// THE WATCH: the stalk has been pulled up short. Weight back on the haunches (the hind legs gathered, the body low behind),
     /// forelegs braced forward and straight, the head low and level, the ears on the hare. t cycles (2 s): the chest breathes,
@@ -562,6 +572,19 @@ internal static partial class FoxAndHaresArt
         return q;
     }
 
+    /// <summary>WAKING: the curl opens into a lie (the snow on the back slides off as it goes), the head comes up, and it sits. i 0..32; snowK 0..1 how much snow lay on the back.</summary>
+    public static FPose FWakePose(int i, float snowK)
+    {
+        if (i < 17)
+        {
+            float s = Sm((i + 1) / 17f);
+            var q = FLerp(FCurl(0f, snowK), FLie(), s);
+            q.BackSnow = snowK * 0.8f * (1f - Sm(Math.Clamp((i + 1) / 10f, 0f, 1f)));
+            return q;
+        }
+        return FLerp(FLie(), FSit(0.1f), Sm((i - 16) / 16f));
+    }
+
     /// <summary>The body points the mind log uses to measure a pose pop: the head centre, the body, the four paws, the nose.</summary>
     public static PointF[] FKeys(FPose q)
     {
@@ -577,9 +600,10 @@ internal static partial class FoxAndHaresArt
 
     public static BookSpec[] FoxBooks()
     {
-        BookSpec Make(string name, int n, float halfW, float above, Func<int, FPose> pose) => new()
+        BookSpec Make(string name, int n, float halfW, float above, Func<int, FPose> pose, Func<float, FPose>? bodyAt = null, Func<int, float>? timeOf = null) => new()
         {
             Name = name, N = n, HalfW = halfW, Above = above,
+            Body = bodyAt == null ? null : t => bodyAt(t).Body, TimeOf = timeOf,
             Paint = (g, i) => PaintFox(g, pose(i)),
             Aux = i => FoxNoseOf(pose(i)),
             Keys = i => FKeys(pose(i)),
@@ -587,35 +611,39 @@ internal static partial class FoxAndHaresArt
         float rest0 = 0.275f, rest1 = 0.775f, gg = GallopGather(FoxGallopStride);
         return
         [
-            Make("stand", 24, 0.80f, 0.80f, i => FStand(i / 24f)),                                         // 0
-            Make("look", 5, 0.80f, 0.90f, i => FLook(i / 4f)),                                             // 1
+            Make("stand", 48, 0.80f, 0.80f, i => FStand(i / 48f)),                                         // 0
+            Make("look", 12, 0.80f, 0.90f, i => FLook(i / 11f)),                                           // 1
             Make("trot", 24, 0.95f, 0.80f, i => FTrot(i / 24f, FoxTrotStride)),                            // 2
-            Make("settle0", 4, 0.85f, 0.80f, i => FLerp(FTrot(rest0, FoxTrotStride), FStand(0.1f), Sm((i + 1) / 4f))),   // 3  trot rest page A to stand
-            Make("settle1", 4, 0.85f, 0.80f, i => FLerp(FTrot(rest1, FoxTrotStride), FStand(0.1f), Sm((i + 1) / 4f))),   // 4  trot rest page B to stand
+            Make("settle0", 8, 0.85f, 0.80f, i => FSettle(rest0, (i + 1) / 8f)),                           // 3  trot rest page A to stand
+            Make("settle1", 8, 0.85f, 0.80f, i => FSettle(rest1, (i + 1) / 8f)),                           // 4  trot rest page B to stand
             Make("stalk", 24, 0.95f, 0.70f, i => FTrot(i / 24f, FoxStalkStride, 1f, 0.68f)),               // 5
-            Make("stalkIn", 5, 0.90f, 0.70f, i => FLerp(FStand(0.1f), FTrot(0.30f, FoxStalkStride, 1f, 0.68f), Sm((i + 1) / 5f))),   // 6  stand into the crouch
-            Make("gallop", 16, 1.35f, 0.85f, i => FGallop(i / 16f, FoxGallopStride)),                      // 7
-            Make("skid", 8, 1.10f, 0.85f, i => FLerp(FGallop(gg, FoxGallopStride), FStand(0.1f), Sm((i + 1) / 8f))),    // 8  gallop gather page, braking to a stand
-            Make("sit", 12, 0.80f, 0.85f, i => FSit(i / 12f)),                                             // 9
-            Make("sitIn", 8, 0.80f, 0.85f, i => FLerp(FStand(0.1f), FSit(0.1f), Sm((i + 1) / 8f))),        // 10 stand to sit
-            Make("curlIn", 24, 0.80f, 0.75f, i => i < 12 ? FLerp(FSit(0.1f), FLie(), Sm((i + 1) / 12f)) : FLerp(FLie(), FCurl(0f, 0f), Sm((i - 11) / 12f))),   // 11
-            Make("sleep", 16, 0.80f, 0.60f, i => FCurl(MathF.Sin(MathF.Tau * (i % 4) / 4f), (i / 4) / 3f)), // 12 breath cycle x four depths of snow
-            Make("listen", 16, 0.85f, 0.70f, i => FListen(i / 16f)),                                       // 13
-            Make("coil", 4, 0.85f, 0.70f, i => FLerp(FListen(0f), FCoil(), Sm((i + 1) / 4f))),           // 14
-            Make("leap", 28, 1.00f, 1.40f, i => FLeap((i + 0.5f) / 28f)),                                  // 15
+            Make("stalkIn", 14, 0.90f, 0.70f, i => FLerp(FStand(0.1f), FTrot(0.30f, FoxStalkStride, 1f, 0.68f), Sm((i + 1) / 14f))),   // 6  stand into the crouch
+            Make("gallop", 24, 1.35f, 0.85f, i => FGallop(i / 24f, FoxGallopStride)),                      // 7
+            Make("skid", 16, 1.10f, 0.85f, i => FLerp(FGallop(gg, FoxGallopStride), FStand(0.1f), Sm((i + 1) / 16f))),    // 8  gallop gather page, braking to a stand
+            Make("sit", 36, 0.80f, 0.85f, i => FSit(i / 36f)),                                             // 9
+            Make("sitIn", 18, 0.80f, 0.85f, i => FLerp(FStand(0.1f), FSit(0.1f), Sm((i + 1) / 18f))),      // 10 stand to sit
+            Make("curlIn", 33, 0.80f, 0.75f, i => i < 16 ? FLerp(FSit(0.1f), FLie(), Sm((i + 1) / 16f)) : FLerp(FLie(), FCurl(0f, 0f), Sm((i - 15) / 17f))),   // 11
+            Make("sleep", 64, 0.80f, 0.60f, i => FCurl(MathF.Sin(MathF.Tau * (i % 8) / 8f), (i / 8) / 7f)), // 12 breath cycle x eight depths of snow
+            Make("listen", 36, 0.85f, 0.70f, i => FListen(i / 36f)),                                       // 13
+            Make("coil", 14, 0.85f, 0.70f, i => FLerp(FListen(0f), FCoil(), Sm((i + 1) / 14f))),           // 14
+            Make("leap", 28, 1.00f, 1.40f, i => FLeap((i + 0.5f) / 28f), FLeap, i => (i + 0.5f) / 28f),    // 15
             Make("diveIn", 8, 0.90f, 1.30f, i => FDiveIn((i + 1) / 8f)),                                   // 16
-            Make("plunge", 8, 0.80f, 1.10f, i => FPlunge(i / 8f, 1f)),                                     // 17
-            Make("backout", 16, 0.90f, 0.80f, i => FBackOut((i + 1) / 16f)),                                 // 18
-            Make("shake", 8, 0.80f, 0.80f, i => FShake(i / 8f, 0.9f - 0.5f * (i / 7f))),                   // 19
-            Make("wipe", 4, 0.80f, 0.80f, i => FLerp(FShake(0.1f, 0.4f), FStand(0.1f), Sm((i + 1) / 4f))), // 20 the last of the snow melts off the muzzle
-            Make("sneeze", 24, 0.80f, 0.85f, i => FSneeze(i / 24f)),                                         // 21
-            Make("dig", 12, 0.90f, 0.70f, i => FDig(i / 12f)),                                             // 22
-            Make("noseIn", 4, 0.85f, 0.70f, i => FLerp(FStand(0.1f), FNose(0f), Sm((i + 1) / 4f))),        // 23
-            Make("nose", 8, 0.85f, 0.70f, i => FNose(i / 8f)),                                             // 24
-            Make("turn", 4, 0.85f, 0.80f, i => FTurn(22.5f * (i + 1))),                                    // 25
-            Make("dashIn", 4, 1.0f, 0.75f, i => FLerp(FTrot(0.30f, FoxStalkStride, 1f, 0.68f), FGallop(0f, FoxGallopStride), Sm((i + 1) / 4f))),   // 26 crouch into the dash
-            Make("lower", 6, 0.85f, 0.80f, i => FLerp(FStand(0.1f), FListen(0f), Sm((i + 1) / 6f))),                     // 28 the head lowering from a stand to listen (and back)
-            Make("watch", 17, 0.95f, 0.75f, i => i < 5 ? FLerp(FTrot(0.30f, FoxStalkStride, 1f, 0.68f), FWatch(0f), Sm(i / 4f)) : FWatch((i - 5) / 12f)),   // 27 pull-up from the stalk into a braced watch
+            Make("plunge", 24, 0.80f, 1.10f, i => FPlunge(i / 24f, 1f)),                                   // 17 one wriggle cycle (0.8 s)
+            Make("backout", 30, 0.90f, 0.80f, i => FBackOut((i + 1) / 30f)),                               // 18
+            Make("shake", 48, 0.80f, 0.80f, i => FShake((i % 24) / 24f, 0.9f - 0.5f * (i / 47f))),         // 19 two shakes
+            Make("wipe", 9, 0.80f, 0.80f, i => FLerp(FShake(0f, 0.4f), FStand(0.1f), Sm((i + 1) / 9f))),   // 20 the last of the snow melts off the muzzle
+            Make("sneeze", 24, 0.80f, 0.85f, i => FSneeze(i / 24f)),                                       // 21
+            Make("dig", 21, 0.90f, 0.70f, i => FDig(i / 21f)),                                             // 22
+            Make("noseIn", 10, 0.85f, 0.70f, i => FLerp(FStand(0.1f), FNose(0f), Sm((i + 1) / 10f))),      // 23
+            Make("nose", 24, 0.85f, 0.70f, i => FNose(i / 24f)),                                           // 24
+            Make("turn", 14, 0.85f, 0.80f, i => FTurn(90f * (i + 1) / 14f)),                               // 25
+            Make("dashIn", 9, 1.0f, 0.75f, i => FLerp(FTrot(0.30f, FoxStalkStride, 1f, 0.68f), FGallop(0f, FoxGallopStride), Sm((i + 1) / 9f))),   // 26 crouch into the dash
+            Make("lower", 10, 0.85f, 0.80f, i => FLerp(FStand(0.1f), FListen(0f), Sm((i + 1) / 10f))),     // 27 the head lowering from a stand to listen (and back)
+            Make("watch", 36, 0.95f, 0.75f, i => i < 12 ? FLerp(FTrot(0.30f, FoxStalkStride, 1f, 0.68f), FWatch(0f), Sm(i / 11f)) : FWatch((i - 12) / 24f)),   // 28 pull-up (12 pages), then a 24 page hold
+            Make("wake0", 33, 0.80f, 0.75f, i => FWakePose(i, 0f)),                                        // 29 the way up out of a curl, by how much snow lay on the back
+            Make("wake1", 33, 0.80f, 0.75f, i => FWakePose(i, 1f / 3f)),                                   // 30
+            Make("wake2", 33, 0.80f, 0.75f, i => FWakePose(i, 2f / 3f)),                                   // 31
+            Make("wake3", 33, 0.80f, 0.75f, i => FWakePose(i, 1f)),                                        // 32
         ];
     }
 

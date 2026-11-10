@@ -354,7 +354,11 @@ internal static class ChristmasPainter
         float feederTall = u * 0.165f * Scale(feederFoot.Y);
         PointF saplingFoot = Field(w * 0.545f, 0.80f);
         float saplingTall = u * 0.15f * Scale(saplingFoot.Y);
-        PointF snowmanFoot = Field(w * 0.835f, 0.62f);
+        // The snowman stands in the GAP between the field's two bands (see HerdBandBottom and SmallBandTop): the herd
+        // passes behind him and never stops there, and the fox and the hares, whose ground starts just nearer than
+        // his foot, always pass in FRONT of him. (He first stood in the middle of the small animals' ground, and a
+        // fox that pulled up behind him stood for seconds with only its head showing.)
+        var snowmanFoot = new PointF(w * 0.835f, crestMax + 0.088f * u);
         float snowmanTall = u * 0.24f * Scale(snowmanFoot.Y);
         float logR = u * 0.030f, logLeft = w * 0.045f, logRight = logLeft + u * 0.27f, logFootY = h * 0.955f;
         var bushes = new List<(PointF At, float R)>

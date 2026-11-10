@@ -339,7 +339,7 @@ internal sealed class ChristmasScene : IScreensaverScene
         foreach (ref readonly var gl in _glitter.AsSpan())
         {
             float flash = MathF.Pow(MathF.Max(0f, (float)Math.Sin(_time * gl.Speed + gl.Phase)), 24);
-            if (flash > 0.02f) _glint.DrawCentered(fb, gl.X, gl.Y, flash * 0.9f);
+            if (flash > 0.02f && !_noSnow) _glint.DrawCentered(fb, gl.X, gl.Y, flash * 0.9f);   // off with the snow in the pop detector's runs: a sparkle beside an animal read as the animal popping
         }
         {
             // The lamp's flame gutters: two quick waves and a slow one, so it never ticks like a clock.

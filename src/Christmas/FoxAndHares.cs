@@ -56,7 +56,7 @@ internal sealed class FoxAndHares : Resident
     private enum FD { Away, Go, Trot, Settle, Stand, Look, Turn, SitIn, Sit, SitOut, CurlIn, Asleep, Wake, Mouse, StalkIn, Stalk, StalkOut, DashIn, Chase, Skid, Nose, Dig, Leave, Watch }
 
     private const int HB_Sit = 0, HB_Look = 1, HB_Reach = 2, HB_Nibble = 3, HB_Groom = 4, HB_Hop = 5, HB_Flee = 6, HB_Settle = 7, HB_TallIn = 8, HB_Tall = 9, HB_Thump = 10, HB_Binky = 11, HB_Dive = 12, HB_Peek = 13, HB_Turn = 14, HB_Twig = 15, HB_NLook = 16, HB_SettleF = 17;
-    private const int FB_Stand = 0, FB_Look = 1, FB_Trot = 2, FB_Settle0 = 3, FB_Settle1 = 4, FB_Stalk = 5, FB_StalkIn = 6, FB_Gallop = 7, FB_Skid = 8, FB_Sit = 9, FB_SitIn = 10, FB_CurlIn = 11, FB_Sleep = 12, FB_Listen = 13, FB_Coil = 14, FB_Leap = 15, FB_DiveIn = 16, FB_Plunge = 17, FB_BackOut = 18, FB_Shake = 19, FB_Wipe = 20, FB_Sneeze = 21, FB_Dig = 22, FB_NoseIn = 23, FB_Nose = 24, FB_Turn = 25, FB_DashIn = 26, FB_Lower = 27, FB_Watch = 28;
+    private const int FB_Stand = 0, FB_Look = 1, FB_Trot = 2, FB_Settle0 = 3, FB_Settle1 = 4, FB_Stalk = 5, FB_StalkIn = 6, FB_Gallop = 7, FB_Skid = 8, FB_Sit = 9, FB_SitIn = 10, FB_CurlIn = 11, FB_Sleep = 12, FB_Listen = 13, FB_Coil = 14, FB_Leap = 15, FB_DiveIn = 16, FB_Plunge = 17, FB_BackOut = 18, FB_Shake = 19, FB_Wipe = 20, FB_Sneeze = 21, FB_Dig = 22, FB_NoseIn = 23, FB_Nose = 24, FB_Turn = 25, FB_DashIn = 26, FB_Lower = 27, FB_Watch = 28, FB_Wake0 = 29;
     private const int Tiers = 2;                                         // the lanes are a narrow band now (SmallBandTop down), three size steps are under four percent apart
     private const float HareScale = 0.45f * 1.3f;                         // a hare's body length in metres, with the storybook factor
     private const float HopBase = 1.45f, BoltSpeed = 8.0f;                // hare: units a second (lollop, bolt)
@@ -82,7 +82,8 @@ internal sealed class FoxAndHares : Resident
         public bool GoFlee, GlWant, GlSanta, ThOut, DivePuff, PkPuff1, PkPuff2, PendSanta;
         public int Gl, GStage, GN, GM, NStage, NPg, NRp, HopsDone, EDir = 1, FreezeTo = 1;
         public float GlLevel, GlT, GlHold, GlTarget, GT, NT, NHold, ThOutT, RespAlert;
-        public double PendAt = -1; public Resp Resp;
+        public double PendAt = -1, Fz1 = -99, Fz2 = -99; public Resp Resp;
+        public float Gx, Gy;                              // the GLIDE of a fast sheet: where the body really is minus where this page painted it (units)
         public Book? PBk; public int PPg; public bool PMir, PVis; public float PX, PY, PUnit;   // the previous frame's page, for the pose-pop log
     }
     private enum Resp { None, Thump, Bolt, Freeze }
@@ -99,9 +100,12 @@ internal sealed class FoxAndHares : Resident
         public Book? Bk; public int Pg; public bool Mir; public float LX, LY;
         public bool Reverse;                            // playing a transition book backwards (getting up)
         public int LastPrint = -1; public FD After2; public bool GoLeave, MouseInit, SleepAfter; public float ListenFor, LastPh;
+        public int WakeBook = 29; public bool LookPend; public double LookPendAt;
         public float Slope, DetourT, DetourSlope;       // the lane change as an eased slope, so a path round something is a curve
         public Book? PBk; public int PPg; public bool PMir, PVis; public float PX, PY, PUnit;   // the previous frame page, for the pose-pop log
         public float StalkCool;                          // seconds before it may stalk again
+        public bool NoseNext; public float NoseT; public int Fail;        // after the chase: wait for the hare to be under, then walk up to the hole and nose it
+        public float Gx, Gy;                             // the glide of the leap sheet
     }
 
     private struct Decal { public float X, Y; public byte Kind; public double Born; }
@@ -122,6 +126,7 @@ internal sealed class FoxAndHares : Resident
     private readonly StreamWriter? _log = MindLog.Open();
     private readonly string _test = Environment.GetEnvironmentVariable("PECKWORKS_FOXHARE") ?? "natural";
     private double _time;
+    private long _tickU, _tickD; private int _costFrames, _costStamps; private double _costAt;   // the cost log (only while MINDLOG is on)
     private bool _forced, _firstUpdate;
     private float _nextAway;
 
@@ -143,7 +148,7 @@ internal sealed class FoxAndHares : Resident
         // its lane, so a hare far up the snowfield is smaller than one by the log, and pages are never scaled per frame.
         float W = s.Width, Hh = s.Height;
         _yLo = float.MaxValue; _yHi = float.MinValue;
-        for (int i = 0; i <= 10; i++) { float x = W * (0.02f + 0.96f * i / 10f); _yLo = MathF.Min(_yLo, s.FieldPoint(x, 0.18f).Y); _yHi = MathF.Max(_yHi, s.FieldPoint(x, 0.60f).Y); }
+        for (int i = 0; i <= 10; i++) { float x = W * (0.02f + 0.96f * i / 10f); _yLo = MathF.Min(_yLo, s.FieldPoint(x, 0.18f).Y); _yHi = MathF.Max(_yHi, s.FieldPoint(x, 0.64f).Y); }
         _yLo = MathF.Max(_yLo, s.SmallBandTop);          // the herd keeps the rows above SmallBandTop: the small animals live at or below it, so the lane table starts there
         for (int t = 0; t < Tiers; t++)
         {
@@ -155,7 +160,7 @@ internal sealed class FoxAndHares : Resident
         // ---- the hares: each with its own dials, a home on the right half or the left strip, and two twigs ----
         _h = new H[_n];
         float[] timid = Traits.Deal(Rng, Math.Max(1, _n)), curious = Traits.Deal(Rng, Math.Max(1, _n)), play = Traits.Deal(Rng, Math.Max(1, _n));
-        float[] homes = [0.66f, 0.82f, 0.10f, 0.92f, 0.60f, 0.15f, 0.74f, 0.96f];
+        float[] homes = [0.66f, 0.945f, 0.10f, 0.96f, 0.60f, 0.15f, 0.74f, 0.96f];       // (none within 0.6 of the snowman's height of him)
         var twigs = new List<(float, float)>();
         for (int i = 0; i < _n; i++)
         {
@@ -241,12 +246,37 @@ internal sealed class FoxAndHares : Resident
         float W = S.Width;
         if (x < 0.02f * W || x > 0.98f * W) return false;
         float wy = S.WalkY(x), d = (y - wy) / (S.Height - wy);
-        if (d < 0.18f || d > 0.60f || y < S.SmallBandTop) return false;     // never in the herd's band
+        if (d < 0.18f || d > 0.64f || y < S.SmallBandTop) return false;     // never in the herd's band
         // never rest BEHIND the bird table or the tiny fir (the props would hide most of the animal: it would read as missing)
         if (MathF.Abs(x - S.FeederFoot.X) < 0.075f * S.U && y <= S.FeederFoot.Y + 3f && y > S.FeederTray.At.Y) return false;
         if (MathF.Abs(x - S.SaplingFoot.X) < MathF.Max(0.04f * S.U, S.SaplingHeight * 0.45f) && y <= S.SaplingFoot.Y + 3f && y > S.SaplingFoot.Y - S.SaplingHeight) return false;
         return S.CanStand(x, y, room);
     }
+
+    /// <summary>
+    /// IS A BODY HALF HIDDEN BEHIND A NEARER THING? Passing behind a prop is fine; STANDING, stalking, sitting or sleeping half
+    /// covered by one is not (the fox waited with its rump inside the snowman). The body is a rectangle (halfW either side of
+    /// the feet, bodyH tall): sample it on a small grid against the depth picture; a painted pixel whose nearness is HIGHER than
+    /// the animal's own feet is nearer, so it covers. The snowman is drawn live, not in the picture: a thing farther away than
+    /// his foot must keep its x more than 0.6 of his height from his.
+    /// </summary>
+    private bool Covered(float x, float y, float halfW, float bodyH)
+    {
+        byte me = S.Nearness(y); int W = S.Width, Hh = S.Height; byte[] nd = S.NearDepth;
+        for (int iy = 0; iy < 4; iy++)
+            for (int ix = -2; ix <= 2; ix++)
+            {
+                int px = (int)(x + ix * halfW * 0.5f), py = (int)(y - 1 - iy * bodyH / 3f);
+                if (px < 0 || py < 0 || px >= W || py >= Hh) continue;
+                if (nd[py * W + px] > me) return true;
+            }
+        return y < S.SnowmanFoot.Y && MathF.Abs(x - S.SnowmanFoot.X) < 0.6f * S.SnowmanHeight;
+    }
+
+    /// <summary>A hare may rest, sit, nibble or dive here: feet allowed and the body not behind a prop.</summary>
+    private bool HRest(float x, float y, float room) { float u = HU(y); return Valid(x, y, room) && !Covered(x, y, 0.5f * u, 0.9f * u); }
+    /// <summary>The fox may stop, sit, watch, listen or sleep here.</summary>
+    private bool FRest(float x, float y, float room) { float u = FU(y); return Valid(x, y, room) && !Covered(x, y, 0.55f * u, 0.6f * u); }
 
     private bool LineClear(float x0, float y0, float x1, float y1, float room)
     {
@@ -262,7 +292,7 @@ internal sealed class FoxAndHares : Resident
         {
             float px = x + ((float)Rng.NextDouble() - 0.5f) * 0.1f * S.U * (1 + tries / 10);
             PointF p = S.FieldPoint(px, 0.28f + 0.26f * (float)Rng.NextDouble());
-            if (Valid(p.X, p.Y, room)) { ox = p.X; oy = p.Y; return; }
+            if (Valid(p.X, p.Y, room) && !Covered(p.X, p.Y, 0.5f * _hUnit[TierOf(p.Y)], 0.9f * _hUnit[TierOf(p.Y)])) { ox = p.X; oy = p.Y; return; }
         }
         PointF f = S.FieldPoint(x, 0.22f); ox = f.X; oy = f.Y;
     }
@@ -298,9 +328,9 @@ internal sealed class FoxAndHares : Resident
     public override void Update(float dt)
     {
         if (_n == 0) return;
-        long t0 = _firstUpdate ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+        long t0 = _firstUpdate && _log == null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
         _time += dt;
-        if (!_forced && _time >= 6.0) { _forced = true; ForceTest(); }
+        if (!_forced && _time >= (_test is "groom" or "binky" or "nibble" or "tall" or "thump" or "peek" ? 14.0 : 6.0)) { _forced = true; ForceTest(); }     // the hare tests wait until every hare has come up (the entrance is over by about 14 s)
         for (int i = 0; i < _puffs.Length; i++)
         {
             ref Puff p = ref _puffs[i];
@@ -311,6 +341,16 @@ internal sealed class FoxAndHares : Resident
         }
         for (int i = 0; i < _n; i++) StepHare(i, dt);
         StepFox(dt);
+        if (_log != null)
+        {
+            _tickU += System.Diagnostics.Stopwatch.GetTimestamp() - t0; _costFrames++;
+            if (_time - _costAt >= 5.0 && _costFrames > 0)
+            {
+                double us = 1e6 / System.Diagnostics.Stopwatch.Frequency / _costFrames;
+                Log($"cost per frame: update {_tickU * us:F0} us, draw {_tickD * us:F0} us, {(float)_costStamps / _costFrames:F1} stamps, {_decalLive} live decals");
+                _tickU = 0; _tickD = 0; _costFrames = 0; _costStamps = 0; _costAt = _time;
+            }
+        }
         if (!_firstUpdate) { _firstUpdate = true; Log($"first update took {(System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency:F2} ms"); }
     }
 
@@ -357,7 +397,7 @@ internal sealed class FoxAndHares : Resident
     private void BeginSit(H h, float dur)
     {
         BeginHare(h, HD.Sit, dur);
-        h.IdleOff = 1.2f; h.Gl = 0; h.GlLevel = 0f;
+        h.IdleOff = 2.4f; h.Gl = 0; h.GlLevel = 0f;
         if (h.PendAt > 0 && _time - h.PendAt < 1.0) WantGlance(h, h.PendSanta);
         h.PendAt = -1;
     }
@@ -404,8 +444,21 @@ internal sealed class FoxAndHares : Resident
     /// <summary>The sit cycle's quiet moments (both ears level, eyes open): the only places a glance may begin or end, so the head-up pages join the sit pages without a pop.</summary>
     private static bool SitGate(H h)
     {
-        float ph = (((h.Clock * 10f + h.IdleOff) % 24f) + 24f) % 24f / 24f;
+        float ph = (((h.Clock * 20f + h.IdleOff) % 48f) + 48f) % 48f / 48f;
         return ph < 0.08f || (ph > 0.34f && ph < 0.44f) || (ph > 0.86f && ph < 0.93f);
+    }
+
+    /// <summary>The fox's stand has quiet moments (the ear still, the eye open): a glance or the next doing begins there, so it joins the stand pages without a pop.</summary>
+    private static bool StandGate(F f)
+    {
+        float ph = (((f.Clock * 16f + 4.8f) % 48f) + 48f) % 48f / 48f;
+        return ph < 0.28f || (ph > 0.45f && ph < 0.68f) || ph > 0.80f;
+    }
+
+    private static bool SitGate(F f)
+    {
+        float ph = (((f.Clock * 15f + 3.6f) % 36f) + 36f) % 36f / 36f;
+        return ph < 0.20f || (ph > 0.28f && ph < 0.55f) || ph > 0.68f;
     }
 
     private float SantaLevel(H h)
@@ -443,6 +496,7 @@ internal sealed class FoxAndHares : Resident
         H h = _h[i];
         float U = S.U, W = S.Width;
         h.Mind.Tick(dt); h.Clock += dt; h.Att.Tick(dt); h.ThumpCool -= dt; h.BreathT -= dt; h.GlanceCool -= dt;
+        h.Gx = 0f; h.Gy = 0f;
         float unit = HU(h.Y);
         bool mir = h.Dir < 0;
         h.Vis = h.Mind.Doing != HD.Under;
@@ -454,11 +508,10 @@ internal sealed class FoxAndHares : Resident
             float dur = h.TurnQuick < 1f ? QuickTurn : TurnFor;
             h.TurnT += dt;
             float f = Math.Clamp(h.TurnT / dur, 0f, 0.999f);
-            int step = (int)(f * 7);                          // 0..6
-            if (step < 4) Show(h, HB_Turn, step - 1 < 0 ? 0 : step - 1, h.TurnFrom < 0);
-            else Show(h, HB_Turn, 6 - step, h.TurnTo < 0);
-            if (step == 0) Show(h, HB_Sit, 1, h.TurnFrom < 0);
-            if (step >= 3) h.Dir = h.TurnTo;
+            // 14 views from side-on to head-on (6.4 degrees a view), then 14 back out the other side: the head-on view is the middle
+            bool first = f < 0.5f; float uu = first ? f * 2f : (1f - f) * 2f;
+            Show(h, HB_Turn, Math.Clamp((int)(uu * 14f), 0, 13), first ? h.TurnFrom < 0 : h.TurnTo < 0);
+            if (!first) h.Dir = h.TurnTo;
             if (h.TurnT >= dur) { h.Turning = false; h.Dir = h.TurnTo; if (h.After == HD.Sit) BeginSit(h, 1f); else if (h.After == HD.Nibble) StartNibbleNow(h, 5f + 4f * (float)Rng.NextDouble()); else BeginHare(h, h.After, h.AfterFor); }
             S.Occupy(this, i, h.X, h.Y, 0.5f * unit);
             LogHare(i, h, dt);
@@ -494,7 +547,9 @@ internal sealed class FoxAndHares : Resident
                 else if (r == Reaction.Freeze)
                 {
                     h.FreezeTo = !overhead && cause.At.X < h.X ? -1 : !overhead ? 1 : h.Dir;
-                    Ask(h, Resp.Freeze, 0f);
+                    int recent = (_time - h.Fz1 < 20.0 ? 1 : 0) + (_time - h.Fz2 < 20.0 ? 1 : 0);
+                    if (recent >= 2 && !overhead) { Log($"hare{i} has frozen twice in 20 s: it bolts"); Ask(h, Resp.Bolt, 0.5f); }
+                    else { h.Fz2 = h.Fz1; h.Fz1 = _time; Ask(h, Resp.Freeze, 0f); }
                 }
                 else if (r == Reaction.Look && (h.GlanceCool <= 0f || !overhead))
                 {
@@ -513,10 +568,10 @@ internal sealed class FoxAndHares : Resident
             {
                 if (h.Gl == 0 && h.GlWant && SitGate(h)) { h.Gl = 1; h.GlWant = false; h.GlT = 0f; h.GlLevel = 0f; }
                 if (h.Gl != 0) { StepGlance(h, dt); Show(h, HB_Look, (int)MathF.Round(h.GlLevel * 8f), mir); }
-                else Show(h, HB_Sit, Cyc(h.Clock, 10f, 24, h.IdleOff), mir);
+                else Show(h, HB_Sit, Cyc(h.Clock, 20f, 48, h.IdleOff), mir);
                 if (h.BreathT <= 0f && _hb != null && h.Gl == 0) { PointF nz = _hb[HB_Sit].Aux[h.Pg]; Emit(1, h.X + h.Dir * nz.X * unit, h.Y, nz.Y * unit, h.Dir * 0.05f * unit, 0.06f * unit, 1.1f, 0, 0.45f); h.BreathT = 5f + 4f * (float)Rng.NextDouble(); }
                 if (h.Gl == 0 && h.Resp != Resp.None) ApplyResp(h, i);
-                else if (h.Gl == 0 && h.Mind.Over) RollHare(h, i);
+                else if (h.Gl == 0 && h.Mind.Over && SitGate(h)) RollHare(h, i);          // a sit is left only at a quiet page (ears level, eyes open)
                 break;
             }
             case HD.Groom:
@@ -527,23 +582,23 @@ internal sealed class FoxAndHares : Resident
                 int pg; bool quit = h.Resp != Resp.None;
                 switch (h.GStage)
                 {
-                    case 0: pg = FoxAndHaresArt.GrLead + Math.Min(7, (int)(h.GT / 0.4f * 8f)); if (h.GT >= 0.4f) { h.GStage = 1; h.GT = 0f; } break;
+                    case 0: pg = FoxAndHaresArt.GrLead + Math.Min(11, (int)(h.GT / 0.4f * 12f)); if (h.GT >= 0.4f) { h.GStage = 1; h.GT = 0f; } break;
                     case 1:
                     {
-                        float fr = h.GT / 0.6f; pg = FoxAndHaresArt.GrWash + Math.Min(11, (int)((fr - MathF.Floor(fr)) * 12f));
+                        float fr = h.GT / 0.6f; pg = FoxAndHaresArt.GrWash + Math.Min(17, (int)((fr - MathF.Floor(fr)) * 18f));
                         if (fr >= h.GN) { h.GStage = 2; h.GT = 0f; pg = FoxAndHaresArt.GrWash; }
                         else if (quit && MathF.Floor(fr) > MathF.Floor(was / 0.6f)) { h.GStage = 5; h.GT = 0f; pg = FoxAndHaresArt.GrWash; }
                         break;
                     }
-                    case 2: pg = FoxAndHaresArt.GrToPull + Math.Min(7, (int)(h.GT / 0.4f * 8f)); if (h.GT >= 0.4f) { h.GStage = 3; h.GT = 0f; } break;
+                    case 2: pg = FoxAndHaresArt.GrToPull + Math.Min(11, (int)(h.GT / 0.4f * 12f)); if (h.GT >= 0.4f) { h.GStage = 3; h.GT = 0f; } break;
                     case 3:
                     {
-                        float fr = h.GT / 0.5f; pg = FoxAndHaresArt.GrLick + Math.Min(11, (int)((fr - MathF.Floor(fr)) * 12f));
+                        float fr = h.GT / 0.5f; pg = FoxAndHaresArt.GrLick + Math.Min(14, (int)((fr - MathF.Floor(fr)) * 15f));
                         if (fr >= h.GM || (quit && MathF.Floor(fr) > MathF.Floor(was / 0.5f))) { h.GStage = 4; h.GT = 0f; pg = FoxAndHaresArt.GrLick; }
                         break;
                     }
-                    case 4: pg = FoxAndHaresArt.GrRelease + Math.Min(7, (int)(h.GT / 0.4f * 8f)); if (h.GT >= 0.4f) { AfterDoing(h, i, 3f + 5f * (float)Rng.NextDouble()); } break;
-                    default: pg = FoxAndHaresArt.GrOut + Math.Min(5, (int)(h.GT / 0.3f * 6f)); if (h.GT >= 0.3f) { AfterDoing(h, i, 3f + 5f * (float)Rng.NextDouble()); } break;
+                    case 4: pg = FoxAndHaresArt.GrRelease + Math.Min(11, (int)(h.GT / 0.4f * 12f)); if (h.GT >= 0.4f) { AfterActivity(h, i, HD.Groom); } break;
+                    default: pg = FoxAndHaresArt.GrOut + Math.Min(8, (int)(h.GT / 0.3f * 9f)); if (h.GT >= 0.3f) { AfterActivity(h, i, HD.Groom); } break;
                 }
                 Show(h, HB_Groom, pg, mir);
                 break;
@@ -556,7 +611,7 @@ internal sealed class FoxAndHares : Resident
                 {
                     case 0:
                     {
-                        h.NRp = Math.Min(5, (int)(h.NT / 0.45f * 6f));
+                        h.NRp = Math.Min(13, (int)(h.NT / 0.45f * 14f));
                         Show(h, HB_Reach, h.NRp, mir);
                         if (h.Resp != Resp.None) { h.NStage = 5; h.NT = 0f; }
                         else if (h.NT >= 0.45f) { h.NStage = 1; h.NT = 0f; h.NPg = -1; }
@@ -564,25 +619,25 @@ internal sealed class FoxAndHares : Resident
                     }
                     case 1:
                     {
-                        int pg = Cyc(h.NT, 14f, 12, 0f);
+                        int pg = Cyc(h.NT, 28f, 24, 0f);
                         bool wrapped = pg < h.NPg;
                         h.NPg = pg;
                         Show(h, HB_Nibble, pg, mir);
                         if (wrapped)
                         {
                             if (h.PendAt > 0 && _time - h.PendAt < 1.0) { h.NStage = 2; h.NT = 0f; h.PendAt = -1; h.NHold = 1.1f + 1.4f * (float)Rng.NextDouble(); }
-                            else if (h.Resp != Resp.None || h.Clock >= h.Dur) { h.NStage = 5; h.NT = 0f; h.NRp = 5; }
+                            else if (h.Resp != Resp.None || h.Clock >= h.Dur) { h.NStage = 5; h.NT = 0f; h.NRp = 13; }
                         }
                         break;
                     }
-                    case 2: Show(h, HB_NLook, Math.Min(5, (int)(h.NT / 0.33f * 6f)), mir); if (h.NT >= 0.33f) { h.NStage = 3; h.NT = 0f; } break;
-                    case 3: Show(h, HB_NLook, 6 + (int)(h.NT * 7f) % 8, mir); if (h.NT >= h.NHold || h.Resp != Resp.None) { h.NStage = 4; h.NT = 0f; } break;
-                    case 4: Show(h, HB_NLook, 4 - Math.Min(4, (int)(h.NT / 0.28f * 5f)), mir); if (h.NT >= 0.28f) { h.NStage = 1; h.NT = 0f; h.NPg = -1; } break;
+                    case 2: Show(h, HB_NLook, Math.Min(9, (int)(h.NT / 0.33f * 10f)), mir); if (h.NT >= 0.33f) { h.NStage = 3; h.NT = 0f; } break;
+                    case 3: Show(h, HB_NLook, 10 + (int)(h.NT * 10f) % 12, mir); if (h.NT >= h.NHold || h.Resp != Resp.None) { h.NStage = 4; h.NT = 0f; } break;
+                    case 4: Show(h, HB_NLook, 8 - Math.Min(8, (int)(h.NT / 0.28f * 9f)), mir); if (h.NT >= 0.28f) { h.NStage = 1; h.NT = 0f; h.NPg = -1; } break;
                     default:
                     {
-                        int pg = Math.Max(0, h.NRp - Math.Min(h.NRp, (int)(h.NT / 0.45f * 6f)));
+                        int pg = Math.Max(0, h.NRp - Math.Min(h.NRp, (int)(h.NT / 0.45f * 14f)));
                         Show(h, HB_Reach, pg, mir);
-                        if (h.NT >= 0.45f * h.NRp / 5f) AfterDoing(h, i, 3f + 5f * (float)Rng.NextDouble());
+                        if (h.NT >= 0.45f * h.NRp / 13f) AfterActivity(h, i, HD.Nibble);
                         break;
                     }
                 }
@@ -592,11 +647,11 @@ internal sealed class FoxAndHares : Resident
             {
                 // up (0.35 s), a held stand (the ears swivel, the nose works), down (0.35 s). The way down begins only when the
                 // hold is on a quiet page (ears level, eyes open: pages 0, 5, 11) so it joins the stand-up pages without a pop.
-                int hp = Cyc(h.Clock, 8f, 12, 0f);
-                if (!h.ThOut && h.Clock >= 0.35f && ((h.Resp != Resp.None && !h.BoltPending) || h.Clock >= h.Dur - 0.35f) && hp is 0 or 5 or 11) { h.ThOut = true; h.ThOutT = 0f; }
-                if (h.Clock < 0.35f) Show(h, HB_TallIn, Math.Min(5, (int)(h.Clock / 0.35f * 6f)), mir);
+                int hp = Cyc(h.Clock, 16f, 24, 0f);
+                if (!h.ThOut && h.Clock >= 0.35f && ((h.Resp != Resp.None && !h.BoltPending) || h.Clock >= h.Dur - 0.35f) && hp is 0 or 1 or 10 or 22 or 23) { h.ThOut = true; h.ThOutT = 0f; }
+                if (h.Clock < 0.35f) Show(h, HB_TallIn, Math.Min(11, (int)(h.Clock / 0.35f * 12f)), mir);
                 else if (!h.ThOut) Show(h, HB_Tall, hp, mir);
-                else { h.ThOutT += dt; Show(h, HB_TallIn, Math.Max(0, 5 - (int)(h.ThOutT / 0.35f * 6f)), mir); }
+                else { h.ThOutT += dt; Show(h, HB_TallIn, Math.Max(0, 11 - (int)(h.ThOutT / 0.35f * 12f)), mir); }
                 if (h.ThOut && h.ThOutT >= 0.35f) { if (h.BoltPending) StartBoltNow(h, h.BoltDir, i); else AfterDoing(h, i, SitFor()); }
                 break;
             }
@@ -605,11 +660,11 @@ internal sealed class FoxAndHares : Resident
                 // tall (0.35 s), then the thump book over 1.2 s (the foot comes down at 0.4 s and at 0.9 s into it), then it DROPS
                 // to all fours (0.24 s, the tall pages backwards) and bolts
                 h.Pace.Halt();
-                int tpg = Math.Min(11, (int)((h.Clock - 0.35f) / 1.2f * 12f));
-                bool footLow = tpg is 0 or 4 or 5 or 9 or 10 or 11;
+                int tpg = Math.Clamp((int)((h.Clock - 0.35f) / 1.2f * 36f), 0, 35);
+                bool footLow = FoxAndHaresArt.ThumpFoot(tpg / 35f) < 0.04f;
                 if (!h.ThOut)
                 {
-                    if (h.Clock < 0.35f) Show(h, HB_TallIn, Math.Min(5, (int)(h.Clock / 0.35f * 6f)), mir);
+                    if (h.Clock < 0.35f) Show(h, HB_TallIn, Math.Min(11, (int)(h.Clock / 0.35f * 12f)), mir);
                     else Show(h, HB_Thump, tpg, mir);
                 }
                 int due = h.Clock >= 0.35f + 0.9f ? 2 : h.Clock >= 0.35f + 0.4f ? 1 : 0;
@@ -626,7 +681,7 @@ internal sealed class FoxAndHares : Resident
                 if (h.ThOut)
                 {
                     h.ThOutT += dt;
-                    Show(h, HB_TallIn, Math.Max(0, 5 - (int)(h.ThOutT / 0.24f * 6f)), mir);
+                    Show(h, HB_TallIn, Math.Max(0, 11 - (int)(h.ThOutT / 0.24f * 12f)), mir);
                     if (h.ThOutT >= 0.24f) { h.ThumpCool = 20f; if (_fox != null) { h.FearX = _fox.X; h.FearY = _fox.Y; } GoBolt(h, i, 0f); }
                 }
                 break;
@@ -634,7 +689,7 @@ internal sealed class FoxAndHares : Resident
             case HD.Go:
             {
                 // setting off: the settle pages backwards (the sit rising into the gather), then the hop or the bolt from the same rest page
-                int np = h.GoFlee ? 8 : 6;
+                int np = 8;
                 Show(h, h.GoFlee ? HB_SettleF : HB_Settle, Math.Max(0, np - 1 - (int)(h.Clock / 0.24f * np)), mir);
                 if (h.Clock >= 0.24f)
                 {
@@ -670,12 +725,12 @@ internal sealed class FoxAndHares : Resident
             }
             case HD.Land:
             {
-                Show(h, HB_Settle, Math.Min(5, (int)(h.Clock / 0.24f * 6f)), mir);
+                Show(h, HB_Settle, Math.Min(7, (int)(h.Clock / 0.24f * 8f)), mir);
                 if (h.Mind.Over)
                 {
                     if (h.Resp != Resp.None) { h.Next = HD.Sit; ApplyResp(h, i); }
                     else if (h.Next != HD.Sit) { HD nx = h.Next; h.Next = HD.Sit; StartNibbleNow(h, 5f + 4f * (float)Rng.NextDouble()); }
-                    else BeginSit(h, SitFor());
+                    else AfterActivity(h, i, HD.Hop);
                 }
                 break;
             }
@@ -683,7 +738,8 @@ internal sealed class FoxAndHares : Resident
             {
                 // a joyful leap: 1.1 s, drifting forward a little; lands with a puff and a few sparkles
                 float f = Math.Min(0.999f, h.Clock / 1.1f);
-                Show(h, HB_Binky, (int)(f * 32f), mir);
+                Show(h, HB_Binky, Math.Min(35, (int)(f * 36f)), mir);
+                { PointF gl = h.Bk!.GlideAt(f, h.Pg); h.Gx = gl.X; h.Gy = gl.Y; }
                 float prev = Math.Min(0.999f, (h.Clock - dt) / 1.1f);
                 float adv = (FoxAndHaresArt.Sm(f) - FoxAndHaresArt.Sm(prev)) * 0.9f * unit;
                 float nx = h.X + h.Dir * adv;
@@ -721,7 +777,7 @@ internal sealed class FoxAndHares : Resident
                     bool near = toB < cyc;
                     bool blocked = !Valid(h.X + h.Dir * 0.35f * U, h.Y, 0.2f * unit);
                     float hx = h.X + h.Dir * FoxAndHaresArt.DiveRun * unit;
-                    bool ok = Valid(hx, h.Y, 0.3f * unit) && !S.Crowded(hx, h.Y, 0.5f * unit, this, i);
+                    bool ok = HRest(hx, h.Y, 0.3f * unit) && !S.Crowded(hx, h.Y, 0.5f * unit, this, i);
                     if ((ok && (near || blocked)) || hard) { h.BX = hx; h.BY = h.Y; h.X = hx; h.Pace.Halt(); BeginHare(h, HD.Dive, 1.0f); Show(h, HB_Dive, 0, mir); }
                 }
                 break;
@@ -730,7 +786,7 @@ internal sealed class FoxAndHares : Resident
             {
                 // the sheet carries the whole motion; the sprite's origin is the hole
                 float f = Math.Min(0.999f, h.Clock / 1.0f);
-                Show(h, HB_Dive, (int)(f * 30f), mir);
+                { int pg = Math.Min(29, (int)MathF.Round(f * 29f)); Show(h, HB_Dive, pg, mir); PointF gl = h.Bk!.GlideAt(f, pg); h.Gx = gl.X; h.Gy = gl.Y; }
                 if (!h.DivePuff && f >= 0.58f)
                 {
                     h.DivePuff = true;
@@ -766,14 +822,14 @@ internal sealed class FoxAndHares : Resident
                 // 62 percent of the pages), quick through the hop out (22 percent of the time, 31 percent of the pages: about 21 pages a second)
                 float c = Math.Min(0.999f, h.Clock / 2.6f);
                 float u = c < 0.60f ? c / 0.60f * 0.62f : c < 0.82f ? 0.62f + (c - 0.60f) / 0.22f * 0.26f : 0.88f + (c - 0.82f) / 0.18f * 0.12f;
-                Show(h, HB_Peek, Math.Min(55, (int)(u * 56f)), mir);
+                { int pg = Math.Min(71, (int)MathF.Round(u * 71f)); Show(h, HB_Peek, pg, mir); PointF gl = h.Bk!.GlideAt(u, pg); h.Gx = gl.X; h.Gy = gl.Y; }
                 if (!h.PkPuff1 && u >= 0.70f) { h.PkPuff1 = true; Burst(h.X, h.Y, unit, 5, 0.35f, 0.35f, 1); }
                 if (!h.PkPuff2 && u >= 0.88f) { h.PkPuff2 = true; Burst(h.X + h.Dir * 0.85f * unit, h.Y, unit, 3, 0.25f, 0.2f, 0); }
                 if (h.Clock >= 2.6f)
                 {
                     h.X += h.Dir * 0.85f * unit;                 // the sheet's last page has the body 0.85 ahead of the hole: the origin moves to the body
                     BeginSit(h, 4f + 5f * (float)Rng.NextDouble());
-                    Show(h, HB_Sit, 1, mir);                      // and the sit page is on the frame at once (the origin and the page change together)
+                    Show(h, HB_Sit, 2, mir);                      // and the sit page is on the frame at once (the origin and the page change together)
                 }
                 break;
             }
@@ -838,7 +894,7 @@ internal sealed class FoxAndHares : Resident
                     pj += $" pj {worst:F1} bj {bodyJump:F1}";
                 }
             }
-            _log.WriteLine($"{_time,8:F3} hare{i} x {h.X:F1} y {h.Y:F1} v {sp:F1} {h.Mind.Doing}{(h.Turning ? "/Turn" : "")} {h.Bk?.Name}#{h.Pg} dir {h.Dir}{(h.Vis ? "" : " hidden")} c {Coarse(h)}{pj} sim {Board.Time:F2}");
+            _log.WriteLine($"{_time,8:F3} hare{i} x {h.X:F1} y {h.Y:F1} v {sp:F1} {h.Mind.Doing}{(h.Turning ? "/Turn" : "")} {h.Bk?.Name}#{h.Pg} dir {h.Dir}{(h.Vis ? "" : " hidden")} c {Coarse(h)}{pj} cv {(h.Vis && Covered(h.X, h.Y, 0.5f * unit, 0.9f * unit) ? 1 : 0)} sim {Board.Time:F2}");
         }
         h.LX = h.X; h.LY = h.Y;
         h.PBk = h.Bk; h.PPg = h.Pg; h.PMir = h.Mir; h.PX = h.X; h.PY = h.Y; h.PUnit = HU(h.Y); h.PVis = h.Vis;
@@ -847,20 +903,36 @@ internal sealed class FoxAndHares : Resident
     /// <summary>What next for a sitting hare: nibble, groom, hop on, stand tall, binky, or sit on (a longer sit).</summary>
     private void RollHare(H h, int i)
     {
-        float U = S.U;
         bool lull = Lull;
         int twig = NearestTwig(h);
         bool pal = false;
-        for (int j = 0; j < _n; j++) if (j != i && MathF.Abs(_h[j].X - h.X) < 0.35f * U && _h[j].Mind.Doing is not (HD.Under or HD.Peek)) pal = true;
-        int face = Dice.Pick(Rng, [0.03f, twig >= 0 ? 0.36f : 0f, 0.26f, lull ? 0.05f : 0.28f, 0.06f, lull ? 0f : 0.03f + (pal ? 0.20f : 0.02f) * h.Play]);
+        for (int j = 0; j < _n; j++) if (j != i && MathF.Abs(_h[j].X - h.X) < 0.35f * S.U && _h[j].Mind.Doing is not (HD.Under or HD.Peek)) pal = true;
+        // a sit is the rest between doings: now it travels, forages (at a twig, or at the snow itself), washes, stands tall, or plays
+        int face = Dice.Pick(Rng, [0.0f, 0.28f, 0.18f, lull ? 0.05f : 0.38f, 0.05f, lull ? 0f : 0.03f + (pal ? 0.20f : 0.03f) * h.Play]);
+        if (Covered(h.X, h.Y, 0.5f * HU(h.Y), 0.9f * HU(h.Y))) face = 3;                // sitting half behind a prop: travel to a clear spot first
         switch (face)
         {
-            case 1: StartNibbleTrip(h, twig); break;
+            case 1: if (twig >= 0) StartNibbleTrip(h, twig); else StartNibbleNow(h, 5f + 4f * (float)Rng.NextDouble()); break;
             case 2: StartGroom(h); break;
             case 3: StartHop(h, i); break;
             case 4: BeginHare(h, HD.Tall, 5f + 3f * (float)Rng.NextDouble()); break;
             case 5: BeginHare(h, HD.Binky, 1.1f); break;
-            default: BeginSit(h, SitFor()); break;        // sit on: the sit that goes on is the same doing, a longer one
+            default: BeginSit(h, SitFor()); break;
+        }
+    }
+
+    private float SitAfter() => 5f + 5f * (float)Rng.NextDouble();
+
+    /// <summary>What follows a doing that was an activity: another activity (a move into a nibble, a nibble into a wash) or a short sit, so the day is mostly doing things.</summary>
+    private void AfterActivity(H h, int i, HD was)
+    {
+        if (h.Resp != Resp.None) { ApplyResp(h, i); return; }
+        float r = (float)Rng.NextDouble(); bool lull = Lull;
+        switch (was)
+        {
+            case HD.Hop: if (r < 0.50f) StartNibbleNow(h, 5f + 4f * (float)Rng.NextDouble()); else if (r < 0.72f) StartGroom(h); else BeginSit(h, SitAfter()); break;
+            case HD.Nibble: if (r < 0.35f) StartGroom(h); else if (r < 0.58f && !lull) StartHop(h, i); else BeginSit(h, SitAfter()); break;
+            default: if (r < 0.40f && !lull) StartHop(h, i); else if (r < 0.58f) StartNibbleNow(h, 5f + 4f * (float)Rng.NextDouble()); else BeginSit(h, SitAfter()); break;
         }
     }
 
@@ -892,7 +964,7 @@ internal sealed class FoxAndHares : Resident
         float unit = HU(h.Y);
         int side = _twigs[twig].X >= h.X ? 1 : -1;
         float sx = _twigs[twig].X - side * 0.64f * unit, sy = _twigs[twig].Y;
-        if (!Valid(sx, sy, 0.3f * unit)) { BeginSit(h, SitFor()); return; }
+        if (!HRest(sx, sy, 0.3f * unit)) { BeginSit(h, SitFor()); return; }
         h.Twig = twig; h.Next = HD.Nibble;
         float nd = 5f + 4f * (float)Rng.NextDouble();
         if (MathF.Abs(sx - h.X) < 0.2f * unit && MathF.Abs(sy - h.Y) < 0.1f * unit)
@@ -908,16 +980,21 @@ internal sealed class FoxAndHares : Resident
     /// <summary>A WHOLE number of EVEN hops (the count and the stretch of one hop never move a planted foot by more than a tenth).</summary>
     private void StartHop(H h, int idx)
     {
-        float U = S.U, unit = HU(h.Y), cyc = FoxAndHaresArt.HareHopD * unit;
-        for (int tries = 0; tries < 16; tries++)
+        float U = S.U, unit = HU(h.Y), cyc = FoxAndHaresArt.HareHopD * unit, W = S.Width;
+        for (int tries = 0; tries < 24; tries++)
         {
-            int n = 4 + Rng.Next(3);                                   // 4 to 6 hops: a move lasts four to six seconds
+            // a TRAVEL: four to six hops half the time, seven to twelve the rest, to a new row of the territory on a shallow diagonal
+            int n = tries >= 12 ? 1 + Rng.Next(3) : Rng.NextDouble() < 0.45 ? 4 + Rng.Next(3) : 7 + Rng.Next(6);      // after a dozen failures short hops (a hare in a pocket can still shuffle out)
             int dir = Rng.Next(2) == 0 ? 1 : -1;
             float dx = dir * n * cyc;
-            float gx = h.X + dx, gy = h.Y + ((float)Rng.NextDouble() - 0.5f) * 0.3f * MathF.Abs(dx);
-            if (!Valid(gx, gy, 0.3f * unit) || !LineClear(h.X, h.Y, gx, gy, 0.3f * unit)) continue;
+            float gxx = Math.Clamp(h.X + dx, 0.03f * W, 0.97f * W);
+            float lo = S.SmallBandTop + 0.004f * U, hi = S.FieldPoint(gxx, 0.64f).Y - 0.004f * U;
+            float ty = lo + (float)Rng.NextDouble() * MathF.Max(1f, hi - lo);
+            float gy = h.Y + Math.Clamp(ty - h.Y, -0.35f * MathF.Abs(dx), 0.35f * MathF.Abs(dx));
+            float gx = h.X + dx;
+            if (!HRest(gx, gy, 0.3f * unit) || !LineClear(h.X, h.Y, gx, gy, 0.3f * unit)) continue;
             bool crowd = false;
-            for (int k = 1; k <= 4; k++) if (S.Crowded(h.X + dx * k / 4f, h.Y + (gy - h.Y) * k / 4f, 0.5f * unit, this, idx)) crowd = true;
+            for (int k = 1; k <= 6; k++) if (S.Crowded(h.X + dx * k / 6f, h.Y + (gy - h.Y) * k / 6f, 0.5f * unit, this, idx)) crowd = true;
             if (crowd) continue;
             h.Next = HD.Sit;
             PlanHop(h, gx, gy, dir, 0.999f, 1.001f);
@@ -932,7 +1009,7 @@ internal sealed class FoxAndHares : Resident
         float unit = HU(h.Y);
         float cyc = FoxAndHaresArt.HareHopD * unit;
         float dist = MathF.Abs(gx - h.X);
-        int n0 = Math.Clamp((int)MathF.Round(dist / cyc), 1, 8), hops = n0; float k = 1f, bestErr = float.MaxValue;
+        int n0 = Math.Clamp((int)MathF.Round(dist / cyc), 1, 14), hops = n0; float k = 1f, bestErr = float.MaxValue;
         for (int n = Math.Max(1, n0 - 1); n <= n0 + 1; n++)
         {
             float kk = Math.Clamp(dist / (n * cyc), kMin, kMax), err = MathF.Abs(dist - n * cyc * kk);
@@ -961,19 +1038,22 @@ internal sealed class FoxAndHares : Resident
     {
         float U = S.U, unit = HU(h.Y);
         int away = h.FearX >= h.X ? -1 : 1;
-        // a burrow 0.28 to 0.42 U away, on the far side from the danger, somewhere it may stand with a clear run
-        h.BX = h.X; h.BY = h.Y;
-        for (int tries = 0; tries < 24; tries++)
+        // a fox that is close is judged by where it IS now, not where the notice said it was (it may have trotted past)
+        if (_fox != null && _fox.Mind.Doing != FD.Away && MathF.Abs(_fox.X - h.X) < 0.35f * U && MathF.Abs(_fox.X - h.X) > 0.4f * unit) away = _fox.X >= h.X ? -1 : 1;
+        // THE FLIGHT RUNS AWAY. A burrow 0.14 to 0.42 U off, on the far side from the danger and inside 60 degrees of straight
+        // away from it (never across it: the first build bolted toward the fox and the two passed through each other), with a
+        // clear run and nobody on the spot. If there is none, the hare dives where it is (the burrow is under its feet).
+        h.BX = h.X; h.BY = h.Y; h.Resp = Resp.None;
+        for (int tries = 0; tries < 40; tries++)
         {
-            int dr = tries < 14 ? away : -away;
-            float bx = h.X + dr * (0.28f + 0.14f * (float)Rng.NextDouble()) * U;
-            float by = h.Y + ((float)Rng.NextDouble() - 0.5f) * 0.10f * U;
-            if (Valid(bx, by, 0.4f * unit) && LineClear(h.X, h.Y, bx, by, 0.3f * unit) && !S.Crowded(bx, by, 0.9f * unit, this, i)) { h.BX = bx; h.BY = by; away = dr; break; }
+            float dist = (0.14f + 0.28f * (float)Rng.NextDouble()) * U;
+            float bx = h.X + away * dist, by = h.Y + ((float)Rng.NextDouble() * 2f - 1f) * MathF.Min(0.05f * U, 1.2f * dist);
+            if (HRest(bx, by, 0.4f * unit) && LineClear(h.X, h.Y, bx, by, 0.3f * unit) && !S.Crowded(bx, by, 0.9f * unit, this, i)) { h.BX = bx; h.BY = by; break; }
         }
-        if (MathF.Abs(h.BX - h.X) < 0.1f * U) away = h.Dir;
         h.GY = h.Y; h.JinkT = 0.2f; h.Odo = FoxAndHaresArt.HopRest; h.LastFrac = FoxAndHaresArt.HopRest;
         h.Pace.Halt(); h.Pace.Accel = 30f * unit;
         h.Turning = false;
+        Log($"hare{i} flees away from {h.FearX:F0}: burrow at {h.BX:F0},{h.BY:F0}");
         if (alertFor > 0.01f) { BeginHare(h, HD.Tall, MathF.Max(0.5f, alertFor) + 0.35f); h.BoltPending = true; h.BoltDir = away; }
         else StartBoltNow(h, away, i);
     }
@@ -996,11 +1076,11 @@ internal sealed class FoxAndHares : Resident
             float x = h.BX + ((float)Rng.NextDouble() * 2f - 1f) * 0.25f * U, y = h.BY + ((float)Rng.NextDouble() - 0.5f) * 0.10f * U;
             bool awayFromFox = _fox == null || _fox.Mind.Doing == FD.Away || MathF.Abs(_fox.X - x) > 0.35f * U || tries > 22;
             if (MathF.Abs(x - h.BX) < 0.10f * U && tries < 30) continue;
-            if (!awayFromFox || !Valid(x, y, 0.4f * unit)) continue;
+            if (!awayFromFox || !HRest(x, y, 0.4f * unit)) continue;
             for (int s = 0; s < 2; s++)
             {
                 int dir = s == 0 ? h.EDir : -h.EDir;
-                if (Valid(x + dir * 0.85f * unit, y, 0.3f * unit) && !S.Crowded(x, y, 1.4f * unit, this, me) && !S.Crowded(x + dir * 0.85f * unit, y, 0.5f * unit, this, me)) { h.ToBX = x; h.ToBY = y; h.EDir = dir; return; }
+                if (HRest(x + dir * 0.85f * unit, y, 0.3f * unit) && !S.Crowded(x, y, 1.4f * unit, this, me) && !S.Crowded(x + dir * 0.85f * unit, y, 0.5f * unit, this, me)) { h.ToBX = x; h.ToBY = y; h.EDir = dir; return; }
             }
         }
     }
@@ -1058,6 +1138,7 @@ internal sealed class FoxAndHares : Resident
         float U = S.U, W = S.Width;
         float unit = FU(f.Y);
         f.Mind.Tick(dt); f.Clock += dt; f.Att.Tick(dt); f.BreathT -= dt; f.PostT -= dt; f.GlanceCool -= dt; f.StalkCool -= dt;
+        f.Gx = 0f; f.Gy = 0f;
         FD d = f.Mind.Doing;
         bool mir = f.Dir < 0;
         if (d != FD.Away) { f.OnScreen += dt; S.Occupy(this, 100, f.X, f.Y, 0.5f * 0.95f * unit); }
@@ -1077,10 +1158,9 @@ internal sealed class FoxAndHares : Resident
         {
             f.TurnT += dt;
             float fr = Math.Clamp(f.TurnT / TurnFor, 0f, 0.999f);
-            int step = (int)(fr * 7);
-            if (step < 4) ShowF(f, step == 0 ? FB_Stand : FB_Turn, step == 0 ? 0 : step - 1, f.TurnFrom < 0);
-            else ShowF(f, FB_Turn, 6 - step, f.TurnTo < 0);
-            if (step >= 3) f.Dir = f.TurnTo;
+            bool first = fr < 0.5f; float uu = first ? fr * 2f : (1f - fr) * 2f;
+            ShowF(f, FB_Turn, Math.Clamp((int)(uu * 14f), 0, 13), first ? f.TurnFrom < 0 : f.TurnTo < 0);
+            if (!first) f.Dir = f.TurnTo;
             if (f.TurnT >= TurnFor) { f.Turning = false; f.Dir = f.TurnTo; BeginFox(f, f.After, f.After == FD.Stand ? 3.5f + 2.5f * (float)Rng.NextDouble() : Mind<FD>.Forever); }
             LogFox(f, dt); return;
         }
@@ -1093,12 +1173,12 @@ internal sealed class FoxAndHares : Resident
             {
                 Log($"fox feels {r} from {cause.Kind} at {cause.At.X:F0},{cause.At.Y:F0}");
                 if (d == FD.Asleep && cause.Kind is not (Sense.Loud or Sense.Threat)) { }                       // a sleeper wakes at a noise or a danger, not at Santa going over or a hare's thump
-                else if (d == FD.Asleep) { BeginFox(f, FD.Wake, 1f); Burst(f.X, f.Y, unit, 10, 0.5f, 0.6f, 2); d = FD.Wake; }
+                else if (d == FD.Asleep) { f.WakeBook = FB_Wake0 + (int)MathF.Round(Math.Min(7, (int)(f.Clock / 4.5f)) / 7f * 3f); BeginFox(f, FD.Wake, 1.1f); Burst(f.X, f.Y, unit, 10, 0.5f, 0.6f, 2); d = FD.Wake; }
                 else if (d == FD.Stand && r != Reaction.Approach && (f.GlanceCool <= 0f || cause.Kind != Sense.Movement || cause.At.Y > f.Y - 0.18f * S.Height))
                 {
                     if (cause.At.Y < f.Y - 0.18f * S.Height) f.GlanceCool = 25f;
                     f.LookUp = Math.Clamp((f.Y - cause.At.Y) / (0.5f * S.Height), 0.15f, 1f); f.LookDur = 2.2f;
-                    BeginFox(f, FD.Look, f.LookDur); d = FD.Look;
+                    f.LookPend = true; f.LookPendAt = _time;
                 }
             }
         }
@@ -1109,7 +1189,7 @@ internal sealed class FoxAndHares : Resident
             {
                 // getting going: the settle pages played backwards, then the trot from the same rest page
                 int rb = f.RestIdx == 0 ? FB_Settle0 : FB_Settle1;
-                ShowF(f, rb, Math.Max(0, 3 - (int)(f.Clock / 0.22f * 4f)), mir);
+                ShowF(f, rb, Math.Max(0, 7 - (int)(f.Clock / 0.22f * 8f)), mir);
                 if (f.Clock >= 0.22f) { f.Mind.Begin(f.GoLeave ? FD.Leave : FD.Trot, Mind<FD>.Forever); f.Clock = 0; f.Odo = (f.RestIdx == 0 ? RestA : RestB) * FoxAndHaresArt.FoxTrotStride; f.Braked = false; f.Pace.Halt(); f.Pace.Accel = 2.2f * unit; }
                 break;
             }
@@ -1136,36 +1216,57 @@ internal sealed class FoxAndHares : Resident
             case FD.Settle:
             {
                 int rb = f.RestIdx == 0 ? FB_Settle0 : FB_Settle1;
-                ShowF(f, rb, Math.Min(3, (int)(f.Clock / 0.22f * 4f)), mir);
-                if (f.Clock >= 0.22f) BeginFox(f, FD.Stand, 4f + 5f * (float)Rng.NextDouble());
+                ShowF(f, rb, Math.Min(7, (int)(f.Clock / 0.22f * 8f)), mir);
+                if (f.Clock >= 0.22f) { if (f.NoseNext && MathF.Abs(f.HoleX - f.X) < 1.3f * unit) { f.NoseNext = false; BeginFox(f, FD.Nose, Mind<FD>.Forever); f.Stage = 0; } else if (f.NoseNext) { f.NoseNext = false; Log("fox could not get to the hole: it gives up"); BeginFox(f, FD.Stand, 3.5f + 2f * (float)Rng.NextDouble()); } else BeginFox(f, FD.Stand, 4f + 5f * (float)Rng.NextDouble()); }
                 break;
             }
             case FD.Stand:
             {
-                ShowF(f, FB_Stand, Cyc(f.Clock, 8f, 24, 0f), mir);
+                ShowF(f, FB_Stand, Cyc(f.Clock, 16f, 48, 4.8f), mir);          // 48 pages at 16 a second, starting on the pose every sheet joins (t = 0.1)
                 Breathe(f, unit);
-                if (f.Mind.Over) RollFox(f);
+                if (f.LookPend)
+                {
+                    // a glance waits for the stand's quiet phase (ear still, eye open), then begins; one that waited over 1.5 s is dropped
+                    if (_time - f.LookPendAt > 1.5) f.LookPend = false;
+                    else if (StandGate(f)) { f.LookPend = false; BeginFox(f, FD.Look, f.LookDur); break; }
+                }
+                if (f.NoseNext)
+                {
+                    // the hare dived; the fox stands where it pulled up, watching, until the tail has gone, then walks up to the hole
+                    f.NoseT += dt;
+                    H? tg = f.Target >= 0 ? _h[f.Target] : null;
+                    bool under = tg == null || tg.Mind.Doing is HD.Under or HD.Peek;
+                    if (under && f.NoseT > 0.3f)
+                    {
+                        float dist = (f.HoleX - f.X) * f.Dir - 0.6f * unit;
+                        if (dist < 0.25f * unit) { f.NoseNext = false; BeginFox(f, FD.Nose, Mind<FD>.Forever); f.Stage = 0; }
+                        else { f.GX = f.X + f.Dir * dist; f.GY = f.Y; f.GoLeave = false; f.RestIdx = Rng.Next(2); f.Pace.Halt(); BeginFox(f, FD.Go, 0.22f); }
+                    }
+                    else if (f.NoseT > 6f) f.NoseNext = false;
+                    break;
+                }
+                if (f.Mind.Over && StandGate(f)) RollFox(f);
                 break;
             }
             case FD.Look:
             {
                 float lv = Math.Min(1f, f.Clock / 0.35f) * (f.Clock > f.LookDur - 0.35f ? Math.Max(0f, (f.LookDur - f.Clock) / 0.35f) : 1f) * f.LookUp;
-                ShowF(f, FB_Look, (int)MathF.Round(lv * 4f), mir);
+                ShowF(f, FB_Look, (int)MathF.Round(lv * 11f), mir);
                 if (f.Mind.Over) BeginFox(f, FD.Stand, 3f + 3f * (float)Rng.NextDouble());
                 break;
             }
             case FD.SitIn:
             {
-                int pg = f.Reverse ? Math.Max(0, 7 - (int)(f.Clock / 0.6f * 8f)) : Math.Min(7, (int)(f.Clock / 0.6f * 8f));
+                int pg = f.Reverse ? Math.Max(0, 17 - (int)(f.Clock / 0.6f * 18f)) : Math.Min(17, (int)(f.Clock / 0.6f * 18f));
                 ShowF(f, FB_SitIn, pg, mir);
                 if (f.Clock >= 0.6f) { if (f.Reverse) { f.Reverse = false; BeginFox(f, FD.Stand, 3.5f + 2.5f * (float)Rng.NextDouble()); } else if (f.SleepAfter) { f.SleepAfter = false; f.SleepFor = 45f; BeginFox(f, FD.CurlIn, 1f); } else BeginFox(f, FD.Sit, 6f + 6f * (float)Rng.NextDouble()); }
                 break;
             }
             case FD.Sit:
             {
-                ShowF(f, FB_Sit, Cyc(f.Clock, 5f, 12, 0f), mir);
+                ShowF(f, FB_Sit, Cyc(f.Clock, 15f, 36, 3.6f), mir);
                 Breathe(f, unit);
-                if (f.Mind.Over)
+                if (f.Mind.Over && SitGate(f))
                 {
                     if (Rng.NextDouble() < 0.35 && _test != "mouse") { BeginFox(f, FD.CurlIn, 1f); f.SleepFor = 22f + 25f * (float)Rng.NextDouble(); }
                     else { f.Reverse = true; BeginFox(f, FD.SitIn, 0.6f); }
@@ -1174,28 +1275,28 @@ internal sealed class FoxAndHares : Resident
             }
             case FD.CurlIn:
             {
-                ShowF(f, FB_CurlIn, Math.Min(23, (int)(f.Clock / 1.1f * 24f)), mir);
+                ShowF(f, FB_CurlIn, Math.Min(32, (int)(f.Clock / 1.1f * 33f)), mir);
                 if (f.Clock >= 1.1f) { BeginFox(f, FD.Asleep, f.SleepFor); Log("fox is asleep"); }
                 break;
             }
             case FD.Asleep:
             {
-                int snow = Math.Min(3, (int)(f.Clock / 9f));
-                ShowF(f, FB_Sleep, snow * 4 + Cyc(f.Clock, 0.45f, 4, 0f), mir);
+                int snow = Math.Min(7, (int)(f.Clock / 4.5f));
+                ShowF(f, FB_Sleep, snow * 8 + Cyc(f.Clock, 2.3f, 8, 0f), mir);
                 if (f.BreathT <= 0f && _fb != null) { Emit(1, f.X + f.Dir * 0.18f * unit, f.Y, 0.12f * unit, f.Dir * 0.04f * unit, 0.05f * unit, 1.3f, 0, 0.4f); f.BreathT = 3.2f; }
-                if (f.Mind.Over) { BeginFox(f, FD.Wake, 1.0f); Burst(f.X, f.Y, unit, 8, 0.45f, 0.5f, 2); }
+                if (f.Mind.Over) { f.WakeBook = FB_Wake0 + (int)MathF.Round(snow / 7f * 3f); BeginFox(f, FD.Wake, 1.1f); Burst(f.X, f.Y, unit, 8, 0.45f, 0.5f, 2); }
                 break;
             }
             case FD.Wake:
             {
-                ShowF(f, FB_CurlIn, Math.Max(0, 23 - (int)(f.Clock / 0.9f * 24f)), mir);
-                if (f.Clock >= 0.9f) BeginFox(f, FD.Sit, 3f);
+                ShowF(f, f.WakeBook, Math.Min(32, (int)(f.Clock / 1.1f * 33f)), mir);
+                if (f.Clock >= 1.1f) BeginFox(f, FD.Sit, 3f);
                 break;
             }
             case FD.Mouse: StepMouse(f, dt, unit, mir); break;
             case FD.StalkIn:
             {
-                int pg = f.Reverse ? Math.Max(0, 4 - (int)(f.Clock / 0.4f * 5f)) : Math.Min(4, (int)(f.Clock / 0.4f * 5f));
+                int pg = f.Reverse ? Math.Max(0, 13 - (int)(f.Clock / 0.4f * 14f)) : Math.Min(13, (int)(f.Clock / 0.4f * 14f));
                 ShowF(f, FB_StalkIn, pg, mir);
                 if (f.Clock >= 0.4f)
                 {
@@ -1207,7 +1308,7 @@ internal sealed class FoxAndHares : Resident
             case FD.Stalk:
             {
                 float stride = FoxAndHaresArt.FoxStalkStride;
-                bool have = f.Target >= 0 && _h[f.Target].Mind.Doing is not (HD.Under or HD.Dive or HD.Peek);
+                bool have = f.Target >= 0 && _h[f.Target].Mind.Doing is not (HD.Under or HD.Dive or HD.Peek) && !Covered(f.X, f.Y, 0.55f * unit, 0.6f * unit);     // a stalk never goes on half behind a prop
                 H? t = have ? _h[f.Target] : null;
                 bool hareAlarmed = t != null && (t.Mind.Doing is HD.Thump or HD.Bolt || BoltRun(t));       // a hare that only freezes (Tall) is still being crept up on
                 {
@@ -1242,13 +1343,13 @@ internal sealed class FoxAndHares : Resident
                 H? t = f.Target >= 0 ? _h[f.Target] : null;
                 if (f.Stage == 0)
                 {
-                    ShowF(f, FB_Watch, Math.Min(4, (int)(f.Clock / 0.4f * 5f)), mir);
+                    ShowF(f, FB_Watch, Math.Min(11, (int)(f.Clock / 0.4f * 12f)), mir);
                     if (f.Clock >= 0.4f) { f.Stage = 1; f.StageT = 0f; }
                 }
                 else if (f.Stage == 1)
                 {
                     f.StageT += dt;
-                    ShowF(f, FB_Watch, 5 + (int)(f.StageT * 6f) % 12, mir);
+                    ShowF(f, FB_Watch, 12 + (int)(f.StageT * 12f) % 24, mir);
                     Breathe(f, unit);
                     bool lost = t == null || t.Mind.Doing is HD.Under or HD.Dive or HD.Peek;
                     if (!lost && BoltRun(t!) && !Lull) { f.After2 = FD.DashIn; f.Stage = 2; f.StageT = 0f; }
@@ -1257,7 +1358,7 @@ internal sealed class FoxAndHares : Resident
                 else
                 {
                     f.StageT += dt;
-                    ShowF(f, FB_Watch, Math.Max(0, 4 - (int)(f.StageT / 0.3f * 5f)), mir);
+                    ShowF(f, FB_Watch, Math.Max(0, 11 - (int)(f.StageT / 0.3f * 12f)), mir);
                     if (f.StageT >= 0.3f)
                     {
                         if (f.After2 == FD.DashIn) BeginFox(f, FD.DashIn, 0.3f);
@@ -1268,7 +1369,7 @@ internal sealed class FoxAndHares : Resident
             }
             case FD.DashIn:
             {
-                ShowF(f, FB_DashIn, Math.Min(3, (int)(f.Clock / 0.3f * 4f)), mir);
+                ShowF(f, FB_DashIn, Math.Min(8, (int)(f.Clock / 0.3f * 9f)), mir);
                 if (f.Clock >= 0.3f)
                 {
                     f.Mind.Begin(FD.Chase, 9f); f.Clock = 0; f.Odo = 0; f.Braked = false; f.SkidGo = false; f.Pace.Halt(); f.Pace.Accel = 9f * unit;
@@ -1285,12 +1386,24 @@ internal sealed class FoxAndHares : Resident
                 if (t != null && !hareGone) { tx = t.Mind.Doing is HD.Dive ? t.BX : t.X; ty = t.Y; f.HoleX = t.BX; f.HoleY = t.BY; }
                 else { tx = f.HoleX; ty = f.HoleY; }
                 bool hasHole = t != null && (t.Mind.Doing is HD.Dive or HD.Under or HD.Peek);
-                if (hasHole) { f.StopX = f.HoleX - f.Dir * 1.45f * unit; }       // it pulls up short of the hole: the diving hare's body lies 0.6 m behind it, and nothing stands inside anything
+                if (hasHole)
+                {
+                    f.StopX = f.HoleX - f.Dir * 1.45f * unit;                    // it pulls up short of the hole: the diving hare's body lies 0.6 m behind it, and nothing stands inside anything
+                    // ...and never half behind a prop. (Seen on film: the fox skidded to a stop with its body behind the
+                    // snowman's bottom ball and stood there, a head poking out, for four seconds.) If the stopping place
+                    // is covered, stop a little shorter, step by step, until the whole fox is in the open.
+                    float fu = FU(f.Y);
+                    for (int back = 0; back < 14 && Covered(f.StopX, f.Y, 0.55f * fu, 0.6f * fu); back++) f.StopX -= f.Dir * 0.3f * unit;
+                }
                 if (!f.SkidGo)
                 {
                     // while the hare is still rearing up to thump the fox eases off, three metres behind it: it never overruns a hare that has not bolted
+                    // BEHIND, never across: a hare that is running (or diving) is never nearer than 1.6 m centre to centre (the fox is
+                    // 0.9 m long, the hare 0.6), a hare that is only rearing up is kept three metres off
                     float easeF = 1f;
-                    if (t != null && !hareGone && !BoltRun(t) && t.Mind.Doing != HD.Dive) easeF = Math.Clamp(((t.X - f.X) * f.Dir / unit - 2.2f) / 2.5f, 0.12f, 1f);
+                    float gapM = t == null ? 99f : (t.X - f.X) * f.Dir / unit;
+                    if (t != null && !hareGone && (BoltRun(t) || t.Mind.Doing == HD.Dive)) easeF = Math.Clamp((gapM - 1.6f) / 0.9f, 0f, 1f);
+                    else if (t != null && !hareGone) easeF = Math.Clamp((gapM - 2.2f) / 2.5f, 0.12f, 1f);
                     f.Pace.Want = FoxChaseV * unit * easeF;
                     float step = f.Pace.Tick(dt);
                     f.Odo += step / unit; f.X += f.Dir * step;
@@ -1298,7 +1411,7 @@ internal sealed class FoxAndHares : Resident
                     f.Y += Math.Clamp((ty - f.Y) * Math.Min(1f, step / dxl), -0.5f * step, 0.5f * step);
                 }
                 float ph = f.Odo / stride; ph -= MathF.Floor(ph);
-                ShowF(f, FB_Gallop, (int)(ph * 16f) % 16, mir);
+                ShowF(f, FB_Gallop, (int)(ph * 24f) % 24, mir);
                 float gatherPh = FoxAndHaresArt.GallopGather(stride);
                 bool atGather = MathF.Abs(ph - gatherPh) < 1.2f / 16f || MathF.Abs(ph - gatherPh) > 1f - 1.2f / 16f;
                 float toStop = hasHole ? (f.StopX - f.X) * f.Dir : 99f;
@@ -1311,13 +1424,14 @@ internal sealed class FoxAndHares : Resident
                 if (f.SkidGo)
                 {
                     float step = f.Pace.Tick(dt); f.X += f.Dir * step; f.Odo += step / unit;
-                    ShowF(f, FB_Skid, Math.Min(7, (int)(f.Clock / 0.55f * 8f)), mir);
+                    ShowF(f, FB_Skid, Math.Min(15, (int)(f.Clock / 0.55f * 16f)), mir);
                     if (step > 0.5f * unit * dt) Emit(0, f.X - f.Dir * 0.15f * unit, f.Y, 0.03f * unit, -f.Dir * 0.6f * unit, 0.3f * unit, 0.5f, 0, 0.7f, 1.2f * unit);
                     if (f.Pace.Still && f.Clock > 0.2f)
                     {
                         f.SkidGo = false; f.Braked = false;
-                        bool hole = hasHole && MathF.Abs(f.HoleX - f.X) < 1.4f * unit;
-                        if (hole) { BeginFox(f, FD.Nose, 4.2f); f.Stage = 0; } else BeginFox(f, FD.Stand, 3.5f + 2.5f * (float)Rng.NextDouble());
+                        bool hole = hasHole;
+                        BeginFox(f, FD.Stand, 3.5f + 2.5f * (float)Rng.NextDouble());
+                        if (hole) { f.NoseNext = true; f.NoseT = 0f; Log("fox waits for the hare to be under, then goes to the hole"); }
                     }
                 }
                 break;
@@ -1326,18 +1440,22 @@ internal sealed class FoxAndHares : Resident
             {
                 // nose at the burrow (about 1.6 s), dig twice (1.4 s, snow flying), nose again, give up (then it sits)
                 float c = f.Clock;
-                if (c < 0.35f) ShowF(f, FB_NoseIn, Math.Min(3, (int)(c / 0.35f * 4f)), mir);
-                else if (c < 1.8f) ShowF(f, FB_Nose, Cyc(c, 6f, 8, 0f), mir);
-                else if (c < 3.2f)
+                // every stage is a whole number of cycles, so each joins the next on its first page: nose-in 0.35 s, one nose cycle
+                // (24 pages at 18 a second = 1.333 s), two dig cycles (21 pages at 30 a second = 0.7 s each), one more nose cycle, nose-out 0.35 s
+                const float NC = 24f / 18f;
+                float tN1 = 0.35f + NC, tD = tN1 + 1.4f, tN2 = tD + NC;
+                if (c < 0.35f) ShowF(f, FB_NoseIn, Math.Min(9, (int)(c / 0.35f * 10f)), mir);
+                else if (c < tN1) ShowF(f, FB_Nose, Cyc(c - 0.35f, 18f, 24, 0f), mir);
+                else if (c < tD)
                 {
-                    int pg = Cyc(c - 1.8f, 12f / 0.7f, 12, 0f);
+                    int pg = Cyc(c - tN1, 30f, 21, 0f);
                     ShowF(f, FB_Dig, pg, mir);
-                    if (pg == 6 && f.Stage == 0) { f.Stage = 1; SprayAt(f, unit); }
-                    if (pg == 0 || pg == 11) f.Stage = 0;
+                    if (pg == 10 && f.Stage == 0) { f.Stage = 1; SprayAt(f, unit); }
+                    if (pg == 0 || pg == 20) f.Stage = 0;
                 }
-                else if (c < 4.0f) ShowF(f, FB_Nose, Cyc(c, 5f, 8, 0f), mir);
-                else ShowF(f, FB_NoseIn, Math.Max(0, 3 - (int)((c - 4.0f) / 0.2f * 4f)), mir);
-                if (c >= 4.2f) { f.Reverse = false; BeginFox(f, FD.SitIn, 0.6f); Log("fox gives up on the burrow and sits"); }
+                else if (c < tN2) ShowF(f, FB_Nose, Cyc(c - tD, 18f, 24, 0f), mir);
+                else ShowF(f, FB_NoseIn, Math.Max(0, 9 - (int)((c - tN2) / 0.35f * 10f)), mir);
+                if (c >= 0.35f + NC + 1.4f + NC + 0.35f) { f.Reverse = false; BeginFox(f, FD.SitIn, 0.6f); Log("fox gives up on the burrow and sits"); }
                 break;
             }
         }
@@ -1353,33 +1471,40 @@ internal sealed class FoxAndHares : Resident
     private bool SteerFox(F f, float dt, float step, float unit)
     {
         float W = S.Width;
-        bool edge = f.X < 0.05f * W || f.X > 0.95f * W;
+        bool edge = f.X < 0.05f * W || f.X > 0.95f * W;            // at the screen's edge the ground is not tested (it is off the snowfield), animals still are
         float dxLeft = MathF.Max(1f, (f.GX - f.X) * f.Dir);
+        float lane = 1.2f * unit;                                  // a lane change is made over 1.2 m of walking: slope never above 0.45
         float want = Math.Clamp((f.GY - f.Y) / MathF.Max(dxLeft, 2.5f * unit), -0.40f, 0.40f);
         float target = want; bool stop = false;
-        if (!edge && step > 0f)
+        if (step > 0f)
         {
             float half = 0.5f * 0.95f * unit;
-            bool Bad(float slope)
+            float lowRow = S.SmallBandTop + 1f;
+            // is the way to row yt (reached over a lane, then held) clear at 1, 1.8, 2.6 and 3.4 m ahead?
+            bool BadRow(float yt)
             {
-                for (int k = 1; k <= 3; k++)
+                for (int k = 1; k <= 4; k++)
                 {
-                    float d = (0.2f + 0.8f * k) * unit, px = f.X + f.Dir * d, py = f.Y + slope * d;
-                    if (!Valid(px, py, 0.3f * unit) || S.Crowded(px, py, half, this, 100)) return true;
+                    float d = (0.2f + 0.8f * k) * unit, px = f.X + f.Dir * d, py = f.Y + (yt - f.Y) * MathF.Min(1f, d / lane);
+                    if ((!edge && !Valid(px, py, 0.3f * unit)) || py < lowRow || S.Crowded(px, py, half, this, 100)) return true;
                 }
                 return false;
             }
             f.DetourT -= dt;
-            if (f.DetourT > 0f && !Bad(f.DetourSlope)) target = f.DetourSlope;
-            else if (Bad(want))
+            float wantRow = f.Y + want * lane;
+            if (f.DetourT > 0f && !BadRow(f.DetourSlope)) target = Math.Clamp((f.DetourSlope - f.Y) / lane, -0.45f, 0.45f);
+            else if (BadRow(wantRow))
             {
+                // another row, nearest first, one side and the other: a body length or less off the straight line, then a bit more
                 bool found = false;
-                for (int i = 0; i < 6 && !found; i++)
+                float[] offs = [0.3f, -0.3f, 0.5f, -0.5f, 0.75f, -0.75f, 1.0f, -1.0f];
+                for (int i = 0; i < offs.Length && !found; i++)
                 {
-                    float sl = (i % 2 == 0 ? 1f : -1f) * (want < 0f ? -1f : 1f) * (0.15f + 0.15f * (i / 2));
-                    if (!Bad(sl)) { target = sl; f.DetourSlope = sl; f.DetourT = 1.0f; found = true; }
+                    float o = offs[i] * unit; if (want < 0f) o = -o;
+                    float yt = f.Y + o;
+                    if (!BadRow(yt)) { f.DetourSlope = yt; f.DetourT = 2.5f; target = Math.Clamp((yt - f.Y) / lane, -0.45f, 0.45f); found = true; }
                 }
-                if (!found) { stop = true; target = 0f; }
+                if (!found) { stop = true; target = 0f; Log($"fox path blocked at {f.X:F0},{f.Y:F0}"); }
             }
         }
         f.Slope += Math.Clamp(target - f.Slope, -2.5f * dt, 2.5f * dt);
@@ -1404,16 +1529,20 @@ internal sealed class FoxAndHares : Resident
     private void EnterFox(F f)
     {
         float W = S.Width, unit = FU(f.Y);
-        bool left = Rng.Next(2) == 0;
+        bool left = true;       // always in from the LEFT: the right edge is a pocket behind the snowman (the snowman's foot and the holly close it) that a fox cannot leave
         for (int tries = 0; tries < 20; tries++)
         {
             float gx = (left ? 0.25f + 0.5f * (float)Rng.NextDouble() : 0.5f + 0.45f * (float)Rng.NextDouble()) * W;
             PointF g = S.FieldPoint(gx, 0.2f + 0.35f * (float)Rng.NextDouble());
-            if (!Valid(g.X, g.Y, 0.5f * unit)) continue;
+            if (!FRest(g.X, g.Y, 0.5f * unit)) continue;
             f.Dir = left ? 1 : -1;
             f.X = left ? -1.6f * unit : W + 1.6f * unit; f.Y = MathF.Max(S.FieldPoint(f.X < 0 ? 0.02f * W : 0.98f * W, 0.22f).Y, S.SmallBandTop + 0.012f * S.U);
             f.GX = g.X; f.GY = g.Y;
             if ((f.GX - f.X) * f.Dir < 3f * unit) continue;
+            // the way in must be clear of animals for the first four metres (the fox walked in on top of a hare sitting by the edge)
+            bool clearIn = true;
+            for (int k = 1; k <= 5; k++) if (S.Crowded(left ? k * 0.9f * unit : W - k * 0.9f * unit, f.Y, 0.55f * unit, this, 100)) clearIn = false;
+            if (!clearIn) continue;
             f.Odo = RestA * FoxAndHaresArt.FoxTrotStride; f.Braked = false; f.Pace.Halt(); f.Pace.Accel = 2.2f * unit; f.OnScreen = 0;
             f.Mind.Begin(FD.Trot, Mind<FD>.Forever); f.Clock = 0;
             Log($"fox trots in from the {(left ? "left" : "right")} toward {f.GX:F0},{f.GY:F0}");
@@ -1430,6 +1559,7 @@ internal sealed class FoxAndHares : Resident
         bool hare = FoxHareVisible(out int hi) && !lull && f.StalkCool <= 0f;
         float leave = 0.04f + Math.Clamp((f.OnScreen - 40f) / 90f, 0f, 0.6f);
         int face = Dice.Pick(Rng, [lull ? 0.05f : 0.30f, 0.10f, 0.18f, lull ? 0f : 0.26f, hare ? 0.55f : 0f, leave]);
+        if (Covered(f.X, f.Y, 0.55f * unit, 0.6f * unit)) face = 0;          // standing half behind a prop: move to a clear spot first, whatever the dice said
         Log($"fox rolls {face} (onscreen {f.OnScreen:F0} s)");
         switch (face)
         {
@@ -1458,16 +1588,17 @@ internal sealed class FoxAndHares : Resident
         {
             float gx = (0.04f + 0.92f * (float)Rng.NextDouble()) * W;
             PointF g = S.FieldPoint(gx, 0.2f + 0.38f * (float)Rng.NextDouble());
-            if (MathF.Abs(g.X - f.X) < 0.18f * S.U || !Valid(g.X, g.Y, 0.5f * unit) || S.Crowded(g.X, g.Y, 0.7f * unit, this, 100)) continue;
+            if (MathF.Abs(g.X - f.X) < 0.18f * S.U || !FRest(g.X, g.Y, 0.5f * unit) || S.Crowded(g.X, g.Y, 0.7f * unit, this, 100)) continue;
             if (MathF.Abs(g.Y - f.Y) > 0.45f * MathF.Abs(g.X - f.X)) continue;
-            if (!LineClear(f.X, f.Y, g.X, g.Y, 0.45f * unit)) continue;
-            f.GX = g.X; f.GY = g.Y; f.GoLeave = false;
+            if (Valid(f.X, f.Y, 0.3f * unit) && !LineClear(f.X, f.Y, g.X, g.Y, 0.45f * unit)) continue;     // a fox that is not on valid snow just goes: the steering finds the way
+            f.GX = g.X; f.GY = g.Y; f.GoLeave = false; f.Fail = 0;
             int to = g.X >= f.X ? 1 : -1;
             // the fox is at a rest page (stand): it turns on the spot if needed, then gets going
             f.RestIdx = Rng.Next(2);
             if (to != f.Dir) StartFoxTurn(f, to, FD.Go); else BeginFox(f, FD.Go, 0.22f);
             return;
         }
+        if (++f.Fail >= 3) { f.Fail = 0; FoxTrotTo(f, true); return; }          // three tries and no goal: it leaves for a while
         BeginFox(f, FD.Stand, 2f);
     }
 
@@ -1486,7 +1617,7 @@ internal sealed class FoxAndHares : Resident
         float unit = FU(f.Y);
         // a hunting spot: facing the way it already faces, with room for the leap and the dive (0.9 m plus)
         float ex = f.X + f.Dir * 1.0f * unit;
-        if (!Valid(ex, f.Y, 0.4f * unit) || S.Crowded(ex, f.Y, 0.7f * unit, this, 100)) { int to = -f.Dir; ex = f.X + to * 1.0f * unit; if (!Valid(ex, f.Y, 0.4f * unit) || S.Crowded(ex, f.Y, 0.7f * unit, this, 100)) { BeginFox(f, FD.Stand, 2f); return; } StartFoxTurn(f, to, FD.Mouse); f.MouseInit = true; return; }
+        if (!FRest(ex, f.Y, 0.4f * unit) || S.Crowded(ex, f.Y, 0.7f * unit, this, 100)) { int to = -f.Dir; ex = f.X + to * 1.0f * unit; if (!FRest(ex, f.Y, 0.4f * unit) || S.Crowded(ex, f.Y, 0.7f * unit, this, 100)) { BeginFox(f, FD.Stand, 2f); return; } StartFoxTurn(f, to, FD.Mouse); f.MouseInit = true; return; }
         BeginFox(f, FD.Mouse, Mind<FD>.Forever); f.Stage = 0; f.StageT = 0; f.LeapDist = 0.45f * unit; f.Sneezes = Rng.NextDouble() < 0.35;
         f.ListenFor = 2.39f * (1 + Rng.Next(2));
     }
@@ -1499,23 +1630,24 @@ internal sealed class FoxAndHares : Resident
         switch (f.Stage)
         {
             case 0: // LISTEN: the head lowers (0.35 s), then low and cocked, ears swivelling; a Loud breaks it (checked below: the head comes back up), a listen of whole ear cycles ends in the coil
-                if (c < 0.35f) ShowF(f, FB_Lower, Math.Min(5, (int)(c / 0.35f * 6f)), mir);
-                else { ShowF(f, FB_Listen, Cyc(c - 0.35f, 6.7f, 16, 0f), mir); Breathe(f, unit); }
+                if (c < 0.35f) ShowF(f, FB_Lower, Math.Min(9, (int)(c / 0.35f * 10f)), mir);
+                else { ShowF(f, FB_Listen, Cyc(c - 0.35f, 36f / 2.39f, 36, 0f), mir); Breathe(f, unit); }
                 foreach (Notice n in Board.Live) if (n.Kind == Sense.Loud && n.Who != f && MathF.Abs(n.At.X - f.X) < n.Reach) { f.Stage = 9; f.StageT = 0; Log("fox's listening is broken by a noise"); break; }
                 if (f.Stage == 0 && c >= 0.35f + f.ListenFor) { f.Stage = 1; f.StageT = 0; }
                 break;
             case 9: // the head comes back up from the listening pose (the lowering pages backwards), then a stand
-                ShowF(f, FB_Lower, Math.Max(0, 5 - (int)(c / 0.3f * 6f)), mir);
+                ShowF(f, FB_Lower, Math.Max(0, 9 - (int)(c / 0.3f * 10f)), mir);
                 if (c >= 0.3f) BeginFox(f, FD.Stand, 3f + 2f * (float)Rng.NextDouble());
                 break;
             case 1: // COIL
-                ShowF(f, FB_Coil, Math.Min(3, (int)(c / 0.45f * 4f)), mir);
+                ShowF(f, FB_Coil, Math.Min(13, (int)(c / 0.45f * 14f)), mir);
                 if (c >= 0.45f) { f.Stage = 2; f.StageT = 0; f.LeapX0 = f.X; Log("fox LEAPS"); }
                 break;
             case 2: // LEAP: 0.8 s, an arc, carried forward 0.45 m
             {
                 float fr = Math.Min(0.999f, c / 0.8f);
                 ShowF(f, FB_Leap, Math.Min(27, (int)(fr * 28f)), mir);
+                { PointF gl = f.Bk!.GlideAt(fr, f.Pg); f.Gx = gl.X; f.Gy = gl.Y; }
                 f.X = f.LeapX0 + f.Dir * f.LeapDist * FoxAndHaresArt.Sm(fr);
                 if (c >= 0.8f)
                 {
@@ -1529,22 +1661,22 @@ internal sealed class FoxAndHares : Resident
                 if (c >= 0.25f) { f.Stage = 4; f.StageT = 0; }
                 break;
             case 4: // PLUNGE: hind legs kicking, brush waving
-                ShowF(f, FB_Plunge, Cyc(c, 10f, 8, 0f), mir);
+                ShowF(f, FB_Plunge, Cyc(c, 30f, 24, 0f), mir);
                 if (((int)(c * 6f)) != ((int)((c - dt) * 6f))) Emit(0, f.HoleX, f.Y, 0.05f * unit, f.Dir * (0.2f + 0.3f * (float)Rng.NextDouble()) * unit, 0.5f * unit, 0.5f, 0, 0.8f, 2f * unit);
-                if (c >= 1.8f) { f.Stage = 5; f.StageT = 0; }
+                if (c >= 2.4f) { f.Stage = 5; f.StageT = 0; }
                 break;
             case 5: // BACK OUT with a face full of snow
-                ShowF(f, FB_BackOut, Math.Min(15, (int)(c / 1.0f * 16f)), mir);
+                ShowF(f, FB_BackOut, Math.Min(29, (int)(c / 1.0f * 30f)), mir);
                 if (c >= 1.0f) { f.Stage = 6; f.StageT = 0; Burst(f.HoleX, f.Y, unit, 6, 0.5f, 0.5f, 1); }
                 break;
             case 6: // SHAKE the head, flinging snow
-                ShowF(f, FB_Shake, Cyc(c, 9f, 8, 0f), mir);
+                ShowF(f, FB_Shake, Math.Min(47, (int)(c / 1.8f * 48f)), mir);
                 if (((int)(c * 10f)) != ((int)((c - dt) * 10f)) && _fb != null)
                     Emit(0, f.X + f.Dir * 0.35f * unit, f.Y, 0.35f * unit, (float)(Rng.NextDouble() * 2 - 1) * 0.8f * unit, 0.3f * unit, 0.5f, 0, 0.9f, 2.2f * unit);
-                if (c >= 1.1f) { f.Stage = 7; f.StageT = 0; }
+                if (c >= 1.8f) { f.Stage = 7; f.StageT = 0; }
                 break;
             case 7: // WIPE: the last snow off the muzzle
-                ShowF(f, FB_Wipe, Math.Min(3, (int)(c / 0.3f * 4f)), mir);
+                ShowF(f, FB_Wipe, Math.Min(8, (int)(c / 0.3f * 9f)), mir);
                 if (c >= 0.3f) { if (f.Sneezes) { f.Stage = 8; f.StageT = 0; } else EndMouse(f); }
                 break;
             case 8: // SNEEZE
@@ -1599,7 +1731,7 @@ internal sealed class FoxAndHares : Resident
                     pj += $" pj {worst:F1} bj {bodyJump:F1}";
                 }
             }
-            _log.WriteLine($"{_time,8:F3} fox x {f.X:F1} y {f.Y:F1} v {sp:F1} {f.Mind.Doing}{(f.Turning ? "/Turn" : "")}{(f.Mind.Doing == FD.Mouse ? "/stage" + f.Stage : "")} {f.Bk?.Name}#{f.Pg} dir {f.Dir} c {Coarse(f)}{pj} sim {Board.Time:F2}");
+            _log.WriteLine($"{_time,8:F3} fox x {f.X:F1} y {f.Y:F1} v {sp:F1} {f.Mind.Doing}{(f.Turning ? "/Turn" : "")}{(f.Mind.Doing == FD.Mouse ? "/stage" + f.Stage : "")} {f.Bk?.Name}#{f.Pg} dir {f.Dir} c {Coarse(f)}{pj} cv {(f.Mind.Doing != FD.Away && Covered(f.X, f.Y, 0.55f * unit, 0.6f * unit) ? 1 : 0)} sim {Board.Time:F2}");
         }
         f.LX = f.X; f.LY = f.Y;
         f.PBk = f.Bk; f.PPg = f.Pg; f.PMir = f.Mir; f.PX = f.X; f.PY = f.Y; f.PUnit = FU(f.Y); f.PVis = f.Mind.Doing != FD.Away;
@@ -1620,9 +1752,9 @@ internal sealed class FoxAndHares : Resident
             case "sleep": FoxAt(0.80f, 0.30f, -1); f.Reverse = false; BeginFox(f, FD.SitIn, 0.6f); f.SleepAfter = true; break;
             case "stalk":
             {
-                PointF p = S.FieldPoint(0.62f * W, 0.36f); h0.X = p.X; h0.Y = p.Y; h0.Dir = 1; h0.Mind.Begin(HD.Sit, 60f); h0.Timid = 0.6f; h0.Att.Timid = 0.7f;
+                PointF p = S.FieldPoint(0.72f * W, 0.55f); h0.X = p.X; h0.Y = p.Y; h0.Dir = 1; h0.Mind.Begin(HD.Sit, 60f); h0.Timid = 0.6f; h0.Att.Timid = 0.7f;
                 for (int i = 1; i < _n; i++) { PointF q = S.FieldPoint((0.30f + 0.03f * i) * W, 0.22f); _h[i].X = q.X; _h[i].Y = q.Y; _h[i].Mind.Begin(HD.Sit, 60f); }
-                FoxAt(0.90f, 0.36f, -1); f.Target = 0; StartStalk(f, h0); break;
+                FoxAt(0.93f, 0.55f, -1); f.Target = 0; StartStalk(f, h0); break;
             }
             case "groom": Calm(); h0.Mind.Begin(HD.Sit, 60f); BeginHare(h0, HD.Groom, 5.5f); break;
             case "binky": Calm(); BeginHare(h0, HD.Binky, 1.1f); break;
@@ -1651,17 +1783,28 @@ internal sealed class FoxAndHares : Resident
     public override void DrawOne(FrameBuffer fb, int index)
     {
         if (_hb == null || _puffSprites == null || _decalSprites == null) return;
+        if (_log == null) { DrawOne2(fb, index); return; }
+        long d0 = System.Diagnostics.Stopwatch.GetTimestamp(); DrawOne2(fb, index); _tickD += System.Diagnostics.Stopwatch.GetTimestamp() - d0; _costStamps += index == 200 ? _decalLive : 1;
+    }
+
+    private void DrawOne2(FrameBuffer fb, int index)
+    {
         if (index < 100)
         {
             H h = _h[index]; if (h.Bk == null) return;
             int t = TierOf(h.Y);
-            Stamp(fb, h.Bk.Pages[t][h.Pg], h.X, h.Y, h.Bk.Ox[t], h.Bk.Oy[t], h.Mir);
+            // the glide moves the DRAWING (through the page's origin) without moving the feet the depth picture is asked about
+            float un = _hUnit[t];
+            float gxs = (h.Mir ? -h.Gx : h.Gx) * un; int sy = (int)MathF.Round(-h.Gy * un);
+            Stamp(fb, h.Bk.Pages[t][h.Pg], h.X + gxs, h.Y, h.Bk.Ox[t], h.Bk.Oy[t] - sy, h.Mir);          // x goes in as a float (the stamp is sub-pixel), y through the origin so the depth test keeps the true feet
         }
         else if (index == 100)
         {
             F f = _fox!; if (f.Bk == null) return;
             int t = TierOf(f.Y);
-            Stamp(fb, f.Bk.Pages[t][f.Pg], f.X, f.Y, f.Bk.Ox[t], f.Bk.Oy[t], f.Mir);
+            float un = _fUnit[t];
+            float gxs = (f.Mir ? -f.Gx : f.Gx) * un; int sy = (int)MathF.Round(-f.Gy * un);
+            Stamp(fb, f.Bk.Pages[t][f.Pg], f.X + gxs, f.Y, f.Bk.Ox[t], f.Bk.Oy[t] - sy, f.Mir);
         }
         else if (index == 200)
         {
