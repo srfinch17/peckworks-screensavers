@@ -89,7 +89,6 @@ internal sealed class MiceTrimTree : Story
     private Actor[] _a = null!;
     private float _end, _k;
     private float _tHangA, _tHangB, _tStarA, _tStarB, _tSpA, _tSpB, _tOn, _tFlare;
-    private PointF _bauHand, _starHand;
     private bool _noticed;
     private LogMiceArt.Sheet _sh = null!;
 
@@ -145,8 +144,8 @@ internal sealed class MiceTrimTree : Story
         }
         float Turn(Actor a, float t0, PointF at, int from, int to)
         {
-            a.Segs.Add(new Seg { T0 = t0, T1 = t0 + 0.7f, Kind = K.Turn, A = at, B = at, Dir0 = from, Dir = to });
-            return t0 + 0.7f;
+            a.Segs.Add(new Seg { T0 = t0, T1 = t0 + 0.5f, Kind = K.Turn, A = at, B = at, Dir0 = from, Dir = to });
+            return t0 + 0.5f;
         }
 
         int nTree = s.Nearness(T.Y), front = Math.Min(254, nTree + 2), behind = Math.Max(1, nTree - 3);
@@ -276,8 +275,10 @@ internal sealed class MiceTrimTree : Story
             switch (g.Kind)
             {
                 case K.Hop:
-                    f.X = g.A.X + (g.B.X - g.A.X) * u; f.Y = g.A.Y + (g.B.Y - g.A.Y) * u - g.Arc * k * MathF.Sin(MathF.PI * u);
-                    f.Book = LogMiceArt.Book.Leap; f.Page = u < 0.5f ? 0 : 1;
+                    float ue = Organic.Smooth(u);                // eased along the ground: it leaves softly and lands softly
+                    f.X = g.A.X + (g.B.X - g.A.X) * ue; f.Y = g.A.Y + (g.B.Y - g.A.Y) * ue - g.Arc * k * MathF.Sin(MathF.PI * u);
+                    // these mice carry things standing up, so they hop standing up (the all-fours leap page was a different animal)
+                    f.Book = g.Arms ? LogMiceArt.Book.WalkUp : LogMiceArt.Book.Walk; f.Page = 0; f.Upright = true;
                     break;
                 case K.Walk: case K.Climb:
                 {
@@ -317,8 +318,11 @@ internal sealed class MiceTrimTree : Story
                     break;
                 }
                 case K.Turn:
-                    f.Book = u > 0.4f && u < 0.7f ? LogMiceArt.Book.Front : LogMiceArt.Book.Walk; f.Page = 0;
-                    f.Mirror = (u < 0.55f ? g.Dir0 : g.Dir) < 0;
+                    int tp = Math.Min(12, (int)(u * 13f));       // thirteen poses over the turn: standing, five in-betweens, head on, five back out, standing
+                    if (tp == 0 || tp == 12) { f.Book = LogMiceArt.Book.Walk; f.Page = 0; }
+                    else if (tp == 6) { f.Book = LogMiceArt.Book.Front; f.Page = 0; }
+                    else { f.Book = LogMiceArt.Book.TurnUp; f.Page = tp < 6 ? tp - 1 : 11 - tp; }
+                    f.Mirror = (u < 0.5f ? g.Dir0 : g.Dir) < 0;
                     if (f.Book == LogMiceArt.Book.Front) f.Mirror = false;
                     f.Upright = true;
                     break;
@@ -385,6 +389,32 @@ internal sealed class MiceTrimTree : Story
                 dec.Spark.DrawCentered(fb, x, y, 0.9f * (1f - age / 1.5f), null, false, s.NearDepth, Math.Min(254, s.Nearness(s.SaplingFoot.Y) + 1));
             }
         }
+        CaptureFrame(fb, t);
+    }
+
+    // TEST AID: PECKWORKS_STORYCAP="fromStorySecond|toStorySecond|folder[|centreX|centreY|width|height]" saves a crop of every frame in that
+    // window of the STORY's own clock (default: round the little fir) as frameNNNN.png for the contact-sheet tool.
+    private readonly string? _cap = Environment.GetEnvironmentVariable("PECKWORKS_STORYCAP");
+    private int _capN;
+    private void CaptureFrame(FrameBuffer fb, float t)
+    {
+        if (_cap == null) return;
+        string[] p = _cap.Split('|');
+        if (p.Length < 3) return;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        if (t < float.Parse(p[0], ci) || t > float.Parse(p[1], ci)) return;
+        PointF T = _w.Scenery.SaplingFoot;
+        int w = p.Length > 5 ? int.Parse(p[5]) : 260, h = p.Length > 6 ? int.Parse(p[6]) : 240;
+        int cx = p.Length > 4 ? int.Parse(p[3]) : (int)T.X, cy = p.Length > 4 ? int.Parse(p[4]) : (int)T.Y - h / 3;
+        using var bmp = new Bitmap(w, h);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int sx = Math.Clamp(cx - w / 2 + x, 0, fb.Width - 1), sy = Math.Clamp(cy - h / 2 + y, 0, fb.Height - 1);
+                bmp.SetPixel(x, y, Color.FromArgb(255, Color.FromArgb((int)fb.Pixels[sy * fb.Width + sx])));
+            }
+        Directory.CreateDirectory(p[2]);
+        bmp.Save(Path.Combine(p[2], $"frame{_capN++:0000}.png"), System.Drawing.Imaging.ImageFormat.Png);
     }
 
     private void DrawMouse(FrameBuffer fb, Actor a, Frame f, float t)
@@ -404,7 +434,7 @@ internal sealed class MiceTrimTree : Story
         {
             float dt = a.LastT < 0f ? 0.016f : Math.Clamp(t - a.LastT, 0f, 0.1f);
             a.Tail.Update(new PointF(f.X + sg * an.Tail.X * k, f.Y - an.Tail.Y * k), sg, f.Y, 0.30f * k, dt, 0.4f);
-            a.Tail.Draw(fb, MathF.Max(1f, 0.085f * k), depth, near, st);
+            a.Tail.Draw(fb, MathF.Max(1.2f, 0.11f * k), depth, near, st);
         }
         a.LastT = t;
 

@@ -65,7 +65,7 @@ internal static class LogMiceArt
     public const float Stride = 1.3f;       // the bound's stride, in body lengths: one full cycle of the flip-book
     public const float RestPhase = 0.275f;  // the bound's phase at which all four feet are on the ground (the rest page)
     public const float WalkStride = 0.62f;  // the upright waddle's stride, body lengths
-    public const int RunPages = 12, WalkPages = 8;
+    public const int RunPages = 24, WalkPages = 8;      // SILKY: the dash cycle has 24 pages (a page for every 15 degrees of the bound)
 
     // ------------------------------------------------------------------
     //  Little helpers
@@ -366,8 +366,38 @@ internal static class LogMiceArt
     // ------------------------------------------------------------------
 
     /// <summary>A mouse seen head on: round face, two big ears, two bead eyes, a pink nose. "snow" lays a little cap of snow on its head.</summary>
-    public static void PaintFront(Graphics g, float ear, bool blink, float nose, bool snow, float tilt)
+    public static void PaintFront(Graphics g, float ear, bool blink, float nose, bool snow, float tilt, float yaw = 0f)
     {
+        // YAW (0 head on .. 1 nearly side on, the face turned to +x): a three-quarter view for the turn. Every
+        // feature is squeezed toward the middle (c) and slid toward the way the face looks (sh), the far ear and
+        // far eye narrow more than the near ones, which is how a round head turning away looks at 20 pixels.
+        float c = 1f - 0.5f * yaw, sh = 0.17f * yaw;
+        if (yaw > 0f)
+        {
+            Shadow(g, 0.05f * yaw, 0.38f + 0.2f * yaw, 55);
+            Ell(g, Fur, sh * 0.6f, 0.33f, 0.31f + 0.22f * yaw, 0.33f);
+            Ell(g, Belly, sh * 1.3f, 0.28f, 0.19f * c + 0.03f, 0.26f);
+            Ell(g, Pink, -0.15f * c, 0.03f, 0.09f, 0.045f);
+            Ell(g, Pink, 0.15f * c + sh, 0.03f, 0.09f, 0.045f);
+            var st2 = g.Save();
+            g.TranslateTransform(0f, 0.66f); g.RotateTransform(tilt); g.TranslateTransform(0f, -0.66f);
+            Ell(g, FurDark, -0.215f * c + sh * 0.6f, 0.93f, 0.155f * c, 0.165f);                    // the far ear, narrow and dark
+            Ell(g, Pink, -0.215f * c + sh * 0.6f, 0.93f, 0.10f * c * 0.8f, 0.11f);
+            Ell(g, Fur, 0.215f * c + sh + 0.02f * yaw, 0.93f, 0.155f * (0.7f + 0.3f * c), 0.165f);   // the near ear, nearly full
+            Ell(g, Pink, 0.215f * c + sh + 0.02f * yaw, 0.93f, 0.10f * (0.7f + 0.3f * c), 0.11f);
+            Ell(g, Fur, sh, 0.70f, 0.27f * (0.8f + 0.2f * c), 0.25f);
+            Ell(g, FurLight, sh, 0.78f, 0.18f * c, 0.12f);
+            Ell(g, Belly, sh * 1.6f, 0.60f, 0.14f * c + 0.03f, 0.10f);
+            for (int s = -1; s <= 1; s += 2)
+            {
+                float ex = s * 0.115f * c + sh * (s > 0 ? 1.15f : 0.9f), erx = 0.055f * (s > 0 ? 1f : 0.6f + 0.4f * c);
+                if (blink) { using var pen = new Pen(Eye, 0.04f) { StartCap = LineCap.Round, EndCap = LineCap.Round }; g.DrawLine(pen, ex - 0.035f, 0.73f, ex + 0.035f, 0.73f); }
+                else { Ell(g, Eye, ex, 0.73f, erx, 0.06f); Ell(g, Color.FromArgb(240, 255, 255, 255), ex + 0.017f, 0.755f, 0.02f, 0.02f); }
+            }
+            Ell(g, Nose, sh * 1.9f, 0.625f, 0.052f, 0.04f);
+            g.Restore(st2);
+            return;
+        }
         Shadow(g, 0f, 0.38f, 55);
         // the body behind the head: a plump egg, cream down the front
         Ell(g, Fur, 0f, 0.33f, 0.31f, 0.33f);
@@ -420,6 +450,32 @@ internal static class LogMiceArt
         g.Restore(st);
     }
 
+    // ------------------------------------------------------------------
+    //  THE CLIMB OUT OF THE SNOW (Book.Emerge): r runs 0 (a swelling mound, the ear tips just showing) to 1 (standing head on, the snow gone)
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// One page of the climb out. The head-on mouse is painted sunk below the snow line by (1 minus the eased r) of its height with a CLIP so nothing
+    /// below the line shows (the snow hides it), a little wriggle of the head while it heaves (the tilt), the cap of snow on its head melting away
+    /// by r 0.6, and in front a mound of snow that swells as it pushes up and sags as it climbs out. Page 23 is the head-on standing page.
+    /// </summary>
+    public static void PaintEmerge(Graphics g, float r)
+    {
+        float e = Ease(r);
+        var st = g.Save();
+        g.SetClip(new RectangleF(-2f, 0f, 4f, 2f));
+        g.TranslateTransform(0f, -(1f - e) * 0.98f);
+        PaintFront(g, r > 0.8f && ((int)(r * 40f)) % 7 == 0 ? 1f : 0f, false, 0f, r < 0.6f, 7f * MathF.Sin(r * 9f) * (1f - r));
+        g.Restore(st);
+        float hm = (0.17f + 0.22f * MathF.Sin(MathF.PI * MathF.Min(1f, r * 1.25f))) * (1f - e * 0.94f), rx = 0.82f * (1f - 0.35f * e);
+        if (hm < 0.012f) return;
+        using var shade = new SolidBrush(Color.FromArgb(215, 150, 172, 222));
+        g.FillEllipse(shade, -rx, -0.10f, rx * 2f, hm * 0.55f + 0.14f);
+        using var snow = new SolidBrush(Color.FromArgb(246, 238, 245, 255));
+        g.FillEllipse(snow, -rx * 0.93f, 0f, rx * 1.86f, hm * 2f);
+        using var lit = new SolidBrush(Color.FromArgb(255, 248, 252, 255));
+        g.FillEllipse(lit, -rx * 0.62f, hm * 0.55f, rx * 0.95f, hm * 0.9f);
+    }
     // ------------------------------------------------------------------
     //  Props the live parts use
     // ------------------------------------------------------------------
@@ -482,14 +538,16 @@ internal static class LogMiceArt
     // ------------------------------------------------------------------
 
     /// <summary>Which pages exist. Every flip-book is a range in one array (Pages), so a page is addressed by Book and number.</summary>
-    public enum Book { Run, Stand, Rise, Sit, Wash, Box, Leap, Plunge, Walk, WalkUp, Front, Head }
+    public enum Book { Run, Stand, Rise, Sit, Wash, Box, Leap, Plunge, Walk, WalkUp, Front, Head, Turn, TurnUp, Emerge }
 
-    public const int StandPages = 8;       // 0..3 sniff, 4 blink, 5 ear flick, 6 head down, 7 head way down (eating, digging)
-    public const int RisePages = 4;        // 1/4, 2/4, 3/4 up and the sat page; played forward to sit up and backward to drop
+    public const int StandPages = 10;      // 0..3 sniff, 4 blink, 5 ear flick, 6 head down, 7 head way down (eating, digging), 8 head up, 9 head high (a look)
+    public const int EmergePages = 24;    // the climb out of the snow: the head in a swelling mound, shoulders, up to the standing head-on mouse, the mound sagging away
+    public const int TurnPages = 7;        // three-quarter views for a turn, from nearly side on (0) to nearly head on (2)
+    public const int RisePages = 16;       // 1/4, 2/4, 3/4 up and the sat page; played forward to sit up and backward to drop
     public const int SitPages = 6;         // sniff cycle with a blink and an ear flick
-    public const int WashPages = 12;
-    public const int BoxPages = 6;
-    public const int PlungePages = 4;      // nose down at 20, 45, 70 and 85 degrees
+    public const int WashPages = 24;
+    public const int BoxPages = 18;
+    public const int PlungePages = 6;      // nose down at 10, 25, 50, 75 and 88 degrees (the first is the bound's own reach, tipped a little)
     public const int FrontPages = 4;       // 0 plain, 1 blink, 2 ear out, 3 snowy head
 
     /// <summary>One set of pages at one size: a sheet per page, all with the same canvas so the same origin (feet) fits every one.</summary>
@@ -507,7 +565,7 @@ internal static class LogMiceArt
     {
         Book.Run => RunPages, Book.Stand => StandPages, Book.Rise => RisePages, Book.Sit => SitPages, Book.Wash => WashPages,
         Book.Box => BoxPages, Book.Leap => 2, Book.Plunge => PlungePages, Book.Walk => WalkPages, Book.WalkUp => WalkPages,
-        Book.Front => FrontPages, Book.Head => 1, _ => 1,
+        Book.Front => FrontPages, Book.Head => 1, Book.Turn => TurnPages, Book.TurnUp => 5, Book.Emerge => EmergePages, _ => 1,
     };
 
     /// <summary>The pose of one page of one book.</summary>
@@ -520,6 +578,8 @@ internal static class LogMiceArt
             4 => new MousePose(Nose: 0.1f, Blink: true),
             5 => new MousePose(Nose: 0.3f, Ear: 1f),
             6 => new MousePose(Lift: -22f, Nose: 0.2f),
+            8 => new MousePose(Lift: 22f, Nose: 0.3f),
+            9 => new MousePose(Lift: 40f, Nose: 0.5f, Ear: 1f),
             _ => new MousePose(Lift: -42f, Nose: 0.6f),
         },
         Book.Rise => new MousePose(Rise: (i + 1) / (float)RisePages, Nose: 0f),
@@ -529,10 +589,10 @@ internal static class LogMiceArt
             4 => new MousePose(Rise: 1f, Nose: 0.2f, Blink: true),
             _ => new MousePose(Rise: 1f, Nose: 0.5f, Ear: 1f),
         },
-        Book.Wash => new MousePose(Rise: 1f, Wash: i / (float)WashPages, Nose: 0.1f, Blink: i % 6 is 2 or 3, Ear: i % 6 is 4 ? 1f : 0f),
+        Book.Wash => new MousePose(Rise: 1f, Wash: i / (float)WashPages, Nose: 0.1f, Blink: i is 8 or 9 or 10, Ear: i is 17 or 18 ? 1f : 0f),
         Book.Box => new MousePose(Rise: 1f, Box: i / (float)BoxPages, Nose: 0.2f),
         Book.Leap => i == 0 ? new MousePose(Gait: 0.80f, Pitch: 12f) : new MousePose(Gait: 0.80f, Pitch: -18f),
-        Book.Plunge => new MousePose(Gait: 0.82f, Pitch: -(i == 0 ? 25f : i == 1 ? 50f : i == 2 ? 75f : 88f)),
+        Book.Plunge => new MousePose(Gait: 0.80f, Pitch: -(i == 0 ? 4f : i == 1 ? 10f : i == 2 ? 25f : i == 3 ? 50f : i == 4 ? 75f : 88f)),
         Book.Walk => new MousePose(Walk: i / (float)WalkPages, Arms: 0f, Nose: 0f),
         Book.WalkUp => new MousePose(Walk: i / (float)WalkPages, Arms: 1f, Nose: 0f),
         _ => new MousePose(),
@@ -550,6 +610,54 @@ internal static class LogMiceArt
         var anchors = new MouseAnchors[books.Length][];
         foreach (Book b in Enum.GetValues<Book>())
         {
+            if (b == Book.Turn)
+            {
+                // THE TURN, by in-betweens: five key poses (standing side on, the side view squashed lengthwise, two three-quarter heads, head
+                // on) with a 50/50 blend of each neighbouring pair between them, so a half turn is nine drawn pictures (seven of them here)
+                // and a whole turn there and back is seventeen. The blends are what an animator calls smear frames.
+                var keys = new Sprite[3];
+                for (int q = 0; q < 3; q++)
+                {
+                    int qq = q;
+                    keys[q] = Sprite.Paint(w, h, g =>
+                    {
+                        g.TranslateTransform(ox, oy);
+                        g.ScaleTransform(k, -k);
+                        if (qq == 0)
+                        {
+                            Shadow(g, 0.05f, 0.5f, 60);
+                            var st0 = g.Save(); g.TranslateTransform(0.2f, 0f); g.ScaleTransform(0.84f, 1f); g.TranslateTransform(-0.2f, 0f);
+                            PaintSide(g, PoseOf(Book.Stand, 0));
+                            g.Restore(st0);
+                        }
+                        else PaintFront(g, 0f, false, 0f, false, 0f, qq == 1 ? 0.6f : 0.25f);
+                    });
+                }
+                Sprite[] ks = { books[(int)Book.Stand][0], keys[0], keys[1], keys[2], books[(int)Book.Front][0] };
+                var seq = new List<Sprite>();
+                for (int q = 0; q < 4; q++) { if (q > 0) seq.Add(ks[q]); seq.Add(Mix(ks[q], ks[q + 1], 0.5f)); }
+                books[(int)b] = seq.ToArray();
+                anchors[(int)b] = new MouseAnchors[seq.Count];
+                for (int q = 0; q < seq.Count; q++) anchors[(int)b][q] = anchors[(int)Book.Stand][0];
+                continue;
+            }
+            if (b == Book.TurnUp)
+            {
+                // the story's upright mouse turning: standing page, two blends toward the squashed page, the squashed page, two blends toward head on
+                Sprite sq = Sprite.Paint(w, h, g =>
+                {
+                    g.TranslateTransform(ox, oy); g.ScaleTransform(k, -k);
+                    Shadow(g, 0.05f, 0.5f, 60);
+                    var st1 = g.Save(); g.TranslateTransform(0.1f, 0f); g.ScaleTransform(0.72f, 1f); g.TranslateTransform(-0.1f, 0f);
+                    PaintSide(g, PoseOf(Book.Walk, 0));
+                    g.Restore(st1);
+                });
+                Sprite w0 = books[(int)Book.Walk][0], f0 = books[(int)Book.Front][0];
+                books[(int)b] = new[] { Mix(w0, sq, 0.33f), Mix(w0, sq, 0.67f), sq, Mix(sq, f0, 0.33f), Mix(sq, f0, 0.67f) };
+                anchors[(int)b] = new MouseAnchors[5];
+                for (int q = 0; q < 5; q++) anchors[(int)b][q] = anchors[(int)Book.Walk][0];
+                continue;
+            }
             int n = PagesIn(b);
             books[(int)b] = new Sprite[n];
             anchors[(int)b] = new MouseAnchors[n];
@@ -563,6 +671,7 @@ internal static class LogMiceArt
                     g.ScaleTransform(k, -k);
                     if (b == Book.Front) PaintFront(g, i == 2 ? 1f : 0f, i == 1, 0f, i == 3, 0f);
                     else if (b == Book.Head) PaintFront(g, 0f, false, 0f, false, 0f);
+                    else if (b == Book.Emerge) PaintEmerge(g, i / (float)(EmergePages - 1));
                     else
                     {
                         bool airborne = b is Book.Leap or Book.Plunge;
@@ -576,6 +685,53 @@ internal static class LogMiceArt
         return new Sheet { Books = books, Anchors = anchors, OriginX = ox, OriginY = oy, K = k };
     }
 
+    // ------------------------------------------------------------------
+    //  SMEAR FRAMES AND THE SEAM TABLE
+    /// <summary>A picture half way between two others (a smear frame): every pixel's colour is the average of the two, weighted by how solid each is there, and its solidity is the average of the two.</summary>
+    public static Sprite Mix(Sprite a, Sprite b, float t)
+    {
+        var pa = a.Argb; var pb = b.Argb; var o = new uint[pa.Length];
+        for (int i = 0; i < o.Length; i++)
+        {
+            float aa = pa[i] >> 24, ab = pb[i] >> 24, w0 = aa * (1f - t), w1 = ab * t, wt = w0 + w1;
+            if (wt < 1f) continue;
+            float r = (((pa[i] >> 16) & 255) * w0 + ((pb[i] >> 16) & 255) * w1) / wt, gg = (((pa[i] >> 8) & 255) * w0 + ((pb[i] >> 8) & 255) * w1) / wt, bb = ((pa[i] & 255) * w0 + (pb[i] & 255) * w1) / wt;
+            uint al = (uint)MathF.Round(aa * (1f - t) + ab * t);
+            o[i] = (al << 24) | ((uint)r << 16) | ((uint)gg << 8) | (uint)bb;
+        }
+        return Sprite.FromPixels(a.Width, a.Height, o);
+    }
+
+    // ------------------------------------------------------------------
+    //  THE SEAM TABLE (PECKWORKS_SHEET=LogMiceSeams;file.txt): how different two pages look, for every pair
+    // ------------------------------------------------------------------
+
+    /// <summary>Writes "bookA pageA bookB pageB difference" for every ordered pair of pages: the share of the pixels either page paints
+    /// that differ clearly between them (0 same picture, 1 nothing in common). A change of page that is a pop shows as a big number.</summary>
+    public static void WriteSeams(string path, float k)
+    {
+        Sheet s = BuildSheet(k);
+        var all = new List<(Book B, int I, Sprite S)>();
+        foreach (Book b in Enum.GetValues<Book>()) for (int i = 0; i < PagesIn(b); i++) all.Add((b, i, s.Page(b, i)));
+        using var w = new StreamWriter(path);
+        foreach (var a in all)
+            foreach (var b in all)
+            {
+                if (a.B == b.B && a.I == b.I) continue;
+                int union = 0, diff = 0;
+                for (int y = 0; y < a.S.Height; y++)
+                    for (int x = 0; x < a.S.Width; x++)
+                    {
+                        uint p = a.S.PixelAt(x, y), q = b.S.PixelAt(x, y);
+                        int pa = (int)(p >> 24), qa = (int)(q >> 24);
+                        if (pa < 60 && qa < 60) continue;
+                        union++;
+                        int d = Math.Abs(pa - qa) + Math.Abs((int)((p >> 16) & 255) - (int)((q >> 16) & 255)) + Math.Abs((int)((p >> 8) & 255) - (int)((q >> 8) & 255)) + Math.Abs((int)(p & 255) - (int)(q & 255));
+                        if (d > 120) diff++;
+                    }
+                w.WriteLine($"{a.B} {a.I} {b.B} {b.I} {(union == 0 ? 0f : diff / (float)union):F3}");
+            }
+    }
     // ------------------------------------------------------------------
     //  THE POSE SHEET (PECKWORKS_SHEET=LogMice;file.png): every page, labelled, on snow and on night blue
     // ------------------------------------------------------------------
