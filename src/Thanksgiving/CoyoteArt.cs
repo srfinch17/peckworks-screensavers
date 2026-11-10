@@ -167,6 +167,24 @@ internal static class CoyoteArt
     /// <summary>Pulling at something held in the mouth: the body leaning back, the legs braced forward, the head low.</summary>
     public static Pose Pull() { var q = new Pose { Chest = P(0.26f, 0.50f), Rump = P(-0.34f, 0.58f), Head = P(0.58f, 0.50f), HeadTilt = -16f, Mouth = true, Tail = -20f }; q.Feet = [P(0.16f, 0f), P(0.12f, 0f), P(0.10f, 0f), P(0.06f, 0f)]; return q; }
 
+    /// <summary>
+    /// HEAD UP, t 0 to 1: standing, the neck stretching and the muzzle lifting until it points up at the sky (t 1 is about 62
+    /// degrees), the jaw hanging a little open, the ears up and forward: how a dog stares at something big going over (the
+    /// vulture). One dial, so the caller can hold any tilt in between to follow a bird up the sky.
+    /// </summary>
+    public static Pose Look(float t)
+    {
+        t = Math.Clamp(t, 0f, 1f);
+        // t 0 is exactly the plain Stand pose (so the stare begins and ends with no join to see).
+        return new Pose { Chest = P(0.32f, 0.54f + 0.04f * t), Head = P(Lerp(0.70f, 0.60f, t), Lerp(0.72f, 1.00f, t)), HeadTilt = Lerp(0f, 62f, t), Gape = 0.45f * t, Tail = -65f - 5f * t };
+    }
+
+    /// <summary>
+    /// A puzzled shake of the head, yaw in degrees: the head turned toward and away from us, the way a dog shakes the idea out
+    /// of its ears (the muzzle shortens as the face turns to us, so the shake reads even from the side), a small nod with it.
+    /// </summary>
+    public static Pose Puzzle(float yaw) => new() { Head = P(0.70f, 0.66f), HeadTilt = 6f - 6f * MathF.Abs(MathF.Sin(yaw * MathF.PI / 90f)), HeadYaw = yaw, Ears = 85f, Tail = -75f };
+
     /// <summary>Where the mouth is for a pose, in coyote units: where a carried thing hangs from.</summary>
     public static PointF MouthPoint(Pose q)
     {

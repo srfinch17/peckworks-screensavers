@@ -640,7 +640,10 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   tossing it in the air, tugging it between two of them, carrying it a few steps, before they trot off
   with it. And there is fake blood, because that is the joke: a bright red cartoon splat on the lane
   where the rabbit is caught, droplets flung off the catcher's mouth at every shake and toss, each one
-  landing as a speck, all of it fading away a couple of minutes later. A tiny, hilariously horrifying
+  landing as a speck, all of it fading away a couple of minutes later. And sometimes, while they play, a big turkey
+  vulture spirals down out of the sky, glides in low, snatches the rabbit off the ground and labours away with it hanging
+  from its feet, leaving the coyotes standing with their heads up watching it go, then looking at each other, one sitting
+  down, one shaking its head, before the howl and the leave. A tiny, hilariously horrifying
   thing way in the background of a serene fall scene, to reward the viewer who keeps watching. The
   rabbits are not fools: one that spots a coyote coming sits up tall, thumps a hind foot twice (a puff
   of dust each time) and bolts, and every rabbit in earshot sits up and bolts before the coyote is on
