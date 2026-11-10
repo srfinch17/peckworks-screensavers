@@ -139,6 +139,8 @@ internal sealed class YardSnowman : Resident
     private bool _noseTest, _noseGiven;
     private double _forceAt = 6.0;
     private float _santaAllow, _lastDt;
+    private double _born = -1;                          // the scene clock at his first Update: his entrance (waking up) is timed from it
+    private const double WakeLen = 3.8;
     private readonly float[] _weights = new float[8];
     // ---- cost instruments: the slowest Update and DrawOne seen, written to the mind log with the doing and the frame number ----
     private long _frameNo;
@@ -207,6 +209,7 @@ internal sealed class YardSnowman : Resident
     public YardSnowman(ChristmasScenery s, int count, Random sceneRng, Noticeboard board) : base(s, sceneRng, board)
     {
         _count = Math.Max(0, count);
+        _open = 0.04f;                                   // asleep at the start: the wake-up opens his eyes (BaseGoal)
         MindLog.Open();                                  // open the shared log now (on the scene thread, before the first frame), not inside the first Update
         _foot = s.SnowmanFoot;
         _z = new SnowmanSize(s.SnowmanHeight);
@@ -266,6 +269,9 @@ internal sealed class YardSnowman : Resident
         if (_art == null) return;
         dt = Math.Clamp(dt, 0f, 0.05f);
         _lastDt = dt;
+        if (_born < 0) _born = Board.Time;
+        // Nothing may walk through him: his place on the snow is his bottom ball's width (the scene's list of who stands where).
+        S.Occupy(this, 0, _foot.X, _foot.Y, _z.R0);
         _mind.Tick(dt); _doT += dt; _att.Tick(dt);
         _jumpCool -= dt; _waveCool -= dt; _dozeCool -= dt; _quietFor += dt;
         if (_lookLeft > 0) _lookLeft -= dt;
@@ -275,7 +281,7 @@ internal sealed class YardSnowman : Resident
 
         ForceTests();
         Senses();
-        if (_mind.Over) Decide();
+        if (_mind.Over && Board.Time - _born >= WakeLen) Decide();
         if (_mind.Doing == Doing.Search && HasNose) _mind.End();
 
         BaseGoal();
@@ -310,6 +316,7 @@ internal sealed class YardSnowman : Resident
     private void Senses()
     {
         _near = S.Nearness(_foot.Y);
+        if (Board.Time - _born < WakeLen) return;          // he is waking up: eyes shut, then a stretch; nothing draws his eye until he is up
         // SANTA is special: he is the one overhead thing the snowman waits for. A "pass" is Santa's notices after a gap of
         // a few seconds (the scene pins him about once a second while he is in view). The first sight of a pass sets
         // whether this pass earns a hat tip: about every second or third pass, never two in a row.
@@ -319,31 +326,29 @@ internal sealed class YardSnowman : Resident
             Notice n = Board.Live[i];
             if (n.Who is SantaRig) { santa = true; sp = n.At; }
         }
-        // Santa is in view for most of every cycle, so staring up the whole time would starve every other piece of business:
-        // each pass earns about six seconds of his attention, and after that Santa is old news (a pass restarts the allowance).
-        if (santa && Board.Time - _santaLast > 4.0) _santaAllow = 6.0f;
-        if (santa && _santaAllow <= 0f && _mind.Doing != Doing.HatTip) { _santaLast = Board.Time; santa = false; }
-        if (santa) _santaAllow -= _lastDt;
+        // A PASS IS ONE WATCH (the review: he watched Santa 20 to 32 percent of the time, a Watch begun again each time one ended
+        // while Santa was still in view). The first sighting after a gap of 4 s opens a pass: ONE Watch (or the hat tip, never both)
+        // that lasts about seven seconds, its target moved to the sleigh's place at each pin so the head FOLLOWS him smoothly (the
+        // eased turn does the following). Until the pass is over Santa is not read again; no second Watch can begin from him.
         if (santa)
         {
-            if (Board.Time - _santaLast > 4.0)
+            bool newPass = Board.Time - _santaLast > 4.0;
+            _santaLast = Board.Time;
+            if (newPass)
             {
-                _passes++; _sinceTip++;
+                _passes++; _sinceTip++; _santaAllow = 1f;                      // 1 = this pass has not been watched yet
                 _wantTip = _sinceTip >= 3 || (_sinceTip == 2 && Rng.NextDouble() < 0.6);
                 MindLog.Open()?.WriteLine($"{Board.Time:F3} Snowman 0 ROLL santa pass {_passes} tip={_wantTip}");
             }
-            _santaLast = Board.Time;
-            _watchPt = sp; _mood = Mood.Awe; _quietFor = 0;
-            switch (_mind.Doing)
+            if (_mind.Doing is Doing.Watch or Doing.HatTip && _santaAllow <= 0f) { _watchPt = sp; _quietFor = 0; return; }   // following him
+            if (_santaAllow > 0f && _mind.Doing is not (Doing.FixHat or Doing.Shake or Doing.Jump or Doing.Doze))
             {
-                case Doing.HatTip: case Doing.FixHat: case Doing.Shake: case Doing.Jump: case Doing.Doze: break;
-                case Doing.Watch: _mind.Left = MathF.Max(_mind.Left, 1.4f); break;
-                default:
-                    if (_wantTip) { _wantTip = false; _sinceTip = 0; Begin(Doing.HatTip, 3.9f); }
-                    else Begin(Doing.Watch, 1.8f);
-                    break;
+                _santaAllow = 0f;                                              // the pass has its one watch
+                _watchPt = sp; _mood = Mood.Awe; _quietFor = 0;
+                if (_wantTip) { _wantTip = false; _sinceTip = 0; Begin(Doing.HatTip, 3.9f); }
+                else Begin(Doing.Watch, 7f);
+                return;
             }
-            return;
         }
 
         PointF me = new(_headX, _headY);
@@ -363,11 +368,11 @@ internal sealed class YardSnowman : Resident
                 _mood = Mood.Suspicious; Begin(Doing.Watch, 3.2f); break;                 // narrow eyes at the fox: he cannot run, so he glares
             case Sense.Loud:
                 if (r >= Reaction.Freeze && _jumpCool <= 0) { Begin(Doing.Jump, 1.9f); }
-                else { _mood = Mood.Alert; Begin(Doing.Watch, 2.2f); }
+                else { _mood = Mood.Alert; Begin(Doing.Watch, 3.2f); }
                 break;
             default:
-                if (r == Reaction.Freeze) { _mood = Mood.Alert; Begin(Doing.Watch, 2.2f); }
-                else { _mood = Mood.Curious; Begin(Doing.Watch, 1.9f); }
+                if (r == Reaction.Freeze) { _mood = Mood.Alert; Begin(Doing.Watch, 3.4f); }
+                else { _mood = Mood.Curious; Begin(Doing.Watch, 3.0f); }
                 break;
         }
     }
@@ -382,7 +387,7 @@ internal sealed class YardSnowman : Resident
         // Pieces of business come with a rest between them (Idle), so there is no metronome.
         if (_mind.Doing != Doing.Idle)
         {
-            Begin(Doing.Idle, Organic.Jitter(Rng, 3.5f));
+            Begin(Doing.Idle, Organic.Jitter(Rng, 5.5f) + 1.2f);
             return;
         }
         bool noLull = !Lull && _lookLeft <= 0;
@@ -519,6 +524,17 @@ internal sealed class YardSnowman : Resident
         _g.Sink = sad ? 0.10f : 0f;
         if (sad) Arms(0.30f, 0.86f, 0.30f, 0.86f, 0.25f); else Arms(0.74f, -0.50f, 0.74f, -0.50f);
         // A hand never hangs dead still: a slow sway.
+        // HIS ENTRANCE: he is there from the first frame the residents start, so he WAKES: eyes shut for a second, they open,
+        // then a small stretch (both arms up a little, head tipped back) and down again. Each part is an eased move.
+        double age = t - _born;
+        if (age < WakeLen)
+        {
+            float a = (float)age;
+            _g.Open = 0.04f + (_g.Open - 0.04f) * Seg(a, 1.0f, 1.7f);
+            float st = Seg(a, 1.5f, 2.3f) * (1f - Seg(a, 2.9f, 3.7f));
+            _g.Pitch += 0.20f * st; _g.Squash = 0.12f * st; _g.Sink = -0.04f * st;
+            Arms(0.74f + (0.36f - 0.74f) * st, -0.50f + (-0.96f + 0.50f) * st, 0.74f + (0.36f - 0.74f) * st, -0.50f + (-0.96f + 0.50f) * st, 0.6f);
+        }
         if (_lookLeft > 0) { AimAt(_lookPt, out float yw, out float pt, out float gx, out float gy); _g.Yaw = yw; _g.Pitch = pt; _g.GazeX = gx; _g.GazeY = gy; }
     }
 

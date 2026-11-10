@@ -67,7 +67,7 @@ internal sealed class ChristmasScene : IScreensaverScene
     }
 
     /// <summary>The residents do nothing before this many seconds: their flip-books are painting on a helper thread, and a start pinned to a time makes every test run begin the same way.</summary>
-    private const double ResidentsStart = 4.0;
+    private const double ResidentsStart = 6.0;
 
     private readonly Random _rng = HappeningDirector.SceneRandom();   // new dice every launch, unless PECKWORKS_SEED asks for a repeat
     private readonly ChristmasScenery _scenery;
@@ -227,16 +227,28 @@ internal sealed class ChristmasScene : IScreensaverScene
         // began when its own were done: the mice at 4 s, the herd at 15 to 18, each popping into the scene fully
         // formed, and the same seed played differently from run to run.) Each resident then makes its own
         // entrance: the herd walks in, the birds fly in, the hares come up out of their burrows.
+        // The start is PINNED to a time, not to "whenever the painting happens to finish": at ResidentsStart
+        // seconds the scene simply waits for any resident still painting (a pause of a moment, once, on a slow
+        // machine; none on a normal one, where the painting takes two or three seconds). A start that followed
+        // the painting moved by a second from run to run, so the same seed played a different film each time
+        // and no test could be repeated.
         if (!_started && _time >= ResidentsStart)
         {
-            _started = true;
-            foreach (Resident r in _residents) if (!r.Ready) { _started = false; break; }
+            var waited = System.Diagnostics.Stopwatch.StartNew();
+            while (waited.ElapsedMilliseconds < 30000)
+            {
+                bool all = true;
+                foreach (Resident r in _residents) if (!r.Ready) { all = false; break; }
+                if (all) { _started = true; break; }
+                Thread.Sleep(5);
+            }
+            if (!_started) { _started = true; }     // half a minute and still not painted: something failed; carry on with whoever is ready
         }
         if (_started) _stories.Update(dt);          // before the residents: a story may borrow one this very frame
         if (_started)
         {
             _scenery.TurnPage();                    // last frame's "who stands where" becomes the sheet to read
-            foreach (Resident r in _residents) { r.Lull = _stories.Playing; r.Update(dt); }
+            foreach (Resident r in _residents) if (r.Ready) { r.Lull = _stories.Playing; r.Update(dt); }
         }
         _happenings.Update(elapsedSeconds);
     }
@@ -336,7 +348,7 @@ internal sealed class ChristmasScene : IScreensaverScene
         // 5. The residents, far to near: each hands the queue one line per
         //    animal, and the queue draws them in order of their feet.
         if (_started)
-            foreach (Resident r in _residents) r.Collect(_queue);
+            foreach (Resident r in _residents) if (r.Ready) r.Collect(_queue);
         _queue.Flush(fb);
 
         // 5b. The story that is on, if any: its actors and props, over the residents.

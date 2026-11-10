@@ -64,13 +64,16 @@ internal sealed class FeederBirds : Resident
         public int PerchIx = -1; public bool OnGround;
         public double Clock;
         // flight
-        public PointF From, To; public float T, Len; public bool Leaving, ToGround; public int DestIx = -1, LvFrom = 2, LvTo = 2; public bool FlareLast;
+        public PointF From, To; public float T, Len; public bool Leaving, ToGround; public int DestIx = -1, LvFrom = 2, LvTo = 2;
         public int Plan;            // what a Startle turns into: 0 leave to the pines, 1 move to another perch, 2 go to the ground
         public float StartleT; public bool AvoidTable; public bool AfterFlush;
         public float Alpha = 1f;
+        public float Ramp, Decel;   // a flight's lean-in (seconds) and slow-down (seconds): 0.15 off a perch, 0.34 onto one, 0 where a pine hides the bird
+        public int Pine = -1;       // the pine a bird is coming out of or going into: it is drawn BEHIND that pine's outline, never faded
+        public Sprite? Shown, Mid; public float MidT;   // the page last wanted, and the half-way page bridging a big pose change
         // perch business
         public int HeadPage, HeadTarget; public float HeadHold, HeadStep, FlickT, NextFlick, FluffT, TurnT, HangT, AlertT, LookUpT, Stay, SquabbleT, SquabbleDir;
-        public bool TurnFlipped, FadeIn; public float HangTotal; public Bird? Pending;
+        public bool TurnFlipped; public float HangTotal; public Bird? Pending;
         // hop / peck
         public float HopPh, HopFrom, HopTo, GoalX; public int PeckN; public bool Flung;
         public string? Force; public float StoryFor; public bool Story;
@@ -112,7 +115,9 @@ internal sealed class FeederBirds : Resident
     private readonly string? _force;
     private readonly StreamWriter? _log;
     private double _time;
-    private float _foodRest, _flushRest, _jayUntil, _forceAt = 6f;
+    private float _foodRest, _flushRest, _jayUntil;
+    private bool[]? _mask;        // a screen-sized stencil, true everywhere: a pine's cone is switched off in it for a moment while a bird passes behind that pine
+    private int _lastPine = -1;   // the pine PinePoint last picked (-1: the bird came from or goes off the top of the screen)
     private bool _forcedDone;
     private bool _tableBanned => _time < _jayUntil;
     private PointF _tableAt;
@@ -133,6 +138,8 @@ internal sealed class FeederBirds : Resident
         if (count == 0) { _seedSprite = _noteSprite = null!; return; }
 
         BuildPerches();
+        _mask = new bool[S.Width * S.Height];
+        Array.Fill(_mask, true);
         // Dials: dealt at birth from our own dice. Chickadees are the bold ones, the jay the boldest, cardinals middling.
         float[] d1 = Traits.Deal(Rng, count), d2 = Traits.Deal(Rng, count);
         for (int i = 0; i < count; i++)
@@ -156,6 +163,7 @@ internal sealed class FeederBirds : Resident
         string? sheet = Environment.GetEnvironmentVariable("PECKWORKS_SHEET");
         BuildInBackground(() =>
         {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             var sheetBooks = new List<BirdBook>(); var sheetKinds = new List<BirdKind>();
             for (int k = 0; k < 4; k++)
             {
@@ -165,7 +173,9 @@ internal sealed class FeederBirds : Resident
                     _books[k, lv] = FeederBirdsArt.Build((BirdKind)k, Math.Max(5f, RealLength[k] * 1.8f * 0.1f * _u * LevelScale[lv] / 0.9f));
                 sheetBooks.Add(_books[k, 2]!); sheetKinds.Add((BirdKind)k);
             }
+            long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
             Warm();
+            if (_log != null) lock (_log) _log.WriteLine($"0.000 FeederBirds build {System.Diagnostics.Stopwatch.GetElapsedTime(t0, t1).TotalMilliseconds:0} ms, warm-up {System.Diagnostics.Stopwatch.GetElapsedTime(t1).TotalMilliseconds:0} ms");
             if (!string.IsNullOrEmpty(sheet)) FeederBirdsArt.WriteSheet([.. sheetBooks], [.. sheetKinds], Path.Combine(Environment.CurrentDirectory, "review", "sheet_feeder.png"));
         });
     }
@@ -303,6 +313,15 @@ internal sealed class FeederBirds : Resident
     public override void Update(float dt)
     {
         if (_birds.Length == 0) return;
+        long u0 = _firstUpdate ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        UpdateAll(dt);
+        if (_firstUpdate) { _firstUpdate = false; if (_log != null) _log.WriteLine($"{Board.Time:0.000} FeederBirds first-update {System.Diagnostics.Stopwatch.GetElapsedTime(u0).TotalMilliseconds:0.00} ms"); }
+    }
+
+    private bool _firstUpdate = true;
+
+    private void UpdateAll(float dt)
+    {
         _time += dt;
         _foodRest -= dt; _flushRest -= dt;
         TickParticles(dt);
@@ -325,7 +344,7 @@ internal sealed class FeederBirds : Resident
             if (_log != null)
             {
                 float sp = dt > 0 ? MathF.Sqrt((b.X - b.PrevX) * (b.X - b.PrevX) + (b.Y - b.PrevY) * (b.Y - b.PrevY)) / dt : 0f;
-                _log.WriteLine($"{Board.Time:0.000} FeederBirds {b.Index} {b.Kind} x={b.X:0.0} y={b.Y:0.0} v={sp:0.0} doing={b.Mind.Doing} page={b.PageName} perch={b.PerchIx} vis={(b.Visible ? 1 : 0)} dir={b.Dir}");
+                _log.WriteLine($"{Board.Time:0.000} FeederBirds {b.Index} {b.Kind} x={b.X:0.0} y={b.Y:0.0} v={sp:0.0} doing={(b.Mind.Doing == Doing.Startle ? Doing.Fly : b.Mind.Doing)} page={b.PageName} perch={b.PerchIx} vis={(b.Visible ? 1 : 0)} dir={b.Dir}");
             }
         }
     }
@@ -349,7 +368,7 @@ internal sealed class FeederBirds : Resident
     private void BeginArrival(Bird b)
     {
         int p = ChoosePerch(b);
-        if (p < 0) { b.Mind.Begin(Doing.Away, 2f + 3f * (float)Rng.NextDouble()); Roll(b, "arrival: nothing free"); return; }
+        if (p < 0) { b.Mind.Begin(Doing.Away, 6f + 4f * (float)Rng.NextDouble()); Roll(b, "arrival: nothing free"); return; }
         Perch pr = _perches[p];
         if (pr.Kind == Spot.Ground) { PointF g = PickGround(b); StartFlight(b, SourcePoint(b, g), g, false, -1, true, 2, GroundLevel(g.Y)); }
         else { pr.Owner = b.Index; StartFlight(b, SourcePoint(b, pr.At), pr.At, false, p, false, pr.Level, pr.Level); }
@@ -425,22 +444,40 @@ internal sealed class FeederBirds : Resident
     {
         if (Rng.NextDouble() < 0.2)
             return new PointF(dest.X < S.Width * 0.5f ? -0.04f * S.Width : 1.04f * S.Width, -0.05f * S.Height);
-        return PinePoint(dest.X);
+        return PinePoint(dest.X, dest);
     }
 
-    private PointF PinePoint(float nearX)
+    /// <summary>True when the point q is inside (or within a bird's size of) pine p's cone.</summary>
+    private bool InCone(int i, PointF q)
+    {
+        var p = S.Pines[i];
+        if (q.Y < p.Top || q.Y > p.Foot) return false;
+        return MathF.Abs(q.X - p.X) < 1.1f * Brushwork.PineHalfWidth(q.Y, p.Top, p.Foot, _u) + 0.04f * _u;
+    }
+
+    /// <summary>
+    /// A point inside a pine for a bird to vanish into or appear from. "other" is the flight's far end: a pine that already
+    /// covers it is NOT chosen (a bird perched on a branch in front of a pine would be hidden the moment it took off, or
+    /// land out of sight). With no pine left, the bird uses the top of the screen (-1).
+    /// </summary>
+    private PointF PinePoint(float nearX, PointF other)
     {
         var pines = S.Pines;
-        int best = 0; float bd = float.MaxValue;
+        int best = -1; float bd = float.MaxValue;
         for (int i = 0; i < pines.Count; i++)
         {
+            if (InCone(i, other)) continue;
             float d = MathF.Abs(pines[i].X - nearX) + (float)Rng.NextDouble() * 0.12f * S.Width;
             if (d < bd) { bd = d; best = i; }
         }
+        if (best < 0) { _lastPine = -1; return new PointF(nearX < S.Width * 0.5f ? -0.04f * S.Width : 1.04f * S.Width, -0.05f * S.Height); }
         var p = pines[best];
-        float y = p.Top + (0.40f + 0.35f * (float)Rng.NextDouble()) * (p.Foot - p.Top);
+        _lastPine = best;   // the flight that follows hides behind THIS pine's outline
+        // Low on the tree and near its trunk, where the cone is wide: the whole bird (about 40 px long) must fit INSIDE the
+        // outline when it gets there, or it would end its flight in plain sight and then vanish.
+        float y = p.Top + (0.50f + 0.30f * (float)Rng.NextDouble()) * (p.Foot - p.Top);
         float hw = Brushwork.PineHalfWidth(y, p.Top, p.Foot, _u);
-        return new PointF(p.X + ((float)Rng.NextDouble() - 0.5f) * hw * 1.1f, y);
+        return new PointF(p.X + ((float)Rng.NextDouble() - 0.5f) * hw * 0.6f, y);
     }
 
     // ---------------------------------------------------------------- flight
@@ -450,37 +487,67 @@ internal sealed class FeederBirds : Resident
         b.From = from; b.To = to; b.Leaving = leaving; b.DestIx = destIx; b.ToGround = toGround;
         b.LvFrom = lvFrom; b.LvTo = lvTo; b.T = 0f;
         float dx = to.X - from.X, dy = to.Y - from.Y, dist = MathF.Sqrt(dx * dx + dy * dy);
-        float v = (b.Kind == BirdKind.Jay ? 0.27f : 0.30f) * _u;   // with the 1.3 ease-out the first step is 1.3 v: under 9 px a frame at 1080p
-        b.Len = Math.Clamp(dist / v, 0.5f, 4f);
+        float v = (b.Kind == BirdKind.Jay ? 0.27f : 0.30f) * _u;   // the cruising speed, pixels a second
+        // THE SPEED CURVE (the review: the old curve began at 1.25 times the average speed, 0 to 7 px in ONE frame, 13 to 70
+        // times a bird in three minutes). A real bird leaves a perch by pushing off: it is slow for the first tenth of a
+        // second while the wings open, then at full speed. So: a lean-in of 0.15 s off a perch (none when the bird comes
+        // out of a pine: it is hidden behind the pine for that part), cruise, and a slow-down over the last 0.34 s onto a
+        // perch (the flare). A bird leaving INTO a pine does not slow: it goes behind the outline at full speed.
+        bool fromPerch = b.Visible;
+        b.Ramp = fromPerch ? 0.15f : 0f;
+        b.Decel = leaving ? 0f : 0.34f;
+        b.Len = Math.Clamp(dist / v + 0.5f * (b.Ramp + b.Decel), 0.8f, 4.5f);   // never under 0.8 s: a flutter between two perches still reads as a flight
         if (MathF.Abs(dx) > 2f) b.Dir = dx > 0 ? 1 : -1;
         b.X = from.X; b.Y = from.Y;
         b.Mind.Begin(Doing.Fly, b.Len);
-        b.Alpha = leaving || b.Visible ? 1f : 0f; b.FadeIn = !b.Visible;   // a bird leaving a perch is solid; one coming out of the pines fades in
+        b.Pine = (leaving || !b.Visible) ? _lastPine : -1;   // out of the pines or into them: passes BEHIND that pine, never fades
+        _lastPine = -1;
+        b.Alpha = 1f;
         b.Clock = 0; b.OnGround = false;
         if (b.PerchIx >= 0 && b.PerchIx != destIx) { _perches[b.PerchIx].Owner = -1; }
         b.PerchIx = -1;
         b.Story = b.Story && destIx >= 0;
     }
 
+    /// <summary>
+    /// How far along the trip a flight is, 0 to 1, at time t: a lean-in of "r" seconds (speed climbing in a straight
+    /// line from nothing), a cruise, and a slow-down of "d" seconds (speed falling to nothing). Think of a bus: it pulls
+    /// away gently, runs at its speed, and brakes into the stop. Speed never jumps from one frame to the next.
+    /// </summary>
+    private static float Travelled(float t, float len, float r, float d)
+    {
+        if (t <= 0f) return 0f;
+        if (t >= len) return 1f;
+        float cruise = len - r - d;                          // positive: len is at least 0.8 and r + d at most 0.49
+        float v = 1f / (0.5f * r + cruise + 0.5f * d);       // cruise speed, in trips a second, so the whole trip comes to exactly 1
+        if (t < r) return 0.5f * v * t * t / r;
+        float done = 0.5f * v * r;
+        if (t < r + cruise) return done + v * (t - r);
+        done += v * cruise;
+        float u = t - r - cruise;
+        return done + v * (u - 0.5f * u * u / d);
+    }
+
     private void UpdateFly(Bird b, float dt)
     {
         b.T += dt;
-        float s = Math.Clamp(b.T / b.Len, 0f, 1f);
-        float e = 1f - MathF.Pow(1f - s, 1.25f);
+        float e = Travelled(b.T, b.Len, b.Ramp, b.Decel);
         float left = b.Len - b.T;
         float x = b.From.X + (b.To.X - b.From.X) * e, y = b.From.Y + (b.To.Y - b.From.Y) * e;
-        // The bound: a small bird climbs while it flaps and dips while its wings are shut (an arch each cycle);
-        // the jay flies level with a gentle bob. The amount fades in at take-off and out into the flare.
+        // The bound: a small bird climbs while it flaps and dips while its wings are shut (an arch each cycle, a smooth
+        // sin squared so the turn at the bottom is round, not a corner); the jay flies level with a gentle bob.
+        // The amount fades in at take-off and out into the flare.
         float env = MathF.Min(1f, MathF.Min(b.T / 0.25f, MathF.Max(0f, left - 0.2f) / 0.3f));
         bool small = b.Kind != BirdKind.Jay;
-        float period = 0.42f, ph = (b.T % period) / period;
+        const float period = 0.46f, flapShare = 0.62f;
+        float ph = (b.T % period) / period;
         float amp = 0.014f * _u;
-        float bound = small ? 4f * amp * ph * (1f - ph) * env : 0.25f * amp * MathF.Sin(b.T * 9f) * env;
+        float sw = MathF.Sin(ph * MathF.PI);
+        float bound = small ? amp * sw * sw * env : 0.25f * amp * MathF.Sin(b.T * 9f) * env;
         b.X = x; b.Y = y - bound;
-        BirdBook bk = BookFor(b, s < 0.34f ? b.LvFrom : s < 0.67f ? (b.LvFrom + b.LvTo) / 2 : b.LvTo);
+        BirdBook bk = BookFor(b, e < 0.34f ? b.LvFrom : e < 0.67f ? (b.LvFrom + b.LvTo) / 2 : b.LvTo);
         b.Book = bk; b.Ground = false; b.Visible = true; b.Lift = 0f; b.Near = 255;
-        b.Alpha = b.Leaving ? Math.Clamp(left / 0.3f, 0f, 1f) : b.FadeIn ? Math.Clamp(b.T / 0.25f, 0f, 1f) : 1f;
-        float rate = b.Kind == BirdKind.Jay ? 5.5f : 8f;
+        b.Alpha = 1f;
         bool landing = !b.Leaving && left < 0.34f;
         if (landing)
         {
@@ -488,11 +555,24 @@ internal sealed class FeederBirds : Resident
             b.Page = bk.Flare[ix]; b.PageName = "flare" + ix;
             // the last flare pages are anchored by the front foot: the feet reach the perch exactly as the flight ends
         }
+        else if (b.Ramp > 0f && b.T < 0.05f)
+        {
+            // THE PUSH: legs straighten and the body springs up off the perch before the wings take over (crouch, push, flap)
+            b.Page = bk.Hop[1]; b.PageName = "push";
+        }
+        else if (!small)
+        {
+            int i = (int)(b.Clock * 5.5f * BirdBook.FlapPages) % BirdBook.FlapPages; b.Page = bk.Flap[i]; b.PageName = "flap" + i;
+        }
         else
         {
-            bool fold = small && ph > 0.62f && env >= 1f && left > 0.45f;
+            // A BURST OF TWO BEATS, THEN WINGS SHUT. The burst starts on page 8 (wings low, near the shut shape) and runs
+            // 24 pages = two full beats, ending on page 7: so the move to and from the folded page changes the wings by a
+            // sliver, never from wings-high to wings-shut in one frame.
+            float u = ph / flapShare;
+            bool fold = ph > flapShare && env >= 1f && left > 0.45f;
             if (fold) { b.Page = bk.Fold; b.PageName = "fold"; }
-            else { int i = (int)(b.Clock * rate * BirdBook.FlapPages) % BirdBook.FlapPages; b.Page = bk.Flap[i]; b.PageName = "flap" + i; }
+            else { int i = (8 + (int)(u * 24f)) % BirdBook.FlapPages; b.Page = bk.Flap[i]; b.PageName = "flap" + i; }
         }
         if (b.Mind.Over) Land(b);
     }
@@ -502,7 +582,7 @@ internal sealed class FeederBirds : Resident
         if (b.Leaving)
         {
             b.Visible = false; b.PageName = "away";
-            float baseT = b.Kind == BirdKind.Jay ? 20f : 5.5f;   // seconds away in the pines (11 at first: a third of every bird's time was spent unseen)
+            float baseT = b.Kind == BirdKind.Jay ? 20f : 9f;   // seconds away in the pines (11 at first: a third of every bird's time was spent unseen)
             float t = b.AfterFlush ? 5f + 14f * b.Timid + 3f * (float)Rng.NextDouble() : Organic.Jitter(Rng, baseT);
             b.AfterFlush = false; b.AvoidTable = false;
             b.Mind.Begin(Doing.Away, t);
@@ -511,8 +591,9 @@ internal sealed class FeederBirds : Resident
         }
         b.X = b.To.X; b.Y = b.To.Y; b.Visible = true; b.Alpha = 1f;
         b.PerchIx = b.DestIx; b.OnGround = b.ToGround;
+        b.Shown = null; b.MidT = 0f; b.Pine = -1;
         b.HeadPage = 0; b.HeadTarget = 0; b.HeadHold = 0.4f; b.NextFlick = Organic.Jitter(Rng, 3f); b.Stay = 0f;
-        b.Mind.Begin(Doing.Perch, Organic.Jitter(Rng, b.Story ? b.StoryFor : 5f));
+        b.Mind.Begin(Doing.Perch, Organic.Jitter(Rng, b.Story ? b.StoryFor : 8f));
         if (b.Story) b.Mind.Left = b.StoryFor;
         Spot where = b.OnGround ? Spot.Ground : _perches[b.PerchIx].Kind;
         if (where == Spot.Lamp) b.Dir = -1;   // faces the lantern, its tail out over open sky and clear of the red bow
@@ -520,14 +601,14 @@ internal sealed class FeederBirds : Resident
         // landed on a seed: eat it (three pecks, TakeSeedUnder removes it on the downstroke)
         if (b.OnGround)
             for (int i = 0; i < _seeds.Length; i++)
-                if (_seeds[i].Life > 0f && MathF.Abs(_seeds[i].X - b.X) < 0.03f * _u && MathF.Abs(_seeds[i].Y - b.Y) < 0.03f * _u) { b.PeckN = 3; b.Clock = 0; b.Flung = false; b.Mind.Begin(Doing.Peck, 3 * 0.42f); break; }
+                if (_seeds[i].Life > 0f && MathF.Abs(_seeds[i].X - b.X) < 0.03f * _u && MathF.Abs(_seeds[i].Y - b.Y) < 0.03f * _u) { b.PeckN = 6; b.Clock = 0; b.Flung = false; b.Mind.Begin(Doing.Peck, PeckLen(6)); break; }
         // forced test doings
         switch (b.Force)
         {
-            case "sing": b.Mind.Begin(Doing.Sing, 3.6f); break;
-            case "bathe": b.Mind.Begin(Doing.Bathe, 2.2f); break;
+            case "sing": b.Mind.Begin(Doing.Sing, 6f); break;
+            case "bathe": b.Mind.Begin(Doing.Bathe, 3.5f); break;
             case "hang": b.HangT = b.HangTotal = 1.6f; break;
-            case "seed": b.PeckN = 6; b.Flung = false; b.Clock = 0; b.Mind.Begin(Doing.Peck, 6 * 0.42f); break;
+            case "seed": b.PeckN = 6; b.Flung = false; b.Clock = 0; b.Mind.Begin(Doing.Peck, PeckLen(6)); break;
             case "squabble": b.Mind.Begin(Doing.Perch, 3.0f); break;
         }
         if (b.Force != null && b.Force != "squabble") b.Force = null;
@@ -576,7 +657,9 @@ internal sealed class FeederBirds : Resident
             PointF g = PickGround(b);
             StartFlight(b, here, g, false, -1, true, lv, GroundLevel(g.Y)); return;
         }
-        PointF to = Rng.NextDouble() < 0.25 ? new PointF(here.X < S.Width * 0.5f ? -0.05f * S.Width : 1.05f * S.Width, -0.06f * S.Height) : PinePoint(here.X);
+        PointF to; _lastPine = -1;
+        if (Rng.NextDouble() < 0.25) to = new PointF(here.X < S.Width * 0.5f ? -0.05f * S.Width : 1.05f * S.Width, -0.06f * S.Height);
+        else to = PinePoint(here.X, here);
         StartFlight(b, here, to, true, -1, false, lv, lv);
     }
 
@@ -626,7 +709,37 @@ internal sealed class FeederBirds : Resident
             case Doing.Bathe: DoBathe(b, bk, dt); break;
             default: DoPerch(b, bk, dt); break;
         }
+        Bridged(b, bk, dt);
         if (b.Mind.Over && b.Mind.Doing is not (Doing.Fly or Doing.Startle or Doing.Away)) Decide(b);
+    }
+
+    /// <summary>
+    /// NO ONE-FRAME POSE CHANGES: a jump between a plain stance and a big pose (the fluffed-up ball, head thrown up to
+    /// sing, the alert stretch) is bridged by one half-way page held about four frames. Half a fluff, half a lift.
+    /// </summary>
+    private static void Bridged(Bird b, BirdBook bk, float dt)
+    {
+        Sprite want = b.Page!;
+        if (b.MidT > 0f)
+        {
+            b.MidT -= dt;
+            if (b.MidT > 0f) { b.Page = b.Mid; b.Shown = want; return; }
+        }
+        else if (b.Shown != null && b.Shown != want)
+        {
+            Sprite? m = Bridge(bk, b.Shown, want);
+            if (m != null) { b.Mid = m; b.MidT = 0.07f; b.Page = m; b.Shown = want; return; }
+        }
+        b.Shown = want;
+    }
+
+    private static Sprite? Bridge(BirdBook bk, Sprite a, Sprite c)
+    {
+        bool fa = a == bk.Fluff, fc = c == bk.Fluff;
+        bool la = a == bk.Alert || Array.IndexOf(bk.Sing, a) >= 0, lc = c == bk.Alert || Array.IndexOf(bk.Sing, c) >= 0;
+        if (fa != fc && !la && !lc && a != bk.Crouch && c != bk.Crouch) return bk.FluffHalf;
+        if (la != lc && !fa && !fc) return bk.LiftHalf;
+        return null;
     }
 
     private void React(Bird b, Reaction r, Notice n)
@@ -721,8 +834,18 @@ internal sealed class FeederBirds : Resident
     private void DoPeck(Bird b, BirdBook bk, float dt)
     {
         const float cycle = 0.42f;
-        float c = (float)(b.Clock % cycle);
         if (b.Clock < 0f) b.Clock = 0f;
+        // A FEEDING BOUT: three pecks, then a short head-up look round (the way a small bird feeds: peck, peck, peck, look),
+        // over and over. The look is the head turning through its views, never a still frame held.
+        float cb = (float)(b.Clock % (3 * cycle + 0.7f));
+        if (cb >= 3 * cycle)
+        {
+            float p = cb - 3 * cycle;
+            int hp = p < 0.25f ? 0 : p < 0.33f ? 1 : p < 0.50f ? 2 : p < 0.58f ? 1 : 0;
+            b.Page = bk.Head[hp]; b.PageName = "watch" + hp; b.Flung = false;
+            return;
+        }
+        float c = cb % cycle;
         if (c < 0.14f) { b.Page = bk.Head[0]; b.PageName = "stand"; b.Flung = false; }
         else if (c < 0.20f) { b.Page = bk.Peck[0]; b.PageName = "peck0"; }
         else if (c < 0.30f)
@@ -735,6 +858,9 @@ internal sealed class FeederBirds : Resident
         else { b.Page = bk.Head[0]; b.PageName = "stand"; }
         if (b.OnGround && c >= 0.20f && c < 0.30f) { TakeSeedUnder(b); }
     }
+
+    /// <summary>How long n pecks last with the head-up looks between each three: 0.42 s a peck and 0.7 s a look.</summary>
+    private static float PeckLen(int n) => n * 0.42f + (n / 3) * 0.7f;
 
     private void TakeSeedUnder(Bird b)
     {
@@ -808,9 +934,9 @@ internal sealed class FeederBirds : Resident
                 Perch p = _perches[i];
                 if (p.Kind == _perches[b.PerchIx].Kind && p.Owner < 0 && MathF.Abs(p.At.X - b.X) < 2f) { _perches[b.PerchIx].Owner = -1; p.Owner = b.Index; b.PerchIx = i; b.Y = p.At.Y; break; }
             }
-        b.Mind.Begin(Doing.Perch, Organic.Jitter(Rng, 1.8f));
+        b.Mind.Begin(Doing.Perch, Organic.Jitter(Rng, 4f));
         if (b.OnGround) for (int i = 0; i < _seeds.Length; i++)
-                if (_seeds[i].Life > 0f && MathF.Abs(_seeds[i].X - b.X) < 0.03f * _u) { b.PeckN = 3; b.Clock = 0; b.Mind.Begin(Doing.Peck, 3 * 0.42f); }
+                if (_seeds[i].Life > 0f && MathF.Abs(_seeds[i].X - b.X) < 0.03f * _u) { b.PeckN = 6; b.Clock = 0; b.Mind.Begin(Doing.Peck, PeckLen(6)); }
     }
 
     // ---- Squabble: one leans in with the beak open, the other gives way or answers ----
@@ -877,8 +1003,8 @@ internal sealed class FeederBirds : Resident
         w[3] = b.Kind == BirdKind.Cardinal && where is Spot.Lamp or Spot.Roof or Spot.Branch or Spot.Fir or Spot.Log ? 3.5f : 0f;   // sing
         w[4] = where == Spot.Ground && b.Kind != BirdKind.Jay ? 1.4f : 0f;                    // bathe
         w[5] = b.Kind == BirdKind.Chickadee && where == Spot.Tray ? 1.6f : 0f;                // hang
-        w[6] = Lull || storyHold ? 0f : 1.3f;                                                 // move to another perch
-        w[7] = Lull || storyHold ? 0f : 0.6f + 0.07f * b.Stay;                                // leave
+        w[6] = Lull || storyHold ? 0f : 0.3f;                                                 // move to another perch (a flight is a doing: few of them)
+        w[7] = Lull || storyHold ? 0f : 0.2f + 0.012f * b.Stay;                               // leave: a visit lasts a minute or more
         w[8] = where == Spot.Tray && OtherOnTable(b) != null ? 1.6f * (0.3f + b.Bold) * (b.Kind == BirdKind.Jay ? 2f : 1f) : 0f;   // squabble
         w[9] = 1f + 1.5f * b.Lazy;                                                            // fluff up
         if (b.Kind == BirdKind.Jay && where is Spot.Tray or Spot.Roof) { w[7] = Lull ? 0f : (_tableBanned ? 0.1f : 3f); w[6] = 0f; }
@@ -886,17 +1012,17 @@ internal sealed class FeederBirds : Resident
         int pick = Dice.Pick(Rng, w);
         switch (pick)
         {
-            case 1: b.PeckN = 3 + Rng.Next(4); b.Clock = 0; b.Flung = false; b.Mind.Begin(Doing.Peck, b.PeckN * 0.42f); Roll(b, "peck"); break;
+            case 1: b.PeckN = 7 + Rng.Next(7); b.Clock = 0; b.Flung = false; b.Mind.Begin(Doing.Peck, PeckLen(b.PeckN)); Roll(b, "peck"); break;
             case 2: StartHopGoal(b); Roll(b, "hop"); break;
-            case 3: b.Mind.Begin(Doing.Sing, 3.6f); b.Clock = 0; Roll(b, "sing"); break;
-            case 4: b.Mind.Begin(Doing.Bathe, 2f); b.Clock = 0; Roll(b, "bathe"); break;
+            case 3: b.Mind.Begin(Doing.Sing, 6f); b.Clock = 0; Roll(b, "sing"); break;
+            case 4: b.Mind.Begin(Doing.Bathe, 3.5f); b.Clock = 0; Roll(b, "bathe"); break;
             case 5: b.HangT = b.HangTotal = 1.0f + 0.8f * (float)Rng.NextDouble(); b.Mind.Begin(Doing.Perch, b.HangT + 0.4f); Roll(b, "hang"); break;
             case 6: b.Plan = 1; b.AfterFlush = false; BeginStartle(b, 0.12f); Roll(b, "move"); break;
             case 7: b.Plan = 0; b.AfterFlush = false; BeginStartle(b, 0.12f); Roll(b, "leave"); break;
             case 8: { Bird? o = OtherOnTable(b); if (o != null) BeginSquabble(b, o); else b.Mind.Begin(Doing.Perch, 2f); break; }
             case 9: b.FluffT = Organic.Jitter(Rng, 3.5f); b.Mind.Begin(Doing.Perch, b.FluffT + 0.3f); Roll(b, "fluff"); break;
             default:
-                b.Mind.Begin(Doing.Perch, Organic.Jitter(Rng, 4.5f));
+                b.Mind.Begin(Doing.Perch, Organic.Jitter(Rng, 9f));
                 if (Rng.NextDouble() < 0.18 && !b.OnGround) { b.TurnT = 0.30f; b.TurnFlipped = false; Roll(b, "turn about"); }
                 break;
         }
@@ -925,8 +1051,9 @@ internal sealed class FeederBirds : Resident
                 if (p != me && p.Kind == me.Kind && p.Owner < 0) { b.GoalX = p.At.X; break; }
         }
         b.HopPh = 0f;
+        float hopLen = RealLength[(int)b.Kind] * 1.8f * 0.1f * _u * LevelScale[CurrentLevel(b)];
         b.Mind.Begin(Doing.Hop, 6f);
-        if (MathF.Abs(b.GoalX - b.X) < 3f) b.Mind.Begin(Doing.Perch, 1.5f);
+        if (MathF.Abs(b.GoalX - b.X) < 1.2f * hopLen) b.Mind.Begin(Doing.Perch, Organic.Jitter(Rng, 4f));   // nowhere worth a hop: stay put, not a one-frame hop
     }
 
     // ==================================================================
@@ -1012,7 +1139,32 @@ internal sealed class FeederBirds : Resident
             Stamp(fb, bk.Shadow, b.X, b.Y + 1f, bk.ShadowOx, bk.ShadowOy, false, 1f);
         int left = (int)MathF.Round(b.X) - (mirror ? b.Page.Width - 1 - bk.Ox : bk.Ox);
         int top = (int)MathF.Round(b.Y - b.Lift) - bk.Oy;
-        b.Page.Draw(fb, left, top, b.Alpha, null, mirror, S.NearDepth, b.Mind.Doing == Doing.Fly ? 255 : b.Near);
+        bool flying = b.Mind.Doing == Doing.Fly;
+        if (flying && b.Pine >= 0 && _mask != null) DrawBehindPine(fb, b, left, top, mirror);
+        else b.Page.Draw(fb, left, top, b.Alpha, null, mirror, S.NearDepth, flying ? 255 : b.Near);
+    }
+
+    /// <summary>
+    /// A bird going into or coming out of a pine passes BEHIND its outline: no see-through fade (the review: birds faded
+    /// in and out in mid-air at the pines). The stencil is the whole screen "true" except, for this one stamp, the inside of
+    /// the pine's cone (the same cone the painter drew: Brushwork.PineHalfWidth at each row) under the bird's rectangle.
+    /// Where the stencil is false the stamp leaves the frame alone, so the pine hides the bird. The cone is put back after.
+    /// </summary>
+    private void DrawBehindPine(FrameBuffer fb, Bird b, int left, int top, bool mirror)
+    {
+        var pine = S.Pines[b.Pine];
+        int x0 = Math.Max(0, left), x1 = Math.Min(S.Width, left + b.Page!.Width), y0 = Math.Max(0, top), y1 = Math.Min(S.Height, top + b.Page.Height);
+        for (int pass = 0; pass < 2; pass++)
+        {
+            for (int y = y0; y < y1; y++)
+            {
+                if (y < pine.Top || y > pine.Foot) continue;
+                float hw = 0.92f * Brushwork.PineHalfWidth(y, pine.Top, pine.Foot, _u);
+                int a = Math.Max(x0, (int)MathF.Ceiling(pine.X - hw)), c = Math.Min(x1, (int)MathF.Floor(pine.X + hw) + 1);
+                for (int x = a; x < c; x++) _mask![y * S.Width + x] = pass == 1;
+            }
+            if (pass == 0) b.Page.Draw(fb, left, top, b.Alpha, _mask, mirror, S.NearDepth, 255);
+        }
     }
 
     private void DrawParticles(FrameBuffer fb)

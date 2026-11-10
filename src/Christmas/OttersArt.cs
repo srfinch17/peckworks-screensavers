@@ -411,12 +411,15 @@ internal static class OttersArt
     /// shoulders are up in the water 0.9 m back; the forepaws find the rim, and the body is pulled out over them, the
     /// hips last, until it stands.
     /// </summary>
-    public static Skel Haul(float t, float fish)
+    /// <param name="sink">How far (metres) the whole front of the body is held DOWN in the water: the first three pages of the sheet rise from
+    /// nearly nothing, so the head that swam to the rim grows into the hauling otter over a third of a second instead of
+    /// changing from a bare head to a reared body in ONE frame (seen on a strip: the pop at every haul-out).</param>
+    public static Skel Haul(float t, float fish, float sink = 0f)
     {
         var k = new Skel();
         float e = Sm(t);
-        Vector3 chest = Vector3.Lerp(V(-0.88f, 0.12f), V(0.17f, 0.15f), e);
-        Vector3 hip = Vector3.Lerp(V(-1.2f, -0.17f), V(-0.17f, 0.15f), MathF.Pow(e, 0.8f));
+        Vector3 chest = Vector3.Lerp(V(-0.88f, 0.12f), V(0.17f, 0.15f), e) - V(0f, sink);
+        Vector3 hip = Vector3.Lerp(V(-1.2f, -0.17f), V(-0.17f, 0.15f), MathF.Pow(e, 0.8f)) - V(0f, sink);
         k.P[Skel.Chest] = chest; k.P[Skel.Hip] = hip;
         k.P[Skel.Mid] = (chest + hip) / 2 + V(0f, 0.02f + 0.04f * MathF.Sin(MathF.PI * e));
         HeadAt(k, chest + V(0.1f, 0.03f + 0.09f * (1f - e)), 0f, 18f * (1f - e) + 4f * e);

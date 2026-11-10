@@ -103,8 +103,10 @@ internal static class ReindeerArt
     // THE TURN is a half turn drawn in TurnSteps steps of 9 degrees (page 0 is the side view facing one way, page TurnSteps the side view
     // facing the other, the three-quarter view toward us and the head-on view between). The head pitch is one of TurnLevels, each EXACTLY
     // one of the ordinary head pages (TurnHp), so the head of the standing animal and the head of the first turn page are the same picture.
-    public const int TurnSteps = 20, TurnLevels = 7;
-    public static readonly int[] TurnHp = [0, 2, 4, 6, 8, 11, 15];
+    // (Second pass: ONE level, head page 4, a head carried up and level. The herd brings the head up BEFORE it turns and holds it there through
+    // the turn, so seven levels were seven times the paint for nothing, and the build fell from six seconds to under two.)
+    public const int TurnSteps = 20, TurnLevels = 1;
+    public static readonly int[] TurnHp = [4];
     public static float TurnF(int level) => TurnHp[level] / (float)(HeadPages - 1);
     public static int TurnLevelOf(float f)
     {
@@ -202,8 +204,12 @@ internal static class ReindeerArt
 
     // ================================================================ building a whole set
 
+    /// <summary>Where the last Build's time went (for the mind log): bodies, heads, turn pages, the rest, in milliseconds.</summary>
+    public static string Timing = "";
+
     public static ReindeerSet Build(int h, ReindeerKind kind)
     {
+        var swT = System.Diagnostics.Stopwatch.StartNew();
         var set = new ReindeerSet { Kind = kind, H = h };
         bool calf = kind == ReindeerKind.Calf;
         float antlerH = kind == ReindeerKind.Bull ? 1.0f : kind == ReindeerKind.Cow ? 0.58f : 0f;
@@ -330,6 +336,7 @@ internal static class ReindeerArt
                 set.Gam[t] = Body(new Pose { Feet = gf, WD = gwd, CD = gcd, Tail = gt });
             }
         }
+        long msBodies = swT.ElapsedMilliseconds;
         for (int j = 0; j < HeadPages; j++)
         {
             float f = j / (float)(HeadPages - 1);
@@ -340,6 +347,7 @@ internal static class ReindeerArt
             }
             set.Nose[j] = NoseTip(f, kind);
         }
+        long msHeads = swT.ElapsedMilliseconds;
         // THE TURN: whole animals drawn at every angle of the half turn, toward us (side 0) and away from us (side 1), at each head pitch level.
         set.FigW = (int)(3.5f * h) + 10; set.FigOx = set.FigW / 2;
         set.FigOy = (int)((0.86f + 0.62f + 0.95f * antlerH) * h) + 10;
@@ -359,6 +367,8 @@ internal static class ReindeerArt
                     }, out page.OX, out page.OY);
                     set.Fig[side, lv, k] = page;
                 }
+        long msTurn = swT.ElapsedMilliseconds;
+        Timing = $"{kind}: bodies {msBodies} ms, heads {msHeads - msBodies} ms, turn pages {msTurn - msHeads} ms";
         // The shadows: a flat soft ellipse on the snow, blue because it is night and the snow is lit by the moon and the sky.
         set.Shadow = ShadowSprite(h, 1.30f);
         set.ShadowLie = ShadowSprite(h, 1.55f);

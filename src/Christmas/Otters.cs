@@ -25,7 +25,7 @@ internal sealed class OtterPages
     public int WideW, WideOX, DiveW, DiveOX, SurfW, SurfH, SurfOX, SurfOY;
     public float P;                              // pixels in a metre
 
-    public const int GallopPages = 16, StartPages = 5, ThrowPages = 6, GetUpPages = 6, StandPages = 5, FlopPages = 6, RollPages = 12, SitDownPages = 5, DivePages = 14, HaulPages = 8, SurfPages = 6;
+    public const int GallopPages = 16, StartPages = 5, ThrowPages = 6, GetUpPages = 6, StandPages = 5, FlopPages = 6, RollPages = 12, SitDownPages = 5, DivePages = 14, HaulPages = 16, SurfPages = 6;
 }
 
 /// <summary>
@@ -45,7 +45,15 @@ internal sealed partial class Otters : Resident
         float p = Math.Max(4f, S.Metre(S.Pond.At.Y));
         if (_count > 0) BuildInBackground(() =>
         {
-            try { OtterPages built = Build(p); Warm(built); _pg = built; }
+            try
+            {
+                long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                OtterPages built = Build(p);
+                long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
+                Warm(built); _pg = built;
+                if (Environment.GetEnvironmentVariable("PECKWORKS_MINDLOG") is { Length: > 0 } && MindLog.Open() is { } lg)
+                    lock (lg) lg.WriteLine($"0.00 Otter build {System.Diagnostics.Stopwatch.GetElapsedTime(t0, t1).TotalMilliseconds:0} ms, warm-up {System.Diagnostics.Stopwatch.GetElapsedTime(t1).TotalMilliseconds:0} ms");
+            }
             catch (Exception e) { if (Environment.GetEnvironmentVariable("PECKWORKS_SHEET") is { } sh && sh.Contains(';')) File.WriteAllText(sh[(sh.IndexOf(';') + 1)..] + ".err.txt", e.ToString()); throw; }
         });
         else BuildInBackground(() => { });
@@ -104,7 +112,7 @@ internal sealed partial class Otters : Resident
         g.Haul = new Sprite[OtterPages.HaulPages, 2];
         for (int i = 0; i < OtterPages.HaulPages; i++)
             for (int f = 0; f < 2; f++)
-                g.Haul[i, f] = OttersArt.Page(OttersArt.Haul(i / (OtterPages.HaulPages - 1f), f * 0.9f), 0f, p, g.WideW, g.H, g.WideOX, g.OY);
+                g.Haul[i, f] = OttersArt.Page(i < 3 ? OttersArt.Haul(0f, f * 0.9f, 0.26f - 0.095f * i) : OttersArt.Haul((i - 3) / (OtterPages.HaulPages - 4f), f * 0.9f), 0f, p, g.WideW, g.H, g.WideOX, g.OY);
         g.Dive = new Sprite[OtterPages.DivePages];
         for (int i = 0; i < OtterPages.DivePages; i++)
             g.Dive[i] = OttersArt.Page(OttersArt.Dive(i / (OtterPages.DivePages - 1f)), 0f, p, g.DiveW, g.H, g.DiveOX, g.OY);
@@ -203,8 +211,8 @@ internal sealed partial class Otters : Resident
         rows.Add(("sit eat", Row(i => g.SitEat[i / 3 % 3, (i % 3) * 3], 9)));
         rows.Add(("surf", Row(i => g.Surf[i, 4, 0], 6)));
         rows.Add(("surf fish", Row(i => g.Surf[5, i, 1], 9)));
-        rows.Add(("haul", Row(i => g.Haul[i, 0], 8)));
-        rows.Add(("haul fish", Row(i => g.Haul[i, 1], 8)));
+        rows.Add(("haul", Row(i => g.Haul[i, 0], 16)));
+        rows.Add(("haul fish", Row(i => g.Haul[i, 1], 16)));
         rows.Add(("dive", Row(i => g.Dive[i], 10)));
         int cell = g.WideW, cellH = g.H, perRow = Math.Max(1, 1900 / cell);
         int total = 0; foreach (var r in rows) total += (r.Pages.Count + perRow - 1) / perRow;

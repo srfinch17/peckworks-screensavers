@@ -46,6 +46,7 @@ internal static partial class FoxAndHaresArt
         public float HindFlat;                                // 1: the hind foot lies flat (a sitting or lying fox)
         public float TailAng = -4f, TailCurl = 10f, TailWrap, TailLen = 0.46f;
         public int WrapKind;                                  // 0 sitting (round the feet), 1 curled (over the nose)
+        public float WrapMix;                                 // 0 the sitting path .. 1 the curled path, blended (a lie settling into a curl never switches path)
         public float Tuck;                                    // 1: the legs are folded away (lying curled)
         public bool HeadFlip;                                 // the head turned upside down (the curl)
         public float BackSnow;                                // snow settled on the back, 0..1
@@ -60,14 +61,15 @@ internal static partial class FoxAndHaresArt
         EarF = Lerp(a.EarF, b.EarF, t), EarN = Lerp(a.EarN, b.EarN, t), Mouth = Lerp(a.Mouth, b.Mouth, t), Blink = Lerp(a.Blink, b.Blink, t), Snow = Lerp(a.Snow, b.Snow, t),
         FootFF = Lerp(a.FootFF, b.FootFF, t), FootFN = Lerp(a.FootFN, b.FootFN, t), FootHF = Lerp(a.FootHF, b.FootHF, t), FootHN = Lerp(a.FootHN, b.FootHN, t),
         HindFlat = Lerp(a.HindFlat, b.HindFlat, t), TailAng = Lerp(a.TailAng, b.TailAng, t), TailCurl = Lerp(a.TailCurl, b.TailCurl, t),
-        TailWrap = Lerp(a.TailWrap, b.TailWrap, t), TailLen = Lerp(a.TailLen, b.TailLen, t), WrapKind = t < 0.5f ? a.WrapKind : b.WrapKind,
+        TailWrap = Lerp(a.TailWrap, b.TailWrap, t), TailLen = Lerp(a.TailLen, b.TailLen, t), WrapKind = t < 0.5f ? a.WrapKind : b.WrapKind, WrapMix = Lerp(a.WrapMix, b.WrapMix, t),
         Tuck = Lerp(a.Tuck, b.Tuck, t), HeadFlip = t < 0.5f ? a.HeadFlip : b.HeadFlip, BackSnow = Lerp(a.BackSnow, b.BackSnow, t),
         Yaw = Lerp(a.Yaw, b.Yaw, t), Sink = Lerp(a.Sink, b.Sink, t), Shadow = Lerp(a.Shadow, b.Shadow, t), Lip = Lerp(a.Lip, b.Lip, t), Clip = a.Clip || b.Clip,
     };
 
     // the tail's two resting shapes, in pose units (nine points from the root to the tip)
     static readonly PointF[] WrapSit = [P(-0.22f, 0.10f), P(-0.27f, 0.055f), P(-0.22f, 0.025f), P(-0.12f, 0.022f), P(0.00f, 0.030f), P(0.11f, 0.038f), P(0.21f, 0.046f), P(0.29f, 0.060f), P(0.35f, 0.085f)];
-    static readonly PointF[] WrapCurl = [P(-0.31f, 0.11f), P(-0.32f, 0.18f), P(-0.24f, 0.225f), P(-0.10f, 0.245f), P(0.04f, 0.240f), P(0.17f, 0.205f), P(0.26f, 0.150f), P(0.29f, 0.095f), P(0.27f, 0.050f)];
+    // the curled brush: from the rump low along the near flank and in front of the chest, its white tip laid over the muzzle (the nose is UNDER the brush)
+    static readonly PointF[] WrapCurl = [P(-0.31f, 0.10f), P(-0.33f, 0.05f), P(-0.21f, 0.028f), P(-0.06f, 0.030f), P(0.10f, 0.038f), P(0.25f, 0.050f), P(0.38f, 0.062f), P(0.47f, 0.075f), P(0.52f, 0.095f)];
 
     public static void PaintFox(Graphics g, FPose q)
     {
@@ -99,8 +101,7 @@ internal static partial class FoxAndHaresArt
             }
             if (q.TailWrap > 0.001f)
             {
-                PointF[] w = q.WrapKind == 0 ? WrapSit : WrapCurl;
-                for (int i = 0; i < 9; i++) spine[i] = Lerp(spine[i], w[i], q.TailWrap);
+                for (int i = 0; i < 9; i++) spine[i] = Lerp(spine[i], Lerp(WrapSit[i], WrapCurl[i], q.WrapMix), q.TailWrap);
             }
             for (int i = 0; i < 9; i++) spine[i] = Pr(spine[i], 0.03f);
         }
@@ -114,7 +115,7 @@ internal static partial class FoxAndHaresArt
                 float dx = b.X - a.X, dy = b.Y - a.Y, len = MathF.Sqrt(dx * dx + dy * dy);
                 if (len < 1e-5f) { dx = -1f; dy = 0f; len = 1f; }
                 float nx = -dy / len, ny = dx / len, t = i / 8f;
-                float w = 0.088f * MathF.Pow(MathF.Max(0f, MathF.Sin(MathF.PI * (0.10f + 0.90f * t))), 0.75f) * (q.TailLen / 0.46f) * (0.45f + 0.55f * c) * (q.TailWrap > 0.5f && q.WrapKind == 1 ? 0.78f : 1f);
+                float w = 0.088f * MathF.Pow(MathF.Max(0f, MathF.Sin(MathF.PI * (0.10f + 0.90f * t))), 0.75f) * (q.TailLen / 0.46f) * (0.45f + 0.55f * c) * (q.TailWrap > 0.5f && q.WrapMix > 0.5f ? 0.78f : 1f);
                 top.Add(P(spine[i].X + nx * w, spine[i].Y + ny * w)); bot.Add(P(spine[i].X - nx * w, spine[i].Y - ny * w));
             }
             bot.Reverse(); top.AddRange(bot);
@@ -402,10 +403,12 @@ internal static partial class FoxAndHaresArt
     /// <summary>Curled up asleep: a low dome of a body, the head turned back along the flank, the brush laid over the nose. breathe -1..1, snow 0..1 settled on the back.</summary>
     public static FPose FCurl(float breathe, float snow) => new()
     {
+        // the head is NOT flipped (the first curl turned it upside down and popped on the way): it lies low in front of the chest,
+        // nose down and forward, eyes shut, one ear showing, and the brush is laid across the muzzle
         Body = P(0f, 0.125f + 0.005f * breathe), Pitch = 0f, Rx = 0.30f, Ry = 0.125f + 0.007f * breathe,
-        NeckLen = 0.16f, NeckAng = 205f, HeadAng = 182f, HeadFlip = true, EarF = 18f, EarN = 20f, Blink = 1f,
-        FootFF = P(0.22f, 0.0f), FootFN = P(0.27f, 0f), FootHF = P(-0.1f, 0f), FootHN = P(-0.04f, 0f), Tuck = 1f, HindFlat = 1f,
-        TailWrap = 1f, WrapKind = 1, TailLen = 0.44f, BackSnow = snow * 0.8f,
+        NeckLen = 0.13f, NeckAng = -6f, HeadAng = -34f, EarF = 4f, EarN = 10f, Blink = 1f,
+        FootFF = P(0.26f, 0.0f), FootFN = P(0.31f, 0f), FootHF = P(-0.1f, 0f), FootHN = P(-0.04f, 0f), Tuck = 1f, HindFlat = 1f,
+        TailWrap = 1f, WrapKind = 1, WrapMix = 1f, TailLen = 0.44f, BackSnow = snow * 0.8f,
     };
 
     // ---- mousing ----
@@ -425,7 +428,7 @@ internal static partial class FoxAndHaresArt
     /// <summary>The coil before the spring: the hindquarters sunk, the weight on the haunches, the nose still on the spot.</summary>
     public static FPose FCoil()
     {
-        var q = FListen(0.1f);
+        var q = FListen(0f);
         q.Body = P(-0.01f, 0.235f); q.Pitch = 12f; q.NeckAng = 14f; q.HeadAng = -46f; q.EarF = 30f; q.EarN = 30f;
         q.FootHF = P(-0.12f, 0f); q.FootHN = P(-0.05f, 0f); q.HindFlat = 0.35f; q.TailAng = -6f; q.TailCurl = 8f;
         return q;
@@ -440,16 +443,16 @@ internal static partial class FoxAndHaresArt
         float[] ts = [0f, 0.2f, 0.45f, 0.75f, 1f];
         var q = new FPose();
         float by = Spline(t, ts, [0.235f, 0.50f, 0.92f, 0.80f, 0.55f]);
-        q.Body = P(0f, by);
+        q.Body = P(-0.01f * (1f - Sm(t / 0.2f)), by);
         q.Pitch = Spline(t, ts, [12f, 38f, 8f, -40f, -62f]);
         q.NeckAng = Spline(t, ts, [14f, 44f, 30f, -30f, -75f]); q.HeadAng = Spline(t, ts, [-46f, 20f, 8f, -50f, -80f]);
-        q.EarF = 6f; q.EarN = 6f; q.Mouth = 0f;
-        float[] hx = [-0.20f, -0.50f, -0.40f, -0.32f, -0.26f], hy = [-0.235f, -0.28f, -0.36f, -0.30f, -0.14f];
-        float[] fx = [0.22f, 0.30f, 0.36f, 0.40f, 0.27f], fy = [-0.235f, -0.12f, -0.22f, -0.44f, -0.55f];
-        q.FootHN = P(Spline(t, ts, hx), MathF.Max(0f, by + Spline(t, ts, hy))); q.FootHF = P(q.FootHN.X + 0.07f, q.FootHN.Y + 0.03f);
+        q.EarF = Lerp(30f, 6f, Sm(t / 0.25f)); q.EarN = q.EarF; q.Mouth = 0f;
+        float[] hx = [-0.05f, -0.50f, -0.40f, -0.32f, -0.26f], hy = [-0.235f, -0.28f, -0.36f, -0.30f, -0.14f];
+        float[] fx = [0.30f, 0.30f, 0.36f, 0.40f, 0.27f], fy = [-0.235f, -0.12f, -0.22f, -0.44f, -0.55f];
+        q.FootHN = P(Spline(t, ts, hx), MathF.Max(0f, by + Spline(t, ts, hy))); q.FootHF = P(q.FootHN.X + Lerp(-0.07f, 0.07f, Sm(t / 0.3f)), q.FootHN.Y + 0.03f * Sm(t / 0.3f));
         q.FootFN = P(Spline(t, ts, fx), MathF.Max(0f, by + Spline(t, ts, fy))); q.FootFF = P(q.FootFN.X - 0.06f, q.FootFN.Y + 0.03f);
-        q.TailAng = Spline(t, ts, [-6f, 4f, 10f, 34f, 52f]); q.TailCurl = 6f;
-        q.HindFlat = t < 0.15f ? 0.3f : 0f;
+        q.TailAng = Spline(t, ts, [-6f, 4f, 10f, 34f, 52f]); q.TailCurl = Lerp(8f, 6f, Sm(t / 0.3f));
+        q.HindFlat = 0.35f * (1f - Sm(t / 0.2f));
         q.Shadow = 1f - 0.55f * Math.Clamp(by / 0.9f, 0f, 1f);
         return q;
     }
@@ -505,7 +508,7 @@ internal static partial class FoxAndHaresArt
     {
         var q = FStand(0.1f);
         float rear = t < 0.45f ? Sm(t / 0.45f) : 0f;
-        float snap = t >= 0.45f && t < 0.62f ? Sm((t - 0.45f) / 0.17f) : t >= 0.62f ? 1f - Sm((t - 0.62f) / 0.38f) : 0f;
+        float snap = t >= 0.45f && t < 0.66f ? Sm((t - 0.45f) / 0.21f) : t >= 0.66f ? 1f - Sm((t - 0.66f) / 0.34f) : 0f;
         q.NeckAng = 40f + 22f * rear - 52f * snap; q.HeadAng = -6f + 30f * rear - 62f * snap;
         q.Blink = rear * 0.8f + snap; q.Mouth = snap * 0.9f; q.EarF = 6f - 14f * snap; q.EarN = 6f - 14f * snap;
         q.Body = P(0f, 0.31f - 0.02f * snap);
@@ -542,6 +545,32 @@ internal static partial class FoxAndHaresArt
         return q;
     }
 
+    /// <summary>
+    /// THE WATCH: the stalk has been pulled up short. Weight back on the haunches (the hind legs gathered, the body low behind),
+    /// forelegs braced forward and straight, the head low and level, the ears on the hare. t cycles (2 s): the chest breathes,
+    /// the near ear flicks, the tip of the brush twitches.
+    /// </summary>
+    public static FPose FWatch(float t)
+    {
+        var q = FStand(0.1f);
+        q.Body = P(-0.03f, 0.262f); q.Pitch = 5f; q.NeckAng = 16f; q.HeadAng = -28f; q.EarF = 14f; q.EarN = 14f;
+        q.FootFF = P(0.30f, 0f); q.FootFN = P(0.36f, 0f); q.FootHF = P(-0.17f, 0f); q.FootHN = P(-0.11f, 0f); q.HindFlat = 0.25f;
+        q.Ry += 0.004f * MathF.Sin(MathF.Tau * 2f * t);
+        q.EarN += t > 0.40f && t < 0.52f ? 16f * MathF.Sin((t - 0.40f) / 0.12f * MathF.PI) : 0f;
+        q.TailAng = -8f + 5f * MathF.Sin(MathF.Tau * 2f * t + 1f); q.TailCurl = 6f;
+        q.Blink = t > 0.80f && t < 0.88f ? MathF.Sin((t - 0.80f) / 0.08f * MathF.PI) : 0f;
+        return q;
+    }
+
+    /// <summary>The body points the mind log uses to measure a pose pop: the head centre, the body, the four paws, the nose.</summary>
+    public static PointF[] FKeys(FPose q)
+    {
+        PointF N0 = Add(q.Body, Rot(P(q.Rx * 0.74f, q.Ry * 0.28f), q.Pitch));
+        float na = q.NeckAng * MathF.PI / 180f;
+        PointF Hc = P(N0.X + q.NeckLen * MathF.Cos(na), N0.Y + q.NeckLen * MathF.Sin(na));
+        return [Hc, q.Body, q.FootFN, q.FootFF, q.FootHN, q.FootHF, FoxNoseOf(q)];
+    }
+
     // ---------------------------------------------------------------- the fox's books
 
     public const float FoxTrotStride = 0.72f, FoxStalkStride = 0.50f, FoxGallopStride = 2.2f;
@@ -553,6 +582,7 @@ internal static partial class FoxAndHaresArt
             Name = name, N = n, HalfW = halfW, Above = above,
             Paint = (g, i) => PaintFox(g, pose(i)),
             Aux = i => FoxNoseOf(pose(i)),
+            Keys = i => FKeys(pose(i)),
         };
         float rest0 = 0.275f, rest1 = 0.775f, gg = GallopGather(FoxGallopStride);
         return
@@ -568,22 +598,24 @@ internal static partial class FoxAndHaresArt
             Make("skid", 8, 1.10f, 0.85f, i => FLerp(FGallop(gg, FoxGallopStride), FStand(0.1f), Sm((i + 1) / 8f))),    // 8  gallop gather page, braking to a stand
             Make("sit", 12, 0.80f, 0.85f, i => FSit(i / 12f)),                                             // 9
             Make("sitIn", 8, 0.80f, 0.85f, i => FLerp(FStand(0.1f), FSit(0.1f), Sm((i + 1) / 8f))),        // 10 stand to sit
-            Make("curlIn", 12, 0.80f, 0.75f, i => i < 6 ? FLerp(FSit(0.1f), FLie(), Sm((i + 1) / 6f)) : FLerp(FLie(), FCurl(0f, 0f), Sm((i - 5) / 6f))),   // 11
+            Make("curlIn", 24, 0.80f, 0.75f, i => i < 12 ? FLerp(FSit(0.1f), FLie(), Sm((i + 1) / 12f)) : FLerp(FLie(), FCurl(0f, 0f), Sm((i - 11) / 12f))),   // 11
             Make("sleep", 16, 0.80f, 0.60f, i => FCurl(MathF.Sin(MathF.Tau * (i % 4) / 4f), (i / 4) / 3f)), // 12 breath cycle x four depths of snow
             Make("listen", 16, 0.85f, 0.70f, i => FListen(i / 16f)),                                       // 13
-            Make("coil", 4, 0.85f, 0.70f, i => FLerp(FListen(0.1f), FCoil(), Sm((i + 1) / 4f))),           // 14
-            Make("leap", 14, 1.00f, 1.40f, i => FLeap((i + 0.5f) / 14f)),                                  // 15
-            Make("diveIn", 4, 0.90f, 1.30f, i => FDiveIn((i + 1) / 4f)),                                   // 16
+            Make("coil", 4, 0.85f, 0.70f, i => FLerp(FListen(0f), FCoil(), Sm((i + 1) / 4f))),           // 14
+            Make("leap", 28, 1.00f, 1.40f, i => FLeap((i + 0.5f) / 28f)),                                  // 15
+            Make("diveIn", 8, 0.90f, 1.30f, i => FDiveIn((i + 1) / 8f)),                                   // 16
             Make("plunge", 8, 0.80f, 1.10f, i => FPlunge(i / 8f, 1f)),                                     // 17
-            Make("backout", 8, 0.90f, 0.80f, i => FBackOut((i + 1) / 8f)),                                 // 18
+            Make("backout", 16, 0.90f, 0.80f, i => FBackOut((i + 1) / 16f)),                                 // 18
             Make("shake", 8, 0.80f, 0.80f, i => FShake(i / 8f, 0.9f - 0.5f * (i / 7f))),                   // 19
             Make("wipe", 4, 0.80f, 0.80f, i => FLerp(FShake(0.1f, 0.4f), FStand(0.1f), Sm((i + 1) / 4f))), // 20 the last of the snow melts off the muzzle
-            Make("sneeze", 8, 0.80f, 0.85f, i => FSneeze(i / 8f)),                                         // 21
+            Make("sneeze", 24, 0.80f, 0.85f, i => FSneeze(i / 24f)),                                         // 21
             Make("dig", 12, 0.90f, 0.70f, i => FDig(i / 12f)),                                             // 22
             Make("noseIn", 4, 0.85f, 0.70f, i => FLerp(FStand(0.1f), FNose(0f), Sm((i + 1) / 4f))),        // 23
             Make("nose", 8, 0.85f, 0.70f, i => FNose(i / 8f)),                                             // 24
             Make("turn", 4, 0.85f, 0.80f, i => FTurn(22.5f * (i + 1))),                                    // 25
             Make("dashIn", 4, 1.0f, 0.75f, i => FLerp(FTrot(0.30f, FoxStalkStride, 1f, 0.68f), FGallop(0f, FoxGallopStride), Sm((i + 1) / 4f))),   // 26 crouch into the dash
+            Make("lower", 6, 0.85f, 0.80f, i => FLerp(FStand(0.1f), FListen(0f), Sm((i + 1) / 6f))),                     // 28 the head lowering from a stand to listen (and back)
+            Make("watch", 17, 0.95f, 0.75f, i => i < 5 ? FLerp(FTrot(0.30f, FoxStalkStride, 1f, 0.68f), FWatch(0f), Sm(i / 4f)) : FWatch((i - 5) / 12f)),   // 27 pull-up from the stalk into a braced watch
         ];
     }
 

@@ -28,6 +28,7 @@ internal sealed class BirdBook
     public readonly Sprite[] Bathe = new Sprite[2];      // wings thrown out, low: the two ends of a flutter
     public readonly Sprite[] Flap = new Sprite[FlapPages];
     public readonly Sprite[] Flare = new Sprite[3];      // the landing: wings thrown up, feet reaching, then the downstroke that settles it
+    public Sprite FluffHalf = null!, LiftHalf = null!;   // half-way pages that bridge the stance to the fluffed ball and to the head-thrown-up poses
     public Sprite Fluff = null!, Crouch = null!, Lean = null!, Alert = null!, Fold = null!, Shadow = null!;
     public int ShadowOx, ShadowOy;
 }
@@ -384,6 +385,8 @@ internal static class FeederBirdsArt
         bk.Bathe[0] = Pose1(new Pose(Crouch: 1.1f, Fluff: 0.5f, Spread: 1.15f, Lean: -4f));
         bk.Bathe[1] = Pose1(new Pose(Crouch: 1.1f, Fluff: 0.5f, Spread: 4.25f, Lean: -4f));
         bk.Fluff = Pose1(new Pose(Fluff: 1f, Crouch: 0.5f));
+        bk.FluffHalf = Pose1(new Pose(Fluff: 0.5f, Crouch: 0.25f));
+        bk.LiftHalf = Pose1(new Pose(Lift: 0.5f, Lean: 4f, Pitch: 7f, Fluff: -0.05f));
         bk.Crouch = Pose1(new Pose(Crouch: 1f, Flick: 22f, Lean: -8f));
         bk.Lean = Pose1(new Pose(Lean: -15f, Dip: 0.28f, Open: 0.9f, Pitch: -4f, Fluff: 0.3f));
         bk.Alert = Pose1(new Pose(Lean: 9f, Lift: 0.55f, Fluff: -0.15f, Flick: 8f));

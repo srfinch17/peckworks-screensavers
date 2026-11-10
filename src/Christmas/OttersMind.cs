@@ -98,6 +98,7 @@ internal sealed partial class Otters
         public string PageKind = ""; public int PageIdx; public float ShakeT;
         public float Spin;                                  // slide's turn rate (rad/s)
         public float BlinkT, EarT, WhiskT, CurlT, ScratchT, NextBlink = 1.5f, NextEar = 5f, NextWhisk = 3f, NextCurl = 8f, NextScratch = 12f, NextBreath = 2f;
+        public float Blocked;                               // seconds a gallop has been refused its steps (the run ends after 0.7 s of it)
         public int Var = -1;                                // an idle fidget on the Rest page: 0 blink, 1 ear flick, 2 whiskers, 3 tail curl
         public float BX, BY, TX, TY, TobogHd, Lift, LiftMax; // the snow slide: the foot of the drift, its top, the way down, how high the feet are lifted (metres)
         public float BallX, BallY; public int BallTurns;
@@ -142,8 +143,9 @@ internal sealed partial class Otters
             o.Att = new Attention(0.25f + 0.5f * timid[i], 0.35f + 0.65f * curious[i]) { Keen = 1.1f, Hungry = 0.55f + 0.45f * (float)Rng.NextDouble() };
             o.Pace = new Pace(4.5f * _p);
             // The first starts standing on the ice, the rest in the water, one by one: it is a pond, and they are not all out at once.
-            if (i == 0) StartStanding(o);
-            else { o.M.Begin(Doing.Under, 2.5f + 3.5f * i + (float)Rng.NextDouble() * 4f); o.Vis = false; }
+            // THE ENTRANCE (the brief): nobody stands there at the start. Every otter is under the ice and its head comes up in
+            // the hole, one after the other: the first about 1.5 s in, the next three or four seconds later each.
+            o.M.Begin(Doing.Under, 1.5f + 3.6f * i + (float)Rng.NextDouble() * 1.5f); o.Vis = false;
             _o[i] = o;
         }
         for (int i = 0; i < _count; i++) _o[i].I = i;
@@ -199,6 +201,8 @@ internal sealed partial class Otters
         float dx = (x - _hx) / (_hrx * grow), dy = (y - _hy) / (_hry * grow);
         return dx * dx + dy * dy < 1f;
     }
+    /// <summary>How far from the hole's middle, in hole-radii (1 = on its rim).</summary>
+    private float HoleRadius(float x, float y) { float dx = (x - _hx) / _hrx, dy = (y - _hy) / _hry; return MathF.Sqrt(dx * dx + dy * dy); }
     private bool Allowed(float x, float y) => S.OnPond(x, y, 1.10f) && !InHole(x, y, 1.22f) && PropFree(x, y, 0.45f * _p);
     /// <summary>Clear of the tiny fir that stands at the pond's right end (the one prop near the ice): nothing of an otter goes through its branches.</summary>
     private bool PropFree(float x, float y, float room) => !(MathF.Abs(x - S.SaplingFoot.X) < S.SaplingHeight * 0.30f + room && MathF.Abs(y - S.SaplingFoot.Y) < 0.05f * S.U);
@@ -208,8 +212,16 @@ internal sealed partial class Otters
     /// <summary>Moves "d" pixels along the heading in the flat plane. False (and no move) if the step would leave the ice or enter the hole.</summary>
     private bool Move(Otter o, float d)
     {
+        if (d <= 0.001f) return true;                       // a standing start (the pace has not picked up yet): no step to refuse
         float nx = o.X + MathF.Cos(o.Hd) * d, ny = o.Y + MathF.Sin(o.Hd) * d * _r;
-        if (!Allowed(nx, ny)) return false;
+        if (!Allowed(nx, ny))
+        {
+            // A WAY OUT OF THE HOLE'S MARGIN (found in the log: an otter standing at 20 px from the hole's middle, inside the
+            // keep-out ring, refused EVERY step, so each gallop it was given ended where it began, 1.6 lengths short, and it
+            // rested two seconds and rolled the same impossible gallop again, a dozen times a minute). If the otter already
+            // stands where it should not, a step that takes it AWAY from the hole's middle and stays on the ice is allowed.
+            if (Allowed(o.X, o.Y) || !S.OnPond(nx, ny, 1.10f) || HoleRadius(nx, ny) <= HoleRadius(o.X, o.Y)) return false;
+        }
         o.X = nx; o.Y = ny; return true;
     }
 
@@ -282,6 +294,7 @@ internal sealed partial class Otters
                 case Doing.Dive: UpdateDive(o, dt); break;
                 case Doing.Wrestle: UpdateWrestle(o, dt); break;
             }
+            if (OnGround(o)) S.Occupy(this, o.I, o.X, o.Y, 0.5f * _p);
             Present(o);
         }
         Separate(dt);
@@ -291,11 +304,11 @@ internal sealed partial class Otters
             // The place that is DRAWN: while two otters are one rolling ball, each is drawn half a pair-gap to its side of the ball's middle.
             float lx = o.X;
             if (o.M.Doing == Doing.Wrestle && o.Stage is >= 1 and <= 3 && o.I < o.Partner) lx = o.X + (o.GoalX - o.BallX);
-            _log.WriteLine($"{_time:F2} Otter {o.I} {lx:F1} {o.Y:F1} {(o.M.Doing == Doing.Gallop ? o.Pace.Speed : o.Speed):F0} {o.M.Doing}/{o.Stage} {o.PageKind}{o.PageIdx} {o.Hd:F3} {(o.Vis ? 1 : 0)}");
+            _log.WriteLine($"{Board.Time:F2} Otter {o.I} {lx:F1} {o.Y:F1} {(o.M.Doing == Doing.Gallop ? o.Pace.Speed : o.Speed):F0} {o.M.Doing}/{o.Stage} {o.PageKind}{o.PageIdx} {o.Hd:F3} {(o.Vis ? 1 : 0)}");
         }
     }
 
-    private void Log(string s) { _log?.WriteLine($"{_time:F2} Otter {s}"); }
+    private void Log(string s) { _log?.WriteLine($"{Board.Time:F2} Otter {s}"); }
 
     // ---------------------------------------------------------------- reactions
 
@@ -397,11 +410,11 @@ internal sealed partial class Otters
             if (o.HasLook && o.LookClock < 4f) o.GoalHd = LookHeading(o, 0f);
             else if (o.LookClock > 0f && (o.HeadClock -= dt) <= 0f)
             {
-                o.HeadClock = Organic.Jitter(Rng, 1.6f, 0.8f);
-                o.GoalHd = (float)(Rng.NextDouble() * Math.PI * 2 - Math.PI);                  // a new look: any direction round the compass
+                o.HeadClock = Organic.Jitter(Rng, 3.8f, 0.6f) + 1.2f;
+                o.GoalHd = o.Hd + (float)(Rng.NextDouble() - 0.5) * 2.6f;                      // a new look, a part of the way round (never a whirl)
                 if (Rng.Next(3) == 0) AddRing(_hx, _hy, 0.5f);
             }
-            o.Hd = Turn.Toward(o.Hd, o.GoalHd, 3.0f, dt);
+            o.Hd = Turn.Toward(o.Hd, o.GoalHd, 1.8f, dt);
         }
         if (o.Stage == 0) { if (o.T >= 0.01) o.Stage = 1; }
         if (o.Stage == 1 && o.M.Over)
@@ -521,11 +534,13 @@ internal sealed partial class Otters
         o.HeadClock -= dt;
         if (o.HeadClock <= 0f)
         {
-            o.HeadClock = Organic.Jitter(Rng, 1.1f, 0.9f);
-            o.HeadTarget = Rng.Next(5);
+            // CALM HEAD (the review: it re-aimed every 1.5 s): a held look of 2 to 7 s, then a small move, one or two views
+            // to a side, or back to the middle; never a jump across the whole range.
+            o.HeadClock = Organic.Jitter(Rng, 3.6f, 0.6f) + 1.2f;
+            o.HeadTarget = Rng.Next(3) == 0 ? 2 : Math.Clamp(o.HeadIdx + (Rng.Next(2) == 0 ? -1 : 1) * (1 + Rng.Next(2)), 0, 4);
         }
         o.LookClock += dt;
-        if (o.HeadIdx != o.HeadTarget && ((int)(o.T * 14) != (int)((o.T - dt) * 14))) o.HeadIdx += Math.Sign(o.HeadTarget - o.HeadIdx);
+        if (o.HeadIdx != o.HeadTarget && ((int)(o.T * 9) != (int)((o.T - dt) * 9))) o.HeadIdx += Math.Sign(o.HeadTarget - o.HeadIdx);
         // A shake after hauling out: a quick whole-body shiver with droplets flying off (Present draws the shiver).
         if (o.ShakeT > 0f)
         {
@@ -586,15 +601,17 @@ internal sealed partial class Otters
         if (_force is "wrestle" or "chase" or "fish" && o.I > 0) { Begin(o, Doing.Rest, 5f); return; }   // the test: the playmate stays put until the slider comes by
         Span<float> w = stackalloc float[8];
         bool quiet = Lull;
-        w[0] = 0.30f * (1f - 0.4f * o.Lazy);                                                    // wander
+        w[0] = 0.17f * (1f - 0.4f * o.Lazy);                                                    // wander
         w[1] = quiet ? 0f : 0.34f * (0.35f + o.Playful);                                         // slide
         w[2] = 0.12f * (0.5f + o.Lazy);                                                          // stand and look
         w[3] = quiet ? 0f : 0.12f * (0.5f + o.Lazy);                                             // roll
         w[4] = 0.10f + 0.012f * Math.Min(o.OutTime, 50f);                                        // go for a swim
         w[5] = _count > 0 && _fishClock > 25f && !AnyFish() ? 0.12f + 0.006f * Math.Min(o.OutTime, 40f) : 0f;   // go fishing
-        w[6] = 0.12f;                                                                           // keep still a bit longer
+        w[6] = 0.22f;                                                                           // keep still a bit longer
         w[7] = quiet || _banks.Count == 0 ? 0f : 0.20f * (0.4f + o.Playful);                    // the snow slide
-        switch (Dice.Pick(Rng, w))
+        int decided = Dice.Pick(Rng, w);
+        if (_log != null) Log($"{o.I} decide {decided}");
+        switch (decided)
         {
             case 0:
                 {
@@ -602,7 +619,7 @@ internal sealed partial class Otters
                     {
                         float a = (float)Rng.NextDouble() * MathF.Tau, d = 0.25f + 0.55f * (float)Rng.NextDouble();
                         float x = _cx + MathF.Cos(a) * _rx * d, y = _cy + MathF.Sin(a) * _ry * d;
-                        if (Allowed(x, y) && PlaneDist(o.X, o.Y, x, y) > 1.5f * _p && PlaneDist(o.X, o.Y, x, y) < 5.0f * _p) { StartGallop(o, x, y, After.Rest, false, 0f, false); return; }
+                        if (Allowed(x, y) && !S.Crowded(x, y, 0.5f * _p, this, o.I) && PlaneDist(o.X, o.Y, x, y) > 1.5f * _p && PlaneDist(o.X, o.Y, x, y) < 5.0f * _p) { StartGallop(o, x, y, After.Rest, false, 0f, false); return; }
                     }
                     Begin(o, Doing.Rest, 2f); break;
                 }
@@ -612,7 +629,7 @@ internal sealed partial class Otters
             case 4: GoDive(o, false, false); break;
             case 5: GoDive(o, false, true); _fishClock = 0f; break;
             case 7: StartTobog(o); break;
-            default: Begin(o, Doing.Rest, Organic.Jitter(Rng, 3f)); break;
+            default: Begin(o, Doing.Rest, Organic.Jitter(Rng, 7f) + 2f); break;
         }
     }
 
@@ -629,6 +646,7 @@ internal sealed partial class Otters
         o.HasWay = false; o.PassedWay = false;
         o.GoalX = gx; o.GoalY = gy; o.Next = next; o.Panic = panic; o.HaveGoalHd = haveFinal; o.GoalHd = finalHd; o.Chasing = false; o.Braked = false;
         Begin(o, Doing.Gallop);
+        o.Pace.Halt();                                       // the pace starts from nothing (the log showed the slide's last speed on a standing gallop)
         float L = PlaneDist(o.X, o.Y, gx, gy);
         // Fit the stride to the distance: a whole number of strides, each within reach of an otter's real one.
         int n = Math.Max(2, (int)MathF.Round(L / _stride));
@@ -664,7 +682,11 @@ internal sealed partial class Otters
                     o.Hd = Turn.Toward(o.Hd, steer, 2.6f, dt);
                     if (!o.Pace.Braking && !o.Braked) o.Pace.Want = speed;
                     float d = o.Pace.Tick(dt);
-                    if (!Move(o, d)) { o.Pace.Halt(); o.Chasing = false; o.Braked = true; }   // blocked (rim, hole, fir): the run ends here, even a chase
+                    // BLOCKED (rim, hole, fir): the pace drops to a stop and builds up again along the heading as it turns toward the
+                    // way round. Only if it stays blocked for 0.7 s does the run end (the old rule ended it on the FIRST refused
+                    // step, which a slide that had just bumped the hole's ring made every time: 11 gallops in 3 minutes died at once).
+                    if (Move(o, d)) o.Blocked = 0f;
+                    else { o.Pace.Halt(); o.Blocked += dt; if (o.Blocked > 0.7f) { o.Chasing = false; o.Braked = true; o.Blocked = 0f; } }
                     if (!o.Chasing && !o.Braked && o.Pace.Speed > 0.35f * _p)
                     {
                         // The stride was fitted so that (distance walked + distance left) is a whole number of strides: braking
@@ -725,7 +747,7 @@ internal sealed partial class Otters
         o.Panic = false; o.Chasing = false;
         // A gallop that was cut short (a prop or the rim in the way) must not hand over to a doing that expects the otter AT its spot.
         if (o.Next != After.Rest && o.Next != After.Beg && o.Next != After.Wrestle && PlaneDist(o.X, o.Y, o.GoalX, o.GoalY) > 1.0f * _p)
-        { Begin(o, Doing.Rest, Organic.Jitter(Rng, 2f)); return; }
+        { if (_log != null) Log($"{o.I} gallop for {o.Next} ended {PlaneDist(o.X, o.Y, o.GoalX, o.GoalY) / _p:F1} lengths short"); Begin(o, Doing.Rest, Organic.Jitter(Rng, 2f)); return; }
         switch (o.Next)
         {
             case After.Dive: case After.DiveFish:
@@ -735,7 +757,7 @@ internal sealed partial class Otters
             case After.Slide: BeginSlide(o); break;
             case After.Tobog: BeginTobog(o); break;
             case After.Beg: StartStand(o, _o.Length > 0 && OtherEating(o, out Otter e) ? e.X : float.NaN, float.NaN, true); break;
-            default: Begin(o, Doing.Rest, Organic.Jitter(Rng, 3f)); break;
+            default: Begin(o, Doing.Rest, Organic.Jitter(Rng, 6f) + 1.5f); break;
         }
     }
 
@@ -1052,8 +1074,8 @@ internal sealed partial class Otters
             else
             {
                 o.HeadClock -= dt;
-                if (o.HeadClock <= 0f) { o.HeadClock = Organic.Jitter(Rng, 1.4f, 0.8f); o.GoalHd = o.Hd + (float)(Rng.NextDouble() - 0.5) * 2.2f; o.Level = Rng.Next(3); }
-                o.Hd = Turn.Toward(o.Hd, o.GoalHd, 1.6f, dt);
+                if (o.HeadClock <= 0f) { o.HeadClock = Organic.Jitter(Rng, 3.2f, 0.6f) + 1.0f; o.GoalHd = o.Hd + (float)(Rng.NextDouble() - 0.5) * 1.4f; o.Level = Math.Clamp(o.Level + Rng.Next(3) - 1, 0, 2); }
+                o.Hd = Turn.Toward(o.Hd, o.GoalHd, 1.2f, dt);
             }
             // A long look at Santa is cut short only by the timer.
             if (o.M.Over) { o.Stage = 2; o.T = 0; }
@@ -1186,7 +1208,7 @@ internal sealed partial class Otters
                 {
                     int i = Math.Min(OtterPages.HaulPages - 1, (int)(o.T / 1.7 * OtterPages.HaulPages));
                     o.Spr = g.Haul[i, o.Fish ? 1 : 0]; o.OX = g.WideOX; o.Mirror = o.Face < 0; o.PageKind = "haul"; o.PageIdx = i;
-                    o.ShadowBin = i >= 6 ? 4 : -1;
+                    o.ShadowBin = i >= 12 ? 4 : -1;
                     break;
                 }
             case Doing.Dive:

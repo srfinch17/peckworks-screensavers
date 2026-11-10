@@ -46,6 +46,7 @@ internal sealed class BookSpec
     public float HalfW, Above;                 // the sheet is 2*HalfW wide and Above (over the snow) plus a little under it tall
     public Action<Graphics, int> Paint = null!; // paints page i in unit space (origin at the feet, y up, facing +x)
     public Func<int, PointF>? Aux;              // a point of interest on page i (the nose, for the breath), in units
+    public Func<int, PointF[]>? Keys;           // a few body points of page i (head, body, feet...), in units: only the mind log reads them, to measure a pose pop
 }
 
 /// <summary>One flip-book painted at every size step: Pages[tier][page]. The tier is the animal's distance from the viewer.</summary>
@@ -53,6 +54,7 @@ internal sealed class Book
 {
     public readonly Sprite[][] Pages;
     public readonly PointF[] Aux;               // per page, in units
+    public readonly PointF[][] Keys;            // per page, a few body points in units (empty when the book gives none)
     public readonly int[] Ox, Oy;               // per tier: the page pixel that lands on the animal's feet
     public readonly int Count;
     public readonly string Name;
@@ -63,7 +65,8 @@ internal sealed class Book
         Pages = new Sprite[tierPx.Length][];
         Ox = new int[tierPx.Length]; Oy = new int[tierPx.Length];
         Aux = new PointF[spec.N];
-        for (int i = 0; i < spec.N; i++) if (spec.Aux != null) Aux[i] = spec.Aux(i);
+        Keys = new PointF[spec.N][];
+        for (int i = 0; i < spec.N; i++) { if (spec.Aux != null) Aux[i] = spec.Aux(i); Keys[i] = spec.Keys != null ? spec.Keys(i) : Array.Empty<PointF>(); }
         for (int t = 0; t < tierPx.Length; t++)
         {
             float k = tierPx[t];
@@ -210,6 +213,7 @@ internal static partial class FoxAndHaresArt
         public bool Clip;                                     // hide everything below the snow line (a burrow)
         public float Shadow = 1f;
         public float Lip;                                     // 0 .. 1 the snow lip drawn over a burrow's edge
+        public float LipX = 0.05f;                            // where the lip's middle is (the hole's place on the page)
     }
 
     public static HPose HLerp(HPose a, HPose b, float t) => new()
@@ -220,7 +224,7 @@ internal static partial class FoxAndHaresArt
         ForeF = Lerp(a.ForeF, b.ForeF, t), ForeN = Lerp(a.ForeN, b.ForeN, t), ToeF = Lerp(a.ToeF, b.ToeF, t), ToeN = Lerp(a.ToeN, b.ToeN, t),
         AngF = Lerp(a.AngF, b.AngF, t), AngN = Lerp(a.AngN, b.AngN, t), Nose = Lerp(a.Nose, b.Nose, t), Yaw = Lerp(a.Yaw, b.Yaw, t),
         Sink = Lerp(a.Sink, b.Sink, t), Blink = Lerp(a.Blink, b.Blink, t), Chew = Lerp(a.Chew, b.Chew, t),
-        Clip = a.Clip || b.Clip, Shadow = Lerp(a.Shadow, b.Shadow, t), Lip = Lerp(a.Lip, b.Lip, t),
+        Clip = a.Clip || b.Clip, Shadow = Lerp(a.Shadow, b.Shadow, t), Lip = Lerp(a.Lip, b.Lip, t), LipX = Lerp(a.LipX, b.LipX, t),
     };
 
     /// <summary>The geometry of one ear in side view: where it starts on the head, its bend, its tip. Shared by the painter and by a pose that holds the tip in a paw.</summary>
@@ -320,8 +324,8 @@ internal static partial class FoxAndHaresArt
         if (q.Lip > 0.01f)
         {
             // the lip of snow thrown up round a burrow: a pale low mound with a bluer underside, drawn over the cut edge.
-            Ell(g, 0.05f, -0.01f, 0.34f * q.Lip + 0.04f, 0.052f * q.Lip + 0.004f, Color.FromArgb(205, 218, 244));
-            Ell(g, 0.05f, 0.012f, 0.32f * q.Lip + 0.04f, 0.046f * q.Lip + 0.004f, Color.FromArgb(238, 245, 255));
+            Ell(g, q.LipX, -0.01f, 0.34f * q.Lip + 0.04f, 0.052f * q.Lip + 0.004f, Color.FromArgb(205, 218, 244));
+            Ell(g, q.LipX, 0.012f, 0.32f * q.Lip + 0.04f, 0.046f * q.Lip + 0.004f, Color.FromArgb(238, 245, 255));
         }
     }
 
@@ -554,6 +558,149 @@ internal static partial class FoxAndHaresArt
         return q;
     }
 
+
+    // ---------------------------------------------------------------- keyed sequences (the round-two sheets)
+    //
+    // FEYNMAN VERSION. A dive or a climb out is not one pose turned round: it is a RUN OF KEY POSES (crouch, push off,
+    // fly, nose in, shoulders in, hind feet last) with the in-between pages drawn by a SMOOTH CURVE through them (a
+    // Catmull-Rom spline, the way an animator's in-betweens ease through every key instead of stopping at each).
+    // The sheet is anchored at the HOLE, not at the body: x = 0 is the middle of the burrow, y = 0 the snow line,
+    // and the hare's body travels across the page. The saver puts the page's origin on the hole.
+
+    /// <summary>A pose moved sideways by dx (units): every point that is a place, not an angle.</summary>
+    public static HPose HShift(HPose a, float dx)
+    {
+        var q = HLerp(a, a, 0f);
+        q.Body = P(a.Body.X + dx, a.Body.Y); q.Head = P(a.Head.X + dx, a.Head.Y);
+        q.ForeF = P(a.ForeF.X + dx, a.ForeF.Y); q.ForeN = P(a.ForeN.X + dx, a.ForeN.Y);
+        q.ToeF = P(a.ToeF.X + dx, a.ToeF.Y); q.ToeN = P(a.ToeN.X + dx, a.ToeN.Y);
+        return q;
+    }
+
+    /// <summary>Every number of a pose through the key poses by a smooth curve (t between ts[0] and ts[^1]).</summary>
+    public static HPose HSpline(float t, float[] ts, HPose[] k)
+    {
+        float V(Func<HPose, float> f) { var vs = new float[k.Length]; for (int i = 0; i < k.Length; i++) vs[i] = f(k[i]); return Spline(t, ts, vs); }
+        return new HPose
+        {
+            Body = P(V(a => a.Body.X), V(a => a.Body.Y)), Rx = V(a => a.Rx), Ry = V(a => a.Ry), Tilt = V(a => a.Tilt),
+            Head = P(V(a => a.Head.X), V(a => a.Head.Y)), HeadTilt = V(a => a.HeadTilt), EarL = V(a => a.EarL), EarR = V(a => a.EarR),
+            BendL = V(a => a.BendL), BendR = V(a => a.BendR),
+            ForeF = P(V(a => a.ForeF.X), V(a => a.ForeF.Y)), ForeN = P(V(a => a.ForeN.X), V(a => a.ForeN.Y)),
+            ToeF = P(V(a => a.ToeF.X), V(a => a.ToeF.Y)), ToeN = P(V(a => a.ToeN.X), V(a => a.ToeN.Y)),
+            AngF = V(a => a.AngF), AngN = V(a => a.AngN), Nose = V(a => a.Nose), Yaw = V(a => a.Yaw), Sink = V(a => a.Sink),
+            Blink = V(a => a.Blink), Chew = V(a => a.Chew), Shadow = V(a => a.Shadow), Lip = V(a => a.Lip), LipX = 0f,
+        };
+    }
+
+    /// <summary>Where the dive's first page puts the body, behind the hole (units). The saver anchors the hole this far ahead of the running hare.</summary>
+    public const float DiveRun = 0.55f;
+
+    /// <summary>THE DIVE, t 0..1 (1.0 s): the gather at the end of a bolt, the push off the long hind feet, a flat flying stretch, the nose and forelegs into the snow, the body sliding in along its own line, the hind feet and the white tail last.</summary>
+    public static HPose HDive2(float t)
+    {
+        float[] ts = [0f, 0.20f, 0.42f, 0.62f, 0.80f, 0.93f, 1f];
+        HPose[] k =
+        [
+            HShift(HHop(15f / 16f, HareFleeD, true), -DiveRun),
+            new HPose { Body = P(-0.34f, 0.34f), Tilt = 14f, Rx = 0.42f, Ry = 0.22f, Head = P(0.06f, 0.52f), HeadTilt = 8f, EarL = 156f, EarR = 150f, ForeF = P(0.14f, 0.30f), ForeN = P(0.21f, 0.27f), ToeF = P(-0.86f, 0.05f), ToeN = P(-0.79f, 0.01f), AngF = 52f, AngN = 56f, Shadow = 0.9f },
+            new HPose { Body = P(-0.02f, 0.50f), Tilt = -14f, Rx = 0.42f, Ry = 0.21f, Head = P(0.42f, 0.42f), HeadTilt = -36f, EarL = 166f, EarR = 160f, ForeF = P(0.60f, 0.20f), ForeN = P(0.66f, 0.16f), ToeF = P(-0.50f, 0.46f), ToeN = P(-0.44f, 0.40f), AngF = 40f, AngN = 46f, Shadow = 0.55f },
+            new HPose { Body = P(0.22f, 0.30f), Tilt = -48f, Rx = 0.40f, Ry = 0.22f, Head = P(0.50f, -0.04f), HeadTilt = -68f, EarL = 172f, EarR = 166f, ForeF = P(0.62f, -0.20f), ForeN = P(0.68f, -0.24f), ToeF = P(-0.03f, 0.64f), ToeN = P(0.04f, 0.60f), AngF = 60f, AngN = 64f, Shadow = 0.3f, Lip = 0.6f },
+            new HPose { Body = P(0.34f, 0.02f), Tilt = -68f, Rx = 0.38f, Ry = 0.23f, Head = P(0.50f, -0.40f), HeadTilt = -78f, EarL = 174f, EarR = 168f, ForeF = P(0.55f, -0.52f), ForeN = P(0.60f, -0.56f), ToeF = P(0.14f, 0.52f), ToeN = P(0.20f, 0.48f), AngF = 64f, AngN = 66f, Shadow = 0.05f, Lip = 1f },
+            new HPose { Body = P(0.38f, -0.30f), Tilt = -76f, Rx = 0.38f, Ry = 0.23f, Head = P(0.47f, -0.72f), HeadTilt = -80f, EarL = 174f, EarR = 168f, ForeF = P(0.52f, -0.8f), ForeN = P(0.56f, -0.84f), ToeF = P(0.25f, 0.20f), ToeN = P(0.31f, 0.16f), AngF = 66f, AngN = 68f, Shadow = 0f, Lip = 1f },
+            new HPose { Body = P(0.40f, -0.60f), Tilt = -78f, Rx = 0.38f, Ry = 0.23f, Head = P(0.47f, -1.0f), HeadTilt = -80f, EarL = 174f, EarR = 168f, ForeF = P(0.52f, -1.1f), ForeN = P(0.56f, -1.14f), ToeF = P(0.30f, -0.10f), ToeN = P(0.36f, -0.14f), AngF = 66f, AngN = 68f, Shadow = 0f, Lip = 1f },
+        ];
+        var q = HSpline(t, ts, k);
+        q.Clip = t > 0.52f; q.Lip = Sm((t - 0.50f) / 0.30f); q.Shadow = Math.Clamp(q.Shadow, 0f, 1f); q.LipX = 0.02f;
+        return q;
+    }
+
+    /// <summary>
+    /// COMING UP, t 0..1 (2.4 s), in the reverse order of the dive's body parts: the EAR TIPS (they swivel), the eyes, the
+    /// head (a look round), the shoulders, then a hop OUT onto the snow and a settle into a sit, 0.85 ahead of the hole.
+    /// </summary>
+    public static HPose HEmerge(float t)
+    {
+        HPose Up(float sink, float earL, float earR, float headTilt)
+        {
+            var q = HSit(0.05f); q.Sink = sink; q.EarL = earL; q.EarR = earR; q.HeadTilt = headTilt; q.Lip = 1f; q.Clip = true; q.Shadow = 0f;
+            return q;
+        }
+        var launch = HLerp(HSit(0.05f), HHop(0.02f, HareHopD, false), 0.55f);       // the push: the gather, hind toes still down
+        var fly = new HPose { Body = P(0.48f, 0.52f), Tilt = 10f, Rx = 0.38f, Ry = 0.22f, Head = P(0.84f, 0.64f), HeadTilt = 6f, EarL = 118f, EarR = 112f, ForeF = P(0.74f, 0.40f), ForeN = P(0.80f, 0.36f), ToeF = P(0.08f, 0.40f), ToeN = P(0.14f, 0.36f), AngF = 40f, AngN = 44f, Shadow = 0.5f };
+        float[] ts = [0f, 0.12f, 0.22f, 0.36f, 0.48f, 0.58f, 0.66f, 0.74f, 0.82f, 0.88f, 1f];
+        HPose[] k =
+        [
+            Up(0.84f, 96f, 90f, 3f), Up(0.76f, 120f, 78f, 3f), Up(0.66f, 88f, 106f, 3f), Up(0.52f, 94f, 90f, 0f),
+            Up(0.42f, 100f, 96f, -6f), Up(0.32f, 100f, 96f, 9f), Up(0.20f, 98f, 92f, 3f),
+            HShift(launch, 0.02f), fly, HShift(HHop(HopRest, HareHopD, false), 0.85f), HShift(HSit(0.05f), 0.85f),
+        ];
+        // the spline blends Clip and Lip badly across the exit from the hole: those are set by hand
+        var q = HSpline(t, ts, k);
+        q.Clip = t < 0.70f; q.Lip = t < 0.66f ? 1f : 1f - Sm((t - 0.66f) / 0.30f); q.Sink = t < 0.66f ? q.Sink : 0f; q.LipX = 0.02f;
+        q.Shadow = t < 0.74f ? 0f : Sm((t - 0.74f) / 0.26f);
+        return q;
+    }
+
+    /// <summary>
+    /// GROOM as a SHEET of loops (the first one was one slow pass of 24 pages: four face strokes were sampled by
+    /// ten pages, a strobe). Pages: 0..3 lead-in, 4..15 the wash loop (one stroke cycle), 16..21 up to the ear,
+    /// 22..33 the lick loop, 34..39 the release to a sit, 40..44 a quick way out of a wash to a sit.
+    /// </summary>
+    public const int GrLead = 0, GrWash = 8, GrToPull = 20, GrLick = 28, GrRelease = 40, GrOut = 48;
+    static HPose GroomWash(float s)
+    {
+        var wash = HSit(0.05f);
+        wash.Head = P(0.33f, 0.47f); wash.HeadTilt = -14f; wash.EarL = 104f; wash.EarR = 98f; wash.Blink = 0.85f;
+        float stroke = MathF.Sin(MathF.Tau * s);
+        wash.ForeF = P(0.44f, 0.455f + 0.06f * stroke); wash.ForeN = P(0.49f, 0.485f - 0.06f * stroke);
+        return wash;
+    }
+    static HPose GroomPull()
+    {
+        var pull = HSit(0.05f);
+        pull.Head = P(0.34f, 0.50f); pull.HeadTilt = 20f; pull.EarL = 96f; pull.EarR = 94f; pull.BendR = 1f; pull.Blink = 0.9f;
+        EarGeom(pull, true, out _, out _, out PointF tip);
+        pull.ForeN = P(tip.X + 0.01f, tip.Y - 0.01f); pull.ForeF = P(tip.X - 0.04f, tip.Y - 0.05f);
+        return pull;
+    }
+    static HPose GroomLick(float s)
+    {
+        var pull = GroomPull();
+        float lick = MathF.Sin(MathF.Tau * s);
+        var q = HLerp(pull, pull, 0f);
+        q.Head = P(pull.Head.X + 0.016f * lick, pull.Head.Y - 0.012f * lick); q.HeadTilt = pull.HeadTilt - 5f * lick;
+        EarGeom(q, true, out _, out _, out PointF tp);
+        q.ForeN = P(tp.X + 0.01f, tp.Y - 0.01f); q.ForeF = P(tp.X - 0.04f, tp.Y - 0.05f);
+        q.Chew = 0.5f + 0.5f * lick;
+        return q;
+    }
+    public static HPose HGroom2(int i)
+    {
+        if (i < GrWash) return HLerp(HSit(0.05f), GroomWash(0f), Sm((i + 1) / 8f));
+        if (i < GrToPull) return GroomWash((i - GrWash) / 12f);
+        if (i < GrLick) return HLerp(GroomWash(0f), GroomLick(0f), Sm((i - GrToPull + 1) / 8f));
+        if (i < GrRelease) return GroomLick((i - GrLick) / 12f);
+        if (i < GrOut) return HLerp(GroomLick(0f), HSit(0.05f), Sm((i - GrRelease + 1) / 8f));
+        return HLerp(GroomWash(0f), HSit(0.05f), Sm((i - GrOut + 1) / 6f));
+    }
+
+    /// <summary>The head up from a nibble, ears pricked, still crouched at the twig: k 0 (the nibble) to 1.</summary>
+    public static HPose HNibbleUp(float k, float t = 0f)
+    {
+        var up = HReach();
+        up.Head = P(0.46f, 0.34f); up.HeadTilt = 10f; up.EarL = 104f + 8f * MathF.Sin(MathF.Tau * t); up.EarR = 96f + 6f * MathF.Sin(MathF.Tau * t + 2f);
+        up.Nose = 0.012f * MathF.Sin(MathF.Tau * 3f * t); up.Tilt = 20f;
+        return HLerp(HNibble(0f), up, Sm(k));
+    }
+
+    /// <summary>The body points the mind log uses to measure a pose pop: head, body, the near ear's tip, both fore paws, both hind toes.</summary>
+    public static PointF[] HKeys(HPose q)
+    {
+        EarGeom(q, true, out _, out _, out PointF tip);
+        return [q.Head, q.Body, tip, q.ForeN, q.ForeF, q.ToeN, q.ToeF];
+    }
+
     // ---------------------------------------------------------------- the hare's twig and the snow decals
 
     /// <summary>A bare twig poking up through the snow, with two side shoots and a few buds: what a hare nibbles. Painted in hare units; origin at its foot.</summary>
@@ -579,26 +726,29 @@ internal static partial class FoxAndHaresArt
             Name = name, N = n, HalfW = halfW, Above = above,
             Paint = (g, i) => PaintHare(g, pose(i)),
             Aux = i => HareNoseOf(pose(i)),
+            Keys = i => HKeys(pose(i)),
         };
         float D = HareHopD, DF = HareFleeD;
         return
         [
             Make("sit", 24, 0.8f, 1.1f, i => HSit(i / 24f)),                                   // 0
-            Make("look", 4, 0.8f, 1.2f, i => HLook(i / 3f)),                                    // 1
-            Make("reach", 5, 0.9f, 1.1f, i => HLerp(HSit(0.05f), HReach(), Sm((i + 1) / 5f))),   // 2  sit to the twig
+            Make("look", 9, 0.8f, 1.2f, i => HLook(i / 8f)),                                    // 1  the head up by eighths: it can FOLLOW a sleigh
+            Make("reach", 6, 0.9f, 1.1f, i => HLerp(HSit(0.05f), HReach(), Sm(i / 5f))),         // 2  sit to the twig (page 0 IS the sit page)
             Make("nibble", 12, 0.9f, 1.1f, i => HNibble(i / 12f)),                              // 3
-            Make("groom", 24, 0.8f, 1.1f, i => HGroom(i / 23f)),                                // 4
-            Make("hop", 16, W, 1.3f, i => HHop(i / 16f, D, false)),                             // 5
+            Make("groom", 54, 0.8f, 1.1f, HGroom2),                                             // 4  loops: see GrWash and friends
+            Make("hop", 24, W, 1.3f, i => HHop(i / 24f, D, false)),                             // 5
             Make("flee", 16, W + 0.4f, 1.3f, i => HHop(i / 16f, DF, true)),                     // 6
-            Make("settle", 4, W, 1.2f, i => HSettle((i + 1) / 4f, D, false)),                   // 7  hop rest to sit
-            Make("tallIn", 5, 0.8f, 1.5f, i => HLerp(HSit(0.05f), HTall(0f), Sm((i + 1) / 5f))),// 8
+            Make("settle", 6, W, 1.2f, i => HSettle((i + 1) / 6f, D, false)),                   // 7  hop rest to sit
+            Make("tallIn", 6, 0.8f, 1.5f, i => HLerp(HSit(0.05f), HTall(0f), Sm(i / 5f))),      // 8  page 0 IS the sit page
             Make("tall", 12, 0.8f, 1.5f, i => HTall(i / 12f)),                                  // 9
             Make("thump", 12, 0.8f, 1.5f, ThumpPose),                                           // 10
-            Make("binky", 16, W, 1.75f, i => HBinky((i + 0.5f) / 16f)),                         // 11
-            Make("dive", 10, W + 0.2f, 1.4f, i => HDive((i + 0.5f) / 10f)),                     // 12
-            Make("peek", 6, 0.7f, 1.2f, i => HPeek(i / 5f, i % 2 == 0 ? 0f : 0.8f)),            // 13 (a still: the resident swivels by choosing pages)
+            Make("binky", 32, W, 1.75f, i => HBinky((i + 0.5f) / 32f)),                         // 11
+            Make("dive", 30, 1.5f, 1.4f, i => HDive2(i / 29f)),                                 // 12 anchored at the HOLE (0 = the burrow's middle)
+            Make("peek", 56, 1.5f, 1.4f, i => HEmerge(i / 55f)),                                // 13 the way out, anchored at the hole
             Make("turn", 4, 0.8f, 1.1f, i => HTurn(22.5f * (i + 1))),                           // 14 yaw 22.5, 45, 67.5, 90
             new BookSpec { Name = "twig", N = 1, HalfW = 0.25f, Above = 0.5f, Paint = (g, i) => PaintTwig(g) },   // 15
+            Make("nlook", 14, 0.9f, 1.1f, i => i < 6 ? HNibbleUp((i + 1) / 6f) : HNibbleUp(1f, (i - 6) / 8f)),  // 16 head up from a twig: 6 pages up, then an 8 page hold
+            Make("settleF", 8, W + 0.4f, 1.2f, i => HSettle((i + 1) / 8f, DF, true)),             // 17 the bolt's rest page to a sit
         ];
     }
 
