@@ -9,7 +9,7 @@ namespace Christmas;
 /// </summary>
 public sealed class ChristmasSettings : ScreensaverSettings
 {
-    private readonly IntSetting _density, _speed, _wind, _size, _surprises;
+    private readonly IntSetting _density, _speed, _wind, _size, _surprises, _stories, _reindeer, _hares, _birds, _mice, _otters;
 
     public ChristmasSettings() : base("Christmas")
     {
@@ -18,6 +18,12 @@ public sealed class ChristmasSettings : ScreensaverSettings
         _wind = Add(nameof(WindPercent), "Breeze", 0, 300, 100, "%");
         _size = Add(nameof(FlakeSizePercent), "Flake size", 50, 200, 100, "%");
         _surprises = Add(nameof(SurprisePercent), "Surprises", 0, 300, 100, "%");
+        _stories = Add(nameof(StoryPercent), "Stories", 0, 300, 100, "%");
+        _reindeer = Add(nameof(ReindeerCount), "Reindeer", 0, 6, 3, "");
+        _hares = Add(nameof(HareCount), "Hares", 0, 6, 3, "");
+        _birds = Add(nameof(BirdCount), "Birds", 0, 10, 5, "");
+        _mice = Add(nameof(MouseCount), "Mice", 0, 6, 3, "");
+        _otters = Add(nameof(OtterCount), "Otters", 0, 3, 2, "");
     }
 
     /// <summary>How many snowflakes are falling at once.</summary>
@@ -34,6 +40,24 @@ public sealed class ChristmasSettings : ScreensaverSettings
 
     /// <summary>How often a happening (a fox, a snowman, fireworks...) comes on. 100 = one every 5 to 12 seconds, 0 = never.</summary>
     public int SurprisePercent => _surprises.Value;
+
+    /// <summary>How often a story (a little scene of half a minute) plays. 100 = one every minute or so, 0 = never.</summary>
+    public int StoryPercent => _stories.Value;
+
+    /// <summary>How many reindeer graze by the pines.</summary>
+    public int ReindeerCount => _reindeer.Value;
+
+    /// <summary>How many snowshoe hares live on the snowfield (the fox comes with them; 0 hares = no fox).</summary>
+    public int HareCount => _hares.Value;
+
+    /// <summary>How many birds visit the bird table.</summary>
+    public int BirdCount => _birds.Value;
+
+    /// <summary>How many mice live in the fallen log.</summary>
+    public int MouseCount => _mice.Value;
+
+    /// <summary>How many otters play on the frozen pond.</summary>
+    public int OtterCount => _otters.Value;
 
     public static ChristmasSettings LoadSaved()
     {

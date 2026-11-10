@@ -114,7 +114,8 @@ public abstract class Happening
 /// FOR TESTING: set the environment variable PECKWORKS_HAPPENING before
 /// launching. A happening's name plays that one alone, starting at time zero
 /// and repeating, so "/snapshot out.png 1920 1080 2.5" shows it 2.5 seconds
-/// in. The word "all" plays every happening back to back, a showreel.
+/// in. The word "all" plays every happening back to back, a showreel, and
+/// "none" plays none at all (a quiet scene for filming something else).
 /// PECKWORKS_SEED (any whole number) makes the scene's dice repeatable, so
 /// two runs paint the same scenery: see SceneRandom.
 /// </summary>
@@ -147,6 +148,8 @@ public sealed class HappeningDirector
         _nextAt = 3 + 3 * rng.NextDouble();                    // the first one comes soon
 
         string? test = Environment.GetEnvironmentVariable("PECKWORKS_HAPPENING");
+        // "none" is the quiet scene: no happening at all, for filming a resident without fireworks going off behind it.
+        if (string.Equals(test, "none", StringComparison.OrdinalIgnoreCase)) { _off = true; test = null; }
         if (!string.IsNullOrWhiteSpace(test) && cast.Length > 0)
         {
             _off = false;

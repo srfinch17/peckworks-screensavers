@@ -1,36 +1,60 @@
-using System.Drawing.Drawing2D;
 using Peckworks.Screensavers.Core;
+using Peckworks.Screensavers.Core.Minds;
 using Peckworks.Screensavers.Core.Sakura;
 using Christmas.Happenings;
+using Christmas.Stories;
 
 namespace Christmas;
 
 /// <summary>
-/// Snow falling on a snowy night, pastel lights twinkling in the trees, and
-/// Santa's sleigh crossing the sky with Rudolph out front.
+/// Everything a story may need to reach: the scenery's facts, the
+/// noticeboard, Santa, and each resident (so a story can BORROW one: the
+/// mice for the tree trimming, the snowman for the carrot heist). One bag,
+/// handed to every story's constructor.
+/// </summary>
+internal sealed class ChristmasWorld
+{
+    public required ChristmasScenery Scenery { get; init; }
+    public required Noticeboard Board { get; init; }
+    public required SantaRig Santa { get; init; }
+    public required ReindeerHerd Reindeer { get; init; }
+    public required FoxAndHares Field { get; init; }
+    public required YardSnowman Snowman { get; init; }
+    public required FeederBirds Birds { get; init; }
+    public required LogMice Mice { get; init; }
+    public required Otters Otters { get; init; }
+}
+
+/// <summary>
+/// Christmas Eve at a cabin in the north woods: snow falling, pastel lights
+/// twinkling in the pines, a village glowing down in the valley, Santa's
+/// sleigh crossing the sky with Rudolph out front, and a snowfield full of
+/// animals getting on with their night.
 ///
-/// The same theater as Sakura: a BACKDROP painted once (ChristmasPainter.cs)
-/// and ACTORS drawn over it every frame. Three kinds of actor here:
+/// The same theater as Sakura and Thanksgiving: a BACKDROP painted once
+/// (ChristmasPainter.cs) and ACTORS drawn over it every frame:
 ///
 ///   - The SNOW is the shared petal engine (Core/Sakura/PetalField.cs) told
 ///     to draw soft white dots instead of petals. Same fall, sway and depth.
-///   - The LIGHTS: the backdrop already has every bulb painted as a small
-///     dull dot. Each frame we stamp a soft glow of the bulb's color over
-///     it, stronger or weaker on each bulb's own slow rhythm. That is the
-///     twinkle.
-///   - SANTA is a "sprite" (Core/Sprite.cs): the whole sleigh and team is
-///     painted once at startup onto a see-through sheet, in four versions
-///     with the reindeer's legs at different points of a gallop. Each frame
-///     we stamp one of the four a little farther along, like a flip-book
-///     sliding across the sky. He is only stamped onto sky pixels (the
-///     painter hands over a stencil that says which pixels are sky), so he
-///     passes behind the branches that reach in from the top corners, and
-///     in front of the moon and stars. (He flies well above the pines, so
-///     those never actually cover him.)
-///   - The HAPPENINGS: twenty small surprises (a fox, a snowman building
-///     itself, fireworks) that each come on for a few seconds now and then.
-///     Each is one class in the Happenings folder; a "director" from the
-///     engine (Core/Happenings.cs) decides which goes on when.
+///   - The LIGHTS: the backdrop has every bulb painted as a small dull dot.
+///     Each frame a soft glow of the bulb's color is stamped over it,
+///     stronger or weaker on each bulb's own slow rhythm: the twinkle. The
+///     brighter stars, the village's windows, the cabin's windows, the lamp
+///     post and the glitter on the snow are the same trick.
+///   - The SMOKE from the cabin's chimney (Core/ChimneySmoke.cs).
+///   - SANTA (SantaRig.cs): a flip-book of the sleigh sliding across the
+///     sky, behind the corner branches.
+///   - The RESIDENTS (Resident.cs): the reindeer, the fox and the hares,
+///     the snowman, the birds at the table, the mice in the log, the otters
+///     on the pond. Each has a mind (Core/Minds) and reads the NOTICEBOARD,
+///     where everything that happens is pinned, so they react to each
+///     other, to the happenings and to Santa going over. They are drawn far
+///     to near through one queue (DepthQueue), each hidden by the props
+///     nearer than its feet.
+///   - The STORIES (Stories folder): little scenes of half a minute, dealt
+///     one every minute or so by the engine's StoryDirector.
+///   - The HAPPENINGS: small surprises of a few seconds (fireworks, the
+///     northern lights, an owl), dealt by the engine's HappeningDirector.
 /// </summary>
 internal sealed class ChristmasScene : IScreensaverScene
 {
@@ -42,30 +66,33 @@ internal sealed class ChristmasScene : IScreensaverScene
         public float Phase, Speed;
     }
 
-    private const int GallopFrames = 4;
-
-    // The sleigh and team are laid out in "s" units (roughly the height of a
-    // reindeer). These say where things are on the sprite sheet, in s.
-    private const float SheetWidth = 5.6f, SheetHeight = 1.5f, TopMargin = 0.32f;
-    private const float FirstReindeer = 1.95f, ReindeerGap = 0.95f;
-    private const int TeamSize = 4;                 // three reindeer and Rudolph, who leads
+    /// <summary>The residents do nothing before this many seconds: their flip-books are painting on a helper thread, and a start pinned to a time makes every test run begin the same way.</summary>
+    private const double ResidentsStart = 4.0;
 
     private readonly Random _rng = HappeningDirector.SceneRandom();   // new dice every launch, unless PECKWORKS_SEED asks for a repeat
     private readonly ChristmasScenery _scenery;
     private readonly PetalField _snow;
     private readonly Light[] _lights;
     private readonly Sprite[] _bulbGlows;           // one soft glow per pastel color
-    private readonly Sprite[] _sleigh;              // one per gallop frame
-    private readonly Sprite _noseGlow, _noseSparkle;
+    private readonly SantaRig _santa;
     private readonly HappeningDirector _happenings;
-    private readonly float _s;                      // the sleigh's size unit, in pixels
+    private readonly ChimneySmoke _smoke;           // the cabin's chimney, live (Core/ChimneySmoke.cs)
+    private readonly Sprite _starGlow, _villageGlow, _windowGlow, _lampGlow, _lampHalo, _glint;
+    private readonly float[] _starPhase, _starSpeed, _villagePhase;
+    private readonly (float X, float Y, float Phase, float Speed)[] _glitter;   // the snow's sparkles: where, and each one's own rhythm
+    private readonly Noticeboard _board;            // what is going on, for the residents' senses (Core/Minds/Senses.cs)
+    private readonly Resident[] _residents;
+    private readonly DepthQueue _queue = new();     // draws the residents far to near (Core/Stories.cs)
+    private readonly StoryDirector _stories;
+    private readonly (Sense Kind, float X, float Y, float Reach, float At)? _testNotice;
     private readonly float _u;
     private readonly int _w, _h;
     // A "double" (a decimal number with about 15 digits of precision), not a
     // "float" (about 7 digits). A screensaver can run for days. A float clock
-    // that large can no longer register a 16 millisecond step, and Santa and
-    // every bulb would freeze.
+    // that large can no longer register a 16 millisecond step, and every
+    // bulb would freeze.
     private double _time;
+    private double _santaTold;                      // when Santa was last pinned on the noticeboard
 
     public ChristmasScene(int width, int height, ChristmasSettings settings)
     {
@@ -94,153 +121,78 @@ internal sealed class ChristmasScene : IScreensaverScene
             Speed = 1.0f + 2.6f * (float)_rng.NextDouble(),
         }).ToArray();
 
-        // ---- Santa: paint the sleigh once per gallop frame ----
-        _s = _u * 0.075f;
-        _sleigh = new Sprite[GallopFrames];
-        for (int i = 0; i < GallopFrames; i++)
-            _sleigh[i] = PaintSleigh(_s, i * MathF.Tau / GallopFrames);   // Tau = one full turn, so the frames are quarter turns apart
-
-        _noseGlow = Sprite.Glow((int)(_s * 0.45f), Color.FromArgb(255, 48, 40));
-        _noseSparkle = PaintSparkle((int)(_s * 0.9f));
+        _santa = new SantaRig(_scenery);
 
         // ---- The happenings: hand the director the cast list and how often to deal ----
         _happenings = new HappeningDirector(ChristmasHappenings.Cast(_scenery), _rng, settings.SurprisePercent / 100f);
-    }
 
-    // ==================================================================
-    //  PAINTING THE SLEIGH (once, at startup)
-    // ==================================================================
-
-    /// <summary>Where Rudolph's nose is on the sprite sheet, in pixels from its top-left corner.</summary>
-    private static PointF NoseOnSheet(float s) =>
-        new((FirstReindeer + ReindeerGap * (TeamSize - 1) + 0.49f) * s, (TopMargin + 0.23f) * s);
-
-    /// <summary>
-    /// Paints Santa, his sleigh, and four reindeer in a line, flying to the
-    /// right, with the legs at one point ("phase") of the gallop.
-    ///
-    /// Every position below is in "s" units and goes through the little
-    /// helper P, which turns (across, down) into real pixels. Scaling the
-    /// whole drawing is then just a matter of changing s.
-    /// </summary>
-    private static Sprite PaintSleigh(float s, float phase)
-    {
-        return Sprite.Paint((int)(SheetWidth * s), (int)(SheetHeight * s), g =>
+        // ---- The small live lights. Everything from here on takes its dice from "amb", a
+        //      second set seeded by one roll of the scene's, so adding a sparkle later never
+        //      shifts what the director and the snow rolled above. ----
+        var amb = new Random(_rng.Next());
+        _smoke = new ChimneySmoke(_scenery.ChimneyTop, _u, 0.8f, 0.6f, amb);
+        _starGlow = Sprite.Glow(Math.Max(2, (int)(_u * 0.006f)), Color.FromArgb(236, 244, 255));
+        _villageGlow = Sprite.Glow(Math.Max(2, (int)(_u * 0.007f)), Color.FromArgb(255, 200, 110));
+        _windowGlow = Sprite.Glow(Math.Max(3, (int)(_u * 0.030f)), Color.FromArgb(255, 196, 100));
+        _lampGlow = Sprite.Glow(Math.Max(3, (int)(_u * 0.030f)), Color.FromArgb(255, 220, 150));
+        _lampHalo = Sprite.Glow(Math.Max(6, (int)(_u * 0.12f)), Color.FromArgb(255, 204, 130));
+        _glint = SantaRig.PaintSparkle(Math.Max(5, (int)(_u * 0.012f)));
+        _starPhase = new float[_scenery.Stars.Count];
+        _starSpeed = new float[_scenery.Stars.Count];
+        for (int i = 0; i < _starPhase.Length; i++)
         {
-            PointF P(float ax, float ay) => new(ax * s, (TopMargin + ay) * s);
-            void Oval(Brush b, float cx, float cy, float rx, float ry) =>
-                g.FillEllipse(b, (cx - rx) * s, (TopMargin + cy - ry) * s, rx * 2 * s, ry * 2 * s);
-            Pen Line(Color c, float width) => new(c, Math.Max(1f, width * s)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            _starPhase[i] = (float)(amb.NextDouble() * Math.PI * 2);
+            _starSpeed[i] = 0.6f + 1.8f * (float)amb.NextDouble();
+        }
+        _villagePhase = new float[_scenery.VillageWindows.Count];
+        for (int i = 0; i < _villagePhase.Length; i++) _villagePhase[i] = (float)(amb.NextDouble() * 40);
 
-            using var red = new SolidBrush(Color.FromArgb(206, 34, 46));
-            using var white = new SolidBrush(Color.FromArgb(250, 250, 255));
-            using var skin = new SolidBrush(Color.FromArgb(255, 212, 186));
-            using var dark = new SolidBrush(Color.FromArgb(34, 24, 22));
-
-            // ---- The sleigh's runner: a gold rail that curls up at the front ----
-            using (Pen gold = Line(Color.FromArgb(236, 196, 96), 0.035f))
-            {
-                g.DrawLine(gold, P(0.12f, 0.96f), P(1.15f, 0.96f));
-                g.DrawBezier(gold, P(1.15f, 0.96f), P(1.40f, 0.96f), P(1.44f, 0.72f), P(1.28f, 0.66f));
-                g.DrawLine(gold, P(0.35f, 0.80f), P(0.35f, 0.96f));
-                g.DrawLine(gold, P(0.95f, 0.80f), P(0.95f, 0.96f));
-            }
-
-            // ---- The sack of presents, behind Santa ----
-            using (var sack = new SolidBrush(Color.FromArgb(134, 96, 58)))
-                Oval(sack, 0.36f, 0.34f, 0.21f, 0.23f);
-
-            // ---- Santa: coat, arm reaching to the reins, head, beard, hat ----
-            Oval(red, 0.72f, 0.40f, 0.17f, 0.22f);
-            using (Pen sleeve = Line(Color.FromArgb(206, 34, 46), 0.08f))
-                g.DrawLine(sleeve, P(0.80f, 0.34f), P(1.00f, 0.38f));
-            Oval(dark, 1.02f, 0.38f, 0.04f, 0.04f);                                    // mitten
-            Oval(skin, 0.80f, 0.13f, 0.085f, 0.085f);
-            Oval(white, 0.83f, 0.22f, 0.085f, 0.09f);                                  // beard
-            g.FillPolygon(red, [P(0.71f, 0.10f), P(0.58f, -0.03f), P(0.80f, 0.02f), P(0.89f, 0.07f)]);   // hat, blown back
-            Oval(white, 0.58f, -0.03f, 0.04f, 0.04f);                                  // pom-pom
-            using (Pen brim = Line(Color.FromArgb(250, 250, 255), 0.04f))
-                g.DrawLine(brim, P(0.72f, 0.09f), P(0.88f, 0.065f));
-
-            // ---- The sleigh body, in front of Santa: a smooth curved shape through these points ----
-            g.FillClosedCurve(red, [
-                P(0.10f, 0.26f), P(0.22f, 0.36f), P(0.36f, 0.52f), P(0.95f, 0.52f), P(1.12f, 0.42f),
-                P(1.27f, 0.36f), P(1.21f, 0.62f), P(1.05f, 0.82f), P(0.25f, 0.82f), P(0.12f, 0.60f)], FillMode.Winding, 0.35f);
-            using (Pen trim = Line(Color.FromArgb(236, 196, 96), 0.025f))
-                g.DrawLine(trim, P(0.36f, 0.56f), P(0.98f, 0.56f));
-
-            // ---- The reins: one long strap from Santa's hand to Rudolph's collar ----
-            using (Pen reins = Line(Color.FromArgb(120, 84, 56), 0.016f))
-                g.DrawLine(reins, P(1.02f, 0.38f), P(FirstReindeer + ReindeerGap * (TeamSize - 1) + 0.20f, 0.42f));
-
-            // ---- The team. The last one painted is the leader. ----
-            for (int i = 0; i < TeamSize; i++)
-            {
-                float cx = FirstReindeer + ReindeerGap * i;
-                bool rudolph = i == TeamSize - 1;
-                float gait = phase + i * 0.9f;                 // each reindeer is a little out of step with the next
-                Color coat = Color.FromArgb(152, 106, 66);
-                using var fur = new SolidBrush(coat);
-
-                // Legs: each swings from the hip like a pendulum. Front legs
-                // reach forward, back legs trail behind. sin() turns the
-                // steadily growing gait number into a back-and-forth swing.
-                using (Pen leg = Line(Color.FromArgb(112, 76, 48), 0.05f))
-                {
-                    void Leg(float hipX, float lean, float swing)
-                    {
-                        float angle = lean + 0.45f * MathF.Sin(swing);
-                        g.DrawLine(leg, P(hipX, 0.58f), P(hipX + 0.34f * MathF.Sin(angle), 0.58f + 0.34f * MathF.Cos(angle)));
-                    }
-                    Leg(cx + 0.17f, 0.55f, gait);
-                    Leg(cx + 0.13f, 0.55f, gait + 1.3f);
-                    Leg(cx - 0.18f, -0.55f, gait + MathF.PI);
-                    Leg(cx - 0.22f, -0.55f, gait + MathF.PI + 1.3f);
-                }
-
-                Oval(white, cx - 0.28f, 0.45f, 0.045f, 0.045f);                        // tail
-                Oval(fur, cx, 0.52f, 0.28f, 0.125f);                                   // body
-                using (Pen neck = Line(coat, 0.12f))
-                    g.DrawLine(neck, P(cx + 0.20f, 0.47f), P(cx + 0.33f, 0.26f));
-                Oval(fur, cx + 0.38f, 0.22f, 0.115f, 0.075f);                          // head
-                g.FillPolygon(fur, [P(cx + 0.28f, 0.19f), P(cx + 0.24f, 0.08f), P(cx + 0.33f, 0.16f)]);   // ear
-                using (Pen collar = Line(Color.FromArgb(206, 34, 46), 0.04f))
-                    g.DrawLine(collar, P(cx + 0.19f, 0.36f), P(cx + 0.27f, 0.50f));
-
-                using (Pen antler = Line(Color.FromArgb(214, 186, 140), 0.025f))
-                {
-                    g.DrawLine(antler, P(cx + 0.33f, 0.16f), P(cx + 0.27f, -0.10f));
-                    g.DrawLine(antler, P(cx + 0.30f, 0.03f), P(cx + 0.38f, -0.06f));
-                    g.DrawLine(antler, P(cx + 0.29f, -0.02f), P(cx + 0.20f, -0.08f));
-                }
-
-                Oval(dark, cx + 0.40f, 0.20f, 0.014f, 0.014f);                         // eye
-                if (rudolph)
-                {
-                    using var nose = new SolidBrush(Color.FromArgb(255, 40, 36));
-                    Oval(nose, cx + 0.49f, 0.23f, 0.04f, 0.04f);                       // the famous nose; the scene adds its shine
-                }
-                else
-                    Oval(dark, cx + 0.485f, 0.23f, 0.02f, 0.02f);
-            }
-        });
-    }
-
-    /// <summary>
-    /// A four-pointed sparkle: two thin diamonds, one lying down and one
-    /// standing up, crossing in the middle. Flashed briefly over the nose
-    /// now and then, the way a shiny thing catches the light.
-    /// </summary>
-    private static Sprite PaintSparkle(int size)
-    {
-        size = Math.Max(8, size);
-        float c = size / 2f, thin = Math.Max(1f, size * 0.035f);
-        return Sprite.Paint(size, size, g =>
+        // The snow's glitter: points on the open snowfield (not on a prop, not on the ice),
+        // each flashing briefly on its own slow rhythm, as moonlit snow does when you move your head.
+        var glitter = new List<(float, float, float, float)>();
+        for (int tries = 0; tries < 900 && glitter.Count < 150; tries++)
         {
-            using var ray = new SolidBrush(Color.FromArgb(230, 255, 226, 220));
-            g.FillPolygon(ray, [new PointF(0, c), new PointF(c, c - thin), new PointF(size, c), new PointF(c, c + thin)]);
-            g.FillPolygon(ray, [new PointF(c, 0), new PointF(c + thin, c), new PointF(c, size), new PointF(c - thin, c)]);
-        });
+            float gx = (float)amb.NextDouble() * width;
+            PointF p = _scenery.FieldPoint(gx, (float)amb.NextDouble());
+            int px = (int)p.X, py = (int)p.Y;
+            if (px < 0 || px >= width || py < 0 || py >= height) continue;
+            if (_scenery.NearDepth[py * width + px] != 0 || _scenery.OnPond(p.X, p.Y, 1.1f)) continue;
+            glitter.Add((p.X, p.Y, (float)(amb.NextDouble() * Math.PI * 2), 0.25f + 0.5f * (float)amb.NextDouble()));
+        }
+        _glitter = [.. glitter];
+
+        // ---- The noticeboard: whatever happens is pinned here, and every resident reads it ----
+        _board = new Noticeboard();
+        _happenings.Began = Tell;
+
+        // ---- The residents. Each takes ONE roll of the scene's dice for its own set, in this
+        //      order; a new resident goes at the END of the list so nobody else's luck moves. ----
+        var reindeer = new ReindeerHerd(_scenery, settings.ReindeerCount, _rng, _board);
+        var field = new FoxAndHares(_scenery, settings.HareCount, _rng, _board);
+        var snowman = new YardSnowman(_scenery, 1, _rng, _board);
+        var birds = new FeederBirds(_scenery, settings.BirdCount, _rng, _board);
+        var mice = new LogMice(_scenery, settings.MouseCount, _rng, _board);
+        var otters = new Otters(_scenery, settings.OtterCount, _rng, _board);
+        _residents = [reindeer, field, snowman, birds, mice, otters];
+
+        // ---- The stories ----
+        var world = new ChristmasWorld
+        {
+            Scenery = _scenery, Board = _board, Santa = _santa,
+            Reindeer = reindeer, Field = field, Snowman = snowman, Birds = birds, Mice = mice, Otters = otters,
+        };
+        _stories = new StoryDirector(_happenings, _rng,
+            [new SantaDelivery(world), new MiceTrimTree(world), new CarrotHeist(world)], settings.StoryPercent / 100f);
+
+        // Test aid: PECKWORKS_NOTICE="Loud;0.5;0.8;0.8;6" pins that kind of notice at (x, y as
+        // fractions of the screen) with a reach in U at that second, to watch everybody react.
+        string? notice = Environment.GetEnvironmentVariable("PECKWORKS_NOTICE");
+        if (!string.IsNullOrEmpty(notice))
+        {
+            string[] p = notice.Split(';');
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            _testNotice = (Enum.Parse<Sense>(p[0], true), float.Parse(p[1], inv), float.Parse(p[2], inv), float.Parse(p[3], inv), float.Parse(p[4], inv));
+        }
     }
 
     // ==================================================================
@@ -252,7 +204,51 @@ internal sealed class ChristmasScene : IScreensaverScene
         float dt = (float)elapsedSeconds;
         _time += dt;
         _snow.Update(dt);
+        _smoke.Update(dt);
+        _santa.Update(dt);
+        _board.Tick(dt);
+
+        // Santa going over is something to look up at: pinned once a second
+        // while he is in view (a notice lasts one second), high in the sky
+        // with a long reach and little weight, so it is a glance, not a fright.
+        if (_scenery.SantaOnScreen && _time - _santaTold >= 0.9)
+        {
+            _santaTold = _time;
+            _board.Post(Sense.Movement, _scenery.SantaSleigh, 1.6f * _u, 0.35f, _santa);
+        }
+        if (_testNotice is { } tn && _time >= tn.At && _time - dt < tn.At)
+            _board.Post(tn.Kind, new PointF(tn.X * _w, tn.Y * _h), tn.Reach * _u, 1f, this);
+
+        _stories.Update(dt);                        // before the residents: a story may borrow one this very frame
+        if (_time >= ResidentsStart)
+            foreach (Resident r in _residents)
+                if (r.Ready) { r.Lull = _stories.Playing; r.Update(dt); }
         _happenings.Update(elapsedSeconds);
+    }
+
+    /// <summary>
+    /// Tells the residents a surprise has begun: each happening that an
+    /// animal could notice is pinned on the board as a kind, a place and a
+    /// reach (fireworks are loud and carry across the whole field; an owl on
+    /// a branch is a threat to the small things; a snowball rolling by is a
+    /// movement to glance at). The animals' own senses decide what they make of it.
+    /// </summary>
+    private void Tell(Happening h)
+    {
+        ChristmasScenery s = _scenery;
+        float u = s.U;
+        var mid = new PointF(s.Width * 0.5f, s.WalkY(s.Width * 0.5f));
+        switch (h.GetType().Name)
+        {
+            case "Fireworks": _board.Post(Sense.Loud, new PointF(s.Width * 0.5f, s.Height * 0.25f), 2.0f * u, 0.75f, h); break;
+            case "SnowyOwl": _board.Post(Sense.Threat, new PointF(s.Width * 0.5f, s.Height * 0.3f), 1.2f * u, 0.6f, h); break;
+            case "ToyTrain": _board.Post(Sense.Loud, new PointF(s.Width * 0.5f, s.Horizon), 1.0f * u, 0.3f, h); break;
+            case "SnowSlide": _board.Post(Sense.Loud, new PointF(s.Pines[s.StarPine].X, s.Pines[s.StarPine].Foot), 0.6f * u, 0.5f, h); break;
+            case "RollingSnowball": _board.Post(Sense.Movement, mid, 0.8f * u, 0.7f, h); break;
+            case "SnowGust": _board.Post(Sense.Movement, mid, 1.2f * u, 0.5f, h); break;
+            case "PresentDrop": _board.Post(Sense.Movement, s.SantaSleigh, 1.6f * u, 0.6f, h); break;
+            case "ChimneyRings": _board.Post(Sense.Movement, s.ChimneyTop, 0.5f * u, 0.4f, h); break;
+        }
     }
 
     public void Render(FrameBuffer fb)
@@ -262,17 +258,42 @@ internal sealed class ChristmasScene : IScreensaverScene
 
         // 2. The FAR happenings (layer 0): the ones in the sky and on the
         //    mountains, before Santa so a firework or the northern lights
-        //    are behind him. They are told where Santa is right now first
-        //    (a present has to fall from the real sleigh).
-        (Sprite sheet, int left, int top) = SantaPlace();
-        PointF nose = NoseOnSheet(_s);
-        _scenery.SantaSleigh = new PointF(left + 0.7f * _s, top + (TopMargin + 0.5f) * _s);
-        _scenery.SantaNose = new PointF(left + nose.X, top + nose.Y);
-        _scenery.SantaOnScreen = left + sheet.Width > 0 && left < _w;
+        //    are behind him.
         _happenings.Draw(fb, 0);
 
+        // 2b. The stars twinkle, through the sky stencil so a star behind a
+        //     branch never shines through it. sin() swings between -1 and 1;
+        //     squaring the "0 to 1" version keeps a star dim most of the time
+        //     with a short bright peak.
+        for (int i = 0; i < _starPhase.Length; i++)
+        {
+            float bright = 0.5f + 0.5f * (float)Math.Sin(_time * _starSpeed[i] + _starPhase[i]);
+            PointF at = _scenery.Stars[i];
+            _starGlow.DrawCentered(fb, at.X, at.Y, bright * bright * 0.9f, _scenery.OpenSky);
+        }
+
+        // 2c. The village: every window's lamp wanders a little, and now and
+        //     then one goes dark for a while (somebody went to bed) and comes back.
+        for (int i = 0; i < _villagePhase.Length; i++)
+        {
+            float p = _villagePhase[i];
+            float awake = (float)Math.Sin(_time * 0.05 + p) > -0.86f ? 1f : 0.15f;
+            float lamp = 0.55f + 0.20f * (float)Math.Sin(_time * 1.3 + p * 3) + 0.12f * (float)Math.Sin(_time * 4.1 + p);
+            PointF at = _scenery.VillageWindows[i];
+            _villageGlow.DrawCentered(fb, at.X, at.Y, lamp * awake);
+        }
+
+        // 2d. The cabin's smoke and its windows' lamplight.
+        _smoke.Draw(fb);
+        for (int i = 0; i < _scenery.CabinWindows.Length; i++)
+        {
+            RectangleF win = _scenery.CabinWindows[i];
+            float lamp = 0.36f + 0.07f * (float)Math.Sin(_time * 1.7 + i * 2.1) + 0.04f * (float)Math.Sin(_time * 5.3 + i);
+            _windowGlow.DrawCentered(fb, win.X + win.Width / 2, win.Y + win.Height / 2, lamp);
+        }
+
         // 3. Santa, behind everything that is not sky (in practice, the corner branches).
-        DrawSanta(fb, sheet, left, top);
+        _santa.Draw(fb);
 
         // 4. The lights. sin() swings between -1 and 1; the arithmetic turns
         //    that into "between 35% and 100% bright", so a bulb dims but
@@ -283,56 +304,42 @@ internal sealed class ChristmasScene : IScreensaverScene
             _bulbGlows[l.Color].DrawCentered(fb, l.X, l.Y, bright);
         }
 
-        // 4b. The NEAR happenings (layer 1): everything that is in front of
-        //     the scenery, like the fox on the snow and the owl on its twig.
-        //     After Santa and the glows, so the sleigh (which flies behind
-        //     the branches) cannot be painted over an owl sitting on one,
-        //     and a tree's lights do not shine through a fox in front of it.
+        // 4a. The snow's glitter and the lamp. A sparkle is sin() raised to a
+        //     high power: nothing most of the time, one short flash per cycle.
+        foreach (ref readonly var gl in _glitter.AsSpan())
+        {
+            float flash = MathF.Pow(MathF.Max(0f, (float)Math.Sin(_time * gl.Speed + gl.Phase)), 24);
+            if (flash > 0.02f) _glint.DrawCentered(fb, gl.X, gl.Y, flash * 0.9f);
+        }
+        {
+            // The lamp's flame gutters: two quick waves and a slow one, so it never ticks like a clock.
+            float flick = 0.80f + 0.08f * (float)Math.Sin(_time * 7.3) + 0.06f * (float)Math.Sin(_time * 13.1 + 1.0) + 0.05f * (float)Math.Sin(_time * 2.1);
+            _lampHalo.DrawCentered(fb, _scenery.Lamp.X, _scenery.Lamp.Y, 0.50f * flick);
+            _lampGlow.DrawCentered(fb, _scenery.Lamp.X, _scenery.Lamp.Y, 0.75f * flick);
+        }
+
+        // 5. The residents, far to near: each hands the queue one line per
+        //    animal, and the queue draws them in order of their feet.
+        if (_time >= ResidentsStart)
+            foreach (Resident r in _residents)
+                if (r.Ready) r.Collect(_queue);
+        _queue.Flush(fb);
+
+        // 5b. The story that is on, if any: its actors and props, over the residents.
+        _stories.Draw(fb);
+
+        // 6. The NEAR happenings (layer 1): everything that is in front of
+        //    the scenery, like the owl on its twig. After Santa and the
+        //    glows, so the sleigh (which flies behind the branches) cannot
+        //    be painted over an owl sitting on one.
         _happenings.Draw(fb, 1);
 
-        // 5. The snow, far to near, in front of everything.
+        // 7. The snow, far to near, in front of everything.
         _snow.Draw(fb);
 
-        // 6. Happenings on the GLASS (layer 2): frost on the window pane is
+        // 8. Happenings on the GLASS (layer 2): frost on the window pane is
         //    nearer than the falling snow outside it.
         _happenings.Draw(fb, 2);
-    }
-
-    /// <summary>
-    /// Santa's position is worked out straight from the clock, with no
-    /// stored state: distance = speed times time. He starts at the left edge,
-    /// crosses to the right, flies on a little way off screen (that is the
-    /// pause before he comes round again), and wraps back to the left. The
-    /// "%" (remainder) is what makes the trip repeat.
-    /// </summary>
-    private (Sprite Sheet, int Left, int Top) SantaPlace()
-    {
-        Sprite sheet = _sleigh[(int)(_time * 7 % GallopFrames)];    // 7 flip-book pages a second
-        double trip = _w + sheet.Width + _u * 0.7f;                 // on-screen crossing plus the off-screen pause
-        double travelled = (_time * _u * 0.085f + sheet.Width + _w * 0.03f) % trip;
-        int left = (int)(travelled - sheet.Width);
-        int top = (int)(_h * 0.12f + _u * 0.022f * Math.Sin(_time * 0.7));   // a gentle rise and dip
-        return (sheet, left, top);
-    }
-
-    private void DrawSanta(FrameBuffer fb, Sprite sheet, int left, int top)
-    {
-        sheet.Draw(fb, left, top, 1f, _scenery.IsSky);
-
-        // Rudolph's nose. Its shine goes through the same sky stencil as the
-        // sleigh, pixel by pixel, so a twig in front of him hides exactly the
-        // part of the glow it covers. (An earlier version asked one yes/no
-        // question about the single pixel under the nose, and the whole glow
-        // blinked off every time that pixel crossed a twig.)
-        PointF nose = NoseOnSheet(_s);
-        int nx = left + (int)nose.X, ny = top + (int)nose.Y;
-
-        float pulse = 0.75f + 0.25f * (float)Math.Sin(_time * 5);               // a steady warm throb
-        _noseGlow.DrawCentered(fb, nx, ny, pulse, _scenery.IsSky);
-        // The sparkle: sin() raised to a high power is near zero most of the
-        // time and spikes briefly, so the glint flashes about once every three seconds.
-        float glint = MathF.Pow(MathF.Max(0, (float)Math.Sin(_time * 2.1)), 8);
-        _noseSparkle.DrawCentered(fb, nx, ny, glint, _scenery.IsSky);
     }
 
     public void Dispose() { }
