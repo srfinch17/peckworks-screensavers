@@ -93,6 +93,9 @@ internal sealed class ChristmasScene : IScreensaverScene
     // bulb would freeze.
     private double _time;
     private double _santaTold;                      // when Santa was last pinned on the noticeboard
+    // Test aid: PECKWORKS_NOSNOW=1 leaves the falling snow out, so a frame-by-frame comparison (the kit's pop detector)
+    // sees only what the animals do, not eight hundred flakes changing every pixel.
+    private readonly bool _noSnow = Environment.GetEnvironmentVariable("PECKWORKS_NOSNOW") == "1";
     private bool _started;                          // true once every resident's flip-books are painted: they all begin on that frame
 
     public ChristmasScene(int width, int height, ChristmasSettings settings)
@@ -361,7 +364,7 @@ internal sealed class ChristmasScene : IScreensaverScene
         _happenings.Draw(fb, 1);
 
         // 7. The snow, far to near, in front of everything.
-        _snow.Draw(fb);
+        if (!_noSnow) _snow.Draw(fb);
 
         // 8. Happenings on the GLASS (layer 2): frost on the window pane is
         //    nearer than the falling snow outside it.

@@ -168,8 +168,10 @@ internal sealed class ChristmasScenery
     /// call; a thing drawn without it floats over the log and the holly.
     /// </summary>
     public void Stamp(FrameBuffer fb, Sprite page, float feetX, float feetY, int originX, int originY, bool mirror = false, float opacity = 1f) =>
-        page.Draw(fb, (int)MathF.Round(feetX) - (mirror ? page.Width - 1 - originX : originX), (int)MathF.Round(feetY) - originY,
-                  opacity, null, mirror, NearDepth, Nearness(feetY));
+        // At a FRACTION of a pixel (Sprite.DrawSmooth): an animal walking a pixel and a half a frame then glides
+        // instead of stepping 1, 2, 1, 2. Nobody rounds feet before calling this.
+        page.DrawSmooth(fb, feetX - (mirror ? page.Width - 1 - originX : originX), feetY - originY,
+                        opacity, null, mirror, NearDepth, Nearness(feetY));
 
     // ---- WHO STANDS WHERE (added after the first review: "no resident knows any other resident exists": the fox
     //      trotted through a reindeer's legs and a hare stood inside one for seventeen seconds) ----

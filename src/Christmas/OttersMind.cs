@@ -1324,7 +1324,7 @@ internal sealed partial class Otters
             else S.Stamp(fb, sh, o.FX, o.FY, sh.Width / 2, sh.Height / 2);
         }
         if (onDrift)
-            o.Spr.Draw(fb, (int)MathF.Round(o.FX) - (o.Mirror ? o.Spr.Width - 1 - o.OX : o.OX), (int)MathF.Round(o.FY) - o.OY, 1f, null, o.Mirror, S.NearDepth, 254);
+            o.Spr.DrawSmooth(fb, o.FX - (o.Mirror ? o.Spr.Width - 1 - o.OX : o.OX), o.FY - o.OY, 1f, null, o.Mirror, S.NearDepth, 254);   // at a fraction of a pixel: a slide glides
         else Stamp(fb, o.Spr, o.FX + o.ShakeDX, o.FY, o.OX, o.OY, o.Mirror);
     }
 }

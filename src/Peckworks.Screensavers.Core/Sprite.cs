@@ -244,4 +244,81 @@ public sealed class Sprite
             }
         }
     }
+
+    /// <summary>
+    /// Stamps the sprite with its top-left corner at a FRACTION of a pixel: (left, top) are decimals.
+    ///
+    /// FEYNMAN VERSION: the screen is a grid, so a plain stamp can only sit on whole pixels. Something walking at
+    /// one and a half pixels a frame then moves 1, 2, 1, 2, 1, 2: a judder the eye reads as "not smooth", however
+    /// good the drawing is. (His words, twice in one day: "silky".) The cure is what a slow camera pan does: a
+    /// sticker that sits 0.3 of a pixel to the right is drawn as 70 percent of itself in each pixel plus 30
+    /// percent of itself in the next pixel along. Do that across and down and the picture glides between grid
+    /// lines. Each screen pixel under the stamp takes its colour from up to four neighbouring sprite pixels,
+    /// weighted by how much of each one lies over it (this is called bilinear filtering).
+    ///
+    /// It costs about four times a plain stamp, so it is for the things that MOVE (an animal's body), not for
+    /// hundreds of glows. When the fraction is tiny it simply calls the plain stamp.
+    /// </summary>
+    public void DrawSmooth(FrameBuffer fb, float left, float top, float opacity = 1f, bool[]? onlyWhere = null, bool mirror = false,
+        byte[]? depth = null, int nearness = 255)
+    {
+        if (opacity <= 0) return;
+        int L = (int)MathF.Floor(left), T = (int)MathF.Floor(top);
+        int fx = (int)((left - L) * 256), fy = (int)((top - T) * 256);       // the fractions, as 0 to 255 out of 256
+        if (fx < 6 && fy < 6) { Draw(fb, L, T, opacity, onlyWhere, mirror, depth, nearness); return; }
+        int opacity256 = (int)(Math.Min(1f, opacity) * 256);
+        uint[] frame = fb.Pixels;
+        int w = Width, h = Height, fw = fb.Width, fh = fb.Height;
+
+        // Row m of the stamp on screen is fed by sprite rows m - 1 (weight fy) and m (weight 1 - fy); the same across.
+        for (int m = 0; m <= h; m++)
+        {
+            int dy = T + m;
+            if (dy < 0 || dy >= fh) continue;
+            bool hasUp = m - 1 >= 0, hasDown = m < h;
+            // The painted stretch of the two sprite rows that feed this screen row, widened by one for the spill to the right.
+            int first = int.MaxValue, last = -1;
+            if (hasUp && _rowLast[m - 1] >= _rowFirst[m - 1]) { first = Math.Min(first, _rowFirst[m - 1]); last = Math.Max(last, _rowLast[m - 1]); }
+            if (hasDown && _rowLast[m] >= _rowFirst[m]) { first = Math.Min(first, _rowFirst[m]); last = Math.Max(last, _rowLast[m]); }
+            if (last < 0) continue;
+            int k0, k1;
+            if (mirror) { k0 = w - 1 - last; k1 = w - 1 - first + 1; } else { k0 = first; k1 = last + 1; }
+            int wyUp = fy, wyDown = 256 - fy;
+            for (int k = k0; k <= k1; k++)
+            {
+                int dx = L + k;
+                if (dx < 0 || dx >= fw) continue;
+                int at = dy * fw + dx;
+                if (onlyWhere != null && !onlyWhere[at]) continue;
+                if (depth != null && depth[at] > nearness) continue;
+
+                // The four sprite pixels that lie partly over this screen pixel, each with its share (out of 65536).
+                int sa = 0, sr = 0, sg = 0, sb = 0;
+                for (int q = 0; q < 4; q++)
+                {
+                    int sx = (q & 1) == 0 ? k - 1 : k, sy = q < 2 ? m - 1 : m;
+                    if (sx < 0 || sx >= w || sy < 0 || sy >= h) continue;
+                    int wt = ((q & 1) == 0 ? fx : 256 - fx) * (q < 2 ? wyUp : wyDown);
+                    if (wt == 0) continue;
+                    uint c = _argb[sy * w + (mirror ? w - 1 - sx : sx)];
+                    int a = (int)(c >> 24);
+                    if (a == 0) continue;
+                    int aw = a * wt >> 8;                                    // this pixel's solidness times its share
+                    sa += aw;
+                    sr += (int)((c >> 16) & 0xFF) * aw >> 8;
+                    sg += (int)((c >> 8) & 0xFF) * aw >> 8;
+                    sb += (int)(c & 0xFF) * aw >> 8;
+                }
+                if (sa <= 0) continue;
+                // sa is solidness times 256 (0 to 65280); the colour sums are colour times solidness. Divide the
+                // colour back out so a half-covered edge keeps the sprite's colour and only its solidness is halved.
+                int cr = Math.Min(255, (sr << 8) / sa), cg = Math.Min(255, (sg << 8) / sa), cb = Math.Min(255, (sb << 8) / sa);
+                int alpha = (sa >> 8) * opacity256 >> 8;
+                if (alpha <= 0) continue;
+                uint bg = frame[at];
+                int br = (int)((bg >> 16) & 0xFF), bgn = (int)((bg >> 8) & 0xFF), bb = (int)(bg & 0xFF);
+                frame[at] = (uint)(((br + ((cr - br) * alpha >> 8)) << 16) | ((bgn + ((cg - bgn) * alpha >> 8)) << 8) | (bb + ((cb - bb) * alpha >> 8)));
+            }
+        }
+    }
 }

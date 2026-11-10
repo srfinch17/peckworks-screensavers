@@ -1115,7 +1115,7 @@ internal sealed class YardSnowman : Resident
     // ==================================================================
 
     private void Put(FrameBuffer fb, SnowPage p, float x, float y, float opacity = 1f, bool mirror = false) =>
-        p.Img.Draw(fb, (int)MathF.Round(x) - (mirror ? p.Img.Width - 1 - p.Ox : p.Ox), (int)MathF.Round(y) - p.Oy, opacity, null, mirror, S.NearDepth, _near);
+        p.Img.DrawSmooth(fb, x - (mirror ? p.Img.Width - 1 - p.Ox : p.Ox), y - p.Oy, opacity, null, mirror, S.NearDepth, _near);   // at a fraction of a pixel: his sway and squash glide
 
     private void Line(FrameBuffer fb, PointF a, PointF b, Color c, float alpha, float thick) => fb.Line(a, b, c, alpha, thick, null, S.NearDepth, _near);
 
