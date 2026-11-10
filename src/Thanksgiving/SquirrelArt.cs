@@ -218,7 +218,7 @@ internal static class SquirrelArt
         float f = 1f - MathF.Abs(k - 0.5f) * 2f;                           // 0 profile, 1 front
         Pose q = Sit(1f, 0, false, paws);
         q.HeadTurn = f;
-        q.BodyScale = 1f - 0.45f * f;                                       // the body narrows as it comes round
+        q.BodyScale = 1f - 0.15f * f;                                       // the body's length foreshortens a LITTLE as it comes round: a squirrel seen from the front is nearly as wide as it is long in profile (at 0.45 here and 0.45 again in Paint's bw the front view was a pillar 0.3 of the profile wide: "2d flipping", a card turned edge on)
         // At the front view the picture is MIRROR-SYMMETRIC: hip, chest and head on the middle line, the tail straight up
         // behind, the feet either side. The caller draws the second half of the turn as the first half mirrored, and a
         // symmetric middle page is the same picture both ways, so the flip is invisible. (With the tail curled to one
@@ -243,7 +243,7 @@ internal static class SquirrelArt
         float e = Smooth(f);
         Pose q = Bound(0.22f, 2.2f);                                        // the gather: low over the forepaws
         q.HeadTurn = f;
-        q.BodyScale = 1f - 0.5f * e;                                        // foreshortened as it comes round
+        q.BodyScale = 1f - 0.2f * e;                                        // foreshortened a little as it comes round (a crouching squirrel seen from the front is a round ball, not a slot)
         q.Hump = 0.08f + 0.14f * e;                                         // bunched
         q.Hip = P(Lerp(q.Hip.X, 0f, e), q.Hip.Y + 0.04f * e); q.Chest = P(Lerp(q.Chest.X, 0f, e), q.Chest.Y - 0.02f * e);
         q.Head = P(Lerp(q.Head.X, 0f, e), q.Head.Y - 0.02f * e); q.HeadTilt = Lerp(q.HeadTilt, 4f, e);
@@ -336,7 +336,7 @@ internal static class SquirrelArt
         PointF hip = q.Hip, chest = q.Chest;
         PointF mid = P((hip.X + chest.X) / 2 - q.Hump * 0.3f, (hip.Y + chest.Y) / 2 + q.Hump);
         float front = q.HeadTurn;                                          // 0 side view, 1 facing us
-        float bw = 1f - 0.45f * front;                                     // narrower seen from the front
+        float bw = 1f - 0.15f * front;                                     // a little narrower seen from the front (the chest and belly face us: a round body, not a slot)
         float upright = Math.Clamp((chest.Y - hip.Y) / 0.5f, 0f, 1f);      // 0 on all fours, 1 sitting up: the body's shape follows
         float sc = q.BodyScale;
 
@@ -428,11 +428,11 @@ internal static class SquirrelArt
         }
         PointF shoulder = P(chest.X + 0.02f, chest.Y - 0.02f), haunch = P(hip.X + 0.02f, hip.Y - 0.04f);
         PointF pawL = P(q.Head.X + Lerp(0.04f, -0.07f, front), q.Head.Y - 0.22f), pawR = P(q.Head.X + Lerp(0.16f, 0.07f, front), q.Head.Y - 0.22f);   // either side of the chin at the front view
-        if (front < 0.5f)
-        {
-            Arm(P(shoulder.X + 0.03f, shoulder.Y), q.PawsUp ? pawR : q.FarFore, FurDark, 0.075f);
-            HindLeg(P(haunch.X + 0.03f, haunch.Y), q.FarHind, FurDark, 0.10f, q.HindFlat);
-        }
+        // The far legs are always BEHIND the body (they are farther from us at every angle; at the front view they stand beside
+        // the near ones, splayed, and show below it). The first version moved them in front of the body past the middle page,
+        // a pop at the very page where the turn's halves meet.
+        Arm(P(shoulder.X + 0.03f, shoulder.Y), q.PawsUp ? pawR : q.FarFore, FurDark, 0.075f);
+        HindLeg(P(haunch.X + 0.03f, haunch.Y), q.FarHind, FurDark, 0.10f, q.HindFlat);
 
         // ---- the body: one pear, built on the hip and the chest ----
         {
@@ -447,10 +447,29 @@ internal static class SquirrelArt
             PointF wither = P(chest.X - 0.06f, chest.Y + 0.20f);
             PointF nape = P(chest.X + 0.04f, chest.Y + 0.20f);
             Blob([throat, breast, belly, under, rumpLow, rumpBack, back, wither, nape], Fur, 0.55f);
-            // The cream front: chin to the lap, wide, one soft shape.
-            Blob([P(chest.X + 0.10f * bw, chest.Y + 0.08f), P(chest.X + 0.19f * bw, chest.Y - 0.06f), P(mid.X + 0.14f * bw * sc, mid.Y - 0.18f), P(hip.X + 0.02f, hip.Y - 0.20f), P(hip.X - 0.02f, hip.Y - 0.08f), P(mid.X + 0.02f * sc, mid.Y - 0.06f), P(chest.X + 0.02f * bw, chest.Y - 0.02f)], Belly, 0.5f);
-            // The haunch: a round mass over the rump, the thigh's muscle, in the fur colour with a soft shade line.
-            Ell2(P(hip.X - 0.06f * bw, hip.Y - 0.02f), 0.21f * bw, 0.19f, Fur);   // (a translucent shade disc on it read as a patch; the mass alone is enough)
+            // The thighs: round masses over the rump, the muscle, in the fur colour. In profile one haunch, over the rump. As the
+            // body comes round they SPLAY: the near thigh swings to our right and the far one (a shade darker) shows on the left,
+            // symmetric at the front view (so the mirrored second half of a turn meets the first on the same picture).
+            PointF nearThigh = P(hip.X - 0.06f * bw * (1f - front) + 0.16f * front, hip.Y - 0.02f);
+            PointF farThigh = P(hip.X - 0.06f * bw * (1f - front) - 0.16f * front, hip.Y - 0.02f);
+            // The cream front: chin to the lap, wide, one soft shape. As the body comes round to face us the cream swings across
+            // the chest and belly (its inner edge moves back by "swing"), so the front view is a broad cream bib down the middle.
+            float swing = 0.20f * front;
+            PointF[] bib = [P(chest.X + 0.10f * bw, chest.Y + 0.08f), P(chest.X + 0.19f * bw, chest.Y - 0.06f), P(mid.X + 0.14f * bw * sc, mid.Y - 0.18f), P(hip.X + 0.02f + swing * 0.5f, hip.Y - 0.20f), P(hip.X - 0.02f - swing, hip.Y - 0.08f), P(mid.X + 0.02f * sc - swing, mid.Y - 0.06f), P(chest.X + 0.02f * bw - swing * 0.7f, chest.Y - 0.02f)];
+            // In profile the thigh is in front of the belly's rear (the leg folds up beside it); past the half-way page the belly
+            // faces us and lies in front of both thighs, which splay to the sides.
+            if (front > 0.5f)
+            {
+                if (front > 0.15f) Ell2(farThigh, 0.19f * bw, 0.18f, FurDark);
+                Ell2(nearThigh, 0.21f * bw, 0.19f, Fur);
+                Blob(bib, Belly, 0.5f);
+            }
+            else
+            {
+                if (front > 0.15f) Ell2(farThigh, 0.19f * bw, 0.18f, FurDark);
+                Blob(bib, Belly, 0.5f);
+                Ell2(nearThigh, 0.21f * bw, 0.19f, Fur);   // (a translucent shade disc on it read as a patch; the mass alone is enough)
+            }
         }
 
         // ---- the head: a round skull, a short snout, the big eye, a cream cheek, tall tufted ears ----
@@ -501,11 +520,6 @@ internal static class SquirrelArt
         // ---- the near legs, in front of the body ----
         Arm(shoulder, q.PawsUp ? pawL : q.NearFore, Fur, 0.08f);
         HindLeg(haunch, q.NearHind, Fur, 0.10f, q.HindFlat);
-        if (front >= 0.5f)
-        {
-            Arm(P(shoulder.X + 0.03f, shoulder.Y), q.PawsUp ? pawR : q.FarFore, FurDark, 0.075f);
-            HindLeg(P(haunch.X + 0.03f, haunch.Y), q.FarHind, FurDark, 0.10f, q.HindFlat);
-        }
     }
 
     /// <summary>The acorn, at "at", turned by "angDeg": the nut with a lighter stripe and a dark rim, and the scaly cap on its end.</summary>

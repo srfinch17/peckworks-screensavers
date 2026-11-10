@@ -733,7 +733,8 @@ in homage to Halloween and kept subtle), maples in full colour, and oak branches
   is reached by a diagonal to that row and a run along it; its heading bends rather than corners; and a change
   of direction is a curl at once (the front end plants, the back end comes round it with the tail whipped over,
   through the front view and off the other way, momentum kept, over half a second); from a standstill it rises,
-  turns through a front view that is the same picture both ways round, and sinks into its run.
+  turns through real three-quarter views to a front view that is the same picture both ways round (a round body with a
+  broad cream bib, both thighs splayed, two eyes; it used to narrow to a pillar, a card turned edge on), and sinks into its run.
 - **The nuts stay on the ground.** Every acorn that falls from the oak branches lies where it landed
   until a squirrel comes for it; the squirrel sits up and eats it, or carries it off a little way, digs
   it in and pats the mound flat, and that stash is its own. A squirrel that finds another's stash may dig

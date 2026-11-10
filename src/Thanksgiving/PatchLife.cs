@@ -78,6 +78,7 @@ internal sealed class PatchLife
         public bool Turning;                        // a squirrel coming round to face the other way (never a mirror flip)
         public bool Curl;                           // ...on the move: the running curl (keeps its momentum), else the sitting turn
         public float TurnT;                         // seconds into that
+        public float TurnPre, TurnPost;             // a sitting turn's rise to the sit before the turn pages, and its sink to the crouch after: each TurnRise or 0 (a turn that starts from a sit has no rise; one whose next doing is sitting has no sink). The old fixed rise dipped a sitting squirrel into the crouch for three frames before it turned.
         public float TurnV;                         // the speed it went into a curl at
         public float Blend;                         // seconds left of its blend through the crouch pages between the two
         public bool Sinking;                        // the blend's direction: sinking from the sit into the run, or rising out of it
@@ -382,7 +383,7 @@ internal sealed class PatchLife
             c.FlyFrom = c.X; c.FlyTo = x; c.FlyY0 = c.Y; c.FlyY1 = y;
             int dir = x >= c.X ? 1 : -1;
             c.Mind.Begin(Doing.HopDown, HopFor); c.Clock = 0; c.Perched = -1;
-            if (dir != c.Dir) { c.Turning = true; c.Curl = false; c.TurnT = 0; c.HopAfterTurn = true; }
+            if (dir != c.Dir) { StartTurn(c); c.HopAfterTurn = true; }
             else c.Dir = dir;
             _log?.WriteLine($"{_time,8:F2} squirrel{c.Id} leaps out of a pocket at {c.X:F0},{c.Y:F0} to {x:F0},{y:F0}");
             return true;
@@ -678,7 +679,7 @@ internal sealed class PatchLife
                     c.Clock = 1.1f; c.Mind.Left = Math.Max(c.Mind.Left, 0.8f);
                     int toward = cause.At.X >= c.X ? 1 : -1;
                     if (c.Kind == Kind.Mouse) c.Dir = toward;
-                    else if (c.Kind == Kind.Squirrel && toward != c.Dir && c.Perched < 0 && !c.Turning) { c.Turning = true; c.Curl = false; c.TurnT = 0; }   // a sitting squirrel comes round through the front view to look (it used to mirror in one frame: 63 flips an hour)
+                    else if (c.Kind == Kind.Squirrel && toward != c.Dir && c.Perched < 0 && !c.Turning) { StartTurn(c); }   // a sitting squirrel comes round through the front view to look (it used to mirror in one frame: 63 flips an hour)
                 }
             }
             if (c.Turning)
@@ -688,8 +689,8 @@ internal sealed class PatchLife
                 // moving: it carries on along the old way, dying out by the middle, and gathers out along the new way.
                 float was = c.TurnT; c.TurnT += dt;
                 if (!c.Curl) c.Mind.Left += dt;                                    // a sitting turn holds the doing's clock; a running curl does NOT (a curl that froze the timer could loop for ever)
-                float rise = c.Curl ? 0f : TurnRise, span = c.Curl ? CurlFor : TurnFor;
-                float mid = rise + span / 2;
+                float pre = c.Curl ? 0f : c.TurnPre, post = c.Curl ? 0f : c.TurnPost, span = c.Curl ? CurlFor : TurnFor;
+                float mid = pre + span / 2;
                 if (c.Curl)
                 {
                     float q = c.TurnT / CurlFor;
@@ -698,7 +699,7 @@ internal sealed class PatchLife
                     if (_ground(nx, c.Y)) c.X = nx;
                 }
                 if (was < mid && c.TurnT >= mid) c.Dir = -c.Dir;
-                if (c.TurnT >= rise + span + rise)
+                if (c.TurnT >= pre + span + post)
                 {
                     c.Turning = false; c.Blend = 0;
                     if (c.Curl) { c.Curl = false; c.Pace.Resume(0.6f * c.TurnV); PointF aim = c.Via ?? c.Goal; c.Heading = MathF.Atan2(aim.Y - c.Y, aim.X - c.X); }   // toward the WAYPOINT when there is one (aimed at the goal behind it, it curled again at once: the loop)
@@ -713,7 +714,7 @@ internal sealed class PatchLife
             // patch's one real jump): the moment its doing changes class (down on all fours, or sitting up) it plays a
             // short blend through the crouch pages, sinking into the run or rising out of it. The pace is still easing
             // in those frames, so the sink plays nearly on the spot. (The tree and pumpkin doings have their own pitches.)
-            bool down = c.Mind.Doing is Doing.Go or Doing.Bolt or Doing.Hide or Doing.Dig or Doing.Fetch or Doing.Carry or Doing.Bury or Doing.Raid or Doing.Chase or Doing.Leave or Doing.Romp;
+            bool down = IsDown(c.Mind.Doing);
             if (c.Kind == Kind.Squirrel && down != c.WasDown && !OnTree(c) && !OnPumpkin(c)) { c.Blend = BlendFor; c.Sinking = down; }
             c.WasDown = down;
             if (c.Blend > 0) c.Blend -= dt;
@@ -836,7 +837,7 @@ internal sealed class PatchLife
         if (MathF.Abs(MathF.Cos(c.Heading)) <= 0.2f) return;
         int dir = MathF.Cos(c.Heading) > 0 ? 1 : -1;
         if (dir == c.Dir) return;
-        if (c.Kind == Kind.Squirrel) { c.Turning = true; c.Curl = false; c.TurnT = 0; }
+        if (c.Kind == Kind.Squirrel) { StartTurn(c); }
         else c.Dir = dir;
     }
 
@@ -844,6 +845,21 @@ internal sealed class PatchLife
     /// A squirrel on the move turning back the other way: the running curl, started at the speed it has now. The
     /// doing goes on toward the (new) goal when the curl ends.
     /// </summary>
+    /// <summary>A doing on all fours (running, hiding, digging), as against sitting up.</summary>
+    private static bool IsDown(Doing d) => d is Doing.Go or Doing.Bolt or Doing.Hide or Doing.Dig or Doing.Fetch or Doing.Carry or Doing.Bury or Doing.Raid or Doing.Chase or Doing.Leave or Doing.Romp;
+
+    /// <summary>
+    /// A squirrel starts a turn on the spot. It rises to the sit first only if it was on all fours (WasDown is last frame's
+    /// class), and sinks to the crouch after only if the doing it has just begun is one on all fours: a sitting squirrel
+    /// that turns to look stays sitting throughout, and one that turns to set off sinks into its run at the end.
+    /// </summary>
+    private void StartTurn(Critter c)
+    {
+        c.Turning = true; c.Curl = false; c.TurnT = 0;
+        c.TurnPre = c.WasDown ? TurnRise : 0f;
+        c.TurnPost = IsDown(c.Mind.Doing) ? TurnRise : 0f;
+    }
+
     private void CurlBack(Critter c, float stepThisFrame = 0f, float dt = 1f / 60)
     {
         // A cap on curls per goal: the second drops the waypoint (it was the thing being argued over), the third ends the doing
@@ -1072,7 +1088,7 @@ internal sealed class PatchLife
             // the row blocked, was a squirrel sitting there for minutes).
             if (!CanStand(to.X, to.Y) || RandomSpot(to.X - 0.3f * u, to.X + 0.3f * u, 10, to.Y, 0.05f * u, 3f * k, to) == null) continue;
             c.FlyFrom = c.X; c.FlyTo = to.X; c.FlyY0 = c.Y; c.FlyY1 = to.Y;
-            if (dir != c.Dir) { c.Turning = true; c.Curl = false; c.TurnT = 0; c.HopAfterTurn = true; }   // comes round on the top first, then hops down the far side
+            if (dir != c.Dir) { StartTurn(c); c.HopAfterTurn = true; }   // comes round on the top first, then hops down the far side
             else { c.Mind.Begin(Doing.HopDown, HopFor); c.Clock = 0; }
             return;
         }
@@ -1412,7 +1428,7 @@ internal sealed class PatchLife
                         case Doing.Go when c.ToPerch >= 0:
                         {
                             var (at, r) = _s.Pumpkins[c.ToPerch];
-                            if ((at.X >= c.X ? 1 : -1) != c.Dir) { c.Turning = true; c.Curl = false; c.TurnT = 0; }   // it arrived along the row and the pumpkin is beside it: comes round first
+                            if ((at.X >= c.X ? 1 : -1) != c.Dir) { StartTurn(c); }   // it arrived along the row and the pumpkin is beside it: comes round first
                             c.Perched = c.ToPerch; c.ToPerch = -1;
                             c.FlyFrom = c.X; c.FlyTo = at.X - c.Dir * 0.12f * r; c.FlyY0 = c.Y; c.FlyY1 = at.Y - 0.98f * r;   // onto its shoulder, by the stem
                             c.Mind.Begin(Doing.HopUp, HopFor); c.Clock = 0;
@@ -1656,15 +1672,16 @@ internal sealed class PatchLife
                     }
                     if (c.Turning)
                     {
-                        float t = c.TurnT;
-                        if (t < TurnRise) Stamp(fb, sq.Rise, sq.Rise.Pages[Math.Min(RisePages - 1, (int)(t / TurnRise * RisePages))], c, c.Y);                // up to the sit
-                        else if (t < TurnRise + TurnFor)
+                        float t = c.TurnT, pre = c.TurnPre, post = c.TurnPost;
+                        if (t < pre) Stamp(fb, sq.Rise, sq.Rise.Pages[Math.Min(RisePages - 1, (int)(t / pre * RisePages))], c, c.Y);                           // up to the sit (only after a run)
+                        else if (t < pre + TurnFor)
                         {
-                            float q = (t - TurnRise) / TurnFor;                                                                                       // narrowing facing the old way, widening facing the new
+                            float q = (t - pre) / TurnFor;                                                                                            // coming round through the three-quarter views to the front, facing the old way; then the same pages back, mirrored, facing the new
                             int pg = q < 0.5f ? Math.Min(TurnPages - 1, (int)(q * 2 * TurnPages)) : Math.Min(TurnPages - 1, (int)((1 - q) * 2 * TurnPages));
                             Stamp(fb, sq.Turn, sq.Turn.Pages[pg], c, c.Y);
                         }
-                        else Stamp(fb, sq.Rise, sq.Rise.Pages[Math.Max(0, RisePages - 1 - (int)((t - TurnRise - TurnFor) / TurnRise * RisePages))], c, c.Y);   // down to the crouch
+                        else if (post > 0f) Stamp(fb, sq.Rise, sq.Rise.Pages[Math.Max(0, RisePages - 1 - (int)((t - pre - TurnFor) / post * RisePages))], c, c.Y);   // down to the crouch (only before a run)
+                        else Stamp(fb, sq.Rise, sq.Rise.Pages[RisePages - 1], c, c.Y);
                         break;
                     }
                     if (OnTree(c))

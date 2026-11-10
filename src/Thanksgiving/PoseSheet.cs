@@ -60,7 +60,9 @@ internal static class PoseSheet
             ("bound 0.50", SquirrelArt.Bound(0.50f, 2.2f)), ("bound 0.625", SquirrelArt.Bound(0.625f, 2.2f)), ("bound 0.75", SquirrelArt.Bound(0.75f, 2.2f)), ("bound 0.875", SquirrelArt.Bound(0.875f, 2.2f)),
             ("sit", SquirrelArt.Sit(1f, 0, false, false)), ("sit, nut", WithNut(SquirrelArt.Sit(1f, 0, false, true))), ("sit, look", SquirrelArt.Sit(1f, 0, true, false)), ("sit, tail lashed", SquirrelArt.Sit(1f, 2, false, false)),
             ("rise 0.5", SquirrelArt.Sit(0.5f, 0, false, false)), ("dig", SquirrelArt.Dig(0.25f)), ("hop crouch", SquirrelArt.Hop(0.12f)), ("hop flight", SquirrelArt.Hop(0.5f)),
-            ("turn 0.25", SquirrelArt.Turn(0.25f)), ("turn 0.5 (front)", SquirrelArt.Turn(0.5f)), ("chatter", SquirrelArt.Chatter(2, 1)), ("dazed", SquirrelArt.Dazed(12f)),
+            ("turn 0.1", SquirrelArt.Turn(0.1f)), ("turn 0.2", SquirrelArt.Turn(0.2f)), ("turn 0.3", SquirrelArt.Turn(0.3f)), ("turn 0.4", SquirrelArt.Turn(0.4f)),
+            ("turn 0.5 (front)", SquirrelArt.Turn(0.5f)), ("curl 0.2", SquirrelArt.Curl(0.2f)), ("curl 0.35", SquirrelArt.Curl(0.35f)), ("curl 0.5 (front)", SquirrelArt.Curl(0.5f)),
+            ("chatter", SquirrelArt.Chatter(2, 1)), ("dazed", SquirrelArt.Dazed(12f)),
         ];
         return poses.Select(p => (p.Name, (Action<Graphics>)(g => { if (p.Pose.Rotate != 0f) g.RotateTransform(p.Pose.Rotate); SquirrelArt.Paint(g, p.Pose); }))).ToArray();
     }
