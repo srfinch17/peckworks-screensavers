@@ -164,7 +164,7 @@ internal sealed class PresentDrop : Happening
         if (t >= _fall)
         {
             // The dent in the snow under it, then a puff of snow thrown up.
-            _shadow.DrawCentered(fb, x, _landY + 0.002f * u, 0.8f * fade);
+            _shadow.DrawCentered(fb, x, _landY + 0.002f * u, 0.8f * fade, null, false, _s.NearDepth, _s.Nearness(_landY));
             float age = t - _fall;
             for (int i = 0; i < Flakes && age < 1.0f; i++)
             {
@@ -178,6 +178,6 @@ internal sealed class PresentDrop : Happening
         int pose = ((int)MathF.Round(turn * Poses) % Poses + Poses) % Poses;
         // Through the "no corner branch here" stencil: the sleigh it falls
         // from flies BEHIND those branches, so the present must too.
-        _boxes[_style][pose].DrawCentered(fb, x, y, fade, _s.OpenOfBranches);
+        _boxes[_style][pose].DrawCentered(fb, x, y, fade, _s.OpenOfBranches, false, _s.NearDepth, _s.Nearness(_landY));   // behind any prop nearer than where it lands (the lamp post)
     }
 }

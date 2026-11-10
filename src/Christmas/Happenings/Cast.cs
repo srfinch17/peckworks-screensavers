@@ -30,10 +30,7 @@ internal static class ChristmasHappenings
         // ---- far off ----
         (nameof(ToyTrain), () => new ToyTrain(s)),
         (nameof(RidgeReindeer), () => new RidgeReindeer(s)),
-        // ---- the snow ----
-        (nameof(Fox), () => new Fox(s)),
-        (nameof(Rabbit), () => new Rabbit(s)),
-        (nameof(Snowman), () => new Snowman(s)),
+        // ---- the snow (the fox, the rabbit and the snowman that used to come on here are residents now: FoxAndHares.cs, YardSnowman.cs) ----
         (nameof(RollingSnowball), () => new RollingSnowball(s)),
         (nameof(SnowSlide), () => new SnowSlide(s)),
         // ---- the cabin and the lights ----

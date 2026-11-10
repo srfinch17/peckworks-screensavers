@@ -156,7 +156,7 @@ internal sealed class RollingSnowball : Happening
                 float f0 = f * i / pieces, f1 = f * (i + 1) / pieces;
                 float x0 = XAt(f0), x1 = XAt(f1);
                 float thick = Math.Max(1.2f, RadiusAt(f1) * 0.7f);
-                fb.Line(new PointF(x0, Snow(x0)), new PointF(x1 - _dir, Snow(x1)), Track, 0.25f * fade, thick);
+                fb.Line(new PointF(x0, Snow(x0)), new PointF(x1 - _dir, Snow(x1)), Track, 0.25f * fade, thick, null, _s.NearDepth, _s.Nearness(Snow(x0)));
             }
         }
 
@@ -167,7 +167,8 @@ internal sealed class RollingSnowball : Happening
         int pose = Math.Min(Poses - 1, (int)(frac * Poses));
         float rr = _radius[size];
         float gy = Snow(x);
-        _shadow[size].DrawCentered(fb, x + rr * 0.3f, gy + rr * 0.08f, fade);
-        _ball[size, pose].DrawCentered(fb, x, gy - rr * 0.9f, fade);
+        // Through the depth picture with the nearness of the ball's own foot: the lamp post stands nearer than this lane, so the ball rolls BEHIND it.
+        _shadow[size].DrawCentered(fb, x + rr * 0.3f, gy + rr * 0.08f, fade, null, false, _s.NearDepth, _s.Nearness(gy));
+        _ball[size, pose].DrawCentered(fb, x, gy - rr * 0.9f, fade, null, false, _s.NearDepth, _s.Nearness(gy));
     }
 }

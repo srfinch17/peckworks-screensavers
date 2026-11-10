@@ -90,10 +90,13 @@ internal sealed class FeederBirds : Resident
     // How much each kind likes each sort of place: Tray, Roof, Lamp, Log, Fir, Branch, Ground.
     private static readonly float[][] Like =
     [
-        [3f, 1.5f, 2.5f, 0.6f, 0.6f, 1.5f, 1.2f],     // male cardinal
-        [3f, 0.4f, 0f, 0.8f, 0.5f, 1.0f, 3.0f],       // hen
-        [3f, 1.0f, 0.3f, 1.4f, 1.6f, 1.5f, 0.8f],     // chickadee
-        [3f, 4.0f, 0f, 0.4f, 0.2f, 1.0f, 0.5f],       // jay
+        // The TABLE is the point of these birds: the first film showed it standing empty for 16 s while one hen sat
+        // on the log, because each of the six branch twigs counted as much as half a tray. The tray, roof and the snow
+        // under the table now far outweigh everything else; a twig is somewhere a bird goes once in a while.
+        [9f, 3.0f, 2.5f, 0.5f, 0.6f, 0.35f, 3.0f],    // male cardinal
+        [9f, 1.0f, 0f, 0.6f, 0.5f, 0.25f, 5.0f],      // hen
+        [9f, 2.5f, 0.3f, 0.8f, 1.6f, 0.35f, 2.0f],    // chickadee
+        [9f, 6.0f, 0f, 0.3f, 0.2f, 0.25f, 1.0f],      // jay
     ];
 
     private readonly Bird[] _birds;
@@ -499,7 +502,7 @@ internal sealed class FeederBirds : Resident
         if (b.Leaving)
         {
             b.Visible = false; b.PageName = "away";
-            float baseT = b.Kind == BirdKind.Jay ? 26f : 11f;
+            float baseT = b.Kind == BirdKind.Jay ? 20f : 5.5f;   // seconds away in the pines (11 at first: a third of every bird's time was spent unseen)
             float t = b.AfterFlush ? 5f + 14f * b.Timid + 3f * (float)Rng.NextDouble() : Organic.Jitter(Rng, baseT);
             b.AfterFlush = false; b.AvoidTable = false;
             b.Mind.Begin(Doing.Away, t);
