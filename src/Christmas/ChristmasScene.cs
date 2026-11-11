@@ -78,7 +78,8 @@ internal sealed class ChristmasScene : IScreensaverScene
     private readonly HappeningDirector _happenings;
     private readonly ChimneySmoke _smoke;           // the cabin's chimney, live (Core/ChimneySmoke.cs)
     private readonly Sprite _starGlow, _villageGlow, _windowGlow, _lampGlow, _lampHalo, _glint;
-    private readonly float[] _starPhase, _starSpeed, _villagePhase;
+    private readonly float[] _starPhase, _starSpeed, _villagePhase, _villageBulbPhase;
+    private readonly Sprite[] _villageBulbGlows;    // one small glow per pastel, for the village's holiday lights
     private readonly (float X, float Y, float Phase, float Speed)[] _glitter;   // the snow's sparkles: where, and each one's own rhythm
     private readonly Noticeboard _board;            // what is going on, for the residents' senses (Core/Minds/Senses.cs)
     private readonly Resident[] _residents;
@@ -150,6 +151,9 @@ internal sealed class ChristmasScene : IScreensaverScene
             _starSpeed[i] = 0.6f + 1.8f * (float)amb.NextDouble();
         }
         _villagePhase = new float[_scenery.VillageWindows.Count];
+        _villageBulbGlows = ChristmasPainter.Pastels.Select(c => Sprite.Glow(Math.Max(2, (int)(_u * 0.0042f)), c)).ToArray();
+        _villageBulbPhase = new float[_scenery.VillageLights.Count];
+        for (int i = 0; i < _villageBulbPhase.Length; i++) _villageBulbPhase[i] = (float)(amb.NextDouble() * Math.PI * 2);
         for (int i = 0; i < _villagePhase.Length; i++) _villagePhase[i] = (float)(amb.NextDouble() * 40);
 
         // The snow's glitter: points on the open snowfield (not on a prop, not on the ice),
@@ -318,6 +322,14 @@ internal sealed class ChristmasScene : IScreensaverScene
             float lamp = 0.55f + 0.20f * (float)Math.Sin(_time * 1.3 + p * 3) + 0.12f * (float)Math.Sin(_time * 4.1 + p);
             PointF at = _scenery.VillageWindows[i];
             _villageGlow.DrawCentered(fb, at.X, at.Y, lamp * awake);
+        }
+
+        // 2c2. The village's holiday lights: each bulb on its own slow rhythm, never fully out, like the pines' bulbs.
+        for (int i = 0; i < _villageBulbPhase.Length; i++)
+        {
+            var vl = _scenery.VillageLights[i];
+            float bright = 0.40f + 0.60f * (0.5f + 0.5f * (float)Math.Sin(_time * (1.1 + 0.37 * (i % 5)) + _villageBulbPhase[i]));
+            _villageBulbGlows[vl.Color].DrawCentered(fb, vl.At.X, vl.At.Y, bright);
         }
 
         // 2d. The cabin's smoke and its windows' lamplight.

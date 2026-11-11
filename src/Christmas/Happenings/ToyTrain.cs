@@ -25,11 +25,22 @@ namespace Christmas.Happenings;
 internal sealed class ToyTrain : Happening
 {
     private const int Poses = 4;                           // wheel flip-book pages
-    // Seconds to cross. Worked out from a fixed SPEED (0.14 U per second),
-    // so the train does not race on a very wide screen.
+    // Seconds to cross. Worked out from a fixed SPEED, so the train does not
+    // race on a very wide screen. It was 0.14 U a second; his line: "slow the
+    // train down". A far-off train should take its time: 0.05 U a second is
+    // a crossing of well over half a minute on an ordinary screen.
+    private const float SpeedU = 0.05f;
     private readonly float _trip;
-    private const float PuffEvery = 0.4f;                  // a new puff this often
-    private const float PuffLife = 2.4f;
+    // THE SMOKE (his line: "give it some smoke"; the first had a few specks
+    // that rose two hundredths of a screen and were gone). A steam engine
+    // CHUFFS: the smoke leaves the funnel in separate balls, a quick pair,
+    // a gap, a quick pair. Each ball stays where it was let go (the train
+    // runs on from under it), climbs, swells to five times its size, leans
+    // away on the wind and thins out over seven seconds, so behind the engine
+    // there is always a long plume laid along the sky above the track.
+    private const float PuffEvery = 0.30f;                 // a new ball this often
+    private const float PuffLife = 7.0f;
+    private const int PuffSizes = 6;
 
     private static readonly Color Body = Color.FromArgb(24, 30, 62);
     private static readonly Color Lit = Color.FromArgb(255, 214, 110);
@@ -37,7 +48,8 @@ internal sealed class ToyTrain : Happening
 
     private readonly ChristmasScenery _s;
     private readonly Sprite[,] _train = new Sprite[2, Poses];   // [0 = heading right, 1 = heading left, wheel pose]
-    private readonly Sprite _lamp, _puffSmall, _puffBig;
+    private readonly Sprite _lamp;
+    private readonly Sprite[] _puff = new Sprite[PuffSizes];    // the same soft ball at six sizes, small to large
     private readonly int _len, _h;
     private readonly float _funnelX;                       // where the funnel is, in a right-heading sprite, from its left edge
     private bool _left;                                    // this showing's direction
@@ -48,7 +60,7 @@ internal sealed class ToyTrain : Happening
     {
         _s = s;
         _len = Math.Max(24, (int)(s.U * 0.12f));
-        _trip = (s.Width + _len) / (0.14f * s.U);            // distance divided by speed
+        _trip = (s.Width + _len) / (SpeedU * s.U);           // distance divided by speed
         _h = Math.Max(6, (int)(s.U * 0.012f));
         _funnelX = _len * 0.925f;
         for (int pose = 0; pose < Poses; pose++)
@@ -57,8 +69,8 @@ internal sealed class ToyTrain : Happening
             _train[1, pose] = PaintTrain(true, pose);
         }
         _lamp = Sprite.Glow(Math.Max(3, (int)(s.U * 0.008f)), Lit);
-        _puffSmall = Sprite.Glow(Math.Max(2, (int)(s.U * 0.004f)), Smoke);
-        _puffBig = Sprite.Glow(Math.Max(3, (int)(s.U * 0.008f)), Smoke);
+        for (int i = 0; i < PuffSizes; i++)
+            _puff[i] = Sprite.Glow(Math.Max(2, (int)(s.U * (0.0045f + 0.0042f * i))), Smoke);
     }
 
     /// <summary>
@@ -131,20 +143,30 @@ internal sealed class ToyTrain : Happening
 
         // The smoke first, so the train is stamped over it. Puff j left the funnel at j * PuffEvery.
         float funnelDX = _left ? _len - _funnelX : _funnelX;
-        float rise = _s.U * 0.02f;
-        for (int j = 0; j * PuffEvery < _trip; j++)
+        float rise = _s.U * 0.060f;
+        // Only the balls young enough to be alive: from the newest back to the oldest that has not faded.
+        int newest = (int)(t / PuffEvery), oldest = Math.Max(0, (int)((t - PuffLife) / PuffEvery));
+        for (int j = oldest; j <= newest; j++)
         {
+            if (j % 4 == 3) continue;                                   // the chuff: three balls, then a breath
             float age = t - j * PuffEvery;
             if (age < 0 || age > PuffLife) continue;
-            float born = LeftEdge(j * PuffEvery) + funnelDX;            // the funnel's x at the moment of this puff
+            float born = LeftEdge(j * PuffEvery) + funnelDX;            // the funnel's x at the moment this ball left it
             float a = age / PuffLife;
-            float px = born + (_left ? 1 : -1) * _s.U * 0.01f * a + _s.U * 0.002f * MathF.Sin(age * 3 + j);   // blown back a little, with a wobble
-            float py = top - _s.U * 0.003f - rise * MathF.Sqrt(a);   // floats up, slowing as it goes
-            (a < 0.4f ? _puffSmall : _puffBig).DrawCentered(fb, px, py, 0.85f * (1 - a) * Math.Min(1f, age * 4), _s.OpenValley);
+            // It stays where it was born and leans a little down the wind (to the right, like the chimney's smoke),
+            // with a slow wander so the plume is not a ruled line.
+            float px = born + _s.U * 0.030f * a * a + _s.U * 0.004f * MathF.Sin(age * 1.3f + j * 1.7f);
+            float py = top - _s.U * 0.004f - rise * (1f - (1f - a) * (1f - a));   // shoots up hot, then slows: fast at first, hanging at the end
+            int size = Math.Min(PuffSizes - 1, (int)(a * 1.6f * PuffSizes));    // swells quickly, then drifts at full size
+            // Thick as it leaves the funnel, thinning as it spreads; faded in over the first tenth of a second so it never pops.
+            float opacity = 0.80f * MathF.Min(1f, age * 10f) * (1f - a) * (1f - 0.5f * a);
+            _puff[size].DrawCentered(fb, px, py, opacity, _s.OpenValley);
         }
 
-        int pose = (int)(t * 14) % Poses;
-        _train[_left ? 1 : 0, pose].Draw(fb, (int)x, top, 1f, _s.OpenValley);
+        // The wheels turn with the DISTANCE covered (a page every few pixels), so slowing the train slowed them too.
+        int pose = (int)(MathF.Abs(x) / Math.Max(1f, _h * 0.35f)) % Poses;
+        // At a fraction of a pixel: at this speed the train moves under a pixel a frame, and on whole pixels it would step.
+        _train[_left ? 1 : 0, pose].DrawSmooth(fb, x, top, 1f, _s.OpenValley);
 
         // The headlight's soft glow, at the nose, which is the right end going right and the left end going left.
         float lampX = x + (_left ? _len * 0.015f : _len * 0.985f);

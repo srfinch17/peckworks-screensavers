@@ -52,6 +52,7 @@ internal sealed class ChristmasScenery
     // ---- The world the residents live in (added 2026-11-10, the "do for Christmas what we did for Thanksgiving" round) ----
     public required List<PointF> Stars { get; init; }                   // the brighter stars, for the scene to twinkle
     public required List<PointF> VillageWindows { get; init; }          // every lit window in the far village, for the scene to flicker
+    public required List<(PointF At, int Color)> VillageLights { get; init; }   // the strings of holiday bulbs along some of the village's eaves and roofs (tiny: the scene twinkles them with a small glow)
     public required PointF Lamp { get; init; }                          // the middle of the lamp post's lantern (the scene stamps its glow here)
     public required PointF LampFoot { get; init; }                      // where the post meets the snow
     public required (PointF At, float Half) LampBar { get; init; }      // the top of the snow on the lamp's crossbar (a perch for a bird) and half the bar's width
@@ -283,6 +284,7 @@ internal static class ChristmasPainter
         var lights = new List<(PointF At, int Color)>();
         var stars = new List<PointF>();
         var villageWindows = new List<PointF>();
+        var villageLights = new List<(PointF At, int Color)>();
 
         // ---- The paint order, back to front. Keep this list explicit. ----
         PaintSky(g, w, horizon, u, rng, stars);
@@ -308,7 +310,7 @@ internal static class ChristmasPainter
         float crestMin = float.MaxValue;
         float crestMax = 0;
         foreach (PointF p in ground.Edge) { crestMin = Math.Min(crestMin, p.Y); if (p.X >= 0 && p.X <= w) crestMax = Math.Max(crestMax, p.Y); }
-        PaintValley(g, w, horizon, u, rng, ground, nearRange, villageWindows);
+        PaintValley(g, w, horizon, u, rng, ground, nearRange, villageWindows, villageLights);
 
         ground.Paint(g, Color.FromArgb(222, 233, 252), Color.FromArgb(118, 140, 196), Color.FromArgb(220, 255, 255, 255), Math.Max(1.5f, u * 0.004f));
         PaintDrifts(g, w, h, u, rng, ground);
@@ -359,7 +361,11 @@ internal static class ChristmasPainter
         // his foot, always pass in FRONT of him. (He first stood in the middle of the small animals' ground, and a
         // fox that pulled up behind him stood for seconds with only its head showing.)
         var snowmanFoot = new PointF(w * 0.835f, crestMax + 0.088f * u);
-        float snowmanTall = u * 0.24f * Scale(snowmanFoot.Y);
+        // THE SNOWMAN IS A MAN'S HEIGHT, by the field's own scale (Metre): 1.8 metres to the top of his hat. He was
+        // first sized by a guess (0.24 U times the props' scale), which made him over three metres: his line was
+        // "your elk/moose whatever, to scale, make the snowman look like it's 50ft tall". Everything that shares
+        // the snow with the animals is sized in METRES, never in fractions of the screen.
+        float snowmanTall = 1.8f * 0.10f * u * (0.36f + 0.64f * Math.Clamp((snowmanFoot.Y - crestMin) / (h - crestMin), 0f, 1f));
         float logR = u * 0.030f, logLeft = w * 0.045f, logRight = logLeft + u * 0.27f, logFootY = h * 0.955f;
         var bushes = new List<(PointF At, float R)>
         {
@@ -429,7 +435,7 @@ internal static class ChristmasPainter
             CabinWindows = cabin.Windows, CabinDoor = cabin.Door, ChimneyTop = cabin.ChimneyTop, CabinBulbs = cabin.Bulbs,
             Pines = pineFacts, StarPine = starPine, StarAt = new PointF(starX, starY),
             CornerBranchSpots = cornerSpots,
-            Stars = stars, VillageWindows = villageWindows,
+            Stars = stars, VillageWindows = villageWindows, VillageLights = villageLights,
             Lamp = lamp, LampFoot = lampFoot, LampBar = (new PointF(lamp.X, lamp.Y + lampTall * 0.130f), lampTall * 0.075f), Pond = pond, IceHole = iceHole,
             LogHollow = hollow, LogR = logR, LogTop = (logLeft + logR * 0.4f, logRight - logR * 0.6f, logTopY),
             FeederFoot = feederFoot, FeederTray = tray, FeederRoof = roof,
@@ -549,7 +555,7 @@ internal static class ChristmasPainter
     /// the valley stencil's copy was taken, so the toy train, which runs
     /// along the foot of the mountains, passes BEHIND the houses and trees.
     /// </summary>
-    private static void PaintValley(Graphics g, int w, float horizon, float u, Random rng, Bank ground, PointF[] nearRange, List<PointF> windows)
+    private static void PaintValley(Graphics g, int w, float horizon, float u, Random rng, Bank ground, PointF[] nearRange, List<PointF> windows, List<(PointF At, int Color)> bulbs)
     {
         // ---- Far firs: tiny dark triangles with a pale side, in loose clumps ----
         using (var fir = new SolidBrush(Color.FromArgb(40, 58, 96)))
@@ -610,6 +616,35 @@ internal static class ChristmasPainter
                 g.FillRectangle(wallDark, x + s * 0.20f, by - s * 1.08f, Math.Max(1f, s * 0.14f), s * 0.3f);   // a chimney
                 Window(x - s * 0.20f, by - s * 0.32f);
                 if (rng.Next(3) > 0) Window(x + s * 0.22f, by - s * 0.32f);
+            }
+
+            // HOLIDAY LIGHTS on about two houses in three (his line: "give some of the houses in the town some
+            // holiday lights"): a string of bulbs along the eave, and on some a second string up one slope of
+            // the roof and down the other. From this far off a bulb is a single coloured dot; the scene adds a
+            // small glow to each and makes them twinkle, the same trick as the pines' bulbs at a fifth the size.
+            // The church gets a string along the edge of its long roof.
+            int style = hs.Church ? 1 : rng.Next(6);                          // 0, 1: none on a house; 2, 3: the eave; 4, 5: eave and roof
+            if (hs.Church || style >= 2)
+            {
+                int colour = rng.Next(Pastels.Length);
+                float br = Math.Max(0.6f, s * 0.045f);
+                void Bulb(float bx, float byy)
+                {
+                    using var dot = new SolidBrush(Pastels[colour]);
+                    g.FillEllipse(dot, bx - br, byy - br, br * 2, br * 2);
+                    bulbs.Add((new PointF(bx, byy), colour));
+                    colour = (colour + 1) % Pastels.Length;
+                }
+                float eaveY = hs.Church ? by - s * 0.70f : by - s * 0.60f, half = hs.Church ? s * 0.82f : s * 0.56f;
+                int along = Math.Max(3, (int)(half * 2 / Math.Max(3f, s * 0.22f)));
+                for (int i = 0; i <= along; i++) Bulb(x - half + half * 2 * i / along, eaveY + br);
+                if (!hs.Church && style >= 4)
+                    for (int i = 1; i < 4; i++)
+                    {
+                        float up = i / 4f;                                      // up the left slope to the ridge, and down the right one
+                        Bulb(x - s * 0.64f * (1 - up), by - s * 0.60f - s * 0.52f * up + br);
+                        Bulb(x + s * 0.64f * (1 - up), by - s * 0.60f - s * 0.52f * up + br);
+                    }
             }
         }
     }
