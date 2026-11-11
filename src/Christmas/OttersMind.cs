@@ -90,6 +90,13 @@ internal sealed partial class Otters
         public bool HaveGoalHd, Panic, Braked, Chasing, Fish, WantFish;
         public int Face = 1;
         public int HeadIdx = 2, HeadTarget = 2, Level;
+        public float HeadF = 8f, HeadV, LevelF;             // the head's view as a float 0 to 16 (17 pages) driven by a spring, and the look-up height eased
+        public double GOff;                                 // the glide's clock offset (a glide that follows the toboggan carries on from its pose)
+        public bool LookPending; public float PendX, PendY, PendT;   // a look that waits for the head to come back to the middle before the otter rises
+        public int LastGal;                                 // the gallop page showing when a run ends: the stop dissolves from IT into the landing
+        public float BinF = 4f;                             // the fractional yaw bin of the shadow (it is blended like the body)
+        public float VarEnv;                                // the swell (0 to 1) of the blink, ear flick, whisker twitch or tail curl being played
+        public readonly Sprite?[] Lay = new Sprite?[8]; public readonly float[] LW = new float[8], LA = new float[8]; public int LN;   // the pages blended this frame
         public float HeadClock, LookClock, Alarm, RunN, OutTime, BubClock, BubDir, BubLen, BubS;
         public float LookX, LookY; public bool HasLook;
         public int Partner = -1, Slides, Bite;
@@ -238,15 +245,28 @@ internal sealed partial class Otters
         return want + 1.6f;
     }
 
-    private void ComputeYaw(float hd, out int bin, out bool mirror)
+    private void ComputeYaw(float hd, out int bin, out bool mirror, out float binF)
     {
         float deg = hd * 180f / MathF.PI;
         deg = MathF.IEEERemainder(deg, 360f);
-        if (MathF.Cos(hd) >= 0f) { bin = OttersArt.BinOf(deg); mirror = false; }
-        else { bin = OttersArt.BinOf(deg > 0 ? 180f - deg : -180f - deg); mirror = true; }
+        float d = MathF.Cos(hd) >= 0f ? deg : (deg > 0 ? 180f - deg : -180f - deg);
+        mirror = MathF.Cos(hd) < 0f;
+        binF = Math.Clamp(d / OttersArt.BinStep + OttersArt.SideBin, 0f, OttersArt.Bins - 1f);          // a fraction: Present blends the two bins either side
+        bin = OttersArt.BinOf(d);
     }
 
-    private void Begin(Otter o, Doing d, float secs = Mind<Doing>.Forever) { o.M.Begin(d, secs); o.T = 0; o.Stage = 0; }
+    /// <summary>The head view and the look-up height glide (a critically damped spring, not a step between pages).</summary>
+    private static void HeadSpring(Otter o, float dt)
+    {
+        float tp = o.M.Doing == Doing.Rest ? o.HeadTarget * 4f : 8f;       // away from rest the head comes back to the middle view
+        o.HeadV += ((tp - o.HeadF) * 60f - 15.5f * o.HeadV) * dt; o.HeadF = Math.Clamp(o.HeadF + o.HeadV * dt, 0f, 16f);
+        o.HeadIdx = (int)MathF.Round(o.HeadF / 4f);
+        o.LevelF += (o.Level - o.LevelF) * (1f - MathF.Exp(-5f * dt));
+    }
+    private static bool HeadCentered(Otter o) => MathF.Abs(o.HeadF - 8f) < 0.7f && MathF.Abs(o.HeadV) < 3f;
+    private static bool HeadSettled(Otter o) => MathF.Abs(o.HeadF - 4f * o.HeadIdx) < 0.5f && MathF.Abs(o.HeadV) < 3f;
+
+    private void Begin(Otter o, Doing d, float secs = Mind<Doing>.Forever) { o.M.Begin(d, secs); o.T = 0; o.Stage = 0; o.HeadTarget = 2; }
 
     // ---------------------------------------------------------------- the hole's two spots
 
@@ -276,7 +296,7 @@ internal sealed partial class Otters
         _fishClock += dt;
         foreach (Otter o in _o)
         {
-            o.T += dt; o.Att.Tick(dt); o.M.Tick(dt); o.PostRest.Tick(dt); o.StandCool.Tick(dt);
+            o.T += dt; HeadSpring(o, dt); o.Att.Tick(dt); o.M.Tick(dt); o.PostRest.Tick(dt); o.StandCool.Tick(dt);
             if (o.M.Doing != Doing.Under) o.OutTime += dt; else o.OutTime = 0f;
             if (o.Alarm > 0) o.Alarm -= dt;
             React(o);
@@ -348,7 +368,7 @@ internal sealed partial class Otters
     {
         o.LookX = x; o.LookY = y; o.HasLook = true; o.LookClock = 0f;
         Doing d = o.M.Doing;
-        if (d == Doing.Rest && !o.Fish && o.StandCool.Ready && Rng.NextDouble() < 0.5) { o.StandCool.Start(35f); StartStand(o, x, y); }
+        if (d == Doing.Rest && !o.Fish && o.StandCool.Ready && !o.LookPending && Rng.NextDouble() < 0.5) { o.LookPending = true; o.PendX = x; o.PendY = y; o.PendT = 0f; o.HeadTarget = 2; }
         else if (d == Doing.Stand || d == Doing.Surface) { /* already looking: Update steers to o.Look */ }
     }
 
@@ -484,7 +504,7 @@ internal sealed partial class Otters
         {
             o.Hd = o.Face > 0 ? 0f : MathF.PI;
             if (o.Fish) { Begin(o, Doing.Eat, 12f); o.Bite = 0; if (_log != null) Log($"{o.I} eats a fish"); if (_fishClock > 0) _fishClock = 0; Board.Post(Sense.Food, new PointF(o.X, o.Y), 0.3f * S.U, 0.8f, o); }
-            else { Begin(o, Doing.Rest, 2.5f + 3f * (float)Rng.NextDouble()); o.ShakeT = 0.9f; }
+            else { Begin(o, Doing.Rest, 7f + 4f * (float)Rng.NextDouble()); o.ShakeT = 0.9f; }
         }
     }
 
@@ -519,7 +539,7 @@ internal sealed partial class Otters
             float d = PlaneDist(o.X, o.Y, x, y);
             if (d < bestD) { bestD = d; best = face; bx = x; by = y; }
         }
-        if (best == 0) { Begin(o, Doing.Rest, 3f); return; }
+        if (best == 0) { Begin(o, Doing.Rest, 6f); return; }
         o.Face = best; o.WantFish = fish;
         StartGallop(o, bx, by, fish ? After.DiveFish : After.Dive, panic, best > 0 ? 0f : MathF.PI);
     }
@@ -532,7 +552,7 @@ internal sealed partial class Otters
         // Idle business: the head turns in steps through the pages, now to one side, now the other; the whole body
         // turns slowly on the spot to look at the other otter or at whatever it has noticed.
         o.HeadClock -= dt;
-        if (o.HeadClock <= 0f)
+        if (o.HeadClock <= 0f && !o.M.Over && !o.LookPending && o.Var < 0 && o.ScratchT <= 0f)
         {
             // CALM HEAD (the review: it re-aimed every 1.5 s): a held look of 2 to 7 s, then a small move, one or two views
             // to a side, or back to the middle; never a jump across the whole range.
@@ -540,7 +560,12 @@ internal sealed partial class Otters
             o.HeadTarget = Rng.Next(3) == 0 ? 2 : Math.Clamp(o.HeadIdx + (Rng.Next(2) == 0 ? -1 : 1) * (1 + Rng.Next(2)), 0, 4);
         }
         o.LookClock += dt;
-        if (o.HeadIdx != o.HeadTarget && ((int)(o.T * 9) != (int)((o.T - dt) * 9))) o.HeadIdx += Math.Sign(o.HeadTarget - o.HeadIdx);
+        // (the head's glide is the spring in HeadSpring: no stepping between pages here)
+        if (o.LookPending)
+        {
+            o.PendT += dt; o.HeadTarget = 2;
+            if (HeadCentered(o) || o.PendT > 1.2f) { o.LookPending = false; o.StandCool.Start(35f); StartStand(o, o.PendX, o.PendY); return; }
+        }
         // A shake after hauling out: a quick whole-body shiver with droplets flying off (Present draws the shiver).
         if (o.ShakeT > 0f)
         {
@@ -548,7 +573,11 @@ internal sealed partial class Otters
             if (_fx.NextDouble() < dt * 34) Drip(o.X + (float)(_fx.NextDouble() - 0.5) * 0.5f * _p, o.Y, 0.9f);
         }
         IdleLife(o, dt, 0.40f, 0.17f);
-        if (o.M.Over && o.ScratchT <= 0f) Decide(o);
+        if (o.M.Over && o.ScratchT <= 0f && !o.LookPending)
+        {
+            // never begin the next doing from a turned head: come back to the middle view first (a spring, about a quarter second)
+            if (!HeadCentered(o) && o.Var < 0) o.HeadTarget = 2; else Decide(o);
+        }
     }
 
     /// <summary>
@@ -560,29 +589,32 @@ internal sealed partial class Otters
     private void IdleLife(Otter o, float dt, float breathFwd, float breathUp)
     {
         o.Var = -1;
-        bool calm = o.M.Doing == Doing.Rest && o.HeadIdx >= 1 && o.HeadIdx <= 3 && o.ShakeT <= 0f;
+        bool calm = o.M.Doing == Doing.Rest && o.HeadIdx >= 1 && o.HeadIdx <= 3 && HeadSettled(o) && o.ShakeT <= 0f && !o.LookPending;
         if (o.M.Doing == Doing.Rest)
         {
             if (o.ScratchT > 0f) o.ScratchT -= dt;
             o.NextScratch -= dt;
             if (calm && o.NextScratch <= 0f && o.T > 0.8 && o.M.Left > 1.6f && o.ScratchT <= 0f && !Lull)
             {
-                o.ScratchT = 1.2f; o.NextScratch = Organic.Jitter(Rng, 20f, 0.8f) + 6f; o.HeadTarget = 2;
+                if (o.HeadIdx != 2) o.HeadTarget = 2;                                                  // face front first, then scratch
+                else { o.ScratchT = 1.2f; o.NextScratch = Organic.Jitter(Rng, 20f, 0.8f) + 6f; }
             }
             if (o.ScratchT <= 0f)
             {
                 o.NextBlink -= dt; o.NextEar -= dt; o.NextWhisk -= dt; o.NextCurl -= dt;
                 if (calm)
                 {
-                    if (o.NextBlink <= 0f) { o.BlinkT = 0.16f; o.NextBlink = Organic.Jitter(Rng, 2.6f, 0.8f) + 0.8f; }
-                    if (o.NextEar <= 0f) { o.EarT = 0.28f; o.NextEar = Organic.Jitter(Rng, 6f, 0.8f) + 2f; }
-                    if (o.NextWhisk <= 0f) { o.WhiskT = 0.5f; o.NextWhisk = Organic.Jitter(Rng, 4.5f, 0.8f) + 1.5f; }
-                    if (o.NextCurl <= 0f) { o.CurlT = 1.4f; o.NextCurl = Organic.Jitter(Rng, 9f, 0.8f) + 3f; }
+                    if (o.NextBlink <= 0f) { o.BlinkT = 0.22f; o.NextBlink = Organic.Jitter(Rng, 2.6f, 0.8f) + 0.8f; }
+                    if (o.NextEar <= 0f) { o.EarT = 0.4f; o.NextEar = Organic.Jitter(Rng, 6f, 0.8f) + 2f; }
+                    if (o.NextWhisk <= 0f) { o.WhiskT = 0.7f; o.NextWhisk = Organic.Jitter(Rng, 4.5f, 0.8f) + 1.5f; }
+                    if (o.NextCurl <= 0f) { o.CurlT = 1.6f; o.NextCurl = Organic.Jitter(Rng, 9f, 0.8f) + 3f; }
                 }
-                if (o.BlinkT > 0f) { o.BlinkT -= dt; o.Var = 0; }
-                else if (o.EarT > 0f) { o.EarT -= dt; o.Var = 1; }
-                else if (o.WhiskT > 0f) { o.WhiskT -= dt; o.Var = ((int)(o.WhiskT * 14f) & 1) == 0 ? 2 : -1; }
-                else if (o.CurlT > 0f) { o.CurlT -= dt; o.Var = 3; }
+                // each is a SWELL (a sine hump), so the overlay fades in and out: a blink 0.22 s, an ear flick 0.4 s, a whisker
+                // twitch 0.7 s with two little pulses, a tail curl 1.6 s
+                if (o.BlinkT > 0f) { o.BlinkT -= dt; o.Var = 0; o.VarEnv = MathF.Sin(MathF.PI * (1f - Math.Max(0f, o.BlinkT) / 0.22f)); }
+                else if (o.EarT > 0f) { o.EarT -= dt; o.Var = 1; o.VarEnv = MathF.Sin(MathF.PI * (1f - Math.Max(0f, o.EarT) / 0.4f)); }
+                else if (o.WhiskT > 0f) { o.WhiskT -= dt; float u = 1f - Math.Max(0f, o.WhiskT) / 0.7f; o.Var = 2; o.VarEnv = MathF.Sin(MathF.PI * u) * (0.55f + 0.45f * MathF.Sin(u * MathF.PI * 4f)); }
+                else if (o.CurlT > 0f) { o.CurlT -= dt; o.Var = 3; o.VarEnv = MathF.Sin(MathF.PI * (1f - Math.Max(0f, o.CurlT) / 1.6f)); }
             }
         }
         // Breath: a small puff of vapour from the nose every few seconds.
@@ -621,7 +653,7 @@ internal sealed partial class Otters
                         float x = _cx + MathF.Cos(a) * _rx * d, y = _cy + MathF.Sin(a) * _ry * d;
                         if (Allowed(x, y) && !S.Crowded(x, y, 0.5f * _p, this, o.I) && PlaneDist(o.X, o.Y, x, y) > 1.5f * _p && PlaneDist(o.X, o.Y, x, y) < 5.0f * _p) { StartGallop(o, x, y, After.Rest, false, 0f, false); return; }
                     }
-                    Begin(o, Doing.Rest, 2f); break;
+                    Begin(o, Doing.Rest, 6f); break;
                 }
             case 1: StartSlide(o); break;
             case 2: StartStand(o, float.NaN, float.NaN); break;
@@ -629,7 +661,7 @@ internal sealed partial class Otters
             case 4: GoDive(o, false, false); break;
             case 5: GoDive(o, false, true); _fishClock = 0f; break;
             case 7: StartTobog(o); break;
-            default: Begin(o, Doing.Rest, Organic.Jitter(Rng, 7f) + 2f); break;
+            default: Begin(o, Doing.Rest, Organic.Jitter(Rng, 12f) + 4f); break;
         }
     }
 
@@ -668,7 +700,7 @@ internal sealed partial class Otters
                     float tgt = dist > 0.1f * _p ? MathF.Atan2(dz, dx) : o.Hd;
                     float err = Turn.Error(o.Hd, tgt);
                     o.Hd = Turn.Toward(o.Hd, tgt, o.Panic ? 5f : 3.2f, dt);
-                    if (MathF.Abs(err) < 0.4f || dist < 0.55f * _p) { o.Stage = o.Stride <= 0f ? 3 : 1; o.T = 0; if (o.Stride <= 0f) { o.Pace.Halt(); } }
+                    if ((MathF.Abs(err) < 0.4f || dist < 0.55f * _p) && (HeadCentered(o) || o.T > 1.2)) { o.Stage = o.Stride <= 0f ? 4 : 1; o.T = 0; if (o.Stride <= 0f) { o.Pace.Halt(); } }   // no run at all (the goal is under half a length away): straight to facing it. The old stage 3 played the STOP (a landing from the gather pose) for a run that never began: a pop from rest to the gather in one frame
                     break;
                 }
             case 1:                                                                              // the crouch before a run
@@ -757,7 +789,7 @@ internal sealed partial class Otters
             case After.Slide: BeginSlide(o); break;
             case After.Tobog: BeginTobog(o); break;
             case After.Beg: StartStand(o, _o.Length > 0 && OtherEating(o, out Otter e) ? e.X : float.NaN, float.NaN, true); break;
-            default: Begin(o, Doing.Rest, Organic.Jitter(Rng, 6f) + 1.5f); break;
+            default: Begin(o, Doing.Rest, Organic.Jitter(Rng, 11f) + 4f); break;
         }
     }
 
@@ -854,7 +886,7 @@ internal sealed partial class Otters
                     if (o.T > 0.1) AddScratch(o.X, o.Y);
                     if (u >= 1f)
                     {
-                        o.Lift = 0f; o.Stage = 4; o.T = 0;
+                        o.Lift = 0f; o.Stage = 4; o.GOff = o.T; o.T = 0;                  // the glide carries on from the toboggan's pose
                         float cz = (_cy - o.Y) / _r, cxx = _cx - o.X, cross = MathF.Cos(o.Hd) * cz - MathF.Sin(o.Hd) * cxx;
                         o.Spin = MathF.Abs(o.Spin) * (cross >= 0 ? 1f : -1f);
                         Puff(o.X, o.Y, 0.4f);
@@ -886,7 +918,7 @@ internal sealed partial class Otters
                 {
                     float err = Turn.Error(o.Hd, o.GoalHd);
                     o.Hd = Turn.Toward(o.Hd, o.GoalHd, 3.2f, dt);
-                    if (MathF.Abs(err) < 0.1f) { o.Stage = 1; o.T = 0; }
+                    if (MathF.Abs(err) < 0.1f && (HeadCentered(o) || o.T > 1.2)) { o.Stage = 1; o.T = 0; }
                     break;
                 }
             case 1:
@@ -905,7 +937,7 @@ internal sealed partial class Otters
                     if (!Move(o, o.Speed * dt)) { o.Speed = 0f; }
                     if (o.T >= 0.34)
                     {
-                        o.Stage = 4; o.T = 0;
+                        o.Stage = 4; o.T = 0; o.GOff = 0;
                         // Curve toward the middle of the pond (never out toward the rim): the side the centre is on.
                         { float cz = (_cy - o.Y) / _r, cxx = _cx - o.X; float cross = MathF.Cos(o.Hd) * cz - MathF.Sin(o.Hd) * cxx; o.Spin = MathF.Abs(o.Spin) * (cross >= 0 ? 1f : -1f); }
                         Puff(o.X, o.Y, 0.4f); Puff(o.X - MathF.Cos(o.Hd) * 0.2f * _p, o.Y, 0.3f);
@@ -928,7 +960,7 @@ internal sealed partial class Otters
                         if (_log != null) Log($"{o.I} bumped the rim");
                     }
                     if (o.T > 0.05) AddScratch(o.X, o.Y);
-                    if (o.Speed < 0.25f * _p) { o.Stage = 5; o.T = 0; o.Speed = 0f; }
+                    if (o.Speed < 0.25f * _p && GlidePage(o, o.GOff) == 0) { o.Stage = 5; o.T = 0; o.Speed = 0f; }   // up from the glide's own first pose
                     break;
                 }
             case 5:
@@ -937,7 +969,7 @@ internal sealed partial class Otters
                     o.Slides++;
                     // Up and round for another go, now and then.
                     if (!Lull && o.Slides < 3 && Rng.NextDouble() < 0.35 + 0.35 * o.Playful) StartSlide(o);
-                    else Begin(o, Doing.Rest, Organic.Jitter(Rng, 3f));
+                    else Begin(o, Doing.Rest, Organic.Jitter(Rng, 9f) + 3f);
                     o.Slides = o.M.Doing == Doing.Slide ? o.Slides : 0;
                 }
                 break;
@@ -1038,7 +1070,7 @@ internal sealed partial class Otters
                         float bcx = m.X, bcy = m.Y;                                              // (read first: the master is one of the two and is about to be moved)
                         left.X = bcx - PairGap * _p; right.X = bcx + PairGap * _p; left.Y = right.Y = bcy;
                         left.Hd = 0f; right.Hd = MathF.PI;
-                        foreach (Otter q in new[] { m, other }) { Begin(q, Doing.Rest, Organic.Jitter(Rng, 2.5f)); q.Partner = -1; q.HasLook = false; }
+                        foreach (Otter q in new[] { m, other }) { Begin(q, Doing.Rest, Organic.Jitter(Rng, 9f) + 3f); q.Partner = -1; q.HasLook = false; }
                         Otter hop = m.Playful >= other.Playful ? m : other;
                         float dir = hop == left ? -1f : 1f;
                         float gx = hop.X + dir * 1.6f * _p;
@@ -1080,7 +1112,7 @@ internal sealed partial class Otters
             // A long look at Santa is cut short only by the timer.
             if (o.M.Over) { o.Stage = 2; o.T = 0; }
         }
-        if (o.Stage == 2 && o.T >= 0.4) { Begin(o, Doing.Rest, Organic.Jitter(Rng, 2.5f)); o.HasLook = false; }
+        if (o.Stage == 2 && o.T >= 0.4) { Begin(o, Doing.Rest, Organic.Jitter(Rng, 9f) + 3f); o.HasLook = false; }
     }
 
     // ---------------------------------------------------------------- ROLL
@@ -1117,7 +1149,7 @@ internal sealed partial class Otters
             if (_fx.NextDouble() < dt * 2.5) Puff(o.X + (float)(_fx.NextDouble() - 0.5) * 0.6f * _p, o.Y, 0.2f);
             if (o.M.Left <= 0.6f) { o.Stage = 2; o.T = 0; }
         }
-        if (o.Stage == 2 && o.T >= 0.6) Begin(o, Doing.Rest, Organic.Jitter(Rng, 2.5f));
+        if (o.Stage == 2 && o.T >= 0.6) Begin(o, Doing.Rest, Organic.Jitter(Rng, 9f) + 3f);
     }
 
     // ---------------------------------------------------------------- EAT
@@ -1136,7 +1168,7 @@ internal sealed partial class Otters
         else if (o.Stage == 4 && o.T >= 0.55)
         {
             o.Fish = false;
-            Begin(o, Doing.Rest, Organic.Jitter(Rng, 3f));
+            Begin(o, Doing.Rest, Organic.Jitter(Rng, 9f) + 3f);
         }
     }
 
@@ -1183,116 +1215,196 @@ internal sealed partial class Otters
         }
     }
 
-    // ---------------------------------------------------------------- the picture
+    // ---------------------------------------------------------------- the picture (SILKY)
+    //
+    // Every picture is a BLEND of up to eight stamped pages: the first at full strength, each next one laid over it at its
+    // share of what is on the frame so far (Mix works that out). So a turn that moves between two yaw bins 22.5 degrees apart
+    // is a dissolve from one to the next, a head glides between its 17 views, a blink or an ear flick is an overlay that fades
+    // in and out, and nothing changes in one frame. (The gate that flagged the old turns: 30 times the change of the frames
+    // beside it every time the heading crossed a bin.)
+
+    private static void Layer(Otter o, Sprite s, float w)
+    {
+        if (w <= 0.001f || o.LN >= o.Lay.Length) return;
+        o.Lay[o.LN] = s; o.LW[o.LN] = w; o.LN++;
+    }
+
+    /// <summary>The page of a [page, yaw] set at a fractional yaw bin: the two bins either side, in proportion.</summary>
+    private static void Yawed(Otter o, Sprite[,] set, int page, float binF, float w = 1f)
+    {
+        int lo = Math.Clamp((int)binF, 0, OttersArt.Bins - 1); float f = binF - lo;
+        if (f < 0.03f || lo + 1 >= OttersArt.Bins) { Layer(o, set[page, lo], w); return; }
+        Layer(o, set[page, lo], w * (1f - f)); Layer(o, set[page, lo + 1], w * f);
+    }
+
+    private static void YawedVar(Otter o, Sprite[,,] set, int v, int h, float binF, float w)
+    {
+        int lo = Math.Clamp((int)binF, 0, OttersArt.Bins - 1); float f = binF - lo;
+        if (f < 0.03f || lo + 1 >= OttersArt.Bins) { Layer(o, set[v, h, lo], w); return; }
+        Layer(o, set[v, h, lo], w * (1f - f)); Layer(o, set[v, h, lo + 1], w * f);
+    }
+
+    /// <summary>The resting body at a fractional head view and a fractional yaw: up to four pages.</summary>
+    private static void RestHeaded(Otter o, OtterPages g, float binF, float w = 1f)
+    {
+        int h = Math.Clamp((int)o.HeadF, 0, OtterPages.RestHeads - 2); float hf = Math.Clamp(o.HeadF - h, 0f, 1f);
+        if (hf < 0.03f) { Yawed(o, g.Rest, h, binF, w); return; }
+        Yawed(o, g.Rest, h, binF, w * (1f - hf)); Yawed(o, g.Rest, h + 1, binF, w * hf);
+    }
+
+    private static void Mix(Otter o)
+    {
+        float sum = 0f;
+        for (int i = 0; i < o.LN; i++) { sum += o.LW[i]; o.LA[i] = i == 0 ? 1f : o.LW[i] / sum; }
+        o.Spr = o.LN > 0 ? o.Lay[0] : null;
+    }
 
     private void Present(Otter o)
     {
         OtterPages g = _pg!;
-        o.Vis = true; o.ShadowBin = -1; o.ShakeDX = 0f;
+        o.Vis = true; o.ShadowBin = -1; o.ShakeDX = 0f; o.LN = 0;
         o.FX = o.X; o.FY = o.Y;
-        ComputeYaw(o.Hd, out int bin, out bool mir);
+        ComputeYaw(o.Hd, out int bin, out bool mir, out float binF);
         o.Mirror = mir; o.OX = g.OX; o.OY = g.OY;
         switch (o.M.Doing)
         {
             case Doing.Under: o.Vis = false; break;
             case Doing.Surface:
                 {
-                    // The head rises over 0.7 s, holds, and sinks again over 0.6 s.
-                    int lvl = o.Stage == 0 ? (int)(Math.Min(1.0, o.T / 0.7) * 0.999 * 5) : o.Stage >= 3 ? 5 - (int)(Math.Min(1.0, o.T / 0.6) * 0.999 * 5.99) : 5;
-                    if (o.Stage == 4) lvl = 5;
-                    lvl = Math.Clamp(lvl, 0, 5);
-                    o.Spr = g.Surf[lvl, bin, o.Fish ? 1 : 0]; o.OX = g.SurfOX; o.OY = g.SurfOY; o.PageKind = "surf"; o.PageIdx = lvl;
+                    // The head rises over 0.7 s, holds, and sinks again over 0.6 s: 14 pages, an eased height.
+                    int n = OtterPages.SurfPages;
+                    float frac = o.Stage == 0 ? (float)Math.Min(1.0, o.T / 0.7) : o.Stage >= 3 ? 1f - (float)Math.Min(1.0, o.T / 0.6) : 1f;
+                    if (o.Stage == 4) frac = 1f;
+                    int lvl = Math.Clamp((int)MathF.Round(Sm(frac) * (n - 1)), 0, n - 1);
+                    int lo = Math.Clamp((int)binF, 0, OttersArt.Bins - 1); float f = binF - lo; int fi = o.Fish ? 1 : 0;
+                    if (f < 0.03f || lo + 1 >= OttersArt.Bins) Layer(o, g.Surf[lvl, lo, fi], 1f);
+                    else { Layer(o, g.Surf[lvl, lo, fi], 1f - f); Layer(o, g.Surf[lvl, lo + 1, fi], f); }
+                    o.OX = g.SurfOX; o.OY = g.SurfOY; o.PageKind = "surf"; o.PageIdx = lvl;
                     break;
                 }
             case Doing.Haul:
                 {
                     int i = Math.Min(OtterPages.HaulPages - 1, (int)(o.T / 1.7 * OtterPages.HaulPages));
-                    o.Spr = g.Haul[i, o.Fish ? 1 : 0]; o.OX = g.WideOX; o.Mirror = o.Face < 0; o.PageKind = "haul"; o.PageIdx = i;
-                    o.ShadowBin = i >= 12 ? 4 : -1;
+                    Layer(o, g.Haul[i, o.Fish ? 1 : 0], 1f); o.OX = g.WideOX; o.Mirror = o.Face < 0; o.PageKind = "haul"; o.PageIdx = i;
+                    o.ShadowBin = i >= OtterPages.HaulPages * 3 / 4 ? OttersArt.SideBin : -1;
                     break;
                 }
             case Doing.Dive:
                 {
                     int i = Math.Min(OtterPages.DivePages - 1, (int)(Math.Min(1.0, o.T / 1.35) * OtterPages.DivePages));
-                    o.Spr = g.Dive[i]; o.OX = g.DiveOX; o.Mirror = o.Face < 0; o.PageKind = "dive"; o.PageIdx = i;
-                    o.ShadowBin = i < 5 ? 4 : -1;
+                    Layer(o, g.Dive[i], 1f); o.OX = g.DiveOX; o.Mirror = o.Face < 0; o.PageKind = "dive"; o.PageIdx = i;
+                    o.ShadowBin = i < OtterPages.DivePages * 5 / 14 ? OttersArt.SideBin : -1;
                     break;
                 }
             case Doing.Rest:
-                if (o.ScratchT > 0f)
                 {
-                    // Scratching with a hind foot: ramp up, stroke, stroke, ... ramp down (pages 0, 1, 2, 1, 2, 1, 2, 3).
-                    int step = Math.Min(7, (int)((1.2f - o.ScratchT) / 0.15f));
-                    int sp = step == 0 ? 0 : step == 7 ? 3 : (step % 2 == 1 ? 1 : 2);
-                    o.Spr = g.Scratch[sp, bin]; o.PageKind = "scratch"; o.PageIdx = sp;
+                    float env = 0f;
+                    if (o.ScratchT > 0f)
+                    {
+                        // The scratch: the hind foot's sweeps, 24 pages, laid over the resting body and faded in over the first
+                        // 0.15 s and out over the last 0.15 s.
+                        float t = 1.2f - o.ScratchT;
+                        env = Sm(MathF.Min(t / 0.15f, o.ScratchT / 0.15f));
+                        int sp = Math.Clamp((int)(t / 1.2f * (OtterPages.ScratchPages - 1) + 0.5f), 0, OtterPages.ScratchPages - 1);
+                        RestHeaded(o, g, binF, 1f - env);
+                        Yawed(o, g.Scratch, sp, binF, env); o.PageKind = "scratch"; o.PageIdx = sp;
+                    }
+                    else if (o.Var >= 0 && o.VarEnv > 0.01f)
+                    {
+                        // A blink, an ear flick, whiskers, a tail curl: the variant page is laid over the resting one at the
+                        // strength of a smooth swell, so a lid closes and opens instead of ticking between two pictures.
+                        RestHeaded(o, g, binF, 1f - o.VarEnv);
+                        YawedVar(o, g.RestVar, o.Var, Math.Clamp(o.HeadIdx, 1, 3) - 1, binF, o.VarEnv);
+                        o.PageKind = "restvar"; o.PageIdx = o.Var;
+                    }
+                    else { RestHeaded(o, g, binF); o.PageKind = "rest"; o.PageIdx = (int)MathF.Round(o.HeadF); }
+                    o.ShadowBin = bin;
+                    break;
                 }
-                else if (o.Var >= 0) { o.Spr = g.RestVar[o.Var, Math.Clamp(o.HeadIdx, 1, 3) - 1, bin]; o.PageKind = "restvar"; o.PageIdx = o.Var; }
-                else { o.Spr = g.Rest[o.HeadIdx, bin]; o.PageKind = "rest"; o.PageIdx = o.HeadIdx; }
-                o.ShadowBin = bin;
-                break;
             case Doing.Gallop:
                 switch (o.Stage)
                 {
-                    case 0: case 4: o.Spr = g.Rest[2, bin]; o.PageKind = "turn"; o.PageIdx = 0; break;
-                    case 1: { int i = Math.Min(4, (int)(o.T / (o.Panic ? 0.13 : 0.22) * 5)); o.Spr = g.Start[i, bin]; o.PageKind = "start"; o.PageIdx = i; break; }
-                    case 3: { int i = Math.Max(0, 4 - (int)(o.T / (o.Panic ? 0.12 : 0.22) * 5)); o.Spr = g.Start[i, bin]; o.PageKind = "stop"; o.PageIdx = i; break; }
-                    default: { int pg = o.Pace.Page(o.Stride > 0 ? o.Stride : _stride, OtterPages.GallopPages); o.Spr = g.Gallop[pg, bin]; o.PageKind = "gal"; o.PageIdx = pg; break; }
+                    case 0: case 4: RestHeaded(o, g, binF); o.PageKind = "turn"; o.PageIdx = 0; break;
+                    case 1: { int i = Math.Min(OtterPages.StartPages - 1, (int)(o.T / (o.Panic ? 0.13 : 0.22) * OtterPages.StartPages)); Yawed(o, g.Start, i, binF); o.PageKind = "start"; o.PageIdx = i; break; }
+                    case 3:
+                        {
+                            // THE STOP: the Start sheet backwards (landing from the gather pose). A run that braked early ends on ANY page of the
+                            // cycle, not the gather: the first 0.14 s dissolve from the page it ended on into the landing (a gate found the one-frame
+                            // jump from an extended stride to the gather).
+                            int i = Math.Max(0, OtterPages.StartPages - 1 - (int)(o.T / (o.Panic ? 0.12 : 0.22) * OtterPages.StartPages));
+                            float w = Sm((float)Math.Min(1.0, o.T / 0.14));
+                            if (w < 0.98f) Yawed(o, g.Gallop, o.LastGal, binF, 1f - w);
+                            Yawed(o, g.Start, i, binF, w); o.PageKind = "stop"; o.PageIdx = i; break;
+                        }
+                    default: { int pg = o.Pace.Page(o.Stride > 0 ? o.Stride : _stride, OtterPages.GallopPages); o.LastGal = pg; Yawed(o, g.Gallop, pg, binF); o.PageKind = "gal"; o.PageIdx = pg; break; }
                 }
                 o.ShadowBin = bin;
                 break;
             case Doing.Slide:
                 switch (o.Stage)
                 {
-                    case 6: { int pg = o.Pace.Page(_stride, OtterPages.GallopPages); o.Spr = g.Gallop[pg, bin]; o.PageKind = "climb"; o.PageIdx = pg; break; }
-                    case 7: o.Spr = g.Rest[2, bin]; o.PageKind = "top"; o.PageIdx = 0; break;
-                    case 8: { int i = Math.Max(0, 5 - (int)(o.T / 0.4 * 6)); o.Spr = g.GetUp[i, bin]; o.PageKind = "flop"; o.PageIdx = i; break; }
-                    case 9: { int i = (int)(o.T * 4.5) % 4; o.Spr = g.Glide[i, bin]; o.PageKind = "toboggan"; o.PageIdx = i; break; }
-                    case 0: o.Spr = g.Rest[2, bin]; o.PageKind = "turn"; o.PageIdx = 0; break;
-                    case 1: { int i = Math.Min(4, (int)(o.T / 0.22 * 5)); o.Spr = g.Start[i, bin]; o.PageKind = "start"; o.PageIdx = i; break; }
-                    case 2: { int pg = o.Pace.Page(_stride, OtterPages.GallopPages); o.Spr = g.Gallop[pg, bin]; o.PageKind = "gal"; o.PageIdx = pg; break; }
-                    case 3: { int i = Math.Min(5, (int)(o.T / 0.34 * 6)); o.Spr = g.Throw[i, bin]; o.PageKind = "throw"; o.PageIdx = i; break; }
-                    case 4: { int i = (int)(o.T * 4.5) % 4; o.Spr = g.Glide[i, bin]; o.PageKind = "glide"; o.PageIdx = i; break; }
-                    default: { int i = Math.Min(5, (int)(o.T / 0.55 * 6)); o.Spr = g.GetUp[i, bin]; o.PageKind = "getup"; o.PageIdx = i; break; }
+                    case 6: { int pg = o.Pace.Page(_stride, OtterPages.GallopPages); Yawed(o, g.Gallop, pg, binF); o.PageKind = "climb"; o.PageIdx = pg; break; }
+                    case 7: RestHeaded(o, g, binF); o.PageKind = "top"; o.PageIdx = 0; break;
+                    case 8: { int i = Math.Max(0, OtterPages.GetUpPages - 1 - (int)(o.T / 0.4 * OtterPages.GetUpPages)); Yawed(o, g.GetUp, i, binF); o.PageKind = "flop"; o.PageIdx = i; break; }
+                    case 9: { int i = GlidePage(o, 0.0); Yawed(o, g.Glide, i, binF); o.PageKind = "toboggan"; o.PageIdx = i; break; }
+                    case 0: RestHeaded(o, g, binF); o.PageKind = "turn"; o.PageIdx = 0; break;
+                    case 1: { int i = Math.Min(OtterPages.StartPages - 1, (int)(o.T / 0.22 * OtterPages.StartPages)); Yawed(o, g.Start, i, binF); o.PageKind = "start"; o.PageIdx = i; break; }
+                    case 2: { int pg = o.Pace.Page(_stride, OtterPages.GallopPages); Yawed(o, g.Gallop, pg, binF); o.PageKind = "gal"; o.PageIdx = pg; break; }
+                    case 3: { int i = Math.Min(OtterPages.ThrowPages - 1, (int)(o.T / 0.34 * OtterPages.ThrowPages)); Yawed(o, g.Throw, i, binF); o.PageKind = "throw"; o.PageIdx = i; break; }
+                    case 4: { int i = GlidePage(o, o.GOff); Yawed(o, g.Glide, i, binF); o.PageKind = "glide"; o.PageIdx = i; break; }
+                    default: { int i = Math.Min(OtterPages.GetUpPages - 1, (int)(o.T / 0.55 * OtterPages.GetUpPages)); Yawed(o, g.GetUp, i, binF); o.PageKind = "getup"; o.PageIdx = i; break; }
                 }
                 o.ShadowBin = bin;
                 break;
             case Doing.Stand:
-                if (o.Stage == 0) { int i = Math.Min(4, (int)(o.T / 0.4 * 5)); o.Spr = g.Stand[i, bin]; o.PageKind = "rise"; o.PageIdx = i; }
-                else if (o.Stage == 2) { int i = Math.Max(0, 4 - (int)(o.T / 0.4 * 5)); o.Spr = g.Stand[i, bin]; o.PageKind = "lower"; o.PageIdx = i; }
-                else { o.Spr = g.Up[Math.Clamp(o.Level, 0, 2), bin]; o.PageKind = "up"; o.PageIdx = o.Level; }
+                if (o.Stage == 0) { int i = Math.Min(OtterPages.StandPages - 1, (int)(o.T / 0.4 * OtterPages.StandPages)); Yawed(o, g.Stand, i, binF); o.PageKind = "rise"; o.PageIdx = i; }
+                else if (o.Stage == 2) { int i = Math.Max(0, OtterPages.StandPages - 1 - (int)(o.T / 0.4 * OtterPages.StandPages)); Yawed(o, g.Stand, i, binF); o.PageKind = "lower"; o.PageIdx = i; }
+                else
+                {
+                    // looking up: the head and neck stretch between three heights, glided by an eased level (never a hop between them)
+                    int lv = Math.Clamp((int)o.LevelF, 0, 1); float lf = Math.Clamp(o.LevelF - lv, 0f, 1f);
+                    if (lf < 0.03f) Yawed(o, g.Up, lv, binF); else { Yawed(o, g.Up, lv, binF, 1f - lf); Yawed(o, g.Up, lv + 1, binF, lf); }
+                    o.PageKind = "up"; o.PageIdx = o.Level;
+                }
                 o.ShadowBin = bin;
                 break;
             case Doing.Roll:
                 o.Mirror = o.Face < 0;
-                if (o.Stage == 0) { int i = Math.Min(5, (int)(o.T / 0.6 * 6)); o.Spr = g.Flop[i]; o.PageKind = "flop"; o.PageIdx = i; }
-                else if (o.Stage == 2) { int i = Math.Max(0, 5 - (int)(o.T / 0.6 * 6)); o.Spr = g.Flop[i]; o.PageKind = "unflop"; o.PageIdx = i; }
-                else { int i = (int)(o.T * 11) % OtterPages.RollPages; o.Spr = g.RollCycle[i]; o.PageKind = "roll"; o.PageIdx = i; }
-                o.ShadowBin = 4;
+                if (o.Stage == 0) { int i = Math.Min(OtterPages.FlopPages - 1, (int)(o.T / 0.6 * OtterPages.FlopPages)); Layer(o, g.Flop[i], 1f); o.PageKind = "flop"; o.PageIdx = i; }
+                else if (o.Stage == 2) { int i = Math.Max(0, OtterPages.FlopPages - 1 - (int)(o.T / 0.6 * OtterPages.FlopPages)); Layer(o, g.Flop[i], 1f); o.PageKind = "unflop"; o.PageIdx = i; }
+                else { int i = (int)(o.T * 33) % OtterPages.RollPages; Layer(o, g.RollCycle[i], 1f); o.PageKind = "roll"; o.PageIdx = i; }
+                o.ShadowBin = OttersArt.SideBin;
                 break;
             case Doing.Eat:
                 o.Mirror = o.Face < 0;
-                if (o.Stage == 0) { int i = Math.Min(4, (int)(o.T / 0.55 * 5)); o.Spr = g.SitDown[i]; o.PageKind = "sit"; o.PageIdx = i; }
-                else if (o.Stage <= 3) { int c = (int)(o.T * 6) % 8; o.Spr = g.SitEat[o.Stage - 1, c]; o.PageKind = "eat"; o.PageIdx = (o.Stage - 1) * 10 + c; }
-                else { int i = Math.Min(4, (int)(o.T / 0.55 * 5)); o.Spr = g.EatEnd[i]; o.PageKind = "eatend"; o.PageIdx = i; }
-                o.ShadowBin = 4;
+                if (o.Stage == 0) { int i = Math.Min(OtterPages.SitDownPages - 1, (int)(o.T / 0.55 * OtterPages.SitDownPages)); Layer(o, g.SitDown[i], 1f); o.PageKind = "sit"; o.PageIdx = i; }
+                else if (o.Stage <= 3) { int c = (int)(o.T * 18) % OtterPages.EatChew; Layer(o, g.SitEat[o.Stage - 1, c], 1f); o.PageKind = "eat"; o.PageIdx = (o.Stage - 1) * 100 + c; }
+                else { int i = Math.Min(OtterPages.EatEndPages - 1, (int)(o.T / 0.55 * OtterPages.EatEndPages)); Layer(o, g.EatEnd[i], 1f); o.PageKind = "eatend"; o.PageIdx = i; }
+                o.ShadowBin = OttersArt.SideBin;
                 break;
             case Doing.Wrestle:
                 {
                     Otter a = o.I < o.Partner ? o : _o[o.Partner];
-                    o.Mirror = false; o.ShadowBin = 4;
-                    if (a.Stage == 1) { int i = Math.Min(2, (int)(a.T / 0.1)); o.Spr = g.PairIn[i]; o.PageKind = "pairin"; o.PageIdx = i; }
-                    else if (a.Stage == 3) { int i = Math.Max(0, 2 - (int)(a.T / 0.1)); o.Spr = g.PairIn[i]; o.PageKind = "pairout"; o.PageIdx = i; }
-                    else if (a.Stage == 2) { int i = (int)((a.BallTh / MathF.Tau % 1f + 1f) % 1f * 12) % 12; o.Spr = g.Ball[i]; o.PageKind = "ball"; o.PageIdx = i; }
-                    else { o.Spr = g.Rest[2, bin]; o.Mirror = mir; o.ShadowBin = bin; o.PageKind = "meet"; o.PageIdx = 0; }   // stage 0: nose to nose, two otters drawn singly
+                    o.Mirror = false; o.ShadowBin = OttersArt.SideBin;
+                    int pn = OtterPages.PairPages;
+                    if (a.Stage == 1) { int i = Math.Min(pn - 1, (int)(a.T / 0.3 * pn)); Layer(o, g.PairIn[i], 1f); o.PageKind = "pairin"; o.PageIdx = i; }
+                    else if (a.Stage == 3) { int i = Math.Max(0, pn - 1 - (int)(a.T / 0.3 * pn)); Layer(o, g.PairIn[i], 1f); o.PageKind = "pairout"; o.PageIdx = i; }
+                    else if (a.Stage == 2) { int bn = OtterPages.BallPages; int i = (int)((a.BallTh / MathF.Tau % 1f + 1f) % 1f * bn) % bn; Layer(o, g.Ball[i], 1f); o.PageKind = "ball"; o.PageIdx = i; }
+                    else { RestHeaded(o, g, binF); o.Mirror = mir; o.ShadowBin = bin; o.PageKind = "meet"; o.PageIdx = 0; }   // stage 0: nose to nose, two otters drawn singly
                 }
                 break;
         }
+        o.BinF = binF;
+        Mix(o);
         // On the drift: the feet are lifted off the ground (the shadow stays down, so the body reads as high).
         if (o.M.Doing == Doing.Slide && o.Stage >= 6 && o.Stage <= 9 && o.Lift > 0f) o.OY += (int)(o.Lift * _p);
         // Rest after a haul-out: a shiver of the whole body with droplets flying (the first second).
         if (o.M.Doing == Doing.Rest && o.ShakeT > 0f)
-            o.ShakeDX = MathF.Sin(o.ShakeT * 48f) * 2.2f * (o.ShakeT / 0.9f);
+            o.ShakeDX = MathF.Sin(o.ShakeT * 48f) * 2.2f * (o.ShakeT / 0.9f) * Sm((0.9f - o.ShakeT) / 0.15f);   // the shiver swells in over 0.15 s (it used to start at full strength)
     }
+
+    /// <summary>The glide's page: 32 pages a 0.9 s sway, counted from "off" seconds back (so a glide that follows the toboggan carries on from its pose).</summary>
+    private static int GlidePage(Otter o, double off) => (int)((o.T + off) * 36.0) % OtterPages.GlidePages;
 
     // ---------------------------------------------------------------- drawing
 
@@ -1319,13 +1431,24 @@ internal sealed partial class Otters
         bool onDrift = o.M.Doing == Doing.Slide && o.Stage >= 6 && o.Stage <= 9;
         if (o.ShadowBin >= 0 && o.ShadowBin < _pg.Shadow.Length)
         {
-            Sprite sh = _pg.Shadow[o.ShadowBin];
-            if (onDrift) sh.Draw(fb, (int)MathF.Round(o.FX) - sh.Width / 2, (int)MathF.Round(o.FY) - sh.Height / 2, 1f, null, false, S.NearDepth, 254);
-            else S.Stamp(fb, sh, o.FX, o.FY, sh.Width / 2, sh.Height / 2);
+            // the shadow follows the body's yaw: the two bins either side, in proportion (a shadow that steps with the bin popped)
+            int sb = o.ShadowBin == 4 && o.M.Doing is Doing.Roll or Doing.Eat or Doing.Haul or Doing.Dive or Doing.Wrestle ? OttersArt.SideBin : -1;
+            int lo = sb >= 0 ? OttersArt.SideBin : Math.Clamp((int)o.BinF, 0, _pg.Shadow.Length - 1); float sf = sb >= 0 ? 0f : o.BinF - lo;
+            for (int k = 0; k < 2; k++)
+            {
+                if (k == 1 && (sf < 0.03f || lo + 1 >= _pg.Shadow.Length)) break;
+                Sprite sh = _pg.Shadow[lo + k]; float sw = k == 0 ? 1f - sf : sf;
+                if (onDrift) sh.DrawSmooth(fb, o.FX - sh.Width / 2f, o.FY - sh.Height / 2f, sw, null, false, S.NearDepth, 254);
+                else S.Stamp(fb, sh, o.FX, o.FY, sh.Width / 2, sh.Height / 2, false, sw);
+            }
         }
-        if (onDrift)
-            o.Spr.DrawSmooth(fb, o.FX - (o.Mirror ? o.Spr.Width - 1 - o.OX : o.OX), o.FY - o.OY, 1f, null, o.Mirror, S.NearDepth, 254);   // at a fraction of a pixel: a slide glides
-        else Stamp(fb, o.Spr, o.FX + o.ShakeDX, o.FY, o.OX, o.OY, o.Mirror);
+        // The blended pages (see Present): the first at full strength, each next laid over it at its share.
+        for (int li = 0; li < o.LN; li++)
+        {
+            Sprite sp = o.Lay[li]!; float al = o.LA[li];
+            if (onDrift) sp.DrawSmooth(fb, o.FX - (o.Mirror ? sp.Width - 1 - o.OX : o.OX), o.FY - o.OY, al, null, o.Mirror, S.NearDepth, 254);   // at a fraction of a pixel: a slide glides
+            else Stamp(fb, sp, o.FX + o.ShakeDX, o.FY, o.OX, o.OY, o.Mirror, al);
+        }
     }
 }
 

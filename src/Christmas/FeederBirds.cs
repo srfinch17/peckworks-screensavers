@@ -78,6 +78,7 @@ internal sealed class FeederBirds : Resident
         public float HopPh, HopFrom, HopTo, GoalX; public int PeckN; public bool Flung;
         public string? Force; public float StoryFor; public bool Story;
         // what to draw
+        public Sprite? Prev, LastPage; public float Fade = 1f; public bool LastFlap, WasVisible;   // the page before this one, dissolved out over 0.06 s (no change of picture is one frame)
         public BirdBook? Book; public Sprite? Page; public float Lift; public int Near = 255; public bool Ground; public bool Visible;
         public string PageName = "";
         public float PrevX, PrevY;
@@ -341,12 +342,32 @@ internal sealed class FeederBirds : Resident
                 case Doing.Fly: UpdateFly(b, dt); break;
                 default: UpdateGrounded(b, dt); break;
             }
+            Dissolve(b, dt);
             if (_log != null)
             {
                 float sp = dt > 0 ? MathF.Sqrt((b.X - b.PrevX) * (b.X - b.PrevX) + (b.Y - b.PrevY) * (b.Y - b.PrevY)) / dt : 0f;
                 _log.WriteLine($"{Board.Time:0.000} FeederBirds {b.Index} {b.Kind} x={b.X:0.0} y={b.Y:0.0} v={sp:0.0} doing={(b.Mind.Doing == Doing.Startle ? Doing.Fly : b.Mind.Doing)} page={b.PageName} perch={b.PerchIx} vis={(b.Visible ? 1 : 0)} dir={b.Dir}");
             }
         }
+    }
+
+    /// <summary>
+    /// SILKY: whenever the page changes (a head turning to another view, a peck, the fluff, a crouch, the flare) the page that
+    /// was showing is kept and faded out over 0.06 s (about four frames) under the new one, so no change of picture is a
+    /// single frame. Two wing positions in a row are exempt: at a full beat the wing's own sweep is the motion.
+    /// </summary>
+    private static void Dissolve(Bird b, float dt)
+    {
+        bool vis = b.Visible && b.Page != null;
+        if (!vis) { b.Prev = null; b.LastPage = null; b.WasVisible = false; b.Fade = 1f; return; }
+        bool flap = b.Book != null && Array.IndexOf(b.Book.Flap, b.Page) >= 0;
+        if (b.Page != b.LastPage)
+        {
+            if (b.LastPage != null && b.WasVisible && !(flap && b.LastFlap)) { b.Prev = b.LastPage; b.Fade = 0f; }
+            b.LastPage = b.Page; b.LastFlap = flap;
+        }
+        b.WasVisible = true;
+        if (b.Fade < 1f) { b.Fade = Math.Min(1f, b.Fade + dt / 0.06f); if (b.Fade >= 1f) b.Prev = null; }
     }
 
     private void Roll(Bird b, string what) { if (_log != null) _log.WriteLine($"{Board.Time:0.000} FeederBirds {b.Index} roll {what}"); }
@@ -551,7 +572,7 @@ internal sealed class FeederBirds : Resident
         bool landing = !b.Leaving && left < 0.34f;
         if (landing)
         {
-            int ix = left > 0.23f ? 0 : left > 0.11f ? 1 : 2;
+            int ix = Math.Clamp((int)((0.34f - left) / 0.34f * BirdBook.FlarePages), 0, BirdBook.FlarePages - 1);
             b.Page = bk.Flare[ix]; b.PageName = "flare" + ix;
             // the last flare pages are anchored by the front foot: the feet reach the perch exactly as the flight ends
         }
@@ -572,7 +593,7 @@ internal sealed class FeederBirds : Resident
             float u = ph / flapShare;
             bool fold = ph > flapShare && env >= 1f && left > 0.45f;
             if (fold) { b.Page = bk.Fold; b.PageName = "fold"; }
-            else { int i = (8 + (int)(u * 24f)) % BirdBook.FlapPages; b.Page = bk.Flap[i]; b.PageName = "flap" + i; }
+            else { int i = (BirdBook.FlapPages * 2 / 3 + (int)(u * 2f * BirdBook.FlapPages)) % BirdBook.FlapPages; b.Page = bk.Flap[i]; b.PageName = "flap" + i; }
         }
         if (b.Mind.Over) Land(b);
     }
@@ -760,7 +781,7 @@ internal sealed class FeederBirds : Resident
                 break;
             case Reaction.Look:
                 if (n.At.Y < b.Y - 0.12f * _u) { if (Rng.NextDouble() < 0.85) return; b.LookUpT = 1.1f; Roll(b, $"glance up ({n.Kind})"); }
-                else { b.HeadTarget = (n.At.X - b.X) * b.Dir > 0 ? 0 : 4; b.HeadHold = 1.2f; Roll(b, $"look ({n.Kind})"); }
+                else { b.HeadTarget = (n.At.X - b.X) * b.Dir > 0 ? 0 : 8; b.HeadHold = 1.2f; Roll(b, $"look ({n.Kind})"); }
                 break;
             case Reaction.Approach:
                 if (!Lull && n.Kind == Sense.Food && !b.OnGround && b.Mind.Doing == Doing.Perch)
@@ -812,20 +833,20 @@ internal sealed class FeederBirds : Resident
             return;
         }
         if (b.FluffT > 0f) { b.Page = bk.Fluff; b.PageName = "fluff"; return; }
-        if (b.FlickT > 0f) { b.Page = b.FlickT > 0.28f || b.FlickT < 0.1f ? bk.Flick[0] : bk.Flick[1]; b.PageName = "flick"; return; }
+        if (b.FlickT > 0f) { float fe = MathF.Sin(MathF.PI * Math.Clamp(1f - b.FlickT / 0.4f, 0f, 1f)); int fi = Math.Min(4, (int)(fe * 4.99f)); b.Page = bk.Flick[fi]; b.PageName = "flick" + fi; return; }   // the tail rises and falls through five pages on one swell
         if (b.NextFlick <= 0f) { b.FlickT = 0.4f; b.NextFlick = Organic.Jitter(Rng, 4.5f); return; }
         // Head snaps: hold a view, then flick to another through one mid view (about 0.05 s a page).
         b.HeadHold -= dt;
         if (b.HeadHold <= 0f && b.HeadPage == b.HeadTarget)
         {
             double roll = Rng.NextDouble();
-            b.HeadTarget = roll < 0.5 ? 0 : roll < 0.75 ? 2 : roll < 0.9 ? 3 : 4;
+            b.HeadTarget = roll < 0.5 ? 0 : roll < 0.75 ? 4 : roll < 0.9 ? 6 : 8;
             b.HeadHold = Organic.Jitter(Rng, b.HeadTarget == 0 ? 1.1f : 0.8f);
         }
         if (b.HeadPage != b.HeadTarget)
         {
             b.HeadStep -= dt;
-            if (b.HeadStep <= 0f) { b.HeadPage += Math.Sign(b.HeadTarget - b.HeadPage); b.HeadStep = 0.05f; }
+            if (b.HeadStep <= 0f) { b.HeadPage += Math.Sign(b.HeadTarget - b.HeadPage); b.HeadStep = 0.028f; }
         }
         b.Page = bk.Head[b.HeadPage]; b.PageName = "head" + b.HeadPage;
     }
@@ -842,20 +863,16 @@ internal sealed class FeederBirds : Resident
         {
             float p = cb - 3 * cycle;
             int hp = p < 0.25f ? 0 : p < 0.33f ? 1 : p < 0.50f ? 2 : p < 0.58f ? 1 : 0;
-            b.Page = bk.Head[hp]; b.PageName = "watch" + hp; b.Flung = false;
+            b.Page = bk.Head[hp * 2]; b.PageName = "watch" + hp; b.Flung = false;
             return;
         }
         float c = cb % cycle;
-        if (c < 0.14f) { b.Page = bk.Head[0]; b.PageName = "stand"; b.Flung = false; }
-        else if (c < 0.20f) { b.Page = bk.Peck[0]; b.PageName = "peck0"; }
-        else if (c < 0.30f)
-        {
-            b.Page = bk.Peck[1]; b.PageName = "peck1";
-            if (!b.Flung && !b.OnGround && b.PerchIx >= 0 && _perches[b.PerchIx].Kind == Spot.Tray && _foodRest <= 0f && !_flung.On && b.Clock > 0.3f && (Rng.NextDouble() < 0.12 || b.Force == "seed"))
-            { b.Flung = true; FlingSeed(b); }
-        }
-        else if (c < 0.36f) { b.Page = bk.Peck[0]; b.PageName = "peck0"; }
-        else { b.Page = bk.Head[0]; b.PageName = "stand"; }
+        // THE PECK as one smooth dip (down 0.14 s eased, the seed, up 0.08 s eased): four pages of depth, dissolved into each other
+        float dep = c < 0.14f ? 0f : c < 0.28f ? Organic.Smooth((c - 0.14f) / 0.14f) : c < 0.34f ? 1f : c < 0.42f ? 1f - Organic.Smooth((c - 0.34f) / 0.08f) : 0f;
+        if (dep <= 0.02f) { b.Page = bk.Head[0]; b.PageName = "stand"; b.Flung = false; }
+        else { int pi = Math.Min(3, (int)(dep * 3.99f)); b.Page = bk.Peck[pi]; b.PageName = "peck" + pi; }
+        if (c >= 0.20f && c < 0.30f && !b.Flung && !b.OnGround && b.PerchIx >= 0 && _perches[b.PerchIx].Kind == Spot.Tray && _foodRest <= 0f && !_flung.On && b.Clock > 0.3f && (Rng.NextDouble() < 0.12 || b.Force == "seed"))
+        { b.Flung = true; FlingSeed(b); }
         if (b.OnGround && c >= 0.20f && c < 0.30f) { TakeSeedUnder(b); }
     }
 
@@ -1137,11 +1154,19 @@ internal sealed class FeederBirds : Resident
         bool mirror = b.Dir < 0;
         if (b.Ground && b.Mind.Doing != Doing.Fly)
             Stamp(fb, bk.Shadow, b.X, b.Y + 1f, bk.ShadowOx, bk.ShadowOy, false, 1f);
-        int left = (int)MathF.Round(b.X) - (mirror ? b.Page.Width - 1 - bk.Ox : bk.Ox);
-        int top = (int)MathF.Round(b.Y - b.Lift) - bk.Oy;
+        // At a FRACTION of a pixel (Sprite.DrawSmooth): a flying or hopping bird glides instead of stepping a whole pixel at a time.
+        float lx = b.X - (mirror ? b.Page.Width - 1 - bk.Ox : bk.Ox), ty = b.Y - b.Lift - bk.Oy;
         bool flying = b.Mind.Doing == Doing.Fly;
-        if (flying && b.Pine >= 0 && _mask != null) DrawBehindPine(fb, b, left, top, mirror);
-        else b.Page.Draw(fb, left, top, b.Alpha, null, mirror, S.NearDepth, flying ? 255 : b.Near);
+        int near = flying ? 255 : b.Near;
+        bool pine = flying && b.Pine >= 0 && _mask != null;
+        if (b.Prev != null && b.Fade < 1f)
+        {
+            float px = b.X - (mirror ? b.Prev.Width - 1 - bk.Ox : bk.Ox);
+            if (pine) DrawBehindPine(fb, b.Prev, px, ty, mirror, 1f, near, b.Pine); else b.Prev.DrawSmooth(fb, px, ty, 1f, null, mirror, S.NearDepth, near);
+            if (pine) DrawBehindPine(fb, b.Page, lx, ty, mirror, b.Fade, near, b.Pine); else b.Page.DrawSmooth(fb, lx, ty, b.Fade, null, mirror, S.NearDepth, near);
+        }
+        else if (pine) DrawBehindPine(fb, b.Page, lx, ty, mirror, 1f, near, b.Pine);
+        else b.Page.DrawSmooth(fb, lx, ty, 1f, null, mirror, S.NearDepth, near);
     }
 
     /// <summary>
@@ -1150,10 +1175,10 @@ internal sealed class FeederBirds : Resident
     /// the pine's cone (the same cone the painter drew: Brushwork.PineHalfWidth at each row) under the bird's rectangle.
     /// Where the stencil is false the stamp leaves the frame alone, so the pine hides the bird. The cone is put back after.
     /// </summary>
-    private void DrawBehindPine(FrameBuffer fb, Bird b, int left, int top, bool mirror)
+    private void DrawBehindPine(FrameBuffer fb, Sprite page, float lx, float ty, bool mirror, float alpha, int near, int pineIx)
     {
-        var pine = S.Pines[b.Pine];
-        int x0 = Math.Max(0, left), x1 = Math.Min(S.Width, left + b.Page!.Width), y0 = Math.Max(0, top), y1 = Math.Min(S.Height, top + b.Page.Height);
+        var pine = S.Pines[pineIx];
+        int x0 = Math.Max(0, (int)MathF.Floor(lx)), x1 = Math.Min(S.Width, (int)MathF.Ceiling(lx) + page.Width + 1), y0 = Math.Max(0, (int)MathF.Floor(ty)), y1 = Math.Min(S.Height, (int)MathF.Ceiling(ty) + page.Height + 1);
         for (int pass = 0; pass < 2; pass++)
         {
             for (int y = y0; y < y1; y++)
@@ -1163,7 +1188,7 @@ internal sealed class FeederBirds : Resident
                 int a = Math.Max(x0, (int)MathF.Ceiling(pine.X - hw)), c = Math.Min(x1, (int)MathF.Floor(pine.X + hw) + 1);
                 for (int x = a; x < c; x++) _mask![y * S.Width + x] = pass == 1;
             }
-            if (pass == 0) b.Page.Draw(fb, left, top, b.Alpha, _mask, mirror, S.NearDepth, 255);
+            if (pass == 0) page.DrawSmooth(fb, lx, ty, alpha, _mask, mirror, S.NearDepth, near);
         }
     }
 

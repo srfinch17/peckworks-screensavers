@@ -25,7 +25,9 @@ internal sealed class OtterPages
     public int WideW, WideOX, DiveW, DiveOX, SurfW, SurfH, SurfOX, SurfOY;
     public float P;                              // pixels in a metre
 
-    public const int GallopPages = 16, StartPages = 5, ThrowPages = 6, GetUpPages = 6, StandPages = 5, FlopPages = 6, RollPages = 12, SitDownPages = 5, DivePages = 14, HaulPages = 16, SurfPages = 6;
+    // SILKY: a transition of T seconds has at least 30 * T pages (a page is held two frames at most while the body moves).
+    public const int GallopPages = 32, StartPages = 14, ThrowPages = 11, GetUpPages = 17, StandPages = 12, FlopPages = 18, RollPages = 36, SitDownPages = 17, DivePages = 40, HaulPages = 52, SurfPages = 14;
+    public const int GlidePages = 32, RestHeads = 17, EatChew = 24, EatEndPages = 17, ScratchPages = 24, PairPages = 10, BallPages = 36;
 }
 
 /// <summary>
@@ -70,7 +72,7 @@ internal sealed partial class Otters : Resident
         g.SurfW = (int)(1.0f * p); g.SurfH = (int)(0.75f * p); g.SurfOX = g.SurfW / 2; g.SurfOY = (int)(0.5f * p);
         Sprite Pg(Skel k, int bin) => OttersArt.Page(k, OttersArt.YawDeg(bin), p, g.W, g.H, g.OX, g.OY);
         Sprite[,] Set(int n, Func<int, Skel> pose) { var a = new Sprite[n, OttersArt.Bins]; for (int i = 0; i < n; i++) { Skel k = pose(i); for (int b = 0; b < OttersArt.Bins; b++) a[i, b] = Pg(k, b); } return a; }
-        Sprite[] Side(int n, Func<int, Skel> pose) { var a = new Sprite[n]; for (int i = 0; i < n; i++) a[i] = Pg(pose(i), 4); return a; }
+        Sprite[] Side(int n, Func<int, Skel> pose) { var a = new Sprite[n]; for (int i = 0; i < n; i++) a[i] = Pg(pose(i), OttersArt.SideBin); return a; }
 
         g.Gallop = Set(OtterPages.GallopPages, i => OttersArt.Gallop(i / (float)OtterPages.GallopPages));
         Skel rest = OttersArt.Rest(), gath = OttersArt.Gallop(0f);
@@ -78,8 +80,8 @@ internal sealed partial class Otters : Resident
         Skel ext = OttersArt.Gallop(9f / 16f), glide0 = OttersArt.Glide(0f);
         g.Throw = Set(OtterPages.ThrowPages, i => Skel.Lerp(ext, glide0, Sm(i / (OtterPages.ThrowPages - 1f))));
         g.GetUp = Set(OtterPages.GetUpPages, i => Skel.Lerp(glide0, rest, Sm(i / (OtterPages.GetUpPages - 1f))));
-        g.Glide = Set(4, i => OttersArt.Glide(MathF.Sin(MathF.Tau * i / 4f)));
-        g.Rest = Set(5, i => OttersArt.Rest((i - 2) * 19f, 4f));
+        g.Glide = Set(OtterPages.GlidePages, i => OttersArt.Glide(MathF.Sin(MathF.Tau * i / OtterPages.GlidePages)));
+        g.Rest = Set(OtterPages.RestHeads, i => OttersArt.Rest((i - 8) * 4.75f, 4f));   // 17 head turns, 4.75 degrees apart: the head glides between them (pages 4, 8 and 12 are the old 19 degree heads)
         g.Up = Set(3, i => OttersArt.Upright(i * 0.5f));
         g.RestVar = new Sprite[4, 3, OttersArt.Bins];
         for (int v = 0; v < 4; v++)
@@ -88,8 +90,16 @@ internal sealed partial class Otters : Resident
                 Skel k = OttersArt.Rest(h * 19f - 19f, 4f, 0.15f, v == 0 ? 1f : 0f, v == 1 ? 1f : 0f, v == 2 ? 1f : 0f, v == 3 ? 1f : 0f);
                 for (int b = 0; b < OttersArt.Bins; b++) g.RestVar[v, h, b] = Pg(k, b);
             }
-        float[] sa = [0.4f, 1f, 1f, 0.45f], ss = [0f, -1f, 1f, 0f], sh = [0.3f, 1f, 1f, 0.3f];
-        g.Scratch = Set(4, i => OttersArt.Scratch(sa[i], ss[i], sh[i]));
+        // The hind-foot scratch as a smooth sweep of 24 pages: the keys are the old four poses, visited in the old order
+        // (0, 1, 2, 1, 2, 1, 2, 3) and the pose is read off a smooth curve through them.
+        {
+            float[] ka = [0.4f, 1f, 1f, 1f, 1f, 1f, 1f, 0.45f], ks = [0f, -1f, 1f, -1f, 1f, -1f, 1f, 0f], kh = [0.3f, 1f, 1f, 1f, 1f, 1f, 1f, 0.3f];
+            g.Scratch = Set(OtterPages.ScratchPages, i =>
+            {
+                float u = i / (OtterPages.ScratchPages - 1f) * 7f; int a = Math.Min(6, (int)u); float f = Sm(u - a);
+                return OttersArt.Scratch(ka[a] + (ka[a + 1] - ka[a]) * f, ks[a] + (ks[a + 1] - ks[a]) * f, kh[a] + (kh[a + 1] - kh[a]) * f);
+            });
+        }
         Skel up0 = OttersArt.Upright(0f);
         g.Stand = Set(OtterPages.StandPages, i => Skel.Lerp(rest, up0, Sm(i / (OtterPages.StandPages - 1f))));
         g.Flop = Side(OtterPages.FlopPages, i => { float e = Sm(i / (OtterPages.FlopPages - 1f)); return OttersArt.Roll(180f * e, 0.15f - 0.075f * e, 0f); });
@@ -98,11 +108,11 @@ internal sealed partial class Otters : Resident
         Skel restFish = OttersArt.Rest(); restFish = HoldFish(restFish);
         Skel sit0 = OttersArt.SitEat(0f, 1f);
         g.SitDown = Side(OtterPages.SitDownPages, i => Skel.Lerp(restFish, sit0, Sm(i / (OtterPages.SitDownPages - 1f))));
-        g.SitEat = new Sprite[3, 8];
+        g.SitEat = new Sprite[3, OtterPages.EatChew];
         float[] fishLeft = [1f, 0.62f, 0.3f];
         for (int f = 0; f < 3; f++)
-            for (int c = 0; c < 8; c++)
-                g.SitEat[f, c] = Pg(OttersArt.SitEat(0.5f + 0.5f * MathF.Sin(MathF.Tau * c / 8f), fishLeft[f]), 4);
+            for (int c = 0; c < OtterPages.EatChew; c++)
+                g.SitEat[f, c] = Pg(OttersArt.SitEat(0.5f + 0.5f * MathF.Sin(MathF.Tau * c / OtterPages.EatChew), fishLeft[f]), OttersArt.SideBin);
         // Head up out of the hole: six heights, nine yaws, with and without a fish.
         g.Surf = new Sprite[OtterPages.SurfPages, OttersArt.Bins, 2];
         for (int r = 0; r < OtterPages.SurfPages; r++)
@@ -112,22 +122,22 @@ internal sealed partial class Otters : Resident
         g.Haul = new Sprite[OtterPages.HaulPages, 2];
         for (int i = 0; i < OtterPages.HaulPages; i++)
             for (int f = 0; f < 2; f++)
-                g.Haul[i, f] = OttersArt.Page(i < 3 ? OttersArt.Haul(0f, f * 0.9f, 0.26f - 0.095f * i) : OttersArt.Haul((i - 3) / (OtterPages.HaulPages - 4f), f * 0.9f), 0f, p, g.WideW, g.H, g.WideOX, g.OY);
+                g.Haul[i, f] = OttersArt.Page(i < 8 ? OttersArt.Haul(0f, f * 0.9f, 0.26f * (1f - i / 8f)) : OttersArt.Haul((i - 8) / (OtterPages.HaulPages - 9f), f * 0.9f), 0f, p, g.WideW, g.H, g.WideOX, g.OY);
         g.Dive = new Sprite[OtterPages.DivePages];
         for (int i = 0; i < OtterPages.DivePages; i++)
             g.Dive[i] = OttersArt.Page(OttersArt.Dive(i / (OtterPages.DivePages - 1f)), 0f, p, g.DiveW, g.H, g.DiveOX, g.OY);
         Skel upEat = OttersArt.Upright(0.5f, 62f);
-        g.EatEnd = Side(5, i => Skel.Lerp(upEat, rest, Sm(i / 4f)));
-        g.Ball = new Sprite[12];
-        for (int i = 0; i < 12; i++)
+        g.EatEnd = Side(OtterPages.EatEndPages, i => Skel.Lerp(upEat, rest, Sm(i / (OtterPages.EatEndPages - 1f))));
+        g.Ball = new Sprite[OtterPages.BallPages];
+        for (int i = 0; i < OtterPages.BallPages; i++)
         {
-            float th = 360f * i / 12f, wig = MathF.Sin(MathF.Tau * i / 6f);
+            float th = 360f * i / OtterPages.BallPages, wig = MathF.Sin(MathF.Tau * i / (OtterPages.BallPages / 2f));
             g.Ball[i] = OttersArt.Page([OttersArt.Curl(th + 180f, 0.115f, -0.03f, -wig), OttersArt.Curl(th, 0.185f, 0.04f, wig)], 0f, p, g.W, g.H, g.OX, g.OY);
         }
-        g.PairIn = new Sprite[3];
-        for (int i = 0; i < 3; i++)
+        g.PairIn = new Sprite[OtterPages.PairPages];
+        for (int i = 0; i < OtterPages.PairPages; i++)
         {
-            float kk = Sm(i / 3f);
+            float kk = Sm(i / (float)OtterPages.PairPages);
             g.PairIn[i] = OttersArt.Page([Skel.Lerp(OttersArt.Place(rest, -0.38f, false), OttersArt.Curl(0f, 0.185f, 0.04f, 0f), kk), Skel.Lerp(OttersArt.Place(rest, 0.38f, true), OttersArt.Curl(180f, 0.115f, -0.03f, 0f), kk)], 0f, p, g.W, g.H, g.OX, g.OY);
         }
         g.Droplet = Sprite.Paint(4, 4, gr => { using var b = new SolidBrush(Color.FromArgb(235, 214, 230, 255)); gr.FillEllipse(b, 0.5f, 0.5f, 3f, 3f); });
@@ -152,7 +162,7 @@ internal sealed partial class Otters : Resident
             g.Droplet.Draw(fb, 10, 10, 0.8f);
             g.Puff[0].DrawCentered(fb, 30, 30, 0.5f);
             g.Shadow[4].DrawCentered(fb, 40, 40, 1f);
-            g.Rest[2, 4].Draw(fb, 5, 5, 1f, null, true, new byte[96 * 64], 100);
+            g.Rest[2, OttersArt.SideBin].Draw(fb, 5, 5, 1f, null, true, new byte[96 * 64], 100);
             fb.Line(new PointF(1, 1), new PointF(50, 40), Color.White, 0.3f, 1.2f);
         }
         catch { }
@@ -187,23 +197,23 @@ internal sealed partial class Otters : Resident
     {
         var rows = new List<(string Name, List<Sprite> Pages)>();
         List<Sprite> Row(Func<int, Sprite> f, int n) { var l = new List<Sprite>(); for (int i = 0; i < n; i++) l.Add(f(i)); return l; }
-        rows.Add(("gallop", Row(i => g.Gallop[i, 4], 16)));
+        rows.Add(("gallop", Row(i => g.Gallop[i, OttersArt.SideBin], 16)));
         rows.Add(("gallop yaws", Row(i => g.Gallop[3, i], 9)));
         rows.Add(("gallop yaws -90", Row(i => g.Gallop[11, i], 9)));
-        rows.Add(("start", Row(i => g.Start[i, 4], 5)));
-        rows.Add(("throw", Row(i => g.Throw[i, 4], 6)));
-        rows.Add(("glide", Row(i => g.Glide[i, 4], 4)));
+        rows.Add(("start", Row(i => g.Start[i, OttersArt.SideBin], 5)));
+        rows.Add(("throw", Row(i => g.Throw[i, OttersArt.SideBin], 6)));
+        rows.Add(("glide", Row(i => g.Glide[i, OttersArt.SideBin], 4)));
         rows.Add(("glide yaws", Row(i => g.Glide[1, i], 9)));
-        rows.Add(("getup", Row(i => g.GetUp[i, 4], 6)));
-        rows.Add(("rest heads", Row(i => g.Rest[i, 4], 5)));
+        rows.Add(("getup", Row(i => g.GetUp[i, OttersArt.SideBin], 6)));
+        rows.Add(("rest heads", Row(i => g.Rest[i, OttersArt.SideBin], 5)));
         rows.Add(("rest yaws", Row(i => g.Rest[2, i], 9)));
         rows.Add(("eatend", Row(i => g.EatEnd[i], 5)));
         rows.Add(("pair in", Row(i => g.PairIn[i], 3)));
-        rows.Add(("scratch", Row(i => g.Scratch[i, 4], 4)));
-        rows.Add(("rest variants", Row(i => g.RestVar[i, 1, 4], 4)));
+        rows.Add(("scratch", Row(i => g.Scratch[i, OttersArt.SideBin], 4)));
+        rows.Add(("rest variants", Row(i => g.RestVar[i, 1, OttersArt.SideBin], 4)));
         rows.Add(("ball", Row(i => g.Ball[i], 12)));
-        rows.Add(("stand", Row(i => g.Stand[i, 4], 5)));
-        rows.Add(("upright", Row(i => g.Up[i, 4], 3)));
+        rows.Add(("stand", Row(i => g.Stand[i, OttersArt.SideBin], 5)));
+        rows.Add(("upright", Row(i => g.Up[i, OttersArt.SideBin], 3)));
         rows.Add(("upright yaws", Row(i => g.Up[1, i], 9)));
         rows.Add(("flop", Row(i => g.Flop[i], 6)));
         rows.Add(("roll", Row(i => g.RollCycle[i], 12)));

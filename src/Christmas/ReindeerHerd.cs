@@ -2101,10 +2101,15 @@ internal sealed class ReindeerHerd : Resident
         float nx = a.X + (mirror ? -1 : 1) * pg.NX * H, ny = foot - pg.NY * H - lift;
         if (!fig)
         {
-            int hp = Math.Clamp((int)MathF.Round(f * (ReindeerArt.HeadPages - 1)), 0, ReindeerArt.HeadPages - 1);
+            // BETWEEN two head pages, not on the nearer one: a slow head used to tick from page to page, its antler
+            // tips jumping four pixels against the dark pines (forty pops in ten seconds on the detector). The
+            // engine dissolves from the page below to the page above by how far between them the head is.
+            float fp = f * (ReindeerArt.HeadPages - 1);
+            int lo = Math.Clamp((int)MathF.Floor(fp), 0, ReindeerArt.HeadPages - 1), hi = Math.Min(ReindeerArt.HeadPages - 1, lo + 1);
             int kind = HeadKind(a);
-            RPage hpg = s.Head[hp, kind];
-            Put(fb, hpg.S, nx, ny, hpg.OX, hpg.OY, mirror, near);
+            RPage pl = s.Head[lo, kind], ph = s.Head[hi, kind];
+            Sprite.DrawBlend(fb, pl.S, nx - (mirror ? pl.S.Width - 1 - pl.OX : pl.OX), ny - pl.OY,
+                                 ph.S, nx - (mirror ? ph.S.Width - 1 - ph.OX : ph.OX), ny - ph.OY, fp - lo, mirror, S.NearDepth, near);
         }
 
         // 5. Flying snow, breath, sparkles.

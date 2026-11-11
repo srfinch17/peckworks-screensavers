@@ -321,4 +321,74 @@ public sealed class Sprite
             }
         }
     }
+
+    /// <summary>
+    /// Stamps a picture that is PART WAY BETWEEN two pages of a flip-book: "w" of the way from page a to page b
+    /// (0 = all a, 1 = all b), each page at its own place, both at fractions of a pixel.
+    ///
+    /// FEYNMAN VERSION: a flip-book has a fixed number of pages. A reindeer's head has 24 of them between "nose on
+    /// the snow" and "head high", so each page turn swings the antler tips four pixels: fine while the head moves
+    /// fast, but a head that drifts slowly then TICKS, four pixels every few frames, and pale antlers ticking
+    /// against a dark pine are exactly what the eye catches (the pop detector found forty in ten seconds). Drawing
+    /// four times as many pages would cost four times the memory. Instead, between two neighbouring pages we show a
+    /// DISSOLVE: where both pages are solid the result is solid, and where only one of them is, that sliver fades
+    /// in or out as the head moves on. The antler tip no longer jumps from one place to the next; one tip fades
+    /// out while the next fades in, a pixel or two away, which at this size reads as smooth movement.
+    ///
+    /// It is the honest way to mix two see-through pictures: each pixel's solidness and its colour-times-solidness
+    /// are mixed separately (called premultiplied alpha), so a solid brown pixel mixed with an empty one becomes
+    /// half-solid brown, never half-solid mud.
+    /// </summary>
+    public static void DrawBlend(FrameBuffer fb, Sprite a, float aLeft, float aTop, Sprite b, float bLeft, float bTop, float w,
+        bool mirror = false, byte[]? depth = null, int nearness = 255)
+    {
+        w = Math.Clamp(w, 0f, 1f);
+        if (w < 0.02f) { a.DrawSmooth(fb, aLeft, aTop, 1f, null, mirror, depth, nearness); return; }
+        if (w > 0.98f) { b.DrawSmooth(fb, bLeft, bTop, 1f, null, mirror, depth, nearness); return; }
+        int x0 = Math.Max(0, (int)MathF.Floor(MathF.Min(aLeft, bLeft))), y0 = Math.Max(0, (int)MathF.Floor(MathF.Min(aTop, bTop)));
+        int x1 = Math.Min(fb.Width - 1, (int)MathF.Ceiling(MathF.Max(aLeft + a.Width, bLeft + b.Width)));
+        int y1 = Math.Min(fb.Height - 1, (int)MathF.Ceiling(MathF.Max(aTop + a.Height, bTop + b.Height)));
+        uint[] frame = fb.Pixels;
+        int fw = fb.Width;
+        float wa = 1f - w;
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+            {
+                int at = y * fw + x;
+                if (depth != null && depth[at] > nearness) continue;
+                a.Sample(x - aLeft, y - aTop, mirror, out float aa, out float ar, out float ag, out float ab);
+                b.Sample(x - bLeft, y - bTop, mirror, out float ba, out float br, out float bg, out float bb);
+                float oa = aa * wa + ba * w;                                // solidness, 0 to 1
+                if (oa < 0.004f) continue;
+                float r = (ar * wa + br * w) / oa, g = (ag * wa + bg * w) / oa, bl = (ab * wa + bb * w) / oa;
+                uint bgp = frame[at];
+                float pr = (bgp >> 16) & 0xFF, pg = (bgp >> 8) & 0xFF, pb = bgp & 0xFF;
+                int outR = (int)(pr + (r - pr) * oa + 0.5f), outG = (int)(pg + (g - pg) * oa + 0.5f), outB = (int)(pb + (bl - pb) * oa + 0.5f);
+                frame[at] = (uint)((Math.Clamp(outR, 0, 255) << 16) | (Math.Clamp(outG, 0, 255) << 8) | Math.Clamp(outB, 0, 255));
+            }
+    }
+
+    /// <summary>
+    /// Reads the sprite at a point between its pixels (u across, v down, decimals): the four pixels round the
+    /// point, each weighted by how near it is. Hands back solidness (0 to 1) and colour TIMES solidness (0 to 255).
+    /// </summary>
+    private void Sample(float u, float v, bool mirror, out float alpha, out float r, out float g, out float b)
+    {
+        alpha = r = g = b = 0f;
+        if (u <= -1f || v <= -1f || u >= Width || v >= Height) return;
+        int ux = (int)MathF.Floor(u), vy = (int)MathF.Floor(v);
+        float fx = u - ux, fy = v - vy;
+        for (int q = 0; q < 4; q++)
+        {
+            int sx = ux + (q & 1), sy = vy + (q >> 1);
+            if (sx < 0 || sy < 0 || sx >= Width || sy >= Height) continue;
+            float wt = ((q & 1) == 0 ? 1f - fx : fx) * (q < 2 ? 1f - fy : fy);
+            if (wt <= 0f) continue;
+            uint c = _argb[sy * Width + (mirror ? Width - 1 - sx : sx)];
+            float pa = (c >> 24) / 255f * wt;
+            if (pa <= 0f) continue;
+            alpha += pa;
+            r += ((c >> 16) & 0xFF) * pa; g += ((c >> 8) & 0xFF) * pa; b += (c & 0xFF) * pa;
+        }
+    }
 }

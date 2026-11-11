@@ -96,6 +96,7 @@ internal sealed class ChristmasScene : IScreensaverScene
     // Test aid: PECKWORKS_NOSNOW=1 leaves the falling snow out, so a frame-by-frame comparison (the kit's pop detector)
     // sees only what the animals do, not eight hundred flakes changing every pixel.
     private readonly bool _noSnow = Environment.GetEnvironmentVariable("PECKWORKS_NOSNOW") == "1";
+    private readonly bool _pinnedStart = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PECKWORKS_SEED"));   // a test run: see Update
     private bool _started;                          // true once every resident's flip-books are painted: they all begin on that frame
 
     public ChristmasScene(int width, int height, ChristmasSettings settings)
@@ -230,22 +231,28 @@ internal sealed class ChristmasScene : IScreensaverScene
         // began when its own were done: the mice at 4 s, the herd at 15 to 18, each popping into the scene fully
         // formed, and the same seed played differently from run to run.) Each resident then makes its own
         // entrance: the herd walks in, the birds fly in, the hares come up out of their burrows.
-        // The start is PINNED to a time, not to "whenever the painting happens to finish": at ResidentsStart
-        // seconds the scene simply waits for any resident still painting (a pause of a moment, once, on a slow
-        // machine; none on a normal one, where the painting takes two or three seconds). A start that followed
-        // the painting moved by a second from run to run, so the same seed played a different film each time
-        // and no test could be repeated.
+        // THE START. On his screen the residents begin on the first frame after ResidentsStart on which every one
+        // of them has finished painting its flip-books: nothing ever waits, the snow never stops. In a TEST (a seed
+        // is set) the start is PINNED to ResidentsStart exactly: the scene waits there for whoever is still
+        // painting, because a start that follows the painting moves by a second from run to run, and then the same
+        // seed plays a different film each time and no test can be repeated. (A test is not watched, so the pause
+        // costs nothing; on his screen a pause would be a freeze.)
         if (!_started && _time >= ResidentsStart)
         {
-            var waited = System.Diagnostics.Stopwatch.StartNew();
-            while (waited.ElapsedMilliseconds < 30000)
+            bool all = true;
+            foreach (Resident r in _residents) if (!r.Ready) { all = false; break; }
+            if (!all && _pinnedStart)
             {
-                bool all = true;
-                foreach (Resident r in _residents) if (!r.Ready) { all = false; break; }
-                if (all) { _started = true; break; }
-                Thread.Sleep(5);
+                var waited = System.Diagnostics.Stopwatch.StartNew();
+                while (!all && waited.ElapsedMilliseconds < 60000)
+                {
+                    Thread.Sleep(5);
+                    all = true;
+                    foreach (Resident r in _residents) if (!r.Ready) { all = false; break; }
+                }
+                all = true;                              // a minute and still not painted: something failed; carry on with whoever is ready
             }
-            if (!_started) { _started = true; }     // half a minute and still not painted: something failed; carry on with whoever is ready
+            _started = all;
         }
         if (_started) _stories.Update(dt);          // before the residents: a story may borrow one this very frame
         if (_started)

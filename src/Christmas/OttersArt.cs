@@ -87,9 +87,11 @@ internal sealed class Skel
 
 internal static class OttersArt
 {
-    public const int Bins = 9;                                           // yaws from -90 to 90 in steps of 22.5 degrees
-    public static float YawDeg(int bin) => (bin - 4) * 22.5f;
-    public static int BinOf(float deg) => Math.Clamp((int)MathF.Round(deg / 22.5f) + 4, 0, Bins - 1);
+    public const int Bins = 17;                                          // yaws from -90 to 90 in steps of 11.25 degrees (SILKY: 17, not 9, so a turn crosses a bin every 3 degrees of heading error in a blend, not 22)
+    public const int SideBin = 8;                                        // yaw 0: the side view
+    public const float BinStep = 11.25f;
+    public static float YawDeg(int bin) => (bin - SideBin) * BinStep;
+    public static int BinOf(float deg) => Math.Clamp((int)MathF.Round(deg / BinStep) + SideBin, 0, Bins - 1);
 
     /// <summary>How high above the ground the picture looks down on the ice: a low look (about 12 degrees), because the ice is a flat plate seen nearly edge on.</summary>
     private const float Elev = 12f * MathF.PI / 180f;

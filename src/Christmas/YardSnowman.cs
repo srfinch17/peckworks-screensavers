@@ -101,7 +101,7 @@ internal sealed class YardSnowman : Resident
     private readonly float[] _spread = new float[2];
 
     // ---- the body's layout this frame (Layout) ----
-    private int _sqk;
+    private int _sqk; private float _sqf;                // the squash page and how far (0 to 1) toward the next: bodies are blended, never stepped
     private float _midX, _c0y, _c1y, _headX, _headY, _neckY;
     private readonly PointF[] _sh = new PointF[2], _elb = new PointF[2], _wr = new PointF[2];
     private int _near;
@@ -125,7 +125,6 @@ internal sealed class YardSnowman : Resident
     private PointF _lookPt;
     private float _lookLeft;
     private float _reactT, _reactLeft; private int _reactKind;
-    private double _santaLast = -99;
     private int _passes, _sinceTip;
     private bool _wantTip;
     private float _jumpCool, _waveCool, _dozeCool, _quietFor;
@@ -138,7 +137,9 @@ internal sealed class YardSnowman : Resident
     private bool _forced;
     private bool _noseTest, _noseGiven;
     private double _forceAt = 6.0;
-    private float _santaAllow, _lastDt;
+    private float _lastDt;
+    private float _vis = 1f;                         // 0 to 1: he fades in over the first 0.8 s the residents run (the scene starts everyone on one frame: no figure may appear in one frame)
+    private bool _santaPass;                           // a Santa pass (one Watch or one hat tip) is in progress
     private double _born = -1;                          // the scene clock at his first Update: his entrance (waking up) is timed from it
     private const double WakeLen = 3.8;
     private readonly float[] _weights = new float[8];
@@ -317,43 +318,27 @@ internal sealed class YardSnowman : Resident
     {
         _near = S.Nearness(_foot.Y);
         if (Board.Time - _born < WakeLen) return;          // he is waking up: eyes shut, then a stretch; nothing draws his eye until he is up
-        // SANTA is special: he is the one overhead thing the snowman waits for. A "pass" is Santa's notices after a gap of
-        // a few seconds (the scene pins him about once a second while he is in view). The first sight of a pass sets
-        // whether this pass earns a hat tip: about every second or third pass, never two in a row.
-        bool santa = false; PointF sp = default;
-        for (int i = 0; i < Board.Live.Count; i++)
-        {
-            Notice n = Board.Live[i];
-            if (n.Who is SantaRig) { santa = true; sp = n.At; }
-        }
-        // A PASS IS ONE WATCH (the review: he watched Santa 20 to 32 percent of the time, a Watch begun again each time one ended
-        // while Santa was still in view). The first sighting after a gap of 4 s opens a pass: ONE Watch (or the hat tip, never both)
-        // that lasts about seven seconds, its target moved to the sleigh's place at each pin so the head FOLLOWS him smoothly (the
-        // eased turn does the following). Until the pass is over Santa is not read again; no second Watch can begin from him.
-        if (santa)
-        {
-            bool newPass = Board.Time - _santaLast > 4.0;
-            _santaLast = Board.Time;
-            if (newPass)
-            {
-                _passes++; _sinceTip++; _santaAllow = 1f;                      // 1 = this pass has not been watched yet
-                _wantTip = _sinceTip >= 3 || (_sinceTip == 2 && Rng.NextDouble() < 0.6);
-                MindLog.Open()?.WriteLine($"{Board.Time:F3} Snowman 0 ROLL santa pass {_passes} tip={_wantTip}");
-            }
-            if (_mind.Doing is Doing.Watch or Doing.HatTip && _santaAllow <= 0f) { _watchPt = sp; _quietFor = 0; return; }   // following him
-            if (_santaAllow > 0f && _mind.Doing is not (Doing.FixHat or Doing.Shake or Doing.Jump or Doing.Doze))
-            {
-                _santaAllow = 0f;                                              // the pass has its one watch
-                _watchPt = sp; _mood = Mood.Awe; _quietFor = 0;
-                if (_wantTip) { _wantTip = false; _sinceTip = 0; Begin(Doing.HatTip, 3.9f); }
-                else Begin(Doing.Watch, 7f);
-                return;
-            }
-        }
+        // SANTA comes through the SAME DOOR as everything else (the review: reading Board.Live for him was a second, unrationed
+        // channel). Attention.Check rations him like any notice: a reaction to him is the FIRST sighting of a pass. That one
+        // reaction opens the pass: ONE Watch (about seven seconds), or the hat tip, never both. While it lasts his head FOLLOWS
+        // the sleigh: the target is the sleigh's own place (a scenery fact, ChristmasScenery.SantaSleigh), not the board.
+        if (_mind.Doing is Doing.Watch or Doing.HatTip && _santaPass && S.SantaOnScreen) { _watchPt = S.SantaSleigh; _quietFor = 0; }
+        else if (_mind.Doing is not (Doing.Watch or Doing.HatTip)) _santaPass = false;
 
         PointF me = new(_headX, _headY);
         Reaction r = _att.Check(Board, me, this, out Notice cause);
-        if (r == Reaction.None || cause.Who is SantaRig) return;   // Santa is handled above; his allowance is spent if we got here
+        if (r == Reaction.None) return;
+        if (cause.Who is SantaRig)
+        {
+            // the first sighting of a pass (Check will not hand him over again for a long while)
+            if (_mind.Doing is Doing.FixHat or Doing.Shake or Doing.Jump or Doing.Doze or Doing.Watch or Doing.HatTip) return;
+            _passes++; _sinceTip++;
+            _wantTip = _sinceTip >= 3 || (_sinceTip == 2 && Rng.NextDouble() < 0.6);
+            MindLog.Open()?.WriteLine($"{Board.Time:F3} Snowman 0 ROLL santa pass {_passes} tip={_wantTip}");
+            _santaPass = true; _watchPt = cause.At; _mood = Mood.Awe; _quietFor = 0;
+            if (_wantTip) { _wantTip = false; _sinceTip = 0; Begin(Doing.HatTip, 3.9f); } else Begin(Doing.Watch, 7f);
+            return;
+        }
         _quietFor = 0;
         MindLog.Open()?.WriteLine($"{Board.Time:F3} Snowman 0 REACT {r} to {cause.Kind} from {(cause.Who?.GetType().Name ?? "scene")}");
         Doing d = _mind.Doing;
@@ -387,7 +372,7 @@ internal sealed class YardSnowman : Resident
         // Pieces of business come with a rest between them (Idle), so there is no metronome.
         if (_mind.Doing != Doing.Idle)
         {
-            Begin(Doing.Idle, Organic.Jitter(Rng, 5.5f) + 1.2f);
+            Begin(Doing.Idle, Organic.Jitter(Rng, 12f) + 3f);                 // a long quiet between pieces of business (he is alive in it: blinks, drifting eyes, the scarf)
             return;
         }
         bool noLull = !Lull && _lookLeft <= 0;
@@ -415,7 +400,7 @@ internal sealed class YardSnowman : Resident
             case 4: Begin(Doing.Doze, 11.4f); break;
             case 5: Begin(Doing.WaveCabin, 5.8f); break;
             case 6: Begin(Doing.Shake, 1.9f); break;
-            default: Begin(Doing.Idle, Organic.Jitter(Rng, 5f)); break;
+            default: Begin(Doing.Idle, Organic.Jitter(Rng, 9f) + 3f); break;
         }
     }
 
@@ -978,9 +963,10 @@ internal sealed class YardSnowman : Resident
     private void Layout()
     {
         SnowmanSize z = _z;
-        int k = Math.Clamp((int)MathF.Round(_squash * 5f), -5, 5);
-        _sqk = k + YardSnowmanArt.SquashMid;
-        float sy = 1f + 0.045f * k, sx = 1f / MathF.Sqrt(sy);
+        float kf = Math.Clamp(_squash * 5f, -5f, 5f);
+        int k = (int)MathF.Floor(kf);
+        _sqk = k + YardSnowmanArt.SquashMid; _sqf = kf - k;
+        float sy = 1f + 0.045f * kf, sx = 1f / MathF.Sqrt(sy);       // the body's real size follows the squash continuously (it used to step with the page)
         float foot = _foot.Y - _lift;
         // The bottom ball's silhouette hangs a hair below the contact point (we look down on it a little).
         _c0y = foot + 0.08f * z.R0 - z.R0 * sy;
@@ -1115,9 +1101,16 @@ internal sealed class YardSnowman : Resident
     // ==================================================================
 
     private void Put(FrameBuffer fb, SnowPage p, float x, float y, float opacity = 1f, bool mirror = false) =>
-        p.Img.DrawSmooth(fb, x - (mirror ? p.Img.Width - 1 - p.Ox : p.Ox), y - p.Oy, opacity, null, mirror, S.NearDepth, _near);   // at a fraction of a pixel: his sway and squash glide
+        p.Img.DrawSmooth(fb, x - (mirror ? p.Img.Width - 1 - p.Ox : p.Ox), y - p.Oy, opacity * _vis, null, mirror, S.NearDepth, _near);   // at a fraction of a pixel: his sway and squash glide
 
-    private void Line(FrameBuffer fb, PointF a, PointF b, Color c, float alpha, float thick) => fb.Line(a, b, c, alpha, thick, null, S.NearDepth, _near);
+    /// <summary>Two pages blended: "a" at full strength, then "b" laid over it at "f" (so f = 0 is a, f = 1 is b).</summary>
+    private void PutMix(FrameBuffer fb, SnowPage a, SnowPage b, float f, float x, float y, float opacity = 1f, bool mirror = false)
+    {
+        Put(fb, a, x, y, opacity, mirror);
+        if (f > 0.02f) Put(fb, b, x, y, opacity * f, mirror);
+    }
+
+    private void Line(FrameBuffer fb, PointF a, PointF b, Color c, float alpha, float thick) => fb.Line(a, b, c, alpha * _vis, thick, null, S.NearDepth, _near);
 
     public override void DrawOne(FrameBuffer fb, int index)
     {
@@ -1136,6 +1129,7 @@ internal sealed class YardSnowman : Resident
     {
         YardSnowmanArt? art = _art;
         if (art == null) return;
+        { float k = _born < 0 ? 0f : Math.Clamp((float)((Board.Time - _born) / 0.8), 0f, 1f); _vis = k * k * (3f - 2f * k); }
         SnowmanSize z = _z;
         float R = z.R2;
 
@@ -1143,11 +1137,16 @@ internal sealed class YardSnowman : Resident
         float air = Math.Clamp(1f - _lift / (0.45f * z.T), 0.3f, 1f);
         Put(fb, art.Shadow, _foot.X + 0.55f * z.R0, _foot.Y + 0.02f * z.R0, air);
         // 2. The two lower balls.
-        Put(fb, art.Bottom[_sqk], _foot.X, _c0y);
-        Put(fb, art.Mid[_sqk], _midX, _c1y);
+        int sq1 = Math.Min(_sqk + 1, art.Bottom.Length - 1);
+        PutMix(fb, art.Bottom[_sqk], art.Bottom[sq1], _sqf, _foot.X, _c0y);
+        PutMix(fb, art.Mid[_sqk], art.Mid[sq1], _sqf, _midX, _c1y);
         // 3. The head.
         Put(fb, art.Head, _headX, _headY);
         int yp = YardSnowmanArt.YawPage(_yaw), pp = YardSnowmanArt.PitchPage(_pitch);
+        // the nose is one of 25 x 7 pages: the yaw and pitch are blended between the pages either side
+        float yawStep = 2 * YardSnowmanArt.YawMax / (YardSnowmanArt.YawPages - 1);
+        float yf = Math.Clamp(_yaw / yawStep + YardSnowmanArt.YawPages / 2, 0f, YardSnowmanArt.YawPages - 1f), pf = Math.Clamp((_pitch - YardSnowmanArt.PitchMin) / YardSnowmanArt.PitchStep, 0f, YardSnowmanArt.PitchPages - 1f);
+        int yl = Math.Min((int)yf, YardSnowmanArt.YawPages - 2), pl = Math.Min((int)pf, YardSnowmanArt.PitchPages - 2); float yfr = yf - yl, pfr = pf - pl;
         float yawQ = YardSnowmanArt.YawOf(yp);
 
         // 4. The face: cheeks, brows, eyes, glints, mouth, nose (the nose last: turned, it hides the far eye).
@@ -1159,9 +1158,10 @@ internal sealed class YardSnowman : Resident
         }
         float blink = _blinkLeft > 0f ? MathF.Sin(MathF.PI * (1f - _blinkLeft / 0.15f)) : 0f;
         float openEff = Math.Clamp(_open * (1f - 0.92f * blink), 0.05f, 1.3f);
-        int level = 0; float bestD = 9f;
-        for (int l = 0; l < YardSnowmanArt.EyeLevels; l++) { float d = MathF.Abs(YardSnowmanArt.EyeOpen[l] - openEff); if (d < bestD) { bestD = d; level = l; } }
-        if (level == YardSnowmanArt.EyeLevels - 1 && openEff < 1.14f) level = YardSnowmanArt.EyeLevels - 2;
+        // THE LID: the two eye pages either side of how open the eye is, in proportion (the lid glides; it used to step through 11 pages)
+        int level = 0;
+        while (level < YardSnowmanArt.EyeLevels - 2 && openEff >= YardSnowmanArt.EyeOpen[level + 1]) level++;
+        float lidF = Math.Clamp((openEff - YardSnowmanArt.EyeOpen[level]) / (YardSnowmanArt.EyeOpen[level + 1] - YardSnowmanArt.EyeOpen[level]), 0f, 1f);
         for (int e = 0; e < 2; e++)
         {
             float lon = e == 0 ? -0.46f : 0.46f;
@@ -1175,8 +1175,8 @@ internal sealed class YardSnowman : Resident
             else
             {
                 bool cut = _narrow > 0.5f && level >= YardSnowmanArt.EyeCutFrom && level <= YardSnowmanArt.EyeCutTo;
-                Put(fb, art.Eye[cut ? 1 : 0, level, sq], x, y, 1f, mirror);
-                if (level >= 2)
+                PutMix(fb, art.Eye[cut ? 1 : 0, level, sq], art.Eye[cut ? 1 : 0, level + 1, sq], lidF, x, y, 1f, mirror);
+                if (openEff >= YardSnowmanArt.EyeOpen[2])
                 {
                     float gxn = Math.Clamp(_gazeX + (e == 0 ? _cross : -_cross) * 0.85f, -1f, 1f), gyn = Math.Clamp(_gazeY + _cross * 0.55f, -1f, 1f);
                     float gx = x - 0.28f * er * wk + gxn * 0.50f * er * wk, gy = y - 0.30f * er + gyn * 0.42f * er * MathF.Min(1f, openEff);
@@ -1213,7 +1213,15 @@ internal sealed class YardSnowman : Resident
             if (mz < 0.15f) continue;
             Put(fb, art.Dot[mz > 0.75f ? 0 : mz > 0.5f ? 1 : 2], _headX + mx, _headY + my);
         }
-        if (HasNose) Put(fb, art.Nose[yp, pp], _headX, _headY);
+        if (HasNose)
+        {
+            // four pages: the two yaws either side, each at the two pitches either side
+            PutMix(fb, art.Nose[yl, pl], art.Nose[yl, pl + 1], pfr, _headX, _headY);
+            if (yfr > 0.02f)
+            {
+                PutMix(fb, art.Nose[yl + 1, pl], art.Nose[yl + 1, pl + 1], pfr, _headX, _headY, yfr);
+            }
+        }
         else
         {
             YardSnowmanArt.FacePoint(0, -0.06f, _yaw, _pitch, R, out float hx, out float hy, out float hz);
@@ -1221,8 +1229,8 @@ internal sealed class YardSnowman : Resident
         }
 
         // 5. The scarf (over the head's chin and the middle ball's top), with snow lying on it.
-        int sp = (int)(_scarfPh * YardSnowmanArt.ScarfPages) % YardSnowmanArt.ScarfPages;
-        Put(fb, art.Scarf[sp], _midX, _neckY);
+        float spf = (float)(_scarfPh * YardSnowmanArt.ScarfPages); int sp = (int)spf % YardSnowmanArt.ScarfPages;
+        PutMix(fb, art.Scarf[sp], art.Scarf[(sp + 1) % YardSnowmanArt.ScarfPages], spf - MathF.Floor(spf), _midX, _neckY);   // the phase is added up each frame and the two pages either side are blended: no page is ever skipped
         if (_snow > 0.35f)
         {
             float so = Math.Clamp((_snow - 0.30f) * 1.8f, 0f, 1f);
@@ -1237,7 +1245,9 @@ internal sealed class YardSnowman : Resident
         float ang = _hatHold ? _hatHeldAng : _hatA;
         int ha = Math.Clamp((int)MathF.Round(ang / YardSnowmanArt.HatStep) + YardSnowmanArt.HatPages / 2, 0, YardSnowmanArt.HatPages - 1);
         int hs = _snow < 0.25f ? 0 : _snow < 0.60f ? 1 : 2;
-        Put(fb, art.Hat[ha, hs], _hatCx, _hatCy);
+        float haf = Math.Clamp(ang / YardSnowmanArt.HatStep + YardSnowmanArt.HatPages / 2, 0f, YardSnowmanArt.HatPages - 1f);
+        int hl = Math.Min((int)haf, YardSnowmanArt.HatPages - 2);
+        PutMix(fb, art.Hat[hl, hs], art.Hat[hl + 1, hs], haf - hl, _hatCx, _hatCy);
 
         // 7. The arms, over everything (a hand raised to a face or a brim is in front of it).
         for (int i = 0; i < 2; i++) DrawArm(fb, art, i);

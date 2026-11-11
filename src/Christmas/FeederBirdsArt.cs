@@ -16,18 +16,20 @@ internal enum BirdKind { Cardinal, Hen, Chickadee, Jay }
 /// </summary>
 internal sealed class BirdBook
 {
-    public const int FlapPages = 12;
+    public const int FlapPages = 24;                     // SILKY: 24 wing positions to a beat, so even at a full beat a page is held about a frame
+    public const int FlarePages = 9;
     public int Ox, Oy;                                   // where the feet are in every page
     public float K;                                      // pixels in one bird unit (a bird is about 0.9 units, beak to tail)
-    public readonly Sprite[] Head = new Sprite[5];       // the head turning: 0 forward, 2 facing us, 4 looking right back
+    public const int HeadPages = 9;
+    public readonly Sprite[] Head = new Sprite[HeadPages];  // the head turning in nine views: 0 forward, 4 facing us, 8 looking right back (a snap is about 3 pages of travel)
     public readonly Sprite[] Sing = new Sprite[3];       // head up beak shut, beak half open, beak wide open
-    public readonly Sprite[] Peck = new Sprite[2];       // the head going down: half way, and to the seed
-    public readonly Sprite[] Flick = new Sprite[2];      // the tail up a little, the tail up a lot
+    public readonly Sprite[] Peck = new Sprite[4];       // the head going down in four steps, the last at the seed
+    public readonly Sprite[] Flick = new Sprite[5];      // the tail up, in five steps from a twitch to a full flick
     public readonly Sprite[] Hop = new Sprite[3];        // crouch, in the air with legs trailing, landing squat
     public readonly Sprite[] Hang = new Sprite[2];       // hanging upside down by the feet (looking ahead, looking at us)
     public readonly Sprite[] Bathe = new Sprite[2];      // wings thrown out, low: the two ends of a flutter
     public readonly Sprite[] Flap = new Sprite[FlapPages];
-    public readonly Sprite[] Flare = new Sprite[3];      // the landing: wings thrown up, feet reaching, then the downstroke that settles it
+    public readonly Sprite[] Flare = new Sprite[FlarePages];      // the landing: wings thrown up, feet reaching, then the downstroke that settles it
     public Sprite FluffHalf = null!, LiftHalf = null!;   // half-way pages that bridge the stance to the fluffed ball and to the head-thrown-up poses
     public Sprite Fluff = null!, Crouch = null!, Lean = null!, Alert = null!, Fold = null!, Shadow = null!;
     public int ShadowOx, ShadowOy;
@@ -369,14 +371,13 @@ internal static class FeederBirdsArt
         Sprite Pose1(Pose p) => Pg(g => Perched(g, sp, p));
 
         float[] psi = [0f, 0.30f * MathF.PI, 0.5f * MathF.PI, 0.74f * MathF.PI, MathF.PI];
-        for (int i = 0; i < 5; i++) { float a = psi[i]; bk.Head[i] = Pose1(new Pose(Psi: a)); }
+        for (int i = 0; i < BirdBook.HeadPages; i++) { int lo = i / 2; float a = i % 2 == 0 ? psi[lo] : 0.5f * (psi[lo] + psi[lo + 1]); bk.Head[i] = Pose1(new Pose(Psi: a)); }
         bk.Sing[0] = Pose1(new Pose(Lift: 1f, Lean: 8f, Pitch: 14f));
         bk.Sing[1] = Pose1(new Pose(Lift: 1f, Open: 0.5f, Lean: 8f, Pitch: 14f));
         bk.Sing[2] = Pose1(new Pose(Lift: 1f, Open: 1f, Lean: 8f, Pitch: 14f));
-        bk.Peck[0] = Pose1(new Pose(Lean: -16f, Dip: 0.45f, Pitch: -22f));
-        bk.Peck[1] = Pose1(new Pose(Lean: -34f, Dip: 1f, Pitch: -42f));
-        bk.Flick[0] = Pose1(new Pose(Flick: 26f));
-        bk.Flick[1] = Pose1(new Pose(Flick: 48f));
+        float[] pk = [0.30f, 0.55f, 0.80f, 1f];                  // how far down the head is: 30, 55, 80 and 100 percent of a peck
+        for (int i = 0; i < 4; i++) bk.Peck[i] = Pose1(new Pose(Lean: -34f * pk[i] + 2f, Dip: pk[i], Pitch: -42f * pk[i]));
+        for (int i = 0; i < 5; i++) bk.Flick[i] = Pose1(new Pose(Flick: 8f + 10.5f * i));
         bk.Hop[0] = Pose1(new Pose(Crouch: 0.9f, Lean: -4f));
         bk.Hop[1] = Pose1(new Pose(Crouch: -0.25f, Lean: 10f, Air: 1f, Flick: 10f));
         bk.Hop[2] = Pose1(new Pose(Crouch: 0.55f, Lean: -2f));
@@ -392,8 +393,16 @@ internal static class FeederBirdsArt
         bk.Alert = Pose1(new Pose(Lean: 9f, Lift: 0.55f, Fluff: -0.15f, Flick: 8f));
         for (int i = 0; i < BirdBook.FlapPages; i++) { float phi = MathF.Tau * i / BirdBook.FlapPages; bk.Flap[i] = Pg(g => Flyer(g, sp, phi, 0f, false, 0f, 0f)); }
         bk.Fold = Pg(g => Flyer(g, sp, 0f, -6f, true, 0f, 0f));
+        // THE LANDING FLARE as nine pages swept smoothly through the three old keys (tilt up, feet reaching, wings thrown up, then
+        // the downstroke that settles it onto the stand page): a landing of 0.34 s wants about ten pages.
         (float tilt, float feet, float phi, float lam)[] fl = [(14f, 0.55f, 1.3f, 0.35f), (8f, 1f, 1.0f, 0.7f), (0f, 1f, 4.3f, 1f)];
-        for (int i = 0; i < 3; i++) { var f = fl[i]; bk.Flare[i] = Pg(g => Flyer(g, sp, f.phi, f.tilt, false, f.feet, f.lam)); }
+        for (int i = 0; i < BirdBook.FlarePages; i++)
+        {
+            float u = i / (BirdBook.FlarePages - 1f) * 2f; int a = Math.Min(1, (int)u); float t = u - a; t = t * t * (3f - 2f * t);
+            var f0 = fl[a]; var f1 = fl[a + 1];
+            float tilt = f0.tilt + (f1.tilt - f0.tilt) * t, feet = f0.feet + (f1.feet - f0.feet) * t, phi = f0.phi + (f1.phi - f0.phi) * t, lam = f0.lam + (f1.lam - f0.lam) * t;
+            bk.Flare[i] = Pg(g => Flyer(g, sp, phi, tilt, false, feet, lam));
+        }
 
         // A soft blue shadow for a bird on the snow: a flat ellipse (night, moonlit: faint).
         int sw = Math.Max(6, (int)(0.95f * k)), sh = Math.Max(3, (int)(0.17f * k));

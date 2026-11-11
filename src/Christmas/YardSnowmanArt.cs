@@ -87,7 +87,7 @@ internal sealed class YardSnowmanArt
     public const float YawMax = 0.72f;                          // radians: about 41 degrees each way, "three quarters" of the way round to a side
     public const int PitchPages = 7;                            // nods, looking down to looking up
     public const float PitchMin = -0.30f, PitchStep = 0.15f;    // page p is the angle PitchMin + p * PitchStep (page 2 is level)
-    public const int ScarfPages = 32;
+    public const int ScarfPages = 64;                           // SILKY: 64 flutter pages to a wave (it was 32 and its free end visibly stepped); the scarf is also blended between pages
     public const int HatPages = 13, HatSnowLevels = 3;
     public const float HatStep = 0.12f;                         // radians a page; page 6 is upright
     public const int EyeLevels = 11, EyeSquash = 4;
