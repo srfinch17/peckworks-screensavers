@@ -71,6 +71,22 @@ internal sealed class ChristmasScenery
     public required List<(PointF At, float R)> Bushes { get; init; }    // the holly bushes: middle and radius
 
     /// <summary>
+    /// COVER: the things on the snowfield a small animal can hide BEHIND (his line: "have a bunch of rocks and
+    /// shrubs and other things for them to hide in. not black holes next to a pond... it looks like they're
+    /// going into a hole that is the same level as the pond so it would have water in it").
+    ///
+    /// FEYNMAN VERSION: a hole in flat snow is a hard thing to believe in; a rock is not. Each cover is painted
+    /// on the backdrop and is in the depth picture with the nearness of its own foot, so an animal that walks
+    /// round to the far side of it (feet a little higher up the screen than the cover's foot) is simply hidden
+    /// by it, the way a cat walks behind a sofa. Nothing fades, nothing sinks, nothing needs a hole.
+    ///
+    /// Foot is the middle of its base on the snow; HalfW and Height are its painted size in pixels; Kind says
+    /// what it is. Hide is where an animal stands to be out of sight behind it (and HideHalf how far either
+    /// side of that it may shuffle and still be covered up to HideTall pixels of body height).
+    /// </summary>
+    public required List<Cover> Covers { get; init; }
+
+    /// <summary>
     /// THE DEPTH PICTURE of the near props (the lamp post, the log, the bird
     /// table, the tiny fir, the holly, the drifts along the bottom edge):
     /// one number per pixel, 0 where none of them painted, otherwise how
@@ -139,6 +155,10 @@ internal sealed class ChristmasScenery
         if (x > LogTop.Left - LogR * 2 - room && x < LogTop.Right + LogR * 2 + room && MathF.Abs(y - (LogHollow.Y + LogR * 0.82f)) < LogR * 0.9f) return false;
         foreach (var b in Bushes)
             if (MathF.Abs(x - b.At.X) < b.R + room && y > b.At.Y - b.R * 0.35f) return false;
+        // Nobody stands IN a rock or a shrub: the strip of ground its base covers is closed. (Just behind it is
+        // open: that is the hiding place.)
+        foreach (Cover c in Covers)
+            if (MathF.Abs(x - c.Foot.X) < c.HalfW * 0.92f + room && y > c.Foot.Y - c.Height * 0.10f && y < c.Foot.Y + c.Height * 0.14f) return false;
         return true;
     }
 
@@ -225,6 +245,12 @@ internal sealed class ChristmasScenery
     public PointF SantaNose { get; set; }                               // Rudolph's nose
     public bool SantaOnScreen { get; set; }                             // false while he is on his off-screen pause
 }
+
+/// <summary>What a piece of cover is.</summary>
+internal enum CoverKind { Rocks, Shrub, Stump, BrushPile }
+
+/// <summary>One piece of cover on the snowfield: see ChristmasScenery.Covers.</summary>
+internal readonly record struct Cover(CoverKind Kind, PointF Foot, float HalfW, float Height, PointF Hide, float HideHalf, float HideTall);
 
 /// <summary>
 /// Paints the backdrop: a deep blue night sky with stars and a moon, two
@@ -381,6 +407,34 @@ internal static class ChristmasPainter
         GroundShadow(g, new PointF((logLeft + logRight) / 2, logFootY), (logRight - logLeft) * 0.56f);
         foreach (var b in bushes) GroundShadow(g, new PointF(b.At.X, b.At.Y + b.R * 0.1f), b.R * 1.2f);
 
+        // ---- The cover (see ChristmasScenery.Covers): where each piece stands (x as a fraction of the width, depth
+        //      down the field), what it is, and its real size in metres (wide, tall). Sized by the field's own
+        //      metre, like every animal, so a hare fits behind a shrub and a mouse behind a stone. ----
+        float MetreAt(float y) => 0.10f * u * (0.36f + 0.64f * Math.Clamp((y - crestMin) / (h - crestMin), 0f, 1f));
+        (float X, float Depth, CoverKind Kind, float Wide, float Tall)[] coverPlan =
+        [
+            (0.105f, 0.36f, CoverKind.Shrub, 1.25f, 0.85f),      // left of the pond, by the tree line
+            (0.165f, 0.60f, CoverKind.Rocks, 1.30f, 0.50f),      // on the pond's left shore
+            (0.300f, 0.93f, CoverKind.BrushPile, 1.50f, 0.50f),  // below the pond, toward the log
+            (0.455f, 0.90f, CoverKind.Rocks, 1.10f, 0.42f),      // at the pond's near right corner
+            (0.600f, 0.34f, CoverKind.Shrub, 1.10f, 0.75f),      // below the cabin
+            (0.610f, 0.88f, CoverKind.Stump, 0.75f, 0.55f),      // between the tiny fir and the bird table
+            (0.745f, 0.52f, CoverKind.Rocks, 1.20f, 0.48f),      // right of the bird table
+            (0.800f, 0.90f, CoverKind.BrushPile, 1.40f, 0.48f),  // near right
+            (0.925f, 0.44f, CoverKind.Shrub, 1.30f, 0.90f),      // far right, by the pines
+        ];
+        var covers = new List<Cover>();
+        foreach (var cp in coverPlan)
+        {
+            PointF foot = Field(w * cp.X, cp.Depth);
+            float m = MetreAt(foot.Y), halfW = cp.Wide * m * 0.5f, tall = cp.Tall * m;
+            // The hiding place: a short step BEHIND the cover (farther from us: a little higher up the screen),
+            // in the middle of it, where its body stands between the animal and us.
+            covers.Add(new Cover(cp.Kind, foot, halfW, tall, new PointF(foot.X, foot.Y - Math.Max(2f, tall * 0.16f)), halfW * 0.55f, tall * 0.80f));
+        }
+        covers.Sort((a, b) => a.Foot.Y.CompareTo(b.Foot.Y));                  // far to near, the order they are painted in
+        foreach (Cover c in covers) GroundShadow(g, new PointF(c.Foot.X, c.Foot.Y), c.HalfW * 1.25f);
+
         // ---- The depth picture. "Near" paints one prop and marks every pixel
         //      that prop changed with how near its foot stands (see the class summary). ----
         var nearDepth = new byte[w * h];
@@ -407,6 +461,17 @@ internal static class ChristmasPainter
             float su = saplingTall / 0.30f;
             Brushwork.Pine(g, saplingFoot.X, saplingFoot.Y - saplingTall, saplingFoot.Y, su, rng, snowy: true);
         });
+        foreach (Cover c in covers)
+            Near(c.Foot.Y, () =>
+            {
+                switch (c.Kind)
+                {
+                    case CoverKind.Rocks: PaintRocks(g, c.Foot, c.HalfW, c.Height, u, rng); break;
+                    case CoverKind.Shrub: PaintShrub(g, c.Foot, c.HalfW, c.Height, u, rng); break;
+                    case CoverKind.Stump: PaintStump(g, c.Foot, c.HalfW, c.Height, u, rng); break;
+                    default: PaintBrushPile(g, c.Foot, c.HalfW, c.Height, u, rng); break;
+                }
+            });
         PointF hollow = default;
         float logTopY = 0;
         Near(logFootY, () => (hollow, logTopY) = PaintLog(g, logLeft, logRight, logFootY, logR, u, rng));
@@ -441,7 +506,7 @@ internal static class ChristmasPainter
             FeederFoot = feederFoot, FeederTray = tray, FeederRoof = roof,
             SaplingFoot = saplingFoot, SaplingHeight = saplingTall,
             SnowmanFoot = snowmanFoot, SnowmanHeight = snowmanTall,
-            Bushes = bushes, NearDepth = nearDepth, CrestMin = crestMin, CrestMax = crestMax,
+            Bushes = bushes, Covers = covers, NearDepth = nearDepth, CrestMin = crestMin, CrestMax = crestMax,
         };
     }
 
@@ -1067,6 +1132,164 @@ internal static class ChristmasPainter
             g.FillEllipse(snow, left - r * 0.5f, footY - r * 0.35f, right - left + r * 1.2f, r * 0.6f);     // snow banked along the foot
         }
         return (hollow, capTop + r * 0.08f);
+    }
+
+    // ================================================================ cover: rocks, shrubs, a stump, brush
+
+    /// <summary>
+    /// A huddle of boulders half buried in snow: one big stone with two or three smaller ones leaning on it.
+    /// Each stone is a rounded shape (never a rectangle with soft corners) with a LIT face toward the moon (up
+    /// and to the left), a darker face away from it, a crack or two, and a cap of snow lying on its top; a drift
+    /// is banked against the foot so the stones sit IN the snow, not on it. Four greys, cool ones: it is night.
+    /// </summary>
+    private static void PaintRocks(Graphics g, PointF foot, float halfW, float tall, float u, Random rng)
+    {
+        Color lit = Color.FromArgb(150, 158, 182), mid = Color.FromArgb(112, 120, 150), dark = Color.FromArgb(74, 80, 112), deep = Color.FromArgb(52, 56, 84);
+        // (centre across as a fraction of the half width, width, height as a fraction of the pile's height), back to front
+        (float Cx, float W, float H)[] stones = [(-0.48f, 0.62f, 0.62f), (0.50f, 0.70f, 0.74f), (0.02f, 0.92f, 1.00f), (-0.70f, 0.34f, 0.34f), (0.78f, 0.30f, 0.30f)];
+        foreach (var st in stones)
+        {
+            float cx = foot.X + st.Cx * halfW, rw = st.W * halfW * 0.5f, rh = st.H * tall;
+            float lean = rw * 0.25f * ((float)rng.NextDouble() - 0.5f);
+            PointF[] outline =
+            [
+                new(cx - rw, foot.Y), new(cx - rw * 0.96f, foot.Y - rh * 0.48f), new(cx - rw * 0.55f + lean, foot.Y - rh * 0.90f),
+                new(cx + lean, foot.Y - rh), new(cx + rw * 0.62f + lean, foot.Y - rh * 0.82f), new(cx + rw, foot.Y - rh * 0.36f), new(cx + rw * 0.98f, foot.Y),
+            ];
+            using (var path = new GraphicsPath())
+            {
+                path.AddClosedCurve(outline, 0.45f);
+                using (var body = new SolidBrush(mid)) g.FillPath(body, path);
+                GraphicsState saved = g.Save();
+                g.SetClip(path, CombineMode.Intersect);
+                // The dark face: the right and lower part, away from the moon.
+                using (var shade = new SolidBrush(dark))
+                    g.FillPolygon(shade, [new PointF(cx + rw * 0.05f + lean, foot.Y - rh * 1.05f), new PointF(cx + rw * 1.2f, foot.Y - rh * 0.95f), new PointF(cx + rw * 1.2f, foot.Y + 2), new PointF(cx - rw * 0.25f, foot.Y + 2)]);
+                using (var under = new SolidBrush(deep))
+                    g.FillEllipse(under, cx - rw * 0.9f, foot.Y - rh * 0.22f, rw * 2.2f, rh * 0.5f);
+                // The lit face: a soft patch on the upper left.
+                Soft(g, cx - rw * 0.42f + lean, foot.Y - rh * 0.66f, rw * 0.62f, rh * 0.36f, Color.FromArgb(150, lit));
+                // A crack: a thin dark line wandering down the face.
+                using (var crack = new Pen(Color.FromArgb(150, deep), Math.Max(1f, u * 0.0012f)))
+                    g.DrawLines(crack, [new PointF(cx + rw * 0.10f + lean, foot.Y - rh * 0.86f), new PointF(cx + rw * 0.02f, foot.Y - rh * 0.58f), new PointF(cx + rw * 0.16f, foot.Y - rh * 0.36f)]);
+                g.Restore(saved);
+            }
+            // The snow cap, lying on the top, thicker on the flatter left shoulder.
+            using var snow = new SolidBrush(Snow);
+            using var snowShade = new SolidBrush(Color.FromArgb(110, SnowShade));
+            g.FillEllipse(snow, cx - rw * 0.74f + lean, foot.Y - rh * 1.08f, rw * 1.36f, rh * 0.34f);
+            g.FillEllipse(snow, cx - rw * 0.98f, foot.Y - rh * 0.78f, rw * 0.80f, rh * 0.26f);
+            g.FillEllipse(snowShade, cx - rw * 0.50f + lean, foot.Y - rh * 0.86f, rw * 1.10f, rh * 0.10f);
+        }
+        // The drift banked against the foot.
+        using var bank = new SolidBrush(Color.FromArgb(232, 240, 255));
+        g.FillEllipse(bank, foot.X - halfW * 1.12f, foot.Y - tall * 0.12f, halfW * 2.24f, tall * 0.30f);
+    }
+
+    /// <summary>
+    /// A snow-laden winter shrub (a red-twig dogwood: bare, with wine-red stems): a fan of thin curving stems
+    /// from one root, a tangle of finer twigs in the crown, and pillows of snow caught in the forks and lying
+    /// along the top, so that from in front it is a low white-and-red mound nothing behind it shows through.
+    /// The lower half is packed with snow (painted as one solid mound first), which is what makes it COVER.
+    /// </summary>
+    private static void PaintShrub(Graphics g, PointF foot, float halfW, float tall, float u, Random rng)
+    {
+        // The packed snow in and under the stems: one solid low mound, blue at its foot.
+        using (var mound = new LinearGradientBrush(new PointF(0, foot.Y - tall * 0.62f), new PointF(0, foot.Y + 1), Color.FromArgb(236, 243, 255), Color.FromArgb(176, 194, 234)))
+            g.FillClosedCurve(mound, [
+                new PointF(foot.X - halfW * 1.05f, foot.Y), new PointF(foot.X - halfW * 0.86f, foot.Y - tall * 0.40f), new PointF(foot.X - halfW * 0.30f, foot.Y - tall * 0.64f),
+                new PointF(foot.X + halfW * 0.35f, foot.Y - tall * 0.60f), new PointF(foot.X + halfW * 0.90f, foot.Y - tall * 0.36f), new PointF(foot.X + halfW * 1.05f, foot.Y)], FillMode.Winding, 0.5f);
+        Color stemDark = Color.FromArgb(96, 30, 44), stemLit = Color.FromArgb(168, 60, 70);
+        for (int i = 0; i < 26; i++)
+        {
+            float f = (i + (float)rng.NextDouble()) / 26f * 2 - 1;                        // -1 left ... +1 right
+            float reach = tall * (0.78f + 0.30f * (float)rng.NextDouble()) * (1f - 0.30f * f * f);
+            var root = new PointF(foot.X + f * halfW * 0.22f, foot.Y - tall * 0.05f);
+            var tip = new PointF(foot.X + f * halfW * 0.98f, foot.Y - reach);
+            var bend = new PointF(root.X + (tip.X - root.X) * 0.25f, root.Y - reach * 0.62f);
+            using var stem = new Pen(Brushwork.Mix(stemDark, stemLit, 0.5f - f * 0.4f), Math.Max(1f, u * 0.0018f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawBezier(stem, root, bend, bend, tip);
+            // Two side twigs off the upper half.
+            using var twig = new Pen(Brushwork.Mix(stemDark, stemLit, 0.5f - f * 0.4f), Math.Max(1f, u * 0.0011f));
+            for (int k = 0; k < 2; k++)
+            {
+                float t = 0.55f + 0.2f * k, tx = root.X + (tip.X - root.X) * t, ty = root.Y - reach * (0.35f + 0.6f * t);
+                g.DrawLine(twig, tx, ty, tx + halfW * 0.16f * (k == 0 ? -1 : 1), ty - tall * 0.12f);
+            }
+        }
+        // Pillows of snow in the forks and along the crown.
+        using var snow = new SolidBrush(Snow);
+        for (int i = 0; i < 11; i++)
+        {
+            float f = (i + (float)rng.NextDouble()) / 11f * 2 - 1;
+            float sw = halfW * (0.16f + 0.14f * (float)rng.NextDouble());
+            float sy = foot.Y - tall * (0.62f + 0.34f * (float)rng.NextDouble()) * (1f - 0.30f * f * f);
+            g.FillEllipse(snow, foot.X + f * halfW * 0.86f - sw, sy - sw * 0.30f, sw * 2, sw * 0.62f);
+        }
+        using var bank = new SolidBrush(Color.FromArgb(232, 240, 255));
+        g.FillEllipse(bank, foot.X - halfW * 1.10f, foot.Y - tall * 0.07f, halfW * 2.2f, tall * 0.17f);
+    }
+
+    /// <summary>
+    /// An old tree stump: a short fat column of grey-brown bark that flares into roots at the foot, a sawn top
+    /// seen at a slant (a pale oval with rings) carrying a thick round cushion of snow, a shelf fungus on one
+    /// side, and snow drifted between the roots.
+    /// </summary>
+    private static void PaintStump(Graphics g, PointF foot, float halfW, float tall, float u, Random rng)
+    {
+        float top = foot.Y - tall * 0.78f, w = halfW * 0.62f;
+        using (var bark = new LinearGradientBrush(new PointF(foot.X - halfW, 0), new PointF(foot.X + halfW, 0), Color.FromArgb(120, 96, 84), Color.FromArgb(58, 44, 46)))
+            g.FillClosedCurve(bark, [
+                new PointF(foot.X - halfW, foot.Y), new PointF(foot.X - w * 1.02f, foot.Y - tall * 0.28f), new PointF(foot.X - w, top),
+                new PointF(foot.X + w, top), new PointF(foot.X + w * 1.04f, foot.Y - tall * 0.26f), new PointF(foot.X + halfW, foot.Y)], FillMode.Winding, 0.35f);
+        using (var furrow = new Pen(Color.FromArgb(130, 40, 30, 34), Math.Max(1f, u * 0.0014f)))
+            for (int i = 0; i < 7; i++)
+            {
+                float fx = foot.X - w * 0.8f + w * 1.6f * (i + (float)rng.NextDouble() * 0.6f) / 7f;
+                g.DrawLine(furrow, fx, top + tall * 0.10f, fx + w * 0.10f * ((float)rng.NextDouble() - 0.5f), foot.Y - tall * 0.10f);
+            }
+        using (var cut = new SolidBrush(Color.FromArgb(188, 150, 108)))
+            g.FillEllipse(cut, foot.X - w, top - tall * 0.10f, w * 2, tall * 0.22f);
+        using (var fungus = new SolidBrush(Color.FromArgb(214, 176, 128)))
+            g.FillPie(fungus, foot.X + w * 0.55f, foot.Y - tall * 0.58f, w * 0.9f, tall * 0.22f, 180, 180);
+        using var snow = new SolidBrush(Snow);
+        using var shade = new SolidBrush(Color.FromArgb(110, SnowShade));
+        g.FillEllipse(snow, foot.X - w * 1.12f, top - tall * 0.30f, w * 2.24f, tall * 0.36f);     // the cushion on top
+        g.FillEllipse(shade, foot.X - w * 0.80f, top - tall * 0.04f, w * 1.9f, tall * 0.07f);     // its underside
+        g.FillEllipse(snow, foot.X - halfW * 1.15f, foot.Y - tall * 0.10f, halfW * 2.3f, tall * 0.24f);
+    }
+
+    /// <summary>
+    /// A brush pile: cut pine boughs and dead sticks heaped up and left, now a long low hummock under snow with
+    /// dark green needles and the grey ends of sticks poking out of its sides. Low and wide: mouse country.
+    /// </summary>
+    private static void PaintBrushPile(Graphics g, PointF foot, float halfW, float tall, float u, Random rng)
+    {
+        // Sticks first, poking out at both ends and along the foot.
+        for (int i = 0; i < 16; i++)
+        {
+            float f = (float)rng.NextDouble() * 2 - 1, a = (f < 0 ? MathF.PI : 0) + 0.7f * ((float)rng.NextDouble() - 0.5f) - 0.2f;
+            var from = new PointF(foot.X + f * halfW * 0.72f, foot.Y - tall * (0.15f + 0.45f * (float)rng.NextDouble()));
+            float len = halfW * (0.28f + 0.30f * (float)rng.NextDouble());
+            using var stick = new Pen(Color.FromArgb(104 + rng.Next(30), 88 + rng.Next(20), 84), Math.Max(1f, u * 0.0020f)) { EndCap = LineCap.Round };
+            g.DrawLine(stick, from, new PointF(from.X + MathF.Cos(a) * len, from.Y + MathF.Sin(a) * len * 0.5f));
+        }
+        // Needles: dark green dabs along the sides, under the snow's edge.
+        Color nDark = Color.FromArgb(22, 50, 38), nLit = Color.FromArgb(62, 104, 72);
+        for (int i = 0; i < 40; i++)
+        {
+            float f = (float)rng.NextDouble() * 2 - 1, pw = halfW * (0.07f + 0.06f * (float)rng.NextDouble());
+            using var needles = new SolidBrush(Brushwork.Mix(nDark, nLit, (float)rng.NextDouble() * (0.6f - f * 0.3f)));
+            g.FillEllipse(needles, foot.X + f * halfW * 0.92f - pw, foot.Y - tall * (0.10f + 0.50f * (float)rng.NextDouble()) * (1f - 0.4f * f * f) - pw * 0.4f, pw * 2, pw * 0.8f);
+        }
+        // The snow lying over the top: a lumpy hummock, blue underneath.
+        using (var snowTop = new LinearGradientBrush(new PointF(0, foot.Y - tall - 1), new PointF(0, foot.Y - tall * 0.2f), Color.FromArgb(240, 246, 255), Color.FromArgb(196, 210, 240)))
+            g.FillClosedCurve(snowTop, [
+                new PointF(foot.X - halfW * 0.92f, foot.Y - tall * 0.34f), new PointF(foot.X - halfW * 0.55f, foot.Y - tall * 0.80f), new PointF(foot.X - halfW * 0.10f, foot.Y - tall),
+                new PointF(foot.X + halfW * 0.40f, foot.Y - tall * 0.86f), new PointF(foot.X + halfW * 0.90f, foot.Y - tall * 0.40f), new PointF(foot.X + halfW * 0.40f, foot.Y - tall * 0.42f),
+                new PointF(foot.X - halfW * 0.30f, foot.Y - tall * 0.46f)], FillMode.Winding, 0.5f);
+        using var bank = new SolidBrush(Color.FromArgb(232, 240, 255));
+        g.FillEllipse(bank, foot.X - halfW * 1.10f, foot.Y - tall * 0.12f, halfW * 2.2f, tall * 0.28f);
     }
 
     /// <summary>
