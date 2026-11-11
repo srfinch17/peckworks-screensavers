@@ -45,7 +45,10 @@ internal readonly record struct MousePose(
     float Ear = 0f,         // 0 to 1: an ear flick (the big ear tips back)
     float Wash = -1f,       // paws-at-the-face phase 0 to 1 (-1: not washing)
     float Box = -1f,        // boxing phase 0 to 1 (forepaws out, one then the other; -1: not boxing)
-    float Pitch = 0f);      // the whole body tipped nose up (a leap) or down (a plunge), degrees
+    float Pitch = 0f,       // the whole body tipped nose up (a leap) or down (a plunge), degrees
+    float Crouch = 0f,      // 0 to 1: the head down and the forepaws on the ground ahead (digging): the head's lift is set by Lift
+    float Scrab = -1f,      // the digging stroke's phase 0 to 1 (-1: paws planted ahead); only while Crouch is up
+    float Kick = 0f);       // 0 to 1: both hind feet flick up and back (a dive's last push)
 
 /// <summary>Places on a painted page the live parts hang from, in mouse units.</summary>
 internal readonly record struct MouseAnchors(PointF Tail, PointF Mouth, PointF Hand);
@@ -160,7 +163,7 @@ internal static class LogMiceArt
 
         // ---- the torso frame: it pivots about the hips as the mouse rises onto its haunches ----
         float theta = Rad(upright ? 80f : 70f * rs);
-        var hip = upright ? new PointF(-0.14f, 0.34f + 0.02f * MathF.Sin(MathF.Tau * m.Walk * 2f)) : new PointF(-0.30f + 0.14f * rs, 0.50f - 0.27f * rs + bob);
+        var hip = upright ? new PointF(-0.14f, 0.34f + 0.02f * MathF.Sin(MathF.Tau * m.Walk * 2f)) : new PointF(-0.30f + 0.14f * rs, 0.50f - 0.27f * rs + bob - 0.07f * m.Crouch);
         if (upright) hip = new PointF(hip.X + 0.02f * MathF.Sin(MathF.Tau * m.Walk), hip.Y);   // the waddle's sway
         float torsoLen = 0.60f;
         PointF shoulder = Fr(hip, theta, torsoLen, 0f);
@@ -214,6 +217,8 @@ internal static class LogMiceArt
             hx0 = hx0 + (sitToe - hx0) * rs; hx1 = hx1 + (sitToe - 0.05f - hx1) * rs;
             hl0 *= 1 - rs; hl1 *= 1 - rs;
         }
+        // the dive's push: both hind feet flick up and back
+        if (!upright && m.Kick > 0f) { hx0 -= 0.32f * m.Kick; hx1 -= 0.32f * m.Kick; hl0 += 0.20f * m.Kick; hl1 += 0.20f * m.Kick; }
 
         // The mouse's far side first (a shade darker): far fore leg, far hind leg, far ear.
         // ---- paws: where the forepaws are ----
@@ -246,6 +251,22 @@ internal static class LogMiceArt
                 float b = MathF.Tau * boxP;
                 nearFoot = new PointF(shoulder.X + 0.26f + 0.16f * MathF.Max(0f, MathF.Sin(b)), shoulder.Y - 0.02f + 0.04f * MathF.Sin(b));
                 farFoot = new PointF(shoulder.X + 0.22f + 0.16f * MathF.Max(0f, MathF.Sin(b + MathF.PI)), shoulder.Y - 0.04f);
+            }
+            if (m.Crouch > 0f)
+            {
+                // DIGGING: each forepaw reaches ahead onto the snow, rakes back under the chest along the ground, lifts and comes forward again
+                // (the far paw half a stroke behind the near one)
+                static PointF Stroke(float p)
+                {
+                    p -= MathF.Floor(p);
+                    if (p < 0.6f) return new PointF(0.64f - 0.52f * p / 0.6f, 0.02f);
+                    float q = (p - 0.6f) / 0.4f;
+                    return new PointF(0.12f + 0.52f * Ease(q), 0.02f + 0.16f * MathF.Sin(MathF.PI * q));
+                }
+                float sp = m.Scrab >= 0f ? m.Scrab : 0.12f;
+                PointF sa = Stroke(sp), sb = Stroke(sp + 0.5f);
+                nearFoot = Lerp(nearFoot, sa, m.Crouch);
+                farFoot = Lerp(farFoot, new PointF(sb.X - 0.04f, sb.Y), m.Crouch);
             }
         }
 
@@ -461,20 +482,288 @@ internal static class LogMiceArt
     /// </summary>
     public static void PaintEmerge(Graphics g, float r)
     {
+        // SNOW HOLES (round of 2026-11-10): the mound that used to be painted into this page is gone. The hole is now two
+        // separate sprites (PaintHole): the BACK (dark mouth) is stamped before the mouse and the FRONT LIP after it, and the
+        // page's own clip line (y = 0, the mouth's lower edge) is hidden under that lip. The mouse is drawn at full size, sunk
+        // by (1 - e) of its height, so nothing fades or shrinks: it is covered by something in front of it.
         float e = Ease(r);
         var st = g.Save();
-        g.SetClip(new RectangleF(-2f, 0f, 4f, 2f));
-        g.TranslateTransform(0f, -(1f - e) * 0.98f);
-        PaintFront(g, r > 0.8f && ((int)(r * 40f)) % 7 == 0 ? 1f : 0f, false, 0f, r < 0.6f, 7f * MathF.Sin(r * 9f) * (1f - r));
+        g.SetClip(new RectangleF(-2f, -0.1f, 4f, 2.1f));
+        g.TranslateTransform(0f, -(1f - e) * 0.84f);
+        PaintFront(g, 0f, false, 0f, r < 0.6f, 7f * MathF.Sin(r * 9f) * (1f - r));
         g.Restore(st);
-        float hm = (0.17f + 0.22f * MathF.Sin(MathF.PI * MathF.Min(1f, r * 1.25f))) * (1f - e * 0.94f), rx = 0.82f * (1f - 0.35f * e);
-        if (hm < 0.012f) return;
-        using var shade = new SolidBrush(Color.FromArgb(215, 150, 172, 222));
-        g.FillEllipse(shade, -rx, -0.10f, rx * 2f, hm * 0.55f + 0.14f);
-        using var snow = new SolidBrush(Color.FromArgb(246, 238, 245, 255));
-        g.FillEllipse(snow, -rx * 0.93f, 0f, rx * 1.86f, hm * 2f);
-        using var lit = new SolidBrush(Color.FromArgb(255, 248, 252, 255));
-        g.FillEllipse(lit, -rx * 0.62f, hm * 0.55f, rx * 0.95f, hm * 0.9f);
+        // the forepaws take hold of the rim while the head and shoulders heave up (r 0.18 to 0.7), then they let go as the
+        // arms swing down (the head-on mouse has no arms drawn, so the paws shrink away with the climb)
+        float grip = Ease((r - 0.12f) / 0.12f) * (1f - Ease((r - 0.55f) / 0.2f));
+        if (grip > 0.02f)
+        {
+            float py = 0.06f + 0.05f * (1f - grip);
+            Ell(g, Pink, -0.27f, py, 0.085f * grip + 0.015f, 0.05f * grip + 0.01f);
+            Ell(g, Pink, 0.27f, py, 0.085f * grip + 0.015f, 0.05f * grip + 0.01f);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  THE HOLE IN THE SNOW, IN TWO PIECES (the back and the front lip) and THE DIVE INTO IT
+    // ------------------------------------------------------------------
+
+    public const int HoleLevels = 6;       // how far the hole is open: 0, 0.2, 0.4 ... 1
+    public const int DivePages = 36;       // the plunge, 0.8 s: a page for every frame at 45 a second
+    private const float MouthRx = 0.52f, RimRx = 0.70f, RimRy = 0.32f;
+    public const float MouthRy = 0.20f;
+
+    /// <summary>
+    /// One piece of a hole dug in the snow, seen from a little above (so its mouth is an ellipse). The page's origin is the mouth's
+    /// centre; the mouse's feet line (where a sunk mouse is cut off) is the mouth's LOWER edge, MouthRy under the centre.
+    /// front = false: the BACK, the whole thing (a rim of piled snow lit on top, a dark mouth, blue-brown shading inside, darkest at
+    /// the top and back). front = true: only the near rim below the mouth's lower edge, the same picture, to be stamped AFTER the
+    /// mouse so whatever is below that edge is really hidden by snow in front of it.
+    /// </summary>
+    private static PointF[] Offset(PointF[] pts, float dx, float dy)
+    {
+        var o = new PointF[pts.Length];
+        for (int i = 0; i < pts.Length; i++) o[i] = new PointF(pts[i].X + dx, pts[i].Y + dy);
+        return o;
+    }
+
+    public static Sprite PaintHole(float k, float open, bool front)
+    {
+        int w = Math.Max(8, (int)MathF.Ceiling(2f * RimRx * k) + 4), h = Math.Max(6, (int)MathF.Ceiling(2f * (RimRy + 0.16f) * k) + 4);
+        return Sprite.Paint(w, h, g =>
+        {
+            g.TranslateTransform(w / 2f, h / 2f);
+            g.ScaleTransform(k, -k);
+            float o = Math.Clamp(open, 0f, 1f);
+            if (o < 0.06f) return;
+            if (front) g.SetClip(new RectangleF(-3f, -3f, 6f, 3f - MouthRy * o * 0.92f));     // only below the mouth's lower edge
+            float rx = RimRx * (0.55f + 0.45f * o), ry = RimRy * (0.55f + 0.45f * o);
+            // THE RIM is a low, UNEVEN lip of piled snow (a lumpy outline, never an ellipse), only a shade off the snow round it: its shadow
+            // on the near side, its body in a bluish snow tone, a lit crest on the far side where the moon touches it, and a darker blue
+            // inner slope falling into the mouth. A few thrown crumbs lie in front. No glow, no bright ring.
+            PointF[] Lump(float sx, float sy, float ph)
+            {
+                var p = new PointF[16];
+                for (int i = 0; i < p.Length; i++)
+                {
+                    float a = i * MathF.Tau / p.Length;
+                    float rr = 1f + 0.10f * MathF.Sin(3f * a + ph) + 0.07f * MathF.Sin(5f * a + 2f * ph) + 0.04f * MathF.Sin(9f * a + ph);
+                    p[i] = new PointF(MathF.Cos(a) * sx * rr, MathF.Sin(a) * sy * rr);
+                }
+                return p;
+            }
+            Blob(g, Color.FromArgb(110, 98, 120, 184), 0.5f, Offset(Lump(rx * 1.02f, ry * 1.0f, 1.3f), 0.025f, -0.055f));
+            Blob(g, Color.FromArgb(246, 184, 200, 236), 0.5f, Offset(Lump(rx, ry, 1.3f), 0f, -0.01f));
+            Blob(g, Color.FromArgb(235, 206, 219, 247), 0.5f, Offset(Lump(rx * 0.88f, ry * 0.70f, 1.9f), -0.04f, 0.075f));        // the lit crest, high on the far side
+            // the mouth: an inner slope of blue shade, then near-black with a blue-brown wall along the near lip, darkest at the top-back
+            float mx = MouthRx * o, my = MouthRy * o;
+            Ell(g, Color.FromArgb(255, 112, 128, 190), 0f, 0.012f, mx * 1.10f, my * 1.16f);       // the slope into the hole (shade, not a ring of light)
+            Ell(g, Color.FromArgb(255, 72, 66, 104), 0f, -0.012f, mx * 1.02f, my);               // the wall under the near lip
+            Ell(g, Color.FromArgb(255, 30, 24, 44), 0f, 0.02f * o, mx * 0.96f, my * 0.9f);
+            Ell(g, Color.FromArgb(255, 12, 9, 20), 0f, 0.06f * o, mx * 0.82f, my * 0.62f);       // the black at the top and back
+            // crumbs of thrown snow in front of the near lip
+            if (!front)
+                for (int i = 0; i < 5; i++)
+                {
+                    float cx = (-0.50f + 0.25f * i + 0.07f * MathF.Sin(i * 4.1f)) * o, cy = -(ry + 0.03f + 0.05f * ((i * 7) % 3)) * (0.7f + 0.3f * o);
+                    Ell(g, Color.FromArgb(235, 204, 217, 246), cx, cy, 0.035f + 0.015f * (i % 2), 0.022f);
+                }
+        });
+    }
+
+    /// <summary>The sheet of the dive: its own canvas (the whole run-up is on it). Origin = the mouth's centre; the mouse faces right.</summary>
+    internal sealed class DiveSheet
+    {
+        public required Sprite[] Pages;
+        public required int OriginX, OriginY;
+    }
+
+    /// <summary>
+    /// How far ahead of the digging mouse's feet the hole's centre lies, in mouse units: the mouse digs with its nose and forepaws over the
+    /// hole, so the mouth is under its paws and its head (read off the painted dig pose, once).
+    /// </summary>
+    public static float DigHoleOffset
+    {
+        get
+        {
+            if (_digOff < 0f)
+            {
+                using var bmp = new Bitmap(8, 8); using var g = Graphics.FromImage(bmp);
+                _digOff = PaintSide(g, DigPose(27)).Mouth.X + 0.10f;
+            }
+            return _digOff;
+        }
+    }
+    private static float _digOff = -1f;
+
+    /// <summary>The pose of one page of the dig book (see PoseOf): the lean in (0 to 7), two strokes of the scrabble (8 to 23), the coil over the hole (24 to 27).</summary>
+    private static MousePose DigPose(int i)
+    {
+        if (i < 8) { float a = Ease(i / 8f); return new MousePose(Crouch: a, Lift: -44f * a, Scrab: -1f); }
+        if (i < 24) return new MousePose(Crouch: 1f, Lift: -44f, Scrab: ((i - 8) % 8) / 8f);
+        int c = i - 24;
+        return new MousePose(Crouch: 1f, Lift: -44f - 1.3f * c, Scrab: 0.04f * c);
+    }
+
+    /// <summary>
+    /// THE DIVE, PAINTED FROM A SPINE (36 pages, origin = the hole's centre, the mouse faces right). The mouse's picture is cut into
+    /// 1/4-pixel slivers and every sliver is laid along a CURVE: the nose leads along a path (level, then bending down over the lip and
+    /// into the mouth), and a point of the body that is d behind the nose sits where the nose WAS when it had gone d less along the
+    /// path. So the back arches over the lip and every part takes the path the head took, like a train into a tunnel. The hind feet
+    /// kick as they go (the source pose changes), and the tail is a smooth curve laid along that same path, whipping as it slips in.
+    /// Everything below the mouth's lower edge is not drawn (the front lip is stamped over the seam). Page 0 is the dig's last page.
+    /// </summary>
+    public static DiveSheet BuildDive(float k)
+    {
+        int ox = (int)MathF.Round(2.3f * k), oy = (int)MathF.Round(1.5f * k);
+        int w = ox + (int)MathF.Ceiling(1.5f * k), h = oy + (int)MathF.Ceiling(0.3f * k);
+        const int N = DivePages;
+        float Rs = 6f * k;                                   // source pixels per unit: 6 by 6 of them land in each output pixel (a bend stretches its outer side)
+        int sw = (int)MathF.Ceiling(2.8f * Rs), sh = (int)MathF.Ceiling(1.6f * Rs), sox = (int)MathF.Round(1.3f * Rs), soy = (int)MathF.Round(1.4f * Rs);
+
+        // where the nose is on the dig's last page, and the rump (the tail's root)
+        MouseAnchors a0;
+        using (var bmp0 = new Bitmap(8, 8)) using (var g0 = Graphics.FromImage(bmp0)) a0 = PaintSide(g0, DigPose(27));
+        float noseU = a0.Mouth.X, noseV = a0.Mouth.Y, rumpU = a0.Tail.X, rumpV = a0.Tail.Y;
+        float holeOff = noseU + 0.40f;
+
+        // ---- the path the nose takes: a level start, a bend down over the lip, then a straight way down the shaft at 68 degrees ----
+        var px = new List<float>(); var py = new List<float>(); var cl = new List<float>();
+        PointF n0 = new(-0.40f, noseV), mouth = new(0.12f, -0.19f);
+        const float entry = -68f * MathF.PI / 180f;
+        PointF c1 = new(n0.X + 0.30f, n0.Y), c2 = new(mouth.X - 0.32f * MathF.Cos(entry), mouth.Y - 0.32f * MathF.Sin(entry));      // (handles short enough that the curve never doubles back)
+        for (int i = 0; i <= 80; i++)
+        {
+            float t = i / 80f, u = 1f - t;
+            float bx = u * u * u * n0.X + 3 * u * u * t * c1.X + 3 * u * t * t * c2.X + t * t * t * mouth.X;
+            float by = u * u * u * n0.Y + 3 * u * u * t * c1.Y + 3 * u * t * t * c2.Y + t * t * t * mouth.Y;
+            px.Add(bx); py.Add(by);
+        }
+        for (int i = 1; i <= 40; i++) { float l = i * 0.12f; px.Add(mouth.X + l * MathF.Cos(entry)); py.Add(mouth.Y + l * MathF.Sin(entry)); }
+        cl.Add(0f);
+        for (int i = 1; i < px.Count; i++) cl.Add(cl[i - 1] + MathF.Sqrt((px[i] - px[i - 1]) * (px[i] - px[i - 1]) + (py[i] - py[i - 1]) * (py[i] - py[i - 1])));
+        float ltot = cl[^1];
+        PointF Path(float l)
+        {
+            if (l <= 0f)
+            {
+                // before the nose's first step: the body's own level line, which the tail's far end then sinks from to the ground
+                float drop = Ease((-l - 1.5f) / 0.8f);
+                return new PointF(n0.X + l, n0.Y + (0.06f - n0.Y) * drop);
+            }
+            if (l >= ltot) return new PointF(px[^1] + (l - ltot) * MathF.Cos(entry), py[^1] + (l - ltot) * MathF.Sin(entry));
+            int lo = 0, hi = cl.Count - 1;
+            while (hi - lo > 1) { int mid = (lo + hi) / 2; if (cl[mid] <= l) lo = mid; else hi = mid; }
+            float f = (l - cl[lo]) / MathF.Max(1e-5f, cl[hi] - cl[lo]);
+            return new PointF(px[lo] + (px[hi] - px[lo]) * f, py[lo] + (py[hi] - py[lo]) * f);
+        }
+        PointF Tangent(float l)
+        {
+            PointF a = Path(l - 0.03f), b = Path(l + 0.03f);
+            float dx = b.X - a.X, dy = b.Y - a.Y, d = MathF.Sqrt(dx * dx + dy * dy);
+            return d < 1e-5f ? new PointF(1f, 0f) : new PointF(dx / d, dy / d);
+        }
+        PointF Map(float u, float v, float lNose)
+        {
+            float l = lNose - (noseU - u);
+            PointF p = Path(l), t = Tangent(l);
+            float off = v - noseV; if (off > 0.3f) off = 0.3f + (off - 0.3f) * 0.5f;     // the ears are drawn closer in, so a bend does not fan them out
+            return new PointF(p.X - t.Y * off, p.Y + t.X * off);
+        }
+
+        var pages = new Sprite[N];
+        var acc = new float[w * h * 4]; var cnt = new int[w * h];
+        for (int i = 0; i < N; i++)
+        {
+            float s = i / (float)(N - 1);
+            float lNose = ltot * MathF.Pow(s, 1.6f);
+            float kick = MathF.Sin(MathF.PI * Math.Clamp((s - 0.40f) / 0.40f, 0f, 1f));
+            // the source: the dig's last pose (hind feet kicking as they go), painted big
+            uint[] src;
+            using (var sb = new Bitmap(sw, sh, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+            {
+                using (var g = Graphics.FromImage(sb))
+                {
+                    g.SmoothingMode = SmoothingMode.AntiAlias; g.Clear(Color.Transparent);
+                    g.TranslateTransform(sox, soy); g.ScaleTransform(Rs, -Rs);
+                    MousePose dp = DigPose(27);
+                    PaintSide(g, dp with { Kick = kick });
+                }
+                var data = sb.LockBits(new Rectangle(0, 0, sw, sh), System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                var raw = new int[sw * sh]; System.Runtime.InteropServices.Marshal.Copy(data.Scan0, raw, 0, raw.Length); sb.UnlockBits(data);
+                src = new uint[raw.Length]; Buffer.BlockCopy(raw, 0, src, 0, raw.Length * 4);
+            }
+            Array.Clear(acc); Array.Clear(cnt);
+            for (int y = 0; y < sh; y++)
+                for (int x = 0; x < sw; x++)
+                {
+                    uint p = src[y * sw + x];
+                    float a = p >> 24;
+                    if (a < 8f) continue;
+                    PointF d = Map((x + 0.5f - sox) / Rs, (soy - y - 0.5f) / Rs, lNose);
+                    if (d.Y < -0.2f) continue;                                   // below the mouth's lower edge: under the snow, not drawn
+                    int qx = (int)MathF.Floor(ox + d.X * k), qy = (int)MathF.Floor(oy - d.Y * k);
+                    if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue;
+                    int o = (qy * w + qx) * 4;
+                    acc[o] += a; acc[o + 1] += ((p >> 16) & 255) * a; acc[o + 2] += ((p >> 8) & 255) * a; acc[o + 3] += (p & 255) * a;
+                    cnt[qy * w + qx]++;
+                }
+            var outp = new uint[w * h];
+            for (int j = 0; j < w * h; j++)
+            {
+                if (cnt[j] == 0 || acc[j * 4] <= 0f) continue;
+                float sa = acc[j * 4];
+                float cover = MathF.Min(1f, cnt[j] / 2.5f) * MathF.Min(1f, sa / cnt[j] / 255f);
+                uint al = (uint)MathF.Round(255f * cover);
+                outp[j] = (al << 24) | ((uint)(acc[j * 4 + 1] / sa) << 16) | ((uint)(acc[j * 4 + 2] / sa) << 8) | (uint)(acc[j * 4 + 3] / sa);
+            }
+            // the tail, behind the body: a smooth curve through points laid back along the path from the rump, whipping as it slips in
+            PointF root = Map(rumpU, rumpV, lNose);
+            var pts = new List<PointF> { root };
+            float dRoot = noseU - rumpU;
+            float whip = 0.16f * Ease((s - 0.45f) / 0.2f) * (1f - Ease((s - 0.9f) / 0.1f));
+            for (int j = 1; j <= 7; j++)
+            {
+                float l = lNose - dRoot - j * 0.30f;
+                PointF p = Path(l), t = Tangent(l);
+                float wv = whip * MathF.Pow(j / 7f, 1.3f) * MathF.Sin(20f * s - j * 0.9f);
+                pts.Add(new PointF(p.X - t.Y * wv, p.Y + t.X * wv));
+            }
+            int ii = i; uint[] body = outp;
+            pages[i] = Sprite.Paint(w, h, g =>
+            {
+                g.TranslateTransform(ox, oy); g.ScaleTransform(k, -k);
+                g.SetClip(new RectangleF(-4f, -0.2f, 8f, 5f));
+                // Catmull-Rom through the points, three steps a link, drawn as short tapering bones
+                PointF prev = pts[0];
+                for (int j = 0; j + 1 < pts.Count; j++)
+                {
+                    PointF p0 = pts[Math.Max(0, j - 1)], p1 = pts[j], p2 = pts[j + 1], p3 = pts[Math.Min(pts.Count - 1, j + 2)];
+                    for (int q = 1; q <= 3; q++)
+                    {
+                        float t = q / 3f, t2 = t * t, t3 = t2 * t;
+                        PointF cur = new(0.5f * ((2 * p1.X) + (-p0.X + p2.X) * t + (2 * p0.X - 5 * p1.X + 4 * p2.X - p3.X) * t2 + (-p0.X + 3 * p1.X - 3 * p2.X + p3.X) * t3),
+                                         0.5f * ((2 * p1.Y) + (-p0.Y + p2.Y) * t + (2 * p0.Y - 5 * p1.Y + 4 * p2.Y - p3.Y) * t2 + (-p0.Y + 3 * p1.Y - 3 * p2.Y + p3.Y) * t3));
+                        Bone(g, TailColor, prev, cur, 0.11f * (0.45f + 0.55f * (1f - (j + t) / 7f)));
+                        prev = cur;
+                    }
+                }
+            });
+            // the body over the tail
+            var tailPix = pages[i].Argb; var comp = new uint[w * h];
+            for (int j = 0; j < comp.Length; j++)
+            {
+                uint b = body[j], tl = tailPix[j];
+                float ba = (b >> 24) / 255f;
+                if (ba >= 0.999f || (tl >> 24) == 0) { comp[j] = ba > 0f || (tl >> 24) == 0 ? b : tl; continue; }
+                if (ba <= 0f) { comp[j] = tl; continue; }
+                float ta = (tl >> 24) / 255f, oa = ba + ta * (1f - ba);
+                float r = (((b >> 16) & 255) * ba + ((tl >> 16) & 255) * ta * (1f - ba)) / oa, gg = (((b >> 8) & 255) * ba + ((tl >> 8) & 255) * ta * (1f - ba)) / oa, bb = ((b & 255) * ba + (tl & 255) * ta * (1f - ba)) / oa;
+                comp[j] = ((uint)MathF.Round(oa * 255f) << 24) | ((uint)r << 16) | ((uint)gg << 8) | (uint)bb;
+            }
+            pages[i] = Sprite.FromPixels(w, h, comp);
+            _ = ii;
+        }
+        return new DiveSheet { Pages = pages, OriginX = ox, OriginY = oy };
     }
     // ------------------------------------------------------------------
     //  Props the live parts use
@@ -538,16 +827,17 @@ internal static class LogMiceArt
     // ------------------------------------------------------------------
 
     /// <summary>Which pages exist. Every flip-book is a range in one array (Pages), so a page is addressed by Book and number.</summary>
-    public enum Book { Run, Stand, Rise, Sit, Wash, Box, Leap, Plunge, Walk, WalkUp, Front, Head, Turn, TurnUp, Emerge }
+    public enum Book { Run, Stand, Rise, Sit, Wash, Box, Leap, Plunge, Walk, WalkUp, Front, Head, Turn, TurnUp, Emerge, Dig, Raise }
 
     public const int StandPages = 10;      // 0..3 sniff, 4 blink, 5 ear flick, 6 head down, 7 head way down (eating, digging), 8 head up, 9 head high (a look)
-    public const int EmergePages = 24;    // the climb out of the snow: the head in a swelling mound, shoulders, up to the standing head-on mouse, the mound sagging away
+    public const int EmergePages = 40;    // the climb out of the snow hole: the head at the lip, the paws on the rim, shoulders, up to the standing head-on mouse (1.3 s)
     public const int TurnPages = 7;        // three-quarter views for a turn, from nearly side on (0) to nearly head on (2)
     public const int RisePages = 16;       // 1/4, 2/4, 3/4 up and the sat page; played forward to sit up and backward to drop
     public const int SitPages = 6;         // sniff cycle with a blink and an ear flick
     public const int WashPages = 24;
     public const int BoxPages = 18;
     public const int PlungePages = 6;      // nose down at 10, 25, 50, 75 and 88 degrees (the first is the bound's own reach, tipped a little)
+    public const int DigPages = 28;        // the digging: the lean in (0 to 7), two strokes of the scrabble (8 to 23), the coil over the hole (24 to 27)
     public const int FrontPages = 4;       // 0 plain, 1 blink, 2 ear out, 3 snowy head
 
     /// <summary>One set of pages at one size: a sheet per page, all with the same canvas so the same origin (feet) fits every one.</summary>
@@ -565,7 +855,7 @@ internal static class LogMiceArt
     {
         Book.Run => RunPages, Book.Stand => StandPages, Book.Rise => RisePages, Book.Sit => SitPages, Book.Wash => WashPages,
         Book.Box => BoxPages, Book.Leap => 2, Book.Plunge => PlungePages, Book.Walk => WalkPages, Book.WalkUp => WalkPages,
-        Book.Front => FrontPages, Book.Head => 1, Book.Turn => TurnPages, Book.TurnUp => 5, Book.Emerge => EmergePages, _ => 1,
+        Book.Front => FrontPages, Book.Head => 1, Book.Turn => TurnPages, Book.TurnUp => 5, Book.Emerge => EmergePages, Book.Dig => DigPages, Book.Raise => 8, _ => 1,
     };
 
     /// <summary>The pose of one page of one book.</summary>
@@ -592,6 +882,8 @@ internal static class LogMiceArt
         Book.Wash => new MousePose(Rise: 1f, Wash: i / (float)WashPages, Nose: 0.1f, Blink: i is 8 or 9 or 10, Ear: i is 17 or 18 ? 1f : 0f),
         Book.Box => new MousePose(Rise: 1f, Box: i / (float)BoxPages, Nose: 0.2f),
         Book.Leap => i == 0 ? new MousePose(Gait: 0.80f, Pitch: 12f) : new MousePose(Gait: 0.80f, Pitch: -18f),
+        Book.Dig => DigPose(i),
+        Book.Raise => new MousePose(Walk: 0f, Arms: i / 7f, Nose: 0f),          // an upright mouse lifting its load from chest height to over its head: page 0 is the walk book's, page 7 the arms-up book's
         Book.Plunge => new MousePose(Gait: 0.80f, Pitch: -(i == 0 ? 4f : i == 1 ? 10f : i == 2 ? 25f : i == 3 ? 50f : i == 4 ? 75f : 88f)),
         Book.Walk => new MousePose(Walk: i / (float)WalkPages, Arms: 0f, Nose: 0f),
         Book.WalkUp => new MousePose(Walk: i / (float)WalkPages, Arms: 1f, Nose: 0f),
@@ -612,30 +904,28 @@ internal static class LogMiceArt
         {
             if (b == Book.Turn)
             {
-                // THE TURN, by in-betweens: five key poses (standing side on, the side view squashed lengthwise, two three-quarter heads, head
-                // on) with a 50/50 blend of each neighbouring pair between them, so a half turn is nine drawn pictures (seven of them here)
-                // and a whole turn there and back is seventeen. The blends are what an animator calls smear frames.
-                var keys = new Sprite[3];
-                for (int q = 0; q < 3; q++)
-                {
-                    int qq = q;
-                    keys[q] = Sprite.Paint(w, h, g =>
-                    {
-                        g.TranslateTransform(ox, oy);
-                        g.ScaleTransform(k, -k);
-                        if (qq == 0)
-                        {
-                            Shadow(g, 0.05f, 0.5f, 60);
-                            var st0 = g.Save(); g.TranslateTransform(0.2f, 0f); g.ScaleTransform(0.84f, 1f); g.TranslateTransform(-0.2f, 0f);
-                            PaintSide(g, PoseOf(Book.Stand, 0));
-                            g.Restore(st0);
-                        }
-                        else PaintFront(g, 0f, false, 0f, false, 0f, qq == 1 ? 0.6f : 0.25f);
-                    });
-                }
-                Sprite[] ks = { books[(int)Book.Stand][0], keys[0], keys[1], keys[2], books[(int)Book.Front][0] };
+                // THE TURN, in REAL in-between pages (no blended double images): the side view squashed lengthwise twice (a body turning away from
+                // us foreshortens), then the head-on painter at five yaws from a nearly side-on face (1.35) to a nearly head-on one (0.22), the
+                // features squeezed toward the middle and slid toward the way it looks, the far ear and eye narrowing. Seven pages a half turn.
                 var seq = new List<Sprite>();
-                for (int q = 0; q < 4; q++) { if (q > 0) seq.Add(ks[q]); seq.Add(Mix(ks[q], ks[q + 1], 0.5f)); }
+                float[] squash = { 0.90f, 0.78f };
+                foreach (float sqh in squash)
+                {
+                    float sqv = sqh;
+                    seq.Add(Sprite.Paint(w, h, g =>
+                    {
+                        g.TranslateTransform(ox, oy); g.ScaleTransform(k, -k);
+                        Shadow(g, 0.05f, 0.5f * (0.4f + 0.6f * sqv), 60);
+                        var st0 = g.Save(); g.TranslateTransform(0.2f, 0f); g.ScaleTransform(sqv, 1f); g.TranslateTransform(-0.2f, 0f);
+                        PaintSide(g, PoseOf(Book.Stand, 0));
+                        g.Restore(st0);
+                    }));
+                }
+                foreach (float yw in new[] { 1.35f, 1.05f, 0.75f, 0.45f, 0.22f })
+                {
+                    float yy = yw;
+                    seq.Add(Sprite.Paint(w, h, g => { g.TranslateTransform(ox, oy); g.ScaleTransform(k, -k); PaintFront(g, 0f, false, 0f, false, 0f, yy); }));
+                }
                 books[(int)b] = seq.ToArray();
                 anchors[(int)b] = new MouseAnchors[seq.Count];
                 for (int q = 0; q < seq.Count; q++) anchors[(int)b][q] = anchors[(int)Book.Stand][0];
@@ -773,5 +1063,45 @@ internal static class LogMiceArt
                 }
         }
         snowBmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+        WriteHoleSheet(path.Replace(".png", "_hole.png"), k);
+    }
+
+    /// <summary>The snow hole's two pieces at every opening, and the dive and the climb out composited with them (back, page, front lip), on snow colour, at 4x.</summary>
+    public static void WriteHoleSheet(string path, float k)
+    {
+        Sheet s = BuildSheet(k);
+        DiveSheet dv = BuildDive(k);
+        const int zoom = 4;
+        int cw = dv.Pages[0].Width, ch = dv.Pages[0].Height;
+        int total = DivePages + EmergePages + HoleLevels;
+        int perRow = 6, rows = (total + perRow - 1) / perRow;
+        using var all = new Bitmap(cw * zoom * perRow / 2, ch * zoom * rows / 2 + 4);
+        using var g = Graphics.FromImage(all);
+        g.Clear(Color.FromArgb(222, 233, 252));
+        g.InterpolationMode = InterpolationMode.NearestNeighbor; g.PixelOffsetMode = PixelOffsetMode.Half;
+        int idx = 0;
+        void Put(Sprite sp, int px, int py, int cx, int cy)       // draws a sprite with its origin (px, py) at cell (cx, cy)
+        {
+            using var bmp = new Bitmap(sp.Width, sp.Height);
+            for (int y = 0; y < sp.Height; y++) for (int x = 0; x < sp.Width; x++) bmp.SetPixel(x, y, Color.FromArgb((int)sp.PixelAt(x, y)));
+            g.DrawImage(bmp, cx - px * zoom / 2, cy - py * zoom / 2, sp.Width * zoom / 2, sp.Height * zoom / 2);
+        }
+        for (int lvl = 0; lvl < HoleLevels; lvl++, idx++)
+        {
+            Sprite b = PaintHole(k, lvl / (float)(HoleLevels - 1), false);
+            int cx = (idx % perRow) * cw * zoom / 2 + cw * zoom / 4, cy = (idx / perRow) * ch * zoom / 2 + oyHole(ch, dv);
+            Put(b, b.Width / 2, b.Height / 2, cx, cy);
+        }
+        int oyHole(int hh, DiveSheet d) => d.OriginY * zoom / 2;
+        Sprite back = PaintHole(k, 1f, false), lip = PaintHole(k, 1f, true);
+        for (int i = 0; i < DivePages + EmergePages; i++, idx++)
+        {
+            int cx = (idx % perRow) * cw * zoom / 2 + dv.OriginX * zoom / 2, cy = (idx / perRow) * ch * zoom / 2 + dv.OriginY * zoom / 2;
+            Put(back, back.Width / 2, back.Height / 2, cx, cy);
+            if (i < DivePages) Put(dv.Pages[i], dv.OriginX, dv.OriginY, cx, cy);
+            else Put(s.Page(Book.Emerge, i - DivePages), s.OriginX, s.OriginY - (int)(MouthRy * k), cx, cy);
+            Put(lip, lip.Width / 2, lip.Height / 2, cx, cy);
+        }
+        all.Save(path, System.Drawing.Imaging.ImageFormat.Png);
     }
 }

@@ -71,6 +71,7 @@ internal sealed class MiceTrimTree : Story
         public int Near;               // nearness to stamp with; 0 means "the feet's own"
         public float Len;              // a spiral's path length
         public float Phase;            // a jump's offset
+        public bool Raise;             // a stand that lifts the load from the chest to over the head (the Raise book)
     }
 
     private sealed class Actor
@@ -129,13 +130,30 @@ internal sealed class MiceTrimTree : Story
             a.Segs.Add(new Seg { T0 = t0, T1 = t0 + dur, Kind = K.Hop, A = from, B = to, Dir = dir, Arc = arc, Stencil = stencil, Prop = prop, Arms = arms, Near = near });
             return t0 + dur;
         }
-        float Walk(Actor a, float t0, PointF from, PointF to, bool arms, int prop, int near = 0)
+        float Walk(Actor a, float t0, PointF from, PointF to, bool arms, int prop, int near = 0, bool stencil = false)
         {
             float L = Dist(from, to);
             int n = Math.Max(2, (int)MathF.Round(L / (LogMiceArt.WalkStride * k)));
             float dur = Math.Max(0.6f, L / (vW * (1f - Ramp * 0.5f)));
-            a.Segs.Add(new Seg { T0 = t0, T1 = t0 + dur, Kind = K.Walk, A = from, B = to, Dir = to.X >= from.X ? 1 : -1, Arms = arms, Prop = prop, Stride = L / n * 1f, Near = near });
+            a.Segs.Add(new Seg { T0 = t0, T1 = t0 + dur, Kind = K.Walk, A = from, B = to, Dir = to.X >= from.X ? 1 : -1, Arms = arms, Prop = prop, Stride = L / n * 1f, Near = near, Stencil = stencil });
             return t0 + dur;
+        }
+        // THE WAY OUT OF THE LOG and THE WAY IN (round of 2026-11-10): the mouse walks out of the dark along the hollow's floor (deep inside,
+        // fully hidden at the start, so nothing pops into being), carrying its prop with it through the oval (the prop is cut by the same
+        // stencil), and steps down onto the snow; going home is the same in reverse: up onto the lip, then in, the tail last.
+        float Out(Actor a, float t0, int prop, bool arms)
+        {
+            PointF deep = new(lip.X - 1.5f * k, lip.Y), edge = new(door.X - 0.25f * k, lip.Y);
+            float t1 = Walk(a, t0, deep, edge, false, prop, 0, true);          // inside, the load is carried at the CHEST (an oval 36 pixels tall has no room overhead)
+            float t2 = Hop(a, t1, edge, door, 1, 0.3f, 0.06f, true, prop, false);
+            if (!arms) return t2;
+            a.Segs.Add(new Seg { T0 = t2, T1 = t2 + 0.35f, Kind = K.Stand, A = door, B = door, Dir = 1, Arms = true, Prop = prop, Raise = true });      // out on the snow it lifts the load over its head
+            return t2 + 0.35f;
+        }
+        float In(Actor a, float t0)
+        {
+            float t1 = Hop(a, t0, door, lip, -1, 0.5f, 0.36f, true);
+            return Walk(a, t1, lip, new PointF(lip.X - 3.6f * k, lip.Y), false, 0, 0, true);
         }
         float Stand(Actor a, float t0, float t1, PointF at, int dir, bool arms, int prop, int near = 0)
         {
@@ -156,9 +174,9 @@ internal sealed class MiceTrimTree : Story
         // ---- 1. the three come out of the hole, a little apart, and cross the snow ----
         Actor A = _a[0], B = _a[1], C = _a[2];
         float tOutA = 0f, tOutB = 1.9f + J(0.3f), tOutC = 3.7f + J(0.4f);
-        float arrA = Walk(A, Hop(A, tOutA, lip, door, 1, 0.45f, 0.5f, true, 1), door, xa, true, 1);
-        float arrB = Walk(B, Hop(B, tOutB, lip, door, 1, 0.45f, 0.5f, true, 2), door, xpt, false, 2);
-        float arrC = Walk(C, Hop(C, tOutC, lip, door, 1, 0.45f, 0.5f, true, 3), door, xc, true, 3);
+        float arrA = Walk(A, Out(A, tOutA, 1, true), door, xa, true, 1);
+        float arrB = Walk(B, Out(B, tOutB, 2, false), door, xpt, false, 2);
+        float arrC = Walk(C, Out(C, tOutC, 3, true), door, xc, true, 3);
         // before they come out they are inside: nothing is drawn (a mouse is visible only inside its own segments)
 
         // ---- 2. the pyramid: A hops onto B's head and hangs the bauble ----
@@ -234,7 +252,7 @@ internal sealed class MiceTrimTree : Story
             float t0 = tHome + i * 1.1f;
             float tt = Turn(a, t0, row[i], 1, -1);
             tt = Walk(a, tt, row[i], door, false, 0);
-            tt = Hop(a, tt, door, lip, -1, 0.45f, 0.5f, true);
+            tt = In(a, tt);
             last = Math.Max(last, tt);
         }
         _end = last + 0.6f;
@@ -292,6 +310,7 @@ internal sealed class MiceTrimTree : Story
                 }
                 case K.Stand:
                     f.Book = g.Arms ? LogMiceArt.Book.WalkUp : LogMiceArt.Book.Walk; f.Page = 0; f.Upright = true;
+                    if (g.Raise) { f.Book = LogMiceArt.Book.Raise; f.Page = Math.Min(7, (int)(Organic.Smooth(u) * 7.999f)); }
                     break;
                 case K.Spiral:
                 {
@@ -441,7 +460,7 @@ internal sealed class MiceTrimTree : Story
         int left = (int)MathF.Round(f.X) - (f.Mirror ? page.Width - 1 - sh.OriginX : sh.OriginX), top = (int)MathF.Round(f.Y) - sh.OriginY;
         page.Draw(fb, left, top, 1f, st, f.Mirror, depth, near);
 
-        // what it carries
+        // what it carries (drawn BEFORE the log's front piece, so the prop is darkened and its lower edge hidden with the mouse)
         if (f.Prop != 0)
         {
             PointF hand = new(f.X + sg * an.Hand.X * k, f.Y - an.Hand.Y * k);
@@ -460,6 +479,8 @@ internal sealed class MiceTrimTree : Story
                     break;
             }
         }
+        // the log's front piece (shade inside, the lip over the feet) while the mouse is at the hollow
+        if (f.Stencil && MathF.Abs(f.X - _w.Mice.Lip.X) < 1.6f * k) _w.Mice.DrawLogFront(fb, 1f, true);
     }
 
     /// <summary>The coil of fairy lights: a ring of small coloured bulbs, held at the mouse's chest.</summary>
