@@ -42,7 +42,8 @@ internal sealed partial class Predators : Resident
 {
     // ---------------------------------------------------------------- the wolf's doings and steps
     private enum WD { Off, Walk, SetIn, SetOut, Stand, Sheet, Loop, Turn, RushIn, Gallop, Skid, Pounce, Hold }
-    private enum WS { WalkTo, Exit, Sniff, Look, Select, Turn, StartWalk, Stalk, Howl, Dig, CShake, CLook, Idle, Rear }
+    private static readonly bool WolfReady = true;                            // see MaybeStart: false keeps the wolf home in a natural run (the test dials still force it)
+    private enum WS { WalkTo, Exit, Sniff, Look, Select, Turn, StartWalk, Stalk, Howl, Dig, CShake, CLook, Idle, Rear, FaceR, FaceL }
     private enum SA { Next, Stand, WalkNow, RushGo }
 
     private static readonly int[] WalkBook = [PredatorsArt.WLopeB, PredatorsArt.WStalkB, PredatorsArt.WCarryB];
@@ -52,7 +53,10 @@ internal sealed partial class Predators : Resident
     private static readonly float[] GaitC = [PredatorsArt.Lope.C, PredatorsArt.Stalk.C, PredatorsArt.CarryG.C];
     private static readonly float[] GaitV = [1.30f, 0.60f, 1.75f];            // metres a second
     private const float GallopC = 3.1f, GallopV = 9.0f;                       // metres a cycle, metres a second
-    private static readonly bool WolfReady = false;                           // see MaybeStart: the wolf visits on its own only once its hunt has passed on film
+    // How far short of its hare the wolf would like to STAND, best first. A hunt is a creep (at least 2 m of it, seen), then the rush-in
+    // (2.2 m), then the gallop, then the pounce (it begins about 1.8 m short of the contact point). So a stand 7.2 m back gives a 2 m creep and
+    // a 5.2 m rush; 9.5 m gives a 2 m creep and a 7.5 m rush with most of a gallop cycle in it. Nearer than 7.2 the creep gets short.
+    private static readonly float[] BackTries = [9.5f, 9.0f, 8.5f, 10.0f, 8.0f, 7.5f, 7.2f, 6.8f, 6.3f, 5.8f, 5.5f];
 
     private sealed class Wolf
     {
@@ -64,8 +68,9 @@ internal sealed partial class Predators : Resident
         public float GX, GY; public bool StopAtGoal, Dyn, RushAfter; public int NewDir; public int Tries;
         public int SBook, SN; public float SDur, ST, SCycle, SLoopFor; public bool SRev; public SA After;
         public float PostT, MoveT, BreathT; public float LastFrac, PathT, StuckT; public bool Braking, MissPlanned, Flag1, Flag2;
-        public float PX0, PY0, PXc, PYc, PV0, PTc; public int BurrowK = -1; public PointF Hole; public float SkidFrom, SkidD; public float RushGap;
+        public int Reseeks; public float PX0, PY0, PXc, PYc, PV0, PV1, PTc; public int BurrowK = -1; public PointF Hole; public float SkidFrom, SkidD; public float RushGap;
         public Cover? Cov; public PointF Stand; public float DigEmit; public string Log = "";
+        public float[]? Road; public int RoadK0; public float PlanY; public bool Arrive, Held; public float HoldT, CreepFrom;          // PlanY: the row it means to stand on (the lane avoidance may detour, never forget it); Arrive: the first stop is still to be checked; Held/HoldT: the crouch held for another hare to clear the line; CreepFrom: where the creep began
     }
 
     // ---------------------------------------------------------------- the owl
@@ -275,8 +280,7 @@ internal sealed partial class Predators : Resident
             return;
         }
         if (_test is not ("natural" or "many")) return;
-        // ponytail: THE WOLF STAYS HOME in a natural run until its hunt has passed on film (2026-11-11: on the cover scene it stood half behind a shrub,
-        // refused every pair of hares, and its walk crossed sitting hares). The test dials still force every wolf visit. Set WolfReady to true to let it out.
+        // The wolf was let out on 2026-11-11, once its catch, its howl, its crossing and its look-and-leave had each been filmed on the merged scene.
         if (WolfReady && _time >= _nextWolf && _time - _lastOwlEnd > (many ? 12.0 : 40.0))
         {
             double r = Rng.NextDouble();
@@ -287,7 +291,10 @@ internal sealed partial class Predators : Resident
             if (kind == 3) kind = 0;
             if (kind == 0 && _field.HareCount < 2) kind = 1;
             if (kind == 3 && _sq.Count < 2) kind = 0;
-            bool want = Rng.NextDouble() < 0.67;
+            // ponytail: a natural wolf always means to CATCH. The planned miss (the hare reaches cover, the wolf skids) has never played on film: the hare
+            // finds "nowhere to run" and freezes, and the wolf catches it anyway. The roll is still taken so the dice stay where they were. The miss code
+            // and its dial (PECKWORKS_PREDATOR=wolfmiss) stay; give the roll back when a hare beside cover really bolts for it.
+            bool want = Rng.NextDouble() < 2.0;
             StartWolf(kind, want);
             if (!_w.On && kind == 3) StartWolf(0, want);                  // no squirrel is out with a clear run (the pond is in the wolf's way): a hare hunt instead
             if (!_w.On) _nextWolf = _time + 8.0;                       // no squirrel was out on the snow with its pine beyond it: try again in a few seconds
@@ -375,12 +382,133 @@ internal sealed partial class Predators : Resident
             }
         return y < S.SnowmanFoot.Y && MathF.Abs(x - S.SnowmanFoot.X) < 0.6f * S.SnowmanHeight;
     }
+    /// <summary>Is another animal standing where the wolf would put its body? A WIDE row band (about 0.7 m of snow each side): the old 17 px band let the wolf
+    /// walk 19 px in front of two sitting hares, which on film is a wolf walking through their ears.</summary>
+    private bool CrowdedW(float x, float y) => S.Crowded(x, y, 0.6f * _m, this, 0, 0.035f * S.U);
+    // The body tested is as tall as a HOWLING wolf's raised head (1.7 m) and a little longer than the wolf: on film (2026-11-11) a wolf tested only to
+    // its back stood for fifteen seconds with its nose inside the bird table's tray, and howled up through it.
+    /// <summary>A place the wolf may STAND, sniff, howl or stalk from: bare snow (not a prop's foot, not the ice), no nearer prop hiding its body, nobody else there.</summary>
+    private bool StandOk(float x, float y) =>
+        Free(x, y, 0.5f * _m) && !Covered(x, y, 1.5f * _m, 1.7f * _m) && !S.OnPond(x, y, 1.10f) && !CrowdedW(x, y) && x > 0.04f * S.Width && x < 0.96f * S.Width;
+    /// <summary>The nearest good place to stand to (x, y): along the row first in the walking direction, then back, on this row and on the planned row.</summary>
+    private bool FindStand(float x, float y, int dir, out PointF at)
+    {
+        float hRow = _w.Hare >= 0 && _w.PreyKind == 3 ? Math.Clamp(_hv[_w.Hare].Feet.Y, _yLo, _yHi) : y;
+        float[] rows = [y, _w.PlanY > 0f ? _w.PlanY : y, hRow];
+        for (int k = 0; k <= 24; k++)
+            // (only AHEAD: the wolf walks the way it faces; walking backwards would be a slide)
+            foreach (float row in rows)
+                {
+                    float xx = x + dir * k * 0.4f * _m;
+                    if (StandOk(xx, row) && RunIceFree(Math.Min(x, xx), Math.Max(x, xx), row)) { at = new PointF(xx, row); return true; }
+                }
+        at = default; return false;
+    }
+    /// <summary>Is the whole run along row y from x0 to x1 free (snow, no prop's foot, no ice, nobody standing there)? The planned row is taken up again only when ALL of the way to the goal is clear (a look 3 m ahead walked the wolf to the pond's rim and it was boxed in for 8 s).</summary>
+    private bool RowClear(float x0, float x1, float y)
+    {
+        float a = Math.Min(x0, x1), b = Math.Max(x0, x1);
+        for (float x = a; x <= b + 1f; x += 0.4f * _m)
+            if (!Free(x, y, 0.5f * _m) || S.OnPond(x, y, 1.18f) || CrowdedW(x, y)) return false;
+        return true;
+    }
+    /// <summary>Is a hare that is out on the snow within 4.4 m of x along the row? (A hunter does not choose to stand on top of its prey.)</summary>
+    private bool HareNear(float x)
+    {
+        for (int j = 0; j < _hv.Length; j++) if (_hv[j].Out && MathF.Abs(_hv[j].Feet.X - x) < 4.4f * _m) return true;
+        return false;
+    }
+    /// <summary>Row y is a road from x0 to x1: bare snow all the way (a prop's foot or the ice stops it), nobody standing on it. Passing BEHIND a nearer prop is fine on the road (not at the stand).</summary>
+    private bool RowFree(float x0, float x1, float y)
+    {
+        float a = Math.Min(x0, x1), b = Math.Max(x0, x1);
+        for (float x = a; x <= b + 1f; x += 0.4f * _m)
+            if (x > 4f && x < S.Width - 4f && (!Free(x, y, 0.5f * _m) || S.OnPond(x, y, 1.18f) || CrowdedW(x, y))) return false;
+        return true;
+    }
+    // ---- THE ROAD: where the wolf's feet go between two places (a small shortest-path search) ----
+    //
+    // FEYNMAN VERSION. The wolf's ground is a crowded strip: the pond fills every row of its left half, and on the right a tree, a bird table, a snowman,
+    // shrubs and rock huddles stand in the way. A wolf that only looks three metres ahead and swerves wanders into a dead end (it was boxed in, or it
+    // walked over the ice). So before it walks, it PLANS: the strip is cut into columns 0.4 m wide and rows 10 px apart, each cell is "bare snow" or not,
+    // and a search finds the cheapest way from the start column to the end column moving one column at a time, up or down by at most one row a column
+    // (a slope of 0.32, just inside what the walk can follow without sliding sideways). The answer is one row per column; the walk reads it like a
+    // railway line. Rows are free to pass BEHIND a nearer prop (the depth picture hides the wolf) but never through its foot.
+    private const float RoadRowStep = 10f;
+    private float RoadCell => 0.4f * _m;
+    /// <summary>Plans the road from x0 to x1 (either direction; off screen ends are fine). It starts on the free row nearest yFrom, and ends on the row nearest yTo that is a good place to stand (if needStand) or just bare snow. Returns false if there is no road.</summary>
+    private bool PlanRoad(float x0, float x1, float yFrom, float yTo, bool needStand, out float[]? rows, out int k0)
+    {
+        float cell = RoadCell, yMax = MathF.Min(S.Height - 50f, _yHi + 0.06f * S.U);
+        int nr = (int)((yMax - _yLo) / RoadRowStep) + 1;
+        int ka = (int)MathF.Round(x0 / cell), kb = (int)MathF.Round(x1 / cell), step = kb >= ka ? 1 : -1, n = Math.Abs(kb - ka) + 1;
+        k0 = Math.Min(ka, kb); rows = null;
+        float[,] cost = new float[n, nr]; sbyte[,] from = new sbyte[n, nr];
+        for (int i = 0; i < n; i++) for (int r = 0; r < nr; r++) cost[i, r] = float.MaxValue;
+        bool Pass(int k, int r)
+        {
+            float x = k * cell, y = _yLo + r * RoadRowStep;
+            if (x < 4f || x > S.Width - 4f) return true;                              // off screen: nothing there
+            return Free(x, y, 0.5f * _m) && !S.OnPond(x, y, 1.18f) && !CrowdedW(x, y);
+        }
+        for (int r = 0; r < nr; r++) if (Pass(ka, r)) cost[0, r] = 0.01f * MathF.Abs(_yLo + r * RoadRowStep - yFrom);
+        for (int i = 1; i < n; i++)
+            for (int r = 0; r < nr; r++)
+            {
+                if (!Pass(ka + i * step, r)) continue;
+                for (int d = -1; d <= 1; d++)
+                {
+                    int rp = r + d; if (rp < 0 || rp >= nr || cost[i - 1, rp] == float.MaxValue) continue;
+                    float c = cost[i - 1, rp] + 1f + (d == 0 ? 0f : 0.05f);
+                    if (c < cost[i, r]) { cost[i, r] = c; from[i, r] = (sbyte)d; }
+                }
+            }
+        int best = -1; float bc = float.MaxValue;
+        for (int r = 0; r < nr; r++)
+        {
+            if (cost[n - 1, r] == float.MaxValue) continue;
+            float y = _yLo + r * RoadRowStep;
+            if (needStand && !StandOk(x1, y)) continue;
+            float c = cost[n - 1, r] + 0.02f * MathF.Abs(y - yTo);
+            if (c < bc) { bc = c; best = r; }
+        }
+        if (best < 0) return false;
+        rows = new float[n];
+        int rr = best;
+        for (int i = n - 1; i >= 0; i--) { rows[i] = _yLo + rr * RoadRowStep; if (i > 0) rr += from[i, rr]; }
+        // rows[] is in walking order (index 0 = the start column); make it indexable by column: the caller gets k0 and a direction-free table by column
+        if (step < 0) Array.Reverse(rows);
+        return true;
+    }
+    /// <summary>The road's row at x (linear between columns), or -1 if the wolf has no road.</summary>
+    private float RoadY(float x)
+    {
+        var w = _w; if (w.Road == null) return -1f;
+        float f = x / RoadCell - w.RoadK0;
+        f = Math.Clamp(f, 0f, w.Road.Length - 1f);
+        int i = (int)f; float t = f - i;
+        return i + 1 < w.Road.Length ? w.Road[i] + (w.Road[i + 1] - w.Road[i]) * t : w.Road[i];
+    }
+    /// <summary>The nearest row to "pref" that is a road from x0 to x1 (searched down the screen and up it, 6 px at a time, from the top of the wolf's ground to the bottom drifts).</summary>
+    private bool TransitRow(float x0, float x1, float pref, out float row)
+    {
+        float yMax = MathF.Min(S.Height - 50f, _yHi + 0.06f * S.U);
+        for (int k = 0; k <= 60; k++)
+            for (int sg = 1; sg >= -1; sg -= 2)
+            {
+                if (k == 0 && sg == -1) continue;
+                float r = pref + sg * k * 6f;
+                if (r < _yLo || r > yMax) continue;
+                if (RowFree(x0, x1, r)) { row = r; return true; }
+            }
+        row = 0f; return false;
+    }
     private bool LaneClear(float x, float y, int dir, float aheadM, float toY, float room)
     {
         for (int k = 1; k <= 6; k++)
         {
             float f = k / 6f, xx = x + dir * aheadM * _m * f, yy = y + (toY - y) * f;
-            if (xx < -4f * _m || xx > S.Width + 4f * _m) continue;                            // off screen: nothing to hit
+            if (xx < 4f || xx > S.Width - 4f) continue;                                   // off screen: nothing to hit (and CanStand says no there, which is not a prop)
             if (!Free(xx, yy, room)) return false;
         }
         return true;
@@ -393,10 +521,32 @@ internal sealed partial class Predators : Resident
     private void StartSheet(int book, int n, float dur, bool rev, SA after) { var w = _w; w.Do = WD.Sheet; w.T = 0f; w.SBook = book; w.SN = n; w.SDur = dur; w.ST = 0f; w.SRev = rev; w.After = after; ShowW(book, rev ? n - 1 : 0); }
     private void StartLoop(int book, int n, float cycle, float total, SA after) { var w = _w; w.Do = WD.Loop; w.T = 0f; w.SBook = book; w.SN = n; w.SCycle = cycle; w.SLoopFor = total; w.ST = 0f; w.After = after; ShowW(book, 0); }
 
+    private bool _mapped;
+    private void DumpMap(float W)
+    {
+        if (_log != null)
+        {
+            foreach (float tx in new[] { 700f, 1100f, 1300f, 1450f })
+            {
+                var sb2 = new System.Text.StringBuilder();
+                for (int iy = 0; iy < 14; iy++) sb2.Append(S.NearDepth[(int)(904 - iy * 10) * S.Width + (int)tx]).Append(' ');
+                Log($"  nd at x {tx:F0}, rows 904 up by 10: me {S.Nearness(904f)}: {sb2}");
+            }
+        }
+        if (_log != null)
+            for (float ry = _yLo; ry <= 1040f; ry += 10f)
+            {
+                var sb = new System.Text.StringBuilder();
+                for (float rx = 0f; rx < W; rx += 40f) sb.Append(S.OnPond(rx, ry, 1.18f) ? 'P' : !Free(rx, ry, 0.5f * _m) ? '#' : CrowdedW(rx, ry) ? 'h' : Covered(rx, ry, 1.0f * _m, 0.9f * _m) ? 'c' : '.');
+                Log($"  map y {ry:F0} {sb} road to 1190 {RowFree(W + 2.2f * _m, 1190f, ry)}, to 1450 {RowFree(W + 2.2f * _m, 1450f, ry)}");
+            }
+    }
+
     private void StartWolf(int kind, bool wantCatch)
     {
         var w = _w;
-        w.On = true; w.Kind = kind; w.PreyKind = kind == 3 ? 4 : 3; w.Rear = false; w.WantCatch = kind == 3 ? false : wantCatch; w.Carrying = false; w.Hare = -1; w.Tries = 0; w.Plan.Clear(); w.MissPlanned = false; w.Cov = null;
+        if (_log != null && !_mapped) { _mapped = true; DumpMap(S.Width); }
+        w.On = true; w.Kind = kind; w.PreyKind = kind == 3 ? 4 : 3; w.Rear = false; w.WantCatch = kind == 3 ? false : wantCatch; w.Carrying = false; w.Hare = -1; w.Tries = 0; w.Reseeks = 0; w.Plan.Clear(); w.MissPlanned = false; w.Cov = null;
         float W = S.Width;
         // the side it comes in from: toward the hares' side for a hunt; for a howl, from the right so it faces the moon
         float avg = 0.7f; int hn = _field.HareCount, cnt = 0; float sum = 0;
@@ -406,7 +556,7 @@ internal sealed partial class Predators : Resident
         if (kind == 1 && Rng.Next(2) == 0) dir = -dir;
         // A MISS is the hare reaching cover: so a hunt that means to miss starts by finding a hare with cover a few metres BEYOND it, and comes in from the side
         // that puts the wolf, the hare and the cover in a line (the hare runs away from the wolf, into the cover)
-        w.PreHare = -1; float preGX = -1f, preGY = -1f;
+        w.PreHare = -1; float preGX = -1f, preGY = -1f, preTR = -1f;
         if (_log != null) for (int i = 0; i < _hv.Length; i++) { Cover? c0 = NearestCover(_hv[i].Feet, out float d0); Log($"hare{i} at {_hv[i].Feet.X:F0},{_hv[i].Feet.Y:F0} out {_hv[i].Out} speed {_hv[i].Speed:F0}, nearest cover {(c0 is Cover cc ? cc.Kind + " at " + cc.Foot.X.ToString("F0") + "," + cc.Foot.Y.ToString("F0") : "none")} {d0:F1} m (yLo {_yLo:F0} yHi {_yHi:F0})"); }
         if (kind == 0 && !wantCatch)
         {
@@ -416,12 +566,15 @@ internal sealed partial class Predators : Resident
                 PV v = _hv[i];
                 if (!Still(v) || v.Feet.Y < _yLo - 2f) continue;
                 Cover? cv = NearestCover(v.Feet, out float dm);
-                if (cv == null || dm < 0.3f || dm > 7f || !RunIceFree(v.Feet.X - (cv.Value.Hide.X > v.Feet.X ? 1 : -1) * 12f * _m, cv.Value.Hide.X, v.Feet.Y)) continue;
+                if (cv == null || dm < 0.3f || dm > 7f || !RunIceFree(v.Feet.X - (cv.Value.Hide.X > v.Feet.X ? 1 : -1) * 4.6f * _m, cv.Value.Hide.X, v.Feet.Y)) continue;
                 int d = cv.Value.Hide.X > v.Feet.X ? 1 : -1; float gx = Math.Clamp(v.Feet.X - d * 11f * _m, 0.06f * W, 0.94f * W);
-                for (int t = 0; t < 60 && (!Free(gx, laneY, 0.5f * _m) || Covered(gx, laneY, 1.0f * _m, 1.0f * _m)); t++) gx += d * 0.4f * _m;      // where it can really stand and sniff
+                float hareRow = Math.Clamp(v.Feet.Y, _yLo, _yHi), grow = hareRow;
+                for (int t = 0; t < 60 && !(StandOk(gx, hareRow) || StandOk(gx, laneY)); t++) gx += d * 0.4f * _m;      // where it can really stand and sniff
+                if (StandOk(gx, laneY) && !StandOk(gx, hareRow)) grow = laneY;
                 float run = (v.Feet.X - gx) * d;
-                if (run < 8.0f * _m || run <= bestRun) continue;                                                                                // the longest run-up
-                bestRun = run; w.PreHare = i; dir = d; preGX = gx;
+                if (_log != null) Log($"  miss plan: hare{i} d {d} stand {gx:F0},{grow:F0} run {run / _m:F1} m, standOk {StandOk(gx, grow)}");
+                if (run < 4.6f * _m || run <= bestRun || !StandOk(gx, grow) || !PlanRoad(W + 2.2f * _m, gx, grow, grow, true, out _, out _)) continue;                  // the longest run-up
+                bestRun = run; w.PreHare = i; dir = d; preGX = gx; preGY = grow; preTR = grow;
             }
         }
         if (kind == 0 && wantCatch)
@@ -435,31 +588,34 @@ internal sealed partial class Predators : Resident
             {
                 PV v = _hv[i];
                 if (!Still(v) || v.Feet.Y < _yLo - 2f || v.Feet.Y > _yHi + 0.05f * S.U) continue;
+                if (Covered(v.Feet.X - 0.3f * _m, v.Feet.Y, 1.5f * _m, 0.9f * _m)) continue;                // (the catch must be in the open: see SelectTarget)
                 NearestCover(v.Feet, out float dm);
-                for (int d = -1; d <= 1; d += 2)                 // d: the way the wolf will run (and the way the hare would bolt)
+                for (int d = 1; d <= 1; d += 2)                 // d: the way the wolf will run (and the way the hare would bolt). ONLY to the right: the wolf comes in from the right edge, and after a catch it trots off to the right edge with the hare (the left half is the pond: a wolf carrying a hare would have to turn round on the spot)
                 {
                     float far = (d > 0 ? W - v.Feet.X : v.Feet.X) / _m;
                     if (far < 3.0f) continue;                                       // the end must be on screen
                     // WHERE IT WILL STAND: a free place 4.8 to 11 metres short of the hare (8 is best: room to creep, then the rush), on the hare's own
                     // row or the tree-line lane, with no ice between. The pond takes the middle of the field, so the places are few: it tries them all.
-                    float hareRow = Math.Clamp(v.Feet.Y, _yLo, _yHi), gx = 0f, gy = 0f, run = 0f;
+                    float hareRow = Math.Clamp(v.Feet.Y, _yLo, _yHi), gx = 0f, gy = 0f, run = 0f, ptr = 0f;
                     for (int r = 0; r < 2 && run == 0f; r++)
                     {
                         float row = r == 0 ? hareRow : laneY;
-                        for (int k = 0; k < 13 && run == 0f; k++)
+                        for (int k = 0; k < BackTries.Length && run == 0f; k++)
                         {
-                            float back = k < 7 ? 8f + 0.5f * k : 8f - 0.5f * (k - 6);      // 8, 8.5 ... 11, then 7.5, 7 ... 4.8
-                            if (back < 4.8f) back = 4.8f;
+                            float back = BackTries[k];                                    // 9.5 first (a long creep, then the rush), down to 5.5
                             float x = v.Feet.X - d * back * _m;
-                            if (x < 0.06f * W || x > 0.94f * W || !Free(x, row, 0.5f * _m) || Covered(x, row, 1.0f * _m, 1.0f * _m)) continue;
+                            if (x < 0.06f * W || x > 0.94f * W || !StandOk(x, row)) continue;
                             if (!RunIceFree(x, v.Feet.X - d * 4.6f * _m, row) || !RunIceFree(v.Feet.X - d * 4.6f * _m, v.Feet.X + d * 3f * _m, v.Feet.Y)) continue;
-                            gx = x; gy = row; run = back;
+                            // THE ROAD IN: the wolf comes in from the RIGHT edge (the pond fills every row of the left half of its ground, so no road
+                            // from the left edge to the right half is bare snow; before this it walked straight over the ice)
+                            if (!PlanRoad(W + 2.2f * _m, x, row, row, true, out _, out _)) continue;
+                            gx = x; gy = row; run = back; ptr = row;
                         }
                     }
                     if (_log != null) Log($"  catch plan: hare{i} at {v.Feet.X:F0},{v.Feet.Y:F0} from the {(d > 0 ? "left" : "right")}: far side {far:F1} m, cover {dm:F1} m, {(run > 0f ? $"stand at {gx:F0},{gy:F0}, {run:F1} m back" : "no free place to stand")}");
                     if (run == 0f) continue;
                     float score = dm + 0.1f * run;
-                    if (score > bestScore) { bestScore = score; w.PreHare = i; dir = d; preGX = gx; preGY = gy; }
+                    if (score > bestScore) { bestScore = score; w.PreHare = i; dir = d; preGX = gx; preGY = gy; preTR = ptr; }
                 }
             }
         }
@@ -488,26 +644,60 @@ internal sealed partial class Predators : Resident
             }
             if (w.PreHare < 0) { w.On = false; return; }
         }
+        // EVERY WOLF BUT THE SQUIRREL CHASER COMES IN FROM THE RIGHT EDGE (see the catch plan: the ice shuts the left). It walks in facing left, to a stand
+        // on the right half of the field; when its work is on the right of the stand (a hare to hunt, or the way out) it turns there on the spot.
+        int huntDir = dir;
+        float standGX = preGX, standRow = preGY, transit = preTR;
+        if (kind != 3)
+        {
+            if (kind == 0) { if (w.PreHare < 0) { w.On = false; Log("WOLF visit not begun: no hare can be hunted from a place the wolf can reach"); return; } }
+            else
+            {
+                // a crossing or a howl: any bare place on the right half with a road to it
+                float laneRow = S.FieldPoint(0.5f * W, 0.40f).Y; bool okp = false;
+                for (int t = 0; t < 40 && !okp; t++)
+                {
+                    standGX = (kind == 2 ? 0.62f + 0.16f * (float)Rng.NextDouble() : 0.58f + 0.30f * (float)Rng.NextDouble()) * W;
+                    standRow = Math.Clamp(laneRow + (float)(Rng.NextDouble() - 0.5) * 0.08f * S.U, _yLo, _yHi);
+                    okp = StandOk(standGX, standRow) && PlanRoad(W + 2.2f * _m, standGX, standRow, standRow, true, out _, out _);
+                }
+                if (!okp) { w.On = false; Log("WOLF visit not begun: no bare place on the right half to stand"); return; }
+            }
+            dir = -1; preGX = standGX; preGY = standRow;
+            // the road itself (it was only tested above): rows[0] is the stand's column, the last is the edge
+            if (PlanRoad(W + 2.2f * _m, standGX, standRow, standRow, true, out float[]? rds, out int rk0) && rds != null)
+            { w.Road = rds; w.RoadK0 = rk0; standRow = rds[0]; transit = rds[^1]; preGY = standRow; }
+            else { w.On = false; Log("WOLF visit not begun: the road vanished"); return; }
+        }
         w.Dir = dir; w.X = dir > 0 ? -2.2f * _m : W + 2.2f * _m;
         w.Y = Math.Clamp(S.FieldPoint(0.5f * W, 0.24f + 0.04f * (float)Rng.NextDouble()).Y, _yLo, _yHi); w.GY = w.Y;
+        if (kind != 3) { w.Y = transit; w.GY = transit; } else w.Road = null;
         w.Gait = 0; w.Pace.Halt(); w.Pace.Walked = 0f; w.Pace.Resume(GaitV[0] * _m * 0.6f);
         w.PostT = 0f; w.MoveT = 0f; w.BreathT = 2f; w.Do = WD.Walk; w.StopAtGoal = true; w.Dyn = false; w.Braking = false;
         switch (kind)
         {
-            case 0: case 3:
+            case 0:
+                w.GX = preGX;
+                if (huntDir > 0) w.Plan.Add(WS.FaceR);
+                w.Plan.AddRange([WS.Sniff, WS.Look, WS.Select]); break;
+            case 3:
                 w.GX = preGX > 0f ? preGX : Math.Clamp(dir > 0 ? Rng.Next(25, 42) / 100f * W : Rng.Next(58, 75) / 100f * W, 0.1f * W, 0.9f * W);
                 w.Plan.AddRange([WS.Sniff, WS.Look, WS.Select]); break;
             case 1:
-                w.GX = Rng.Next(32, 68) / 100f * W;
-                w.Plan.AddRange([WS.Sniff, WS.Look, WS.StartWalk, WS.Exit]); break;
+                w.GX = preGX;
+                w.Plan.AddRange([WS.Sniff, WS.Look, WS.FaceR, WS.StartWalk, WS.Exit]); break;
             default:
-                w.GX = Rng.Next(14, 30) / 100f * W;
-                w.Plan.AddRange([WS.Howl, WS.Look, WS.StartWalk, WS.Exit]); break;
+                w.GX = preGX;
+                w.Plan.AddRange([WS.Howl, WS.Look, WS.FaceR, WS.StartWalk, WS.Exit]); break;
         }
         // the lane must be free where it stops (a planned catch has already found its free place, and its row: the walk drifts onto that row)
-        if (preGY > 0f) w.GY = preGY;
-        else for (int tries = 0; tries < 40 && (!Free(w.GX, w.Y, 0.5f * _m) || Covered(w.GX, w.Y, 1.0f * _m, 1.0f * _m)); tries++) w.GX += dir * 0.4f * _m;
+        if (kind == 3) { if (preGY > 0f) w.GY = preGY; else for (int tries = 0; tries < 40 && (!Free(w.GX, w.Y, 0.5f * _m) || Covered(w.GX, w.Y, 1.0f * _m, 1.0f * _m)); tries++) w.GX += dir * 0.4f * _m; }
+        w.PlanY = kind == 3 ? w.GY : standRow; w.Arrive = true; w.Held = false;
         ShowW(PredatorsArt.WLopeB, 0); w.Mir = dir < 0;
+        // THE HARE THE PLAN WAS MADE FOR STAYS WHERE IT IS from the moment the wolf sets out (it goes on with what it was doing, but starts nothing new).
+        // On film (2026-11-11) the walk in took fourteen seconds, the hare had hopped off behind a shrub by then, and the wolf looked about and left: in
+        // twenty minutes of natural runs it never hunted once. EndWolf lets the hare go again whatever happens.
+        if (kind == 0 && w.PreHare >= 0) PreyStalked(3, w.PreHare);
         Log($"WOLF visit begins: kind {(kind == 0 ? "kill" : kind == 3 ? "squirrel chase" : kind == 1 ? "cross" : "howl")}, intends {(wantCatch ? "a catch" : "a miss")}, from the {(dir > 0 ? "left" : "right")}, to x {w.GX:F0}");
     }
 
@@ -536,17 +726,30 @@ internal sealed partial class Predators : Resident
             case WS.Look: StartSheet(PredatorsArt.WLook, PredatorsArt.NLook, 1.9f, false, SA.Next); break;
             case WS.Idle: w.Do = WD.Stand; w.T = 0f; w.SLoopFor = 1.0f; break;
             case WS.Turn: BeginTurn(w.NewDir); break;
-            case WS.StartWalk: w.Gait = w.Carrying ? 2 : 0; BeginWalkFromStand(); break;
+            case WS.FaceR: if (w.Dir == 1) NextW(); else BeginTurn(1); break;
+            case WS.FaceL: if (w.Dir == -1) NextW(); else BeginTurn(-1); break;
+            // (StartWalk only chooses the gait now. It used to START a walk, and then the Exit that followed stopped it again on the next frame: a settle,
+            // one frame of walk, and a settle again, a stutter at the start of every leaving)
+            case WS.StartWalk: w.Gait = w.Carrying ? 2 : 0; NextW(); break;
             case WS.Select: SelectTarget(); break;
-            case WS.Stalk: w.Gait = 1; w.Dyn = true; w.StopAtGoal = true; w.RushAfter = true; BeginWalkFromStand(); break;
+            case WS.Stalk: w.Road = null; w.Gait = 1; w.Dyn = true; w.StopAtGoal = true; w.RushAfter = true; BeginWalkFromStand(); break;
             case WS.Howl: StartSheet(PredatorsArt.WHowlIn, PredatorsArt.NHowlIn, 0.85f, false, SA.Next); w.Flag1 = true; w.ST = 0f; break;
             case WS.Rear: w.Rear = true; StartSheet(PredatorsArt.WRearIn, PredatorsArt.NRearIn, 0.95f, false, SA.Next); break;
             case WS.Dig: StartSheet(PredatorsArt.WDigIn, PredatorsArt.NDigIn, 0.65f, false, SA.Next); w.Flag1 = true; w.Flag2 = false; break;
             case WS.CShake: StartSheet(PredatorsArt.WCShake, PredatorsArt.NCShake, 0.85f, false, SA.Next); w.Flag1 = true; break;
             case WS.CLook: StartSheet(PredatorsArt.WCLook, PredatorsArt.NCLook, 1.3f, false, SA.Next); break;
-            case WS.WalkTo: w.Gait = 0; w.StopAtGoal = true; w.Dyn = false; BeginWalkFromStand(); break;
+            case WS.WalkTo:
+                w.Gait = 0; w.StopAtGoal = true; w.Dyn = false; w.Road = null;
+                if (PlanRoad(w.X, w.GX, w.Y, w.GY, false, out float[]? wr, out int wk0) && wr != null) { w.Road = wr; w.RoadK0 = wk0; }
+                BeginWalkFromStand(); break;
             case WS.Exit:
+                if (w.X > 0.5f * S.Width && w.Dir < 0 && !w.Carrying) { w.Plan.Insert(0, WS.Exit); BeginTurn(1); break; }       // the right half leaves by the right edge
+                w.Gait = w.Carrying ? 2 : 0;
                 w.GX = w.Dir > 0 ? S.Width + 3.5f * _m : -3.5f * _m; w.GY = w.Y; w.StopAtGoal = false; w.Dyn = false; w.RushAfter = false;
+                // THE ROAD OUT: a row that is bare snow all the way to the edge and keeps clear of whoever is sitting there
+                w.Road = null;
+                if (PlanRoad(w.X, w.GX, w.Y, w.Y, false, out float[]? xr, out int xk0) && xr != null) { w.Road = xr; w.RoadK0 = xk0; w.GY = RoadY(w.X); w.PlanY = w.GY; }
+                else if (TransitRow(w.X, w.GX, w.Y, out float exitRow)) { w.GY = exitRow; w.PlanY = exitRow; }
                 if (w.Do != WD.Walk) BeginWalkFromStand();
                 break;
         }
@@ -567,44 +770,42 @@ internal sealed partial class Predators : Resident
         var w = _w;
         if (w.PreyKind == 4) { SelectSquirrel(); return; }
         int best = -1; float bestScore = -1e9f;
+        if (w.Tries > 20) { Log("WOLF has failed too often: it walks off"); w.Plan.Clear(); w.Plan.AddRange([WS.StartWalk, WS.Exit]); NextW(); return; }
         for (int i = 0; i < _hv.Length; i++)
         {
             var v = _hv[i];
-            if (_log != null && false) Log($"  select: hare{i} at {v.Feet.X:F0},{v.Feet.Y:F0} out {v.Out} speed {v.Speed:F0} still {Still(v)}; wolf {w.X:F0}; rows {_yLo:F0}-{_yHi:F0}");
+            if (_log != null && (w.Tries & 3) == 1) Log($"  select: hare{i} at {v.Feet.X:F0},{v.Feet.Y:F0} out {v.Out} speed {v.Speed:F0} still {Still(v)}; wolf {w.X:F0},{w.Y:F0}; rows {_yLo:F0}-{_yHi:F0}");
             if (!Still(v) || v.Feet.Y < _yLo - 2f || v.Feet.Y > _yHi + 0.05f * S.U) continue;
-            if (MathF.Abs(v.Feet.X - w.X) < 3.6f * _m) continue;                         // not a hare right under its nose: there would be no run-up
+            if (MathF.Abs(v.Feet.X - w.X) < 4.6f * _m) continue;                         // not a hare right under its nose: there would be no creep and no run-up
             Cover? cv = NearestCover(v.Feet, out float dCoverM);
             // never across the ice: the wolf walks along ITS OWN row to within four and a half metres of the hare, then changes to the hare's row for the last part
             int toward = v.Feet.X > w.X ? 1 : -1;
             // THE HUNT ENDS ON SCREEN: a hare with under three metres of snow between it and the screen's edge on its far side is left alone (one such
             // chase ran off the side: the "catch" was never seen, and took nothing, since a hare off screen is not in the open)
+            // THE CATCH MUST BE IN THE OPEN: the tumble, the cloud and the carry-stand happen on and round the hare's place. A hare sitting at a snowman's foot (on film the
+            // wolf rolled in a snow cloud and then stood with the snowman's belly across its back) is left alone.
+            if (w.WantCatch && Covered(v.Feet.X - toward * 0.3f * _m, v.Feet.Y, 1.5f * _m, 0.9f * _m)) continue;
             float farM = (toward > 0 ? S.Width - v.Feet.X : v.Feet.X) / _m;
             if (_log != null) Log($"  select: hare{i} at {v.Feet.X:F0},{v.Feet.Y:F0}, wolf at {w.X:F0}: gap {MathF.Abs(v.Feet.X - w.X) / _m:F1} m, far side {farM:F1} m, cover {dCoverM:F1} m");
             if (farM < 3.0f) continue;
-            if (!RunIceFree(w.X, v.Feet.X - toward * 4.6f * _m, w.Y) || !RunIceFree(v.Feet.X - toward * 4.6f * _m, v.Feet.X + toward * 3f * _m, v.Feet.Y)) continue;
-            // NO BODY THROUGH A BODY: another hare standing between the wolf and this one (on the same rows) is in the way of the last bound, so this one is not chosen
-            bool inWay = false;
-            for (int j = 0; j < _hv.Length; j++)
-            {
-                if (j == i || !_hv[j].Out) continue;
-                float jx = _hv[j].Feet.X;
-                if ((jx - w.X) * toward > 0f && (v.Feet.X + toward * 1.2f * _m - jx) * toward > 0f && MathF.Abs(_hv[j].Feet.Y - v.Feet.Y) < 0.07f * S.U) inWay = true;
-            }
-            if (inWay) continue;
-            float score;
+            if (!RunIceFree(w.X + toward * 0.9f * _m, v.Feet.X - toward * 4.6f * _m, w.Y) || !RunIceFree(v.Feet.X - toward * 4.6f * _m, v.Feet.X + toward * 3f * _m, v.Feet.Y)) continue;
+            // NO BODY THROUGH A BODY: another hare standing between the wolf and this one is in the way of the last bound. It used to REJECT the hare,
+            // and hares sit in PAIRS, so both were rejected every time and the wolf never hunted. Now it only counts against the choice here; the real
+            // test is at the END OF THE CREEP (LineBlocked): by then the partner has been frightened by the Threat and has usually gone to cover.
+            float score = LineBlocked(i, w.X, toward) ? -0.5f : 0f;
             if (w.WantCatch)
             {
                 // a catch wants a hare far from any cover: one a stride from a bush cannot be caught from this far (it was the reason the wolf "only missed").
                 // After three idle looks it takes what there is, and the outcome is honest (the hare reaches the cover and the wolf skids at it).
                 // (It was twelve looks, a second each: on a field where every hare sits by a shrub the wolf stood like a statue for a quarter of a minute.)
                 if (dCoverM < 1.3f && w.Tries < 3) continue;
-                score = dCoverM;
+                score += dCoverM;
             }
             else
             {
                 // a miss wants cover a few metres off, BEYOND the hare (the wolf, the hare and the cover in a line: the hare runs away from the wolf, into it)
                 if (cv == null || dCoverM < 0.3f || dCoverM > 8.0f || (cv.Value.Hide.X - v.Feet.X) * (v.Feet.X - w.X) <= 0f) continue;
-                score = -MathF.Abs(dCoverM - 3.0f);
+                score += -MathF.Abs(dCoverM - 3.0f);
             }
             score -= 0.002f * MathF.Abs(v.Feet.X - w.X) / _m;
             if (i == w.PreHare) score += 100f;
@@ -613,15 +814,36 @@ internal sealed partial class Predators : Resident
         if (best < 0)
         {
             if (!w.WantCatch && w.Tries == 3) { w.WantCatch = true; Log("WOLF: no hare has cover beyond it; it hunts for the catch instead"); }
-            if (++w.Tries > 8) { Log("WOLF finds no hare to hunt: it walks off"); w.Plan.Clear(); w.Plan.AddRange([WS.StartWalk, WS.Exit]); }
-            else { w.Plan.Insert(0, WS.Select); w.Plan.Insert(0, WS.Idle); }
+            if (++w.Tries > 6) { Log("WOLF finds no hare to hunt: it walks off"); w.Plan.Clear(); w.Plan.AddRange([WS.StartWalk, WS.Exit]); }
+            else { w.Plan.Insert(0, WS.Select); w.Plan.Insert(0, w.Tries == 4 ? WS.Look : WS.Idle); }          // (it waits for a hare to come out: a look about now and then, not a statue)
             NextW(); return;
         }
         var hv = _hv[best];
         NearestCover(hv.Feet, out float dm);
+        // A HARE FAR OFF is approached at a lope first (the stalk's 0.6 m a second over twelve metres would be a twelve second crawl): to a place 7.5 to 9.5 m
+        // short of it, on bare snow, ahead of the wolf; then it settles, and thinks again from there (the hare may have moved).
+        if (w.WantCatch && MathF.Abs(hv.Feet.X - w.X) > 11.0f * _m)
+        {
+            int need0 = hv.Feet.X > w.X ? 1 : -1;
+            if (need0 != w.Dir) { w.NewDir = need0; w.Plan.Insert(0, WS.Select); w.Plan.Insert(0, WS.Turn); NextW(); return; }
+            float row0 = Math.Clamp(hv.Feet.Y, _yLo, _yHi);
+            foreach (float back in new[] { 9.5f, 9.0f, 8.5f, 8.0f, 7.5f })
+            {
+                float gx0 = hv.Feet.X - need0 * back * _m;
+                if ((gx0 - w.X) * need0 < 1.5f * _m || !StandOk(gx0, row0) || !RowClear(w.X + need0 * 0.5f * _m, gx0, row0)) continue;
+                w.GX = gx0; w.GY = row0; w.PlanY = row0; w.Arrive = true;
+                Log($"WOLF: hare{best} is {MathF.Abs(hv.Feet.X - w.X) / _m:F1} m off: it lopes to {gx0:F0},{row0:F0} ({back:F1} m short of it) first");
+                w.Plan.Insert(0, WS.Select); w.Plan.Insert(0, WS.WalkTo);
+                NextW(); return;
+            }
+        }
         // an honest outcome: a hare that sits a stride from a shrub cannot be caught from this far; one in the open usually can
-        w.Hare = best; w.RushGap = w.WantCatch ? 4.4f : 5.9f;
-        if ((!w.WantCatch || dm < 3.0f) && NearestCover(hv.Feet, out _) is Cover cv9)
+        // THE CREEP IS SEEN: from where it stands it creeps at least 2 m, and the rush is as long as the ground gives (the rush-in is 2.2 m and the
+        // pounce begins about 1.8 m short of the contact point, so 5.2 m is the least; 8.3 m holds a whole gallop cycle).
+        float gapNowM = MathF.Abs(hv.Feet.X - w.X) / _m;
+        w.Hare = best; w.RushGap = w.WantCatch ? Math.Clamp(gapNowM - 2.0f, 5.2f, 8.3f) : 5.9f; w.CreepFrom = w.X;
+        // (only a hunt that means to MISS plans its rush round the cover: a catch takes a hare that sits, unaware, wherever its cover is)
+        if (!w.WantCatch && NearestCover(hv.Feet, out _) is Cover cv9)
         {
             // far enough back that the gallop can end in a skid AT the cover (the rush-in eats 2.6 m, the first rest page to skid from comes 3.1 m on, the skid needs 2.6 m)
             int dw = hv.Feet.X > w.X ? 1 : -1;
@@ -685,7 +907,7 @@ internal sealed partial class Predators : Resident
         _field.PredatorAt = w.Do == WD.Off ? null : new PointF(w.X, w.Y); _field.PredatorIsWolf = true;
         float U = S.U;
         // the pins
-        bool hunting = w.Do is WD.RushIn or WD.Gallop or WD.Pounce || (w.Do == WD.Walk && w.Gait == 1) || (w.Carrying && w.Do != WD.Off) || w.Do == WD.Skid || w.Rear;
+        bool hunting = w.Do is WD.RushIn or WD.Gallop or WD.Pounce or WD.Hold || (w.Do == WD.Walk && w.Gait == 1) || (w.Carrying && w.Do != WD.Off) || w.Do == WD.Skid || w.Rear;
         if (hunting) Post(Sense.Threat, w.X, w.Y, 0.45f, 1f, ref w.PostT, dt, 0.6f);
         else if (w.Do == WD.Walk) Post(Sense.Movement, w.X, w.Y, 0.25f, 0.3f, ref w.MoveT, dt, 1.5f);
         S.Occupy(this, 0, w.X, w.Y, 0.85f * _m);
@@ -714,6 +936,7 @@ internal sealed partial class Predators : Resident
                 // THE STARE (squirrel chase only): the wolf has stopped on its crouched rest page and the squirrel has just heard it. It holds, still but for a
                 // breath, until the squirrel has bolted (so the squirrel is already running to a trunk), then it explodes into the rush: it never gallops
                 // into a squirrel that has not had time to move.
+                if (w.Held) { HoldForLine(dt); break; }
                 ShowW(PredatorsArt.WStalkB, 0);
                 if (_sq.PineOf(w.Hare) >= 0 || w.T > 2.2f) BeginRush();
                 break;
@@ -723,6 +946,39 @@ internal sealed partial class Predators : Resident
     }
 
     private static float Lerp(float a, float b, float t) => a + (b - a) * t;
+
+    /// <summary>Is another hare (out on the snow, not the chosen one) between the wolf and hare i, or within 1.2 m beyond it, on about the same row?</summary>
+    private bool LineBlocked(int i, float wx, int toward)
+    {
+        PV v = _hv[i];
+        for (int j = 0; j < _hv.Length; j++)
+        {
+            if (j == i || !_hv[j].Out) continue;
+            float jx = _hv[j].Feet.X;
+            if ((jx - wx) * toward > 0f && (v.Feet.X + toward * 1.2f * _m - jx) * toward > 0f && MathF.Abs(_hv[j].Feet.Y - v.Feet.Y) < 0.07f * S.U) return true;
+        }
+        return false;
+    }
+
+    /// <summary>The wolf holds its crouch (the stalk's rest page, its breath curling up) until the hare in the line has gone: up to 3 s; if it has not, it rises and thinks again.</summary>
+    private void HoldForLine(float dt)
+    {
+        var w = _w;
+        w.HoldT += dt;
+        ShowW(PredatorsArt.WStalkB, 0);
+        w.BreathT -= dt; if (w.BreathT <= 0f && w.Bk != null) { PointF nz = w.Bk.Aux[0]; BreathAt(w.X + w.Dir * nz.X * _m, w.Y - nz.Y * _m, 0f); w.BreathT = 1.1f + 0.5f * (float)Rng.NextDouble(); }
+        var hv = _hv[w.Hare];
+        bool gone = !hv.Out || Bolting(hv);
+        bool blocked = LineBlocked(w.Hare, w.X, w.Dir);
+        if (!gone && !blocked) { w.Held = false; Log($"WOLF: the line is clear after {w.HoldT:F1} s; it rushes"); BeginRush(); return; }
+        if (gone || w.HoldT > 3.0f)
+        {
+            Log(gone ? "WOLF: the chosen hare went while it held; it rises" : "WOLF: the line did not clear in 3 s; it rises and looks again");
+            w.Held = false; _field.Stalked(-1); w.Hare = -1; w.Dyn = false; w.RushAfter = false; w.Tries += gone ? 1 : 3;
+            w.Plan.Clear(); w.Plan.Add(WS.Select);
+            StartSheet(SetBook[1], SetN[1], 0.55f, false, SA.Stand);
+        }
+    }
 
     private void StepWalk(float dt)
     {
@@ -746,18 +1002,26 @@ internal sealed partial class Predators : Resident
         if (w.StopAtGoal && !w.Braking)
         {
             float remaining = (w.GX - w.X) * w.Dir;
-            if (remaining <= w.Pace.ToRestPage(stride) + 1f) BrakeNow(stride);
+            if (remaining <= RestDist(stride) + 1f) BrakeNow(stride);
         }
         if (!w.Braking) w.Pace.Want = v;
         w.Pace.Accel = 2.2f * v;
         // go ROUND things: look ahead for a prop, the ice or another animal, and take a different lane if the way is shut
         w.PathT -= dt;
-        if (w.PathT <= 0f && !w.Braking)
+        if (w.Road != null && !w.Dyn)
+        {
+            // ON THE ROAD (planned before the walk began: see PlanRoad): the goal row is the road's row half a metre ahead, nothing to look for
+            w.GY = RoadY(w.X + w.Dir * 0.4f * _m); w.StuckT = 0f;
+        }
+        else if (w.PathT <= 0f && !w.Braking)
         {
             w.PathT = 0.12f;
             float ahead = w.Gait == 1 ? 1.6f : 2.6f;
             float room = 0.5f * _m;
-            bool shut = !LaneClear(w.X, w.Y, w.Dir, ahead, w.GY, room) || S.Crowded(w.X + w.Dir * ahead * 0.7f * _m, w.GY, 0.7f * _m, this, 0);
+            // BACK TO THE PLANNED ROW: a detour round a prop moved the goal row and nothing ever moved it back (the wolf planned to stand at y 938
+            // and stood at y 904, half behind a shrub). Whenever the planned row is clear ahead again, aim at it again.
+            if (!w.Dyn && w.StopAtGoal && w.PlanY > 0f && MathF.Abs(w.GY - w.PlanY) > 1f && RowClear(w.X + w.Dir * 0.5f * _m, w.GX, w.PlanY)) w.GY = w.PlanY;
+            bool shut = !LaneClear(w.X, w.Y, w.Dir, ahead, w.GY, room) || CrowdedW(w.X + w.Dir * ahead * 0.7f * _m, w.GY);
             if (shut && _log != null && w.StuckT == 0f)
             {
                 string why = ""; for (int k = 1; k <= 6 && why == ""; k++) { float f = k / 6f, xx = w.X + w.Dir * ahead * _m * f, yy = w.Y + (w.GY - w.Y) * f; if (!Free(xx, yy, room)) why = $"not free at {xx:F0},{yy:F0}"; }
@@ -770,9 +1034,9 @@ internal sealed partial class Predators : Resident
                 foreach (float o in offs)
                 {
                     float ny = Math.Clamp(w.Y + o * S.U, _yLo, _yHi);
-                    if (LaneClear(w.X, w.Y, w.Dir, ahead + 1f, ny, room) && !S.Crowded(w.X + w.Dir * ahead * 0.7f * _m, ny, 0.7f * _m, this, 0)) { w.GY = ny; found = true; break; }
+                    if (LaneClear(w.X, w.Y, w.Dir, ahead + 1f, ny, room) && !CrowdedW(w.X + w.Dir * ahead * 0.7f * _m, ny)) { w.GY = ny; found = true; break; }
                 }
-                if (!found) { w.StuckT += 0.12f; if (w.StuckT > 1.0f && w.Pace.Speed > 0f) { w.Pace.Want = 0f; } if (w.StuckT > 8f) { Log("WOLF is boxed in: it gives up"); _field.Stalked(-1); w.Plan.Clear(); w.Plan.Add(WS.Exit); w.Hare = -1; w.Dyn = false; w.GX = w.X + w.Dir * 99999f; w.StuckT = 0f; } }
+                if (!found) { w.StuckT += 0.12f; if (w.StuckT > 1.0f && w.Pace.Speed > 0f) { w.Pace.Want = 0f; } if (w.StuckT > 8f) { Log("WOLF is boxed in: it gives up"); _field.Stalked(-1); w.Plan.Clear(); w.Plan.Add(WS.Exit); w.Hare = -1; w.Dyn = false; w.StopAtGoal = false; w.RushAfter = false; w.GX = w.X + w.Dir * 99999f; w.StuckT = 0f; } }
                 else w.StuckT = 0f;
             }
             else w.StuckT = 0f;
@@ -787,6 +1051,22 @@ internal sealed partial class Predators : Resident
         if (w.Braking && !w.Pace.Braking)
         {
             w.Braking = false;
+            // THE STOP IS CHECKED WHERE THE WOLF REALLY STOPPED (before this the plan said "stand at 1169,938" and the wolf stopped at 1170,904 with its hind
+            // legs behind a shrub and its muzzle over the bird table's roof). If this is not a place to stand, it walks on to one that is (it is on a rest
+            // page, so setting off again is seamless).
+            if (w.Arrive && w.StopAtGoal && !w.Dyn && w.Hare < 0)
+            {
+                w.Arrive = false;
+                // AT MOST THREE TIMES: on film (2026-11-11) a wolf whose way to the better place was shut braked where it stood, asked again, and asked
+                // 339 times in 5.7 seconds. After three it makes do with where it is.
+                if (w.Reseeks++ < 3 && !StandOk(w.X, w.Y) && FindStand(w.X, w.Y, w.Dir, out PointF ns))
+                {
+                    Log($"WOLF stopped at {w.X:F0},{w.Y:F0}, no place to stand (covered, crowded or on ice): walks on to {ns.X:F0},{ns.Y:F0}");
+                    w.GX = ns.X; w.GY = ns.Y; w.PlanY = ns.Y; w.Arrive = true; w.StuckT = 0f; w.PathT = 0f;
+                    w.Pace.Halt(); w.Pace.Resume(0.3f * GaitV[w.Gait] * _m);
+                    return;
+                }
+            }
             if (w.RushAfter && w.Hare >= 0 && w.PreyKind == 4)
             {
                 w.RushAfter = false; w.Do = WD.Hold; w.T = 0f; w.Pace.Halt();
@@ -805,6 +1085,14 @@ internal sealed partial class Predators : Resident
                     StartSheet(SetBook[w.Gait], SetN[w.Gait], 0.55f, false, SA.Stand);
                     return;
                 }
+                // THE LINE IS CHECKED NOW, at the end of the creep (not when the hare was chosen): another hare still on the snow between the wolf and its
+                // hare, or just beyond it, would be run through. The wolf holds its crouch for it to go (the Threat keeps frightening it).
+                if (w.PreyKind == 3 && LineBlocked(w.Hare, w.X, w.Dir))
+                {
+                    w.Do = WD.Hold; w.T = 0f; w.Held = true; w.Pace.Halt(); w.HoldT = 0f;
+                    Log("WOLF holds its crouch: another hare is on the line, it waits for it to go");
+                    return;
+                }
                 BeginRush(); return;
             }
             StartSheet(SetBook[w.Gait], SetN[w.Gait], w.Gait == 1 ? 0.55f : 0.42f, false, SA.Stand);
@@ -812,6 +1100,14 @@ internal sealed partial class Predators : Resident
         }
     }
 
+    /// <summary>How far to the next rest page. Pace.ToRestPage never answers less than a quarter stride (closer than that it takes one stride more), and when the wolf was
+    /// walking to a place that was exactly right, that wrap made it overshoot by up to a whole stride (0.7 m, on to the pond's rim). A stop in an eighth of a stride is a
+    /// firm one (a quarter second at a lope), which a wolf can do; a stop a stride late is a wolf standing on the ice.</summary>
+    private float RestDist(float stride)
+    {
+        float d = stride - _w.Pace.Walked % stride;
+        return d < 0.15f * stride ? d + stride : d;
+    }
     private void BrakeNow(float stride)
     {
         var w = _w;
@@ -819,7 +1115,7 @@ internal sealed partial class Predators : Resident
         // a walk that has only just set off is still ON its rest page: there is nothing to brake from (braking from a crawl takes for ever)
         if (w.Pace.Speed < 0.35f * GaitV[w.Gait] * _m && (w.Pace.Walked % stride) < 0.08f * stride) { w.Pace.Halt(); return; }
         if (w.Pace.Speed < 0.5f * GaitV[w.Gait] * _m) { w.Braking = false; return; }       // too slow to brake from: speed up first
-        w.Pace.Brake(w.Pace.ToRestPage(stride));
+        w.Pace.Brake(RestDist(stride));
     }
 
     private void StepSheet(float dt)
@@ -914,6 +1210,7 @@ internal sealed partial class Predators : Resident
         // the prey may notice now (the Threat below reaches it)... EXCEPT the hare of a rush that means to catch: it never saw it coming. It sits,
         // unaware, until the wolf is on it (every hare here sits a stride from a shrub: one that looked up at the first bound was behind its shrub
         // before the wolf had covered half the gap, so the wolf "only missed"). If the rush turns into a miss it notices at once (StepGallop).
+        w.Held = false;
         if (!(w.WantCatch && w.PreyKind == 3)) PreyStalked(w.PreyKind, -1);
         Board.Post(Sense.Threat, new PointF(w.X, w.Y), 0.45f * S.U, 1f, this); w.PostT = 0.6f;
         Log($"WOLF RUSHES at hare{w.Hare} (gap {Math.Abs(PreyView(w.PreyKind)[w.Hare].Feet.X - w.X) / _m:F1} m)");
@@ -958,6 +1255,8 @@ internal sealed partial class Predators : Resident
             Log($"WOLF: the hare is behind cover at {(w.Cov is Cover c0 ? c0.Foot.X : -1):F0} ({(w.Cov is Cover c1 ? c1.Kind.ToString() : "?")})");
         }
         SteerGallop(dt, step, out float dx, out PointF aim);
+        // a rush that means to end at a piece of cover eases off in the last five metres (a 9 m/s gallop needs 2 m to stop; at 6.5 m/s the skid is a short one)
+        if (w.MissPlanned && w.Cov is Cover cvs && (CoverStand(cvs, w.Dir).X - w.X) * w.Dir < 5.0f * _m) w.Pace.Want = 0.72f * GallopV * _m;
         float cyc = GallopC * _m;
         float frac = w.Pace.Walked / cyc; frac -= MathF.Floor(frac);
         ShowW(PredatorsArt.WGallopB, (int)(frac * PredatorsArt.NGallop) % PredatorsArt.NGallop);
@@ -965,7 +1264,14 @@ internal sealed partial class Predators : Resident
         NearestCover(hv.Feet, out float dCoverM);
         // THE CATCH: close enough, and the hare has not reached cover: the last bound
         // (a hare that is running needs 0.9 m of open snow left before its cover; one still sitting, unaware, is taken where it sits)
-        if (hv.Out && dx <= 2.7f * _m && dx >= -0.3f * _m && MathF.Abs(hv.Feet.Y - w.Y) < 0.10f * S.U && !w.MissPlanned && (Bolting(hv) ? dCoverM > 0.9f : dx < 1.6f * _m)) { BeginPounce(aim); return; }
+        // (the pounce begins where a straight slow-down from the gallop's speed to a third of it, in 0.3 s, lands exactly 1.18 m short of the hare:
+        // about 1.8 m short of the contact point at full speed. A sitting, unaware hare is taken; a bolting one only with open snow left before its cover.)
+        float dPounce = dx - 1.18f * _m;
+        // A HARE THAT FROZE: a miss was planned (the hare was to run to its cover), but this one has not moved (the hares' own flight said "nowhere to run,
+        // it freezes"). The wolf would gallop straight through it. So the miss becomes a catch: the hare's bad luck, and no body through a body.
+        if (w.MissPlanned && w.PreyKind == 3 && hv.Out && !Bolting(hv) && dPounce <= 0.2f * w.Pace.Speed + 0.4f * _m && dx >= -0.3f * _m)
+        { w.MissPlanned = false; w.WantCatch = true; Log("WOLF: the hare froze instead of running; the miss becomes a catch"); }
+        if (hv.Out && dPounce <= 0.2f * w.Pace.Speed && dx >= -0.3f * _m && MathF.Abs(hv.Feet.Y - w.Y) < 0.10f * S.U && !w.MissPlanned && (Bolting(hv) || w.Pace.Speed > 0.8f * GallopV * _m) && (!Bolting(hv) || dCoverM > 0.9f)) { BeginPounce(aim); return; }
         if (dx < -1.0f * _m && hv.Out) w.MissPlanned = true;                  // it got past or away: no catch
         if (dx > 16f * _m) w.MissPlanned = true;
         if (w.MissPlanned) PreyStalked(w.PreyKind, -1);                       // no catch after all: the hare is free to notice and run
@@ -978,7 +1284,7 @@ internal sealed partial class Predators : Resident
             Cover cv = w.Cov ?? new Cover(CoverKind.Rocks, new PointF(w.X + w.Dir * 4f * _m, w.Y + 10f), 1f * _m, 0.5f * _m, new PointF(w.X + w.Dir * 4f * _m, w.Y), 0.5f * _m, 0.4f * _m);
             PointF st = CoverStand(cv, w.Dir);
             float remaining = (st.X - w.X) * w.Dir;
-            float D = MathF.Max(2.0f * _m, remaining);
+            float D = MathF.Max(1.2f * _m, remaining);                 // (it was 2.0 m: a place 0.6 m ahead became a 2 m skid, 1.4 m PAST the cover, and the wolf had to turn round and walk to the cover's far side, at the screen's edge)
             w.Do = WD.Skid; w.T = 0f; w.SkidFrom = w.Pace.Walked; w.SkidD = D; w.Pace.Brake(D); w.Cov = cv;
             Log($"WOLF skids: {D / _m:F1} m to stop, its place at the cover is {remaining / _m:F1} m ahead");
         }
@@ -1003,7 +1309,7 @@ internal sealed partial class Predators : Resident
             if (d2 != w.Dir) { w.NewDir = d2; w.Plan.Add(WS.Turn); }
             if (MathF.Abs(w.Stand.X - w.X) > 0.3f * _m) { w.GX = w.Stand.X; w.GY = w.Stand.Y; w.StuckT = 0f; w.Plan.Add(WS.WalkTo); }
             if (w.PreyKind == 4) w.Plan.AddRange([WS.Rear, WS.Look]); else w.Plan.AddRange([WS.Dig, WS.Look]);
-            w.NewDir = -d2; w.Plan.AddRange([WS.Turn, WS.StartWalk, WS.Exit]);
+            w.Plan.AddRange([w.Stand.X > 0.5f * S.Width ? WS.FaceR : WS.FaceL, WS.StartWalk, WS.Exit]);       // out by the nearer edge (the right: the left half is the pond)
             w.Hole = w.Stand;
             _field.PredatorAt = new PointF(w.X, w.Y);
             Log($"WOLF stopped at {w.X:F0}; the {cv.Kind} is at {cv.Foot.X:F0},{cv.Foot.Y:F0}; it will stand at {w.Stand.X:F0} facing {(d2 > 0 ? "right" : "left")}");
@@ -1014,8 +1320,13 @@ internal sealed partial class Predators : Resident
     {
         var w = _w;
         w.Do = WD.Pounce; w.T = 0f; w.Flag1 = false; w.Flag2 = false;
-        w.PX0 = w.X; w.PY0 = w.Y; w.PV0 = w.Pace.Speed; w.PTc = 0.30f;
+        w.PX0 = w.X; w.PY0 = w.Y; w.PV0 = w.Pace.Speed; w.PV1 = 0.35f * w.PV0;
         w.PXc = aim.X - w.Dir * 1.18f * _m; w.PYc = Math.Clamp(aim.Y, _yLo - 6f, _yHi + 0.1f * S.U);
+        // A STRAIGHT SLOW-DOWN from the gallop's speed to a third of it, over exactly the distance to the contact point (the old cubic curve, started 1.4 m
+        // short at 9 m/s, shot 22 px past its place and slid 12 px BACK: a wolf moonwalking in mid-pounce). Its time follows from the distance.
+        float dist = MathF.Max(0.15f * _m, (w.PXc - w.X) * w.Dir);
+        w.PTc = Math.Clamp(2f * dist / MathF.Max(1f, w.PV0 + w.PV1), 0.18f, 0.45f);
+        w.PV1 = MathF.Max(0.05f * w.PV0, 2f * dist / w.PTc - w.PV0);              // (if the time had to be clamped, the end speed takes up the difference)
         w.Hole = new PointF(aim.X, aim.Y);
         Log($"WOLF POUNCES on hare{w.Hare} at {PreyView(w.PreyKind)[w.Hare].Feet.X:F0},{PreyView(w.PreyKind)[w.Hare].Feet.Y:F0}, contact at {aim.X:F0}");
     }
@@ -1025,18 +1336,18 @@ internal sealed partial class Predators : Resident
         var w = _w;
         float t = w.T, tc = w.PTc;
         float x;
-        float v1 = 0.35f * w.PV0 * w.Dir, v0 = w.PV0 * w.Dir;
+        float v1 = w.PV1 * w.Dir, v0 = w.PV0 * w.Dir;
+        float xEnd = w.PX0 + 0.5f * (v0 + v1) * tc;                                   // where the slow-down ends (the contact place, up to the clamp above)
         if (t < tc)
         {
-            // cubic Hermite from (x0, v0) to (xc, v1): the speed is continuous with the gallop's, so there is no lurch
-            float s = t / tc, h00 = 2 * s * s * s - 3 * s * s + 1, h10 = s * s * s - 2 * s * s + s, h01 = -2 * s * s * s + 3 * s * s, h11 = s * s * s - s * s;
-            x = h00 * w.PX0 + h10 * tc * v0 + h01 * w.PXc + h11 * tc * v1;
-            w.Y = Lerp(w.PY0, w.PYc, PredatorsArt.Sm(s));
+            // a steady slow-down from v0 to v1: the speed is continuous with the gallop's (no lurch) and never goes backwards
+            x = w.PX0 + v0 * t - 0.5f * (v0 - v1) / tc * t * t;
+            w.Y = Lerp(w.PY0, w.PYc, PredatorsArt.Sm(t / tc));
         }
         else
         {
             float s = Math.Clamp((t - tc) / 1.0f, 0f, 1f);
-            x = w.PXc + 0.5f * v1 * 1.0f * (1f - (1f - s) * (1f - s));
+            x = xEnd + 0.5f * v1 * 1.0f * (1f - (1f - s) * (1f - s));
         }
         w.X = x;
         int pg = Math.Min(PredatorsArt.NPounce - 1, (int)(t * 30f));
@@ -1050,7 +1361,7 @@ internal sealed partial class Predators : Resident
             {
                 _field.Restore(w.Hare, 60f + 60f * (float)Rng.NextDouble());
                 w.Carrying = true;
-                for (int k = 0; k < 5; k++) AddStain(w.Hole.X + (float)(Rng.NextDouble() - 0.5) * 0.9f * _m, w.Hole.Y + (float)(Rng.NextDouble() - 0.4) * 0.12f * S.U);
+                for (int k = 0; k < 5; k++) AddStain(w.Hole.X + (float)(Rng.NextDouble() - 0.5) * 1.6f * _m, w.Hole.Y + (float)(Rng.NextDouble() - 0.5) * 0.025f * S.U);       // (a flat scatter: a wide spread of x and a hair of y; it was 50 px of y, a vertical string of drops)
                 Log($"WOLF CATCHES hare{w.Hare}: seized at {w.Hole.X:F0},{w.Hole.Y:F0}; it comes back in about a minute or two");
             }
             else { Log("WOLF: the hare could not be taken (the last ones are spared): it lets go"); }
@@ -1061,7 +1372,7 @@ internal sealed partial class Predators : Resident
             w.Do = WD.Stand; w.T = 0f; w.SLoopFor = 0.5f; w.Pace.Halt();
             _field.Stalked(-1);
             w.Plan.Clear();
-            if (w.Carrying) w.Plan.AddRange([WS.CShake, WS.CLook, WS.StartWalk, WS.Exit]); else w.Plan.AddRange([WS.StartWalk, WS.Exit]);
+            if (w.Carrying) w.Plan.AddRange([WS.CShake, WS.CLook, WS.StartWalk, WS.Exit]); else w.Plan.AddRange([WS.FaceR, WS.StartWalk, WS.Exit]);
         }
     }
 

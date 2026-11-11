@@ -645,9 +645,12 @@ minute or so, or `off`. Three rules were added when the hunts were filmed. The p
 creeping up on, stays where it is (its own "what next" clock stops, like a mouse washing its whiskers a little longer
 than it meant to), or it would wander home in the seconds the hunter needs to arrive. No story begins while a hunter
 is out (`StoryDirector.Hold`), and a hunter waits for a story to end. An owl on a perch pins a Threat at the perch's
-foot, so no mouse strolls past under it. STATE OF THIS BUILD: only the owl visits on its own, hunting mice and hares.
-The wolf stays home in a natural run (`WolfReady` in `Predators.cs`) until its hunt has passed on film on the cover
-scene, and the squirrel hunts are switched off; the test dials still force all of them.
+foot, so no mouse strolls past under it. STATE OF THIS BUILD: the owl hunts mice and hares. The wolf visits
+too (`WolfReady` in `Predators.cs`; false keeps it home): it crosses, howls, or hunts a hare, and a natural wolf always
+means to catch. The hare its plan was made for holds still from the moment the wolf sets out, because the walk in takes
+fourteen seconds and the hare used to hop away in that time. With no hare in reach it looks about and leaves. The
+planned miss does not play yet (a hare beside cover freezes where it should bolt) and the squirrel hunts are switched
+off; the test dials still force all of them.
 
 *Four: draw width.* `ChristmasSettings.DrawWidth` (the "Draw width" knob, 1600 to 3840, default 1920) is what
 `MaxRenderWidth` in `Program.cs` returns. On a wider screen the scene is drawn at that width and Windows

@@ -627,9 +627,10 @@ Thanksgiving uses for its pumpkins.
   with a tumble in a cloud of snow, and the creature taken is replaced much later by a newcomer. The rest of
   the field reacts: a stalking wolf is a threat the animals near it notice, and a howl is a loud noise that
   the animals nearby notice. Visits are rare and come on their own schedule, and no story begins while a
-  hunter is out. (In this build only the OWL visits on its own, and it hunts mice and hares. The wolf's hunt is
-  still being staged on the snowfield's cover, so the wolf stays home unless a test dial calls it, and the
-  squirrel hunts are switched off.)
+  hunter is out. (In this build the owl hunts mice and hares. The wolf crosses, howls, or creeps up on a hare and
+  catches it, and when no hare sits where it can be reached the wolf looks about and leaves. The wolf's planned
+  miss does not play yet, since a hare beside cover freezes where it should bolt, and the squirrel hunts are
+  switched off.)
 - They notice each other and the happenings. Fireworks and the toy train are loud, the owl is a threat, a
   sliding snowball is something to glance at; a fox stalking or a bolting reindeer is read by the animals near
   it. Nobody reacts to a kind of animal, only to what a notice says. The field is kept calm: after a glance an

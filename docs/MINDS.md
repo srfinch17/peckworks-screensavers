@@ -666,9 +666,9 @@ in reach of the pin:
   (0.9 U, weight 0.6, once); the owl, Threat at its SHADOW's place (0.35 U, weight 0.9, every 0.6 s) once it is
   low, and at the foot of its perch while it sits on one. Knob "Predators" (0 to 300 percent, default 100: the gap
   between visits shrinks as it rises; 0 never). The prey being watched or stalked (`Stalked`) holds still: its mind's
-  clock stops while it sits. No story begins while a hunter is out (`StoryDirector.Hold`). In this build only the
-  owl visits on its own (mice and hares); the wolf waits for its hunt to pass on film (`WolfReady`), and squirrel
-  hunts are off. Hares: every choice of a landing place asks `PlaceTaken` (another hare sits there OR is on its way
+  clock stops while it sits. No story begins while a hunter is out (`StoryDirector.Hold`). In this build the
+  owl hunts mice and hares; the wolf crosses, howls or catches a hare (`WolfReady`; the hare its plan was made for is
+  `Stalked` from the moment it sets out); the wolf's planned miss and the squirrel hunts are off. Hares: every choice of a landing place asks `PlaceTaken` (another hare sits there OR is on its way
   there), because the scene's crowd test only knows where bodies are, and two hares that chose one place half a
   second apart sat one inside the other.
 - Santa (`SantaRig.cs`) is not a resident. His team is nine (Rudolph alone, then four pairs) on one set of
