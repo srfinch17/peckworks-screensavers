@@ -199,8 +199,8 @@ internal sealed class FoxAndHares : Resident
             var hb = FoxAndHaresArt.HareBooks(); var fb = FoxAndHaresArt.FoxBooks();
             var hbooks = new Book[hb.Length]; var fbooks = new Book[fb.Length];
             // each book is painted on its own thread (a page is its own bitmap and its own Graphics: nothing is shared)
-            Parallel.For(0, hb.Length, i => hbooks[i] = new Book(hb[i], _hUnit));
-            Parallel.For(0, fb.Length, i => fbooks[i] = new Book(fb[i], _fUnit));
+            QuietFor(hb.Length, i => hbooks[i] = new Book(hb[i], _hUnit));   // a few low-priority threads, never every core: see Resident.QuietFor
+            QuietFor(fb.Length, i => fbooks[i] = new Book(fb[i], _fUnit));
             // the soft snow puffs (three sizes) and the ground tracks, per size step
             var puffs = new Sprite[Tiers][]; var decals = new Sprite[Tiers][];
             for (int t = 0; t < Tiers; t++)

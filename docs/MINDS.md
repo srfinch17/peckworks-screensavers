@@ -250,11 +250,11 @@ These are in the code comments too; here they are in one place.
 | Ducks (`src/SakuraPond/Ducks.cs`) | calm, fussy (per visit); a duckling has none, the director picks for it | Cruise, Look, Dabble, Preen, Flap, Wait, Herd, Snatch (duckling: Follow, Lag, Scramble, Bump, Ride, Peck, Chase, Dabble, Bunch, Scatter) | the snake's head near the mother (Herd), a straggler (Wait), the family's cute-thing dice (one at a time; a duckling's drawn heading is its steering heading plus a one degree paddle sway, so a metric on the drawn heading and one on the steering heading agree; the director of the cute things is the family's own, outside the kit). Snatch (a chance meal of a tadpole or froglet within a tenth of the screen of the bill, from Cruise only, a `Snatch` seeded from the dials) is ended by any of them, through `Duck.Start` |
 | Tadpoles (`src/SakuraPond/Tadpoles.cs`) | none: a tadpole runs a small state machine of its own (`TadState`), not a `Mind<TDoing>`, and the clutch is its own director, outside the kit | hang, burst, scatter, graze, grow, dive, rise, leave as a froglet, or be eaten (`Exit.Eaten`, one `Hunter` at a time); the clutch moves house every 2 to 5 minutes between three haunts (`Clutch.Haunt`: Shore, Island, Open) and one tadpole ventures off alone about once a minute | every koi's head and middle whatever its depth, the turtles, the ducks' heads, the snake's head, the crayfish |
 | Frogs (`src/SakuraPond/Frog.cs`) | bold, restless (dealt); wet (seconds since it last sat: past twelve it wants out) | Sit (with croak, shift, pivot inside it), Snap (at a dragonfly, or at a froglet or shallow tadpole: one hop, eaten only if the snout lands on it), Leap, Swim (to a NEAR perch, the next pad or stone, 20 s at most), Float, Dive (at most two in one spell in the water), Climb | the snake's head, a koi's head or a turtle near a swimming frog, a lizard's nose near one on a rock or the bank, a swallow's shadow |
-| Christmas reindeer (`src/Christmas/ReindeerHerd.cs`, 2026-11-10) | timid, curious (dealt; the calf is more of both, the bull less timid); an `Attention` each | Graze (scan, paw three times, eat, chew), Look, Walk, Lie, Alert, Watch (the head follows Santa), Trot, Shake, Gambol (the calf's play) | any reaction cuts a graze after a scrape in progress is finished; a Flee gets a lying animal up fast; Gambol only by a danger; Watch by Santa leaving or a danger; each walk brakes onto the rest page first |
-| Christmas hares and fox (`FoxAndHares.cs`) | hares: timid, curious, play (dealt); the fox is one visitor that comes and goes | hares: Sit, Look, Nibble, Groom, Go, Hop, Tall, Thump, Binky, Bolt, Dive, Under, Peek; fox: Away, Go, Trot, Stand, Look, Sit, Asleep, Mouse (listen, leap, dive), Stalk, Dash, Chase, Skid, Nose, Dig, Leave | a Threat (the fox, the owl) and a Loud send a hare tall and then bolting; a thump (Friend) makes every hare in earshot bolt; the fox's chase ends at the burrow with a dig and a sit |
+| Christmas reindeer (`src/Christmas/ReindeerHerd.cs`, 2026-11-10) | timid, curious (dealt; the calf is more of both, the bull less timid); an `Attention` each | Graze (scan, paw three times, eat, chew), Creep (a drift forward: a step, a scrape, a step), Look, Walk (alone, or LED: the others fall in behind in file), Lie, Alert, Watch (the head follows Santa), Trot, Shake, Gambol (the calf's play), Nuzzle (two touch noses), Bellow (the bull) | any reaction cuts a graze after a scrape in progress is finished; a Flee gets a lying animal up fast; Gambol only by a danger; Watch by Santa leaving or a danger; each walk brakes onto the rest page first; nothing rests, lies or nuzzles in a no-stop place (behind the snowman, the bird table, the lamp post, the cabin's door), and each animal enters by walking in from the edge |
+| Christmas hares and fox (`FoxAndHares.cs`) | hares: timid, curious, play (dealt); the fox is one visitor that comes and goes | hares: Sit, Look, Nibble, Groom, Go, Hop, Tall, Thump, Binky, Bolt, Dive, Under, Peek; fox: Away, Go, Trot, Stand, Look, Sit, Asleep, Mouse (listen, leap, dive), Stalk, Watch (a braced pull-up, ears on the hare), Dash, Chase, Skid, Nose, Dig, Leave | a Threat (the fox, the owl) and a Loud send a hare tall and then bolting; a thump (Friend) makes every hare in earshot bolt; the fox's chase ends at the burrow with a dig and a sit |
 | Christmas snowman (`YardSnowman.cs`) | one mind, no walking | Idle, Watch, HatTip, FixHat, Scan, Shiver, Snowflake, Yawn, Doze, WaveCabin, Shake, Jump, Search | most doings are cut by any reaction; a Loud makes him Jump, Santa overhead brings the HatTip, a Doze is cut only by a Loud or a Threat; HatTip, FixHat, Shake and Jump are never cut |
 | Christmas feeder birds (`FeederBirds.cs`) | timid, bold, lazy (dealt, from the kind: chickadee, cardinal, at most one jay); hunger | Away, Startle, Fly, Perch, Peck, Hop, Squabble, Sing, Bathe | a Threat sends every bird up at once; the jay's arrival scatters the table; a flush is posted for the rest |
-| Christmas log mice (`LogMice.cs`) | bold, curious, play (dealt); hunger (a mood that rises over about four minutes and sends a mouse to the bird table) | Home, Peek, Hop, Hold, Scurry, Rise, Sit, Wash, Fall, Dig, Plunge, Under, Pop, Box, Frozen | a Threat or Loud withdraws a peeking mouse and drops a sitting one to flee; a dash is never cut; a mouse under the snow hears nothing; a story LENDS the mice and the resident draws nothing of them |
+| Christmas log mice (`LogMice.cs`) | bold, curious, play (dealt); hunger (a mood that rises over about four minutes and sends a mouse to the bird table) | Home, Peek, Hop, Hold, Scurry, Rise, Sit, Wash, Fall, Dig, Plunge, Under, Pop, Box, Frozen (these are PHASES; the mind rolls an ACTIVITY: Emerge, Wander, Sit, Wash, Nibble, Forage, Tunnel, Tussle, Watch, Flee, Return, and one activity runs through several phases) | a Threat or Loud withdraws a peeking mouse and drops a sitting one to flee; a dash is never cut; a mouse under the snow hears nothing; a story LENDS the mice and the resident draws nothing of them |
 | Christmas otters (`Otters.cs`, `OttersMind.cs`) | playful, lazy, timid, curious (dealt) | Under, Surface, Haul, Rest, Gallop, Slide, Stand, Roll, Eat, Dive, Wrestle | a Threat or Loud sinks a surfaced otter at once and turns a gallop into a panicked run for the hole; Haul, Roll and Dive are never cut; a slide is cut only before the flop |
 
 The minnows' school mood (drift, rush, mill, and since round thirty-seven a dip to the deep bed and a graze
@@ -518,6 +518,18 @@ should spread (a deer bolting) pins a `Friend` notice of its own, which is how a
 through a herd without any herd code. Thanksgiving's director pins every happening as it begins
 (`HappeningDirector.Began`), a story pins its scuffle, and a squirrel on the move pins itself.
 
+**Calm (optional).** A busy scene needs the board rationed, or every animal keeps glancing at every other
+(Christmas: each reindeer reacted 15 to 32 times a minute and nothing finished). Three dials on the
+`Noticeboard`, all off unless a scene sets them (the block marked CALM in `Senses.cs`): `LookRest`, the seconds an
+animal rests after a mere Look; `Habituate`, the seconds for interest in the SAME source to come back (in
+`Attention.Check`, `Fresh` dulls a Movement, Friend or Call note from a source the animal has just reacted to
+to 0.3 of its strength, climbing back over those seconds, and `Remember` writes down who it reacted to; a Threat
+or a Loud is never dulled); and `Looks` per `Window`, how many Looks the whole scene may begin (`GrantLook`
+hands out the slots; a mere Look needs one). Fear is never rationed. Christmas sets 14, 45, 2 and 10
+(`ChristmasScene.cs`) and a reindeer now reacts 2 to 3 times a minute. The plain-words version, together with
+the other three parts of a managed scene (who stands where, one start for every resident, draw width), is in
+`HOW_SCREENSAVERS_WORK.md`, "The scene is managed".
+
 **Movers.** `Pace` is a speed that eases toward what the animal wants under an acceleration cap
 (a deer leans into a walk over half a second), a `Brake(dist)` that runs it down to nothing over
 exactly a chosen distance (so a walk ends on the page where both feet are on the ground: ask
@@ -597,27 +609,57 @@ in reach of the pin:
   Movement notice from the scene, and the calf always lifts its head to follow him. They pin Movement at a
   walking or trotting animal (reach 0.25 U, weight 0.3, only after it has walked more than 2 s, then a 6 s
   rest) and Friend when one bolts (reach 0.6 U, weight 1, once per alarm, never again within 5 s). In reach:
-  the hares, the birds at the table, and the other reindeer.
+  the hares, the birds at the table, and the other reindeer. Besides the grazing doings they have a drift
+  (`Creep`: the herd slowly crosses its lane over about five minutes, each animal with its own bias), a LED walk
+  (the bull or a cow sets off for a place five to nine body lengths away, at most once in 70 to 110 s, and the
+  adults behind it fall in after it in file, a gap of about three heights; where it stops they stop), a nuzzle
+  (two herd-mates stand nose to nose) and a bellow (the bull, with a plume of breath,
+  which the nearest of the herd may glance at). Four open stretches of snow are where they rest; the places
+  behind the snowman, the bird table, the lamp post and the cabin's front are NO-STOP (a walk may go past,
+  nothing stops there). Each animal makes an ENTRANCE, walking in from one edge (the bull first).
 - The hares and the fox (`FoxAndHares.cs`) read Santa, Loud, Threat and each other's thumps. The fox pins Threat
   while it stalks or chases (reach 0.35 U, weight 1, every 0.5 s) and a weaker one while it trots (0.2 U,
   weight 0.4, every 0.8 s); a hare pins Friend at each of its two thumps (0.4 U, weight 0.6) and does not thump
   again for 20 s after a flight. The hares hear the fox, the fox is in reach of the hares, and the thump is how
-  one hare's alarm becomes all of them bolting, with no herd code.
+  one hare's alarm becomes all of them bolting, with no herd code. A hare's Look is only the head (nine pages of
+  the sit book, the body unchanged); a hare flees AWAY from the danger to a burrow on the far side (within 60
+  degrees of straight away), dives in a drawn sheet and comes up by a drawn emerge; the fox's stalk ends in a
+  Watch (a braced pull-up) until the hare bolts or 4.5 s pass, and its sleep begins with a drawn curl. Every
+  hare starts underground and comes up one after another over the first 20 s.
 - The snowman (`YardSnowman.cs`) only listens: he reads Movement, Loud, Threat and Santa, and pins nothing, so
   nothing hears him. Every channel of his body (eyes, hands, mouth, squash) eases toward a goal the doing
-  writes, which is why two doings that disagree about the head glide from one to the other.
+  writes, which is why two doings that disagree about the head glide from one to the other. He is drawn
+  with `DrawSmooth`, and his entrance is a wake-up (eyes shut for a second, then open, a small stretch).
 - The birds (`FeederBirds.cs`) pin Movement when the whole flock flushes (0.4 U, weight 0.6, once per flush) and
   Food where a flung seed lands (0.3 U, weight 0.5, never within 8 s of the last). In reach: the hares, the
-  mice, and the snowman if they sit within 0.4 U of the table.
+  mice, and the snowman if they sit within 0.4 U of the table. A bird's change of page is dissolved over
+  about 0.06 s, so no change of picture is one frame.
 - The mice (`LogMice.cs`) move in dashes of a whole number of strides, so a dash always ends on the page where
   all four feet are down. They pin Movement while they run (0.15 to 0.18 U, weight 0.3 to 0.35) and a Friend
-  squeak (0.20 U, weight 0.4, at most once in 3 s); a Food notice sends a hungry mouse foraging.
+  squeak (0.20 U, weight 0.4, at most once in 3 s); a Food notice sends a hungry mouse foraging. A mouse
+  decides once per ACTIVITY (a wander, a sit, a wash, a tunnel, a tussle), never per phase; a reversal is a
+  drawn pivot on the spot; and the climb out of the snow is a drawn sheet (a head in a swelling mound, the
+  shoulders, up to standing, 1.45 s eased slow-fast-slow).
 - The otters (`Otters.cs`, `OttersMind.cs`) move in the flat plane of the ice and are drawn at nine yaws. They
   pin Movement at a belly slide (0.3 U, weight 0.4, once per slide), Friend when one bolts for the hole (0.5 U,
   weight 0.8, at most once in 15 s) and Food when one starts a fish (0.3 U, weight 0.8, once per fish). In
-  reach: the mice that come to the near rim of the pond, and a hare at the strip left of the pond.
-- Santa (`SantaRig.cs`) is not a resident. The scene pins him as a Movement notice once a second while he is on
-  screen (high in the sky, reach 1.6 U, weight 0.35), so the animals glance up rather than flee.
+  reach: the mice that come to the near rim of the pond, and a hare at the strip left of the pond. Nobody is
+  on the ice at the start: every otter is under it and its head comes up in the hole, the first about 1.5 s in
+  and the others three or four seconds apart. A picture is a blend of up to eight stamped pages, so a turn
+  between two yaw bins or a stop after a gallop is a dissolve, never a one-frame change.
+- Santa (`SantaRig.cs`) is not a resident. His team is nine (Rudolph alone, then four pairs) on one set of
+  pictures, each on its own gallop phase. The scene pins him as a Movement notice every 2.5 s while he is on
+  screen (high in the sky, reach 1.6 U, weight 0.35), so the animals glance up rather than flee, and the calm
+  board makes that one glance per animal, not one every few seconds. A flight comes every minute or two (a pause
+  of 45 to 105 s after one). On the roof (`SantaDelivery`) only the sleigh and the rear pair land; Rudolph and
+  the other three pairs hover in the air beyond the eave.
+- WHO STANDS WHERE (`ChristmasScenery.Occupy`, `Crowded`, `NearestOther`, `TurnPage`): every resident writes its
+  feet each frame and asks the finished list of last frame before it picks a place or steps, so nobody stands
+  inside anybody; the herd keeps to `HerdBandTop` to `HerdBandBottom` and the small animals to `SmallBandTop`
+  and below, with the snowman in the gap between. Any new animal on the snow calls `Occupy` and `Crowded`.
+- ONE START (`ChristmasScene.Update`): no resident begins until `ResidentsStart` (6 s) has passed and every
+  resident is `Ready`, and then all begin on the same frame; in a test (a seed is set) the start is pinned to
+  `ResidentsStart`. Every resident makes an entrance. See `HOW_SCREENSAVERS_WORK.md`, "The scene is managed".
 
 `Story`, `StoryDirector` and `DepthQueue` now live in `Core/Stories.cs`, for any saver. Thanksgiving still uses
 its own older copy in `src/Thanksgiving/Stories.cs`: that is a known leftover, not a design. Two Christmas stories
@@ -625,6 +667,20 @@ its own older copy in `src/Thanksgiving/Stories.cs`: that is a known leftover, n
 mice (they are inside the log and the resident draws nothing of them while it plays), and `SantaDelivery` takes
 Santa's reins (`SantaRig.Take` and `Release`). While a story plays the scene sets `Lull` on every resident, so
 each finishes what it is doing and keeps to quiet doings. `CarrotHeist` is a placeholder that never plays.
+
+Rules for a silky scene (each came from a sighting of a tick or a pop; the plain-words story is in
+`HOW_SCREENSAVERS_WORK.md`, "Silky"):
+- A body that moves is stamped with `Sprite.DrawSmooth` (at a fraction of a pixel; `ChristmasScenery.Stamp` does
+  it), never at rounded feet.
+- A part that drifts slowly between flip-book pages (a head, an antler) is drawn with `Sprite.DrawBlend`, a
+  dissolve between the two nearest pages, not the nearer page.
+- Every pair of doings has a drawn way between them (a turn, a rise, a settle, a dive, a climb out); a doing never
+  ends on one pose and the next begins on another.
+- A transition of T seconds carries about 30 times T pages, so a page is held two frames at most at 60 a second.
+- A glance is the head alone, and a resident's reaction is rationed by the calm board (section 10).
+- Judge smoothness with the frame-by-frame pop detector before any look: a smooth motion changes the picture by
+  about the same amount each frame, a pop by far more in one frame than in the frames either side.
+  `PECKWORKS_NOSNOW=1` leaves out the falling snow and the glitter so only the animals change the picture.
 Test aids: `PECKWORKS_STORY=1` starts the first story at 4 s (0 never plays one), `PECKWORKS_STORYPICK=<name>`
 plays one story every time, `PECKWORKS_STORYLOG=<file>` writes a line per story begun, and `PECKWORKS_MINDLOG=<file>`
 makes every Christmas resident and the Santa rig write their places and doings.

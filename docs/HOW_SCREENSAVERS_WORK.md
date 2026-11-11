@@ -68,7 +68,7 @@ src/
     IScreensaverScene.cs           the contract a screensaver fills in
     ScreensaverSettings.cs         a list of knobs, saved in the registry
     SettingsDialog.cs              the Settings dialog: live preview + one slider per knob
-    Sprite.cs                      a small picture painted once and stamped each frame (bats, Santa, glows)
+    Sprite.cs                      a small picture painted once and stamped each frame (bats, Santa, glows); DrawSmooth stamps at a fraction of a pixel, DrawBlend shows a picture part way between two flip-book pages
     FrameSections.cs               a lap timer for a frame: which part costs what (off unless PECKWORKS_SECTIONS is set)
     Happenings.cs                  small random events: the base class, and the director that deals them out
     Sakura/PetalField.cs           the falling petals (or leaves, or snow), shared by every painted scene
@@ -166,9 +166,9 @@ a fed koi was as hungry as before and went straight back for the next.
 
   Christmas/                       falling snow, twinkling lights, a village, and a snowfield of residents
     Program.cs                     Main(), plus the definition
-    ChristmasScene.cs              backdrop + the live lights (stars, village and cabin windows, lamp, glitter, bulbs) + smoke + Santa + the residents through one depth queue + the stories + the noticeboard + the shared engine dropping snow
-    ChristmasPainter.cs            paints the low-horizon night, the village in the valley, the log cabin, the pines and their lights, the snowfield with its frozen pond and ice hole, the lamp post, the fallen log, the bird table, the tiny fir and the holly; hands back the facts and the depth picture (NearDepth)
-    ChristmasSettings.cs           declares its knobs
+    ChristmasScene.cs              backdrop + the live lights (stars, village and cabin windows, lamp, glitter, bulbs) + smoke + Santa + the residents through one depth queue + the stories + the calm noticeboard + the one start for every resident + the shared engine dropping snow
+    ChristmasPainter.cs            paints the low-horizon night, the village in the valley, the log cabin, the pines and their lights, the snowfield with its frozen pond and ice hole, the toy train's track with its sleepers and telegraph poles, the lamp post, the fallen log, the bird table, the tiny fir and the holly; hands back the facts, the depth picture (NearDepth), the two bands of the field and the "who stands where" list
+    ChristmasSettings.cs           declares its knobs (including Draw width)
     Resident.cs                    the base class of everything that lives in the scene (its own dice, painting on a helper thread, Lull, Stamp) and the shared mind log
     ReindeerHerd.cs, ReindeerArt.cs      the grazing herd: minds and flip-books
     FoxAndHares.cs, FoxAndHaresArt.cs, FoxAndHaresFoxArt.cs   the hares and the fox that stalks them
@@ -449,12 +449,12 @@ just as a petal does, so `PetalField` simply has a `Shape` switch (petal, leaf, 
 pair of `Colors` to mix between. Halloween asks for leaves from gold to deep red; Christmas asks
 for soft white dots.
 
-*Sprites.* A bat with scalloped wings, or a sleigh with four reindeer, is too detailed to work
+*Sprites.* A bat with scalloped wings, or a sleigh with nine reindeer, is too detailed to work
 out pixel by pixel sixty times a second. So `Sprite.cs` does what `GlyphAtlas` does for the
 Matrix characters: paint the thing **once** at startup onto a small see-through sheet, then stamp
 that sheet onto the frame wherever it is needed. To animate, paint a few sheets in different
 poses and stamp a different one each frame, like the pages of a flip-book. The bats have seven
-wing positions in three sizes; Santa's reindeer each have a sixteen-page flying gallop of their own.
+wing positions in three sizes; Santa's reindeer share a set of twenty-page flying gallop pictures, each reindeer on its own beat of it.
 
 A soft **glow** is also a sprite: a round patch of color, strong in the middle and fading to
 nothing at the edge. Stamping it at changing strength is what makes a jack-o'-lantern flicker, a
@@ -531,18 +531,114 @@ machinery in `src/Thanksgiving/Stories.cs`; moving it onto the engine's is a kno
 
 *Santa became a rig.* He used to be one picture of the whole team slid across the sky. Now (`SantaRig.cs`,
 `SantaArt.cs`) every reindeer is its own flip-book and the sleigh is a set of pages (Santa seated, waving,
-looking down, cracking the reins) at nine tilts; each frame the rig puts each part on a shared curve, a fixed
-distance behind the front, on its own beat, and joins them with traces and reins that sag and tighten. His
+looking down, cracking the reins) at five tilts; each frame the rig puts each part on a shared curve, a fixed
+distance behind the front, on its own beat, and joins them with traces and reins that sag and tighten. The
+team is nine: Rudolph alone in front, then four pairs, two abreast (the far one of a pair is the same picture
+a little behind, a little above, and tinted darker and bluer, as something farther off at night), with a gang
+line down the middle of the team from the sleigh to Rudolph that tightens pair by pair. His
 place is an added-up distance along the path, never "time times speed", which is what lets a story take the
 reins: `SantaDelivery` calls `Take`, flies the parts down to the cabin's roof by hand (the rig is shrunk
 along a ladder of seven sizes, each its own set of pictures, because the cabin is farther away than the sky
 lane), and hands the reins back with `Release`. He is still stamped only on sky pixels, so he passes behind
 the corner branches, and where he crosses the moon he turns into a silhouette.
 
+A flight is an event, not a constant. The rig waits nine seconds at the start, and after each flight it
+pauses for 45 to 105 seconds (40 to 90 after a delivery story), so he comes by every minute or two.
+Rudolph's nose also throws a faint red pool of light on the snow (an ellipse of red at a tenth of full
+strength at most, laid only on pixels that are still snow-bright, so it never stains a pine or the cabin); it slides
+along under him and is strongest when he is low in the sky. Light is solid to nothing, so it simply tints the
+snow. In `SantaDelivery` the cabin's roof is short, so only the sleigh and the rear pair land on it; Rudolph
+and the other three pairs hold station in the air beyond the eave in a slow hover, the gang line taut back to
+the sleigh.
+
 *Live lights.* Besides the bulbs, the scene stamps glows (the same sprite trick) for the twinkling stars, the
 village's windows, the cabin's windows and the lamp post, sparkles on the snow, and the chimney's smoke
 (`Core/ChimneySmoke.cs`). Everything that happens in the scene (a firework, the owl, Santa going over) is
 pinned on the noticeboard, so the residents react to it.
+
+*The scene is managed.* Put a dozen animals in one field and a problem appears that no single animal has: they
+all notice each other, all the time. Christmas ran into it, and the cure has four parts.
+
+*One: a calm noticeboard* (`Core/Minds/Senses.cs`, the block marked CALM, switched on in `ChristmasScene.cs`).
+Every animal that walks pins a note on the board ("something moved here"), and every animal reads the board.
+Each reaction is sensible by itself. Together they are a room where everybody keeps looking up and nobody
+finishes a mouthful: with the old rules each reindeer reacted 15 to 32 times a minute, and no doing ever ran
+its course. Now the board has dials. `LookRest` (14 seconds in Christmas): after a glance an animal gets on
+with life for about that long. `Habituate` (45 seconds): an animal gets used to a source it has just reacted
+to, so a second note from the same source counts for less than a third as much, and its interest creeps back
+over that time (Santa passing is worth one look, not twenty). `Looks` per `Window` (2 per 10 seconds): the
+whole scene may only begin so many glances in a window, so if two animals have just looked up, a third waits.
+On the animal's side, `Attention.Check` asks `Fresh` (how new is this source to me?), `Remember`s who it just
+reacted to, asks the board for a slot (`GrantLook`) before a mere Look, and then rests. A bang or a threat is
+never dulled, and a Freeze or a Flee is never held back: fear is not rationed. A crowd where heads turn one or
+two at a time reads as alive; a crowd where all heads turn all the time reads as broken. After the change a
+reindeer reacted 2 to 3 times a minute.
+
+*Two: who stands where.* At first nobody knew anybody else existed: the fox trotted through a reindeer's
+legs, and a hare stood inside a reindeer for seventeen seconds. Now `ChristmasScenery` keeps a cloakroom list.
+Every frame each animal on the snow writes down where its feet are and how long it is (`Occupy`). Before it
+picks a place or takes a step it asks whether somebody else is already standing on that bit of that row
+(`Crowded`), and `NearestOther` finds the neighbour to step round. There are two sheets, the one being
+written and last frame's finished one (`TurnPage` swaps them once a frame), and everybody reads the finished
+one, so the answer never depends on who happened to be updated first. Passing in front of or behind another
+animal is fine, and is what the depth picture is for; standing inside one is not. The field is also split
+into two bands. The herd keeps to level rows from `HerdBandTop` to `HerdBandBottom`, just below the lowest dip
+of the hill's crest; everything smaller (the fox, the hares) lives at or below `SmallBandTop`, a clear gap
+nearer to us. Animals of the two bands pass in front of or behind each other and never through. The snowman
+stands in the gap between the bands, so the herd passes behind him and never stops there, and the fox and the
+hares always pass in front of him.
+
+*Three: one start.* At first each resident began when its own flip-books were painted (the mice at 4 seconds,
+the herd at 15 to 18), each popping into the scene fully formed, and the same seed played differently from
+run to run. Now nobody begins until `ResidentsStart` (6 seconds) has passed and every resident reports
+`Ready`; then they all begin on the same frame, so nothing ever waits and the snow never stops. In a test (a
+seed is set) the start is pinned to exactly `ResidentsStart`: the scene waits there, up to a minute, for
+whoever is still painting, because a start that follows the painting moves from run to run and then no test can
+be repeated. (Nobody watches a test, so the pause costs nothing; on a screen it would be a freeze.) Each
+resident then makes an entrance: the herd walks in from an edge, the hares come up out of burrows, the otters
+surface through the hole in the ice one after another, the snowman wakes, the mice peek out of the log.
+
+*Four: draw width.* `ChristmasSettings.DrawWidth` (the "Draw width" knob, 1600 to 3840, default 1920) is what
+`MaxRenderWidth` in `Program.cs` returns. On a wider screen the scene is drawn at that width and Windows
+enlarges the picture. Drawing all eight million pixels of a 4K screen took 21 to 23 thousandths of a second a
+frame, more than the 16.7 a smooth 60 frames a second allows, so every animal stuttered however well it was
+drawn; a soft storybook scene loses almost nothing when enlarged.
+
+*Silky.* Once the animals behaved, the next complaint was the pictures themselves: they ticked. Two cures,
+both in `Core/Sprite.cs`.
+
+`DrawSmooth` stamps a picture at a fraction of a pixel. The screen is a grid, so a plain stamp can only sit on
+whole pixels, and something moving a pixel and a half a frame advances 1, 2, 1, 2: a judder the eye reads as
+"not smooth" however good the drawing is. A slow camera pan does it better: a sticker sitting 0.3 of a pixel
+to the right is drawn as 70 percent of itself in each pixel plus 30 percent of itself in the next pixel along.
+Do that across and down and the picture glides between the grid lines (the name for it is bilinear
+filtering). It costs about four times a plain stamp, so it is for things that move (an animal's body), not
+for hundreds of glows, and when the fraction is tiny it just calls the plain stamp. `ChristmasScenery.Stamp`,
+the one call every resident and story uses to put feet on the snow, uses it, so nobody rounds their feet first.
+
+`DrawBlend` shows a picture part way between two pages of a flip-book. A flip-book has a fixed number of
+pages: a reindeer's head has 24 of them between "nose on the snow" and "head high", so each page turn swings an
+antler tip four pixels. That is fine while the head moves fast, but a head that drifts slowly then ticks, four
+pixels every few frames, and pale antlers ticking against dark pines is exactly what the eye catches. Four
+times the pages would cost four times the memory. Instead, between two neighbouring pages we draw a dissolve:
+where both pages are solid the result is solid, and where only one is, that sliver fades in or out as the head
+moves on. The antler tip no longer jumps; one tip fades out while the next fades in a pixel or two away, which
+at this size reads as smooth movement. (Each pixel's solidness and its colour-times-solidness are mixed
+separately, so a solid brown pixel mixed with an empty one becomes half-solid brown, never half-solid mud.)
+The birds, the otters and the snowman use the same dissolve idea between their own pages.
+
+Two rules follow. Every pair of doings has a DRAWN way between them (a turn, a rise, a settle, a dive, a climb
+out), so a body never jumps from one pose to a different one. And a transition carries about 30 pages a
+second (a transition of T seconds has at least 30 times T pages), so while a body moves a page is held about
+two frames at 60 frames a second. Santa's gallop is 20 pages at 1.5 beats a second for the same reason: 30
+pages a second, every page held exactly two frames.
+
+To catch ticks without staring, development used a frame-by-frame "pop detector". The idea: a smooth motion
+changes the picture by about the same amount each frame, while a pop changes it far more in one frame than in
+the frames either side of it. Compare every frame to the one before and flag any frame whose change is many
+times its neighbours'. The falling snow would drown that in noise (hundreds of flakes change every pixel
+every frame), so `PECKWORKS_NOSNOW=1` leaves out the snow and the snow's glitter for a test run; it is only for
+testing, and the scene looks wrong without them.
 
 Each happening is one small class with one rule: it is told `t`, the number of seconds since it
 began, and works out the whole picture from that number alone. It keeps no notes from one frame

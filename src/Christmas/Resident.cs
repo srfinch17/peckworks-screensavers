@@ -58,7 +58,46 @@ internal abstract class Resident : IDepthDrawn
     /// it runs at the same time as the scene.
     /// </summary>
     protected void BuildInBackground(Action build) =>
-        Task.Run(() => { try { build(); } catch { return; } _ready = true; });
+        Quietly(() => { try { build(); } catch { return; } _ready = true; });
+
+    // ---- PAINTING WITHOUT STEALING THE SHOW ----
+    //
+    // FEYNMAN VERSION: the flip-books are painted while the snow is already falling. At first every resident
+    // painted at full tilt on every processor core at once, and for the first five seconds the picture itself
+    // could not get a turn: 26 thousandths of a second a frame instead of 7, the snow juddering (the publish
+    // check caught it; his word for the whole saver is "silky", and that includes the first second). So the
+    // painters now work like cleaners in a theatre during the show: on a few threads only, and at a LOWER
+    // PRIORITY than the picture, which means Windows lets the picture go first whenever both want the
+    // processor. The animals arrive a few seconds later; nothing on screen ever waits for them.
+
+    /// <summary>Runs "work" on a helper thread of its own at below-normal priority.</summary>
+    public static void Quietly(Action work) =>
+        new Thread(() => work()) { IsBackground = true, Priority = ThreadPriority.BelowNormal, Name = "painting flip-books" }.Start();
+
+    /// <summary>
+    /// Does body(0), body(1) ... body(n - 1), shared between a few helper threads at below-normal priority, and
+    /// returns when all are done. For painting many pages: quicker than one after another, without taking every
+    /// core the way Parallel.For does.
+    /// </summary>
+    public static void QuietFor(int n, Action<int> body)
+    {
+        if (n <= 0) return;
+        int workers = Math.Clamp(Math.Min(n, Environment.ProcessorCount / 4), 1, 3);
+        int next = -1;
+        Exception? failed = null;
+        var threads = new Thread[workers];
+        for (int w = 0; w < workers; w++)
+        {
+            threads[w] = new Thread(() =>
+            {
+                try { int i; while ((i = Interlocked.Increment(ref next)) < n) body(i); }
+                catch (Exception e) { failed = e; }
+            }) { IsBackground = true, Priority = ThreadPriority.BelowNormal, Name = "painting flip-books" };
+            threads[w].Start();
+        }
+        foreach (Thread t in threads) t.Join();
+        if (failed != null) throw failed;
+    }
 
     /// <summary>Thinks and moves. dt is the seconds since the last frame.</summary>
     public abstract void Update(float dt);

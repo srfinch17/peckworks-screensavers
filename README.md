@@ -548,7 +548,7 @@ Adding more happenings, here or to another screensaver, is a recipe:
 
 Christmas Eve at a log cabin in the north woods, rebuilt the way Thanksgiving was: a painted world with
 animals living in it. Snow falls on a low horizon with a village glowing down in the valley and snowy
-mountains behind it. A big log cabin with warm windows and a smoking chimney stands among pines strung with
+mountains behind it. A railway line with sleepers and telegraph poles runs across the valley floor. A big log cabin with warm windows and a smoking chimney stands among pines strung with
 pastel lights that twinkle. In front lies a snowfield with a frozen pond (and a hole in its ice), a lamp
 post, a fallen log, a bird table, a tiny fir tree and holly bushes, with bare branches reaching in from the
 top corners. Everything near is hidden correctly by whatever stands nearer than it, the same depth trick
@@ -561,36 +561,60 @@ Thanksgiving uses for its pumpkins.
   drifts from the chimney, the lamp post's flame gutters inside a halo, the snow glitters in flashes, and every
   bulb (pink, mint, baby blue, lavender, butter, peach) brightens and dims on its own rhythm. The snow is the
   Sakura petal engine drawing soft white dots.
-- **Santa's sleigh crosses the sky** behind the overhanging branches, pulled by four reindeer, Rudolph in front
-  with his red nose glowing. Each reindeer has its own flying gallop and drops stardust from the runners, the
-  team rises and dips along its path, and where it crosses the moon it turns into a silhouette. The flights
-  vary (along the top or a long diagonal, left to right or right to left). The animals look up as he goes over.
-- **Reindeer** (a bull with a wide rack, cows, and from three animals up a calf) graze on the snowfield: they
-  paw the snow with a foreleg and then nose down into the hole, walk, look up, lie down together, shake the
-  snow off, follow Santa across the sky with their heads and bolt for a short trot at a danger. The calf plays,
-  and now and then tries to fly like the ones overhead.
-- **Snowshoe hares and a red fox.** The hares sit with twitching noses, wash their faces, hop, stand tall to
-  look, and now and then spring into the air for joy. The fox is a visitor: it trots in, listens for a mouse
-  under the snow, leaps and dives in head first, sits, curls up to sleep under a thickening dusting of snow,
-  and goes away again. When it stalks a hare, the hare rears up, thumps twice (the other hares hear it and
-  bolt too) and zigzags to a burrow; the fox gallops after it and gives up at the hole. The hare always gets
-  away.
-- **A snowman** stands in the near snow and never walks, but he watches. He jumps at a bang and his hat flies
+- **Santa's sleigh crosses the sky** behind the overhanging branches, pulled by eight reindeer in four pairs
+  with Rudolph alone in front, his red nose glowing. Every reindeer gallops on its own beat (no two are in
+  step), a gang line runs down the middle of the team from the sleigh to Rudolph and sags and tightens with
+  the beat, stardust drops from the runners, the team rises and dips along its path, and where it crosses the
+  moon it turns into a silhouette. Rudolph's nose throws a faint red pool of light on the snow that slides
+  across the field beneath him as he passes. A flight is an event, not a constant: the first comes about nine
+  seconds in, and after each one there is a pause of 45 to 105 seconds (40 to 90 after the delivery story),
+  so he comes by every minute or two. The flights vary (along the top or a long diagonal, left to right or
+  right to left). The animals glance up as he goes over.
+- **Reindeer** (a bull with a wide rack, cows, and from three animals up a calf) walk in from one edge of the
+  screen when the scene begins (the bull first, the calf trotting to keep up), then graze on the snowfield:
+  they paw the snow with a foreleg and then nose down into the hole, drift slowly forward a step and a scrape
+  at a time, walk, look up, lie down together, shake the snow off, follow Santa across the sky with their
+  heads and bolt for a short trot at a danger. Now and then the bull or a cow sets off for a place a few body
+  lengths away and the other adults behind it fall in after it in single file, then spread out and graze
+  again. Two of them touch noses, and the bull lifts his head right up and bellows, a plume of breath rolling
+  off his muzzle. Four stretches of clear snow are where the herd lives: they walk past the snowman, the bird
+  table, the lamp post and the cabin's door but never stop, graze or lie there. The calf plays, and now and
+  then tries to fly like the ones overhead.
+- **Snowshoe hares and a red fox.** The hares come up out of their burrows one after another over the first
+  twenty seconds, then sit with twitching noses, wash their faces, hop, stand tall to look, and now and then
+  spring into the air for joy. A glance is only the head coming up: the body does not change. The fox is a
+  visitor: it trots in, listens for a mouse under the snow, leaps and dives in head first (a drawn dive, and a
+  drawn climb back out with a face full of snow), sits, curls up to sleep under a thickening dusting of snow
+  (a drawn curl), and goes away again. When it stalks a hare, the fox pulls up into a low watch pose with its
+  ears on the hare, and holds it until the hare bolts or four and a half seconds pass. The hare rears up,
+  thumps twice (the other hares hear it and bolt too) and zigzags AWAY from the fox to a burrow on the far
+  side; the fox gallops after it and gives up at the hole. The hare always gets away, and later its ears come
+  up out of the snow somewhere else: ears, eyes, head, a look round, a hop out.
+- **A snowman** stands in the near snow and never walks, but he watches. He wakes as the scene begins (eyes shut for a second, then open, a small stretch). He jumps at a bang and his hat flies
   off, tips the hat to Santa, shivers, catches a snowflake on his carrot, yawns, dozes off and wakes with a
   start, waves at the cabin, and shakes the snow off his arms.
 - **Birds at the bird table**: cardinals, chickadees and at most one bossy blue jay. They land on the tray, the
   roof, the lamp's crossbar, the log, the tiny fir and the corner branches, peck, hop, sing, bathe in the snow,
-  squabble, scatter when the jay comes and all go up at once at a threat.
+  squabble, scatter when the jay comes and all go up at once at a threat. Every change of picture dissolves into
+  the next over a few frames, so nothing flickers.
 - **Mice in the fallen log** come out slowly (a nose, whiskers, a head that looks both ways), run in dashes
   with frozen stops between, sit up, wash their faces, fetch seeds, box nose to nose, dive into the snow and
-  tunnel when frightened, and bolt for the hole.
+  tunnel when frightened (and climb out of the snow in a drawn climb: a head in a swelling mound, then the
+  shoulders, then standing), and bolt for the hole. A mouse works through whole activities (a wander, a sit,
+  a wash, a tunnel, a tussle) rather than a string of unrelated moves, and every change of facing is a drawn
+  turn on the spot.
 - **Otters on the frozen pond** come and go through the hole in the ice: they surface, haul out over the rim,
-  gallop, run up and belly slide, stand up like periscopes, roll on their backs, eat a fish and wrestle.
+  gallop, run up and belly slide, stand up like periscopes, roll on their backs, eat a fish and wrestle. They arrive one at a time, each head coming
+  up in the hole a few seconds after the last, and their pictures dissolve into each other, so a turn or a
+  stop never snaps.
 - They notice each other and the happenings. Fireworks and the toy train are loud, the owl is a threat, a
   sliding snowball is something to glance at; a fox stalking or a bolting reindeer is read by the animals near
-  it. Nobody reacts to a kind of animal, only to what a notice says.
+  it. Nobody reacts to a kind of animal, only to what a notice says. The field is kept calm: after a glance an
+  animal gets on with life for about a quarter of a minute, it gets used to a source it has just looked at,
+  and only two glances may begin in any ten seconds across the whole field. Fear (a bang, a fox) is never
+  held back.
 - **Two stories** play now and then (one about every minute, dealt like a deck so each comes round before
-  any repeats): *Santa delivers* (the team lands on the cabin roof one reindeer after another, Santa climbs out
+  any repeats): *Santa delivers* (the sleigh and the rear pair land on the cabin roof, which is short, while Rudolph and the other pairs hover in the air beyond the eave; Santa climbs out
   with his sack and goes down the chimney, the windows flicker, he comes back up sooty and pats himself clean,
   and the team leaps off in a burst of stardust) and *the mice trim the tree* (three mice carry a bauble, a
   coil of lights and a gold star to the tiny fir; the lights come on from the bottom, and the trimmed tree
@@ -600,19 +624,34 @@ Thanksgiving uses for its pumpkins.
 
   | Where | What happens |
   |-------|--------------|
-  | The sky | A shooting star to wish on. The northern lights ripple. Stars join up into a snowflake, a star, a tree, a candy cane or a bell. Festive fireworks (gold and silver, red and green, or icy blue). A gust of wind whirls snow across. A drift of golden fairy dust swoops through. |
+  | The sky | A shooting star to wish on. The northern lights ripple. Stars join up into a snowflake, a star, a tree, a candy cane or a bell. A firework show launched from the village (below). A gust of wind whirls snow across. A drift of golden fairy dust swoops through. |
   | The moon | An ice halo with a faint rainbow forms around it. |
   | Santa | A present tumbles off the sleigh and lands in the snow. |
-  | Far off | A toy train with lit windows crosses the valley. A reindeer stands on the mountain ridge. |
+  | Far off | A toy train with lit windows crosses the valley on its track. A reindeer stands on the mountain ridge. |
   | The snow | A snowball rolls across, growing. A clump of snow slides off a pine. |
   | The cabin and the lights | Smoke rings (and a heart) from the chimney. A wave of brightness runs through every light. The star on the tree flares and showers sparkles. |
   | The corners | Frost crystals grow across a corner of the glass. A snowy owl perches on a branch and blinks. |
 
   (The fox, the rabbit and the snowman used to be happenings. They live in the scene all the time now.)
 
+  **The firework show** lasts about 27 seconds and always has the same arc, with different shells each time:
+  an opening of three single shells, one at a time; a middle (a snowflake, a pair of rings, the Christmas tree
+  on its own so it can be read, then three overlapping bursts); a quiet beat of two seconds while the last
+  smoke drifts; and a finale of volleys (two or three shells bursting at the same instant) in a rush, ending
+  in one huge gold willow. Every shell climbs from the village in the valley as a faint trail, pops, and
+  bursts. The kinds of shell are the peony (a round ball, usually red and green), the pastel (a ball of pink
+  and violet, ice blue or gold), the willow (long gold stars that droop), the chrysanthemum (mostly white
+  stars with some gold or silver), the ring (red, gold or green), the double ring, the five-pointed star, the
+  six-armed snowflake, the Christmas tree (green, with baubles that turn red, gold or ice blue) and the cross
+  (gold stars that each split into four). Each burst lights the sky, the mountains and the valley with a
+  faint wash of its colour, and a wide, fainter wash of the same colour lies on the snow below it for about
+  half a second.
+
 Settings: amount of snow, fall speed, breeze, flake size, how often a surprise happens (0 turns them off),
-how often a story plays (0 turns them off), and how many reindeer (0 to 6, default 3), hares (0 to 6, default
-3; no hares means no fox), birds (0 to 10, default 5), mice (0 to 6, default 3) and otters (0 to 3, default 2).
+how often a story plays (0 turns them off), how many reindeer (0 to 6, default 3), hares (0 to 6, default
+3; no hares means no fox), birds (0 to 10, default 5), mice (0 to 6, default 3) and otters (0 to 3, default 2),
+and "Draw width" (1600 to 3840 pixels, default 1920): the widest the scene is drawn, enlarged by Windows on a
+wider screen.
 
 ## Thanksgiving
 
@@ -939,8 +978,8 @@ Time per frame (update + render):
 
 | Resolution | Matrix Rain | Sakura      | Sakura Dusk | Halloween   | Christmas   | Thanksgiving | Cabin by Stream |
 |------------|-------------|-------------|-------------|-------------|-------------|--------------|-----------------|
-| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 7 ms  | about 3 ms   | about 2 ms      |
-| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 25 ms | about 12 ms  | about 9 ms      |
+| 1920x1080  | about 10 ms | about 4 ms  | about 4 ms  | about 4 ms  | about 11 ms | about 3 ms   | about 2 ms      |
+| 3840x2160  | about 29 ms | about 11 ms | about 12 ms | about 15 ms | about 11 ms (drawn at 1920 wide) | about 12 ms  | about 9 ms      |
 
 Under about 16 ms means the full 60 frames per second. Each frame waits for the screen's next
 refresh before the next one is drawn, so frames reach the screen evenly, one per refresh (an
@@ -977,11 +1016,12 @@ their worst second. Six are dearer while they last: Red Fuji (about 7.5 ms more)
 director never lets two of them run at once and their costs never add up. At 1920x1080 none of
 them drops a frame.
 
-Christmas, rebuilt (2026-11-10), measured over 90 seconds at 1920x1080 with every resident, the stories and
-the happenings on: 7.3 ms on average, 10.0 ms in its worst second, 15.9 ms for its slowest frame, so no
-frame is dropped. With the happenings off it is 6.7 ms. At 3840x2160 it averages about 25 ms (28 ms in its
-worst second): smooth at 30 frames a second there, not at 60. Each resident's flip-books are painted on a
-helper thread in the first seconds, so the animals appear a few seconds after the snow starts (the
-reindeer last, at about 14 seconds).
+Christmas, measured at 1920x1080 with every resident, the stories and the happenings on: 10.6 ms on average
+over 120 seconds, and 14.5 to 16.3 ms in its worst second. On a 4K screen it is drawn at 1920 wide by default
+(the "Draw width" setting) and Windows enlarges the picture, so it costs about the same there: drawing all
+eight million pixels of a 4K screen took 21 to 23 ms a frame, more than a frame has. Each resident's
+flip-books are painted on a helper thread in the first seconds while the snow is already falling. Every
+resident then begins together about six seconds in, once all their flip-books are painted, and makes an
+entrance.
 
 Measure your own with `/snapshot`; the timing lands in `out.png.txt`.

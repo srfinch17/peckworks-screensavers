@@ -50,6 +50,13 @@ For things made of many bits (firework sparks, a swarm of bats): in `Begin`, sto
 starting direction and speed in an array. In `Draw`, work out where each bit is at time `t` from
 those numbers. Do not move them a little each frame.
 
+A happening can be a whole show. Christmas's fireworks last about 27 seconds with an arc (an opening of three
+single shells, a middle, two quiet seconds, a finale of volleys and one huge willow), and every shell is a
+whole life worked out from `t` alone (a launch from the village, a flash, a burst of stars that slow down by
+air drag, then fade). Each run rolls different shells, places and heights in `Begin`, but always that arc.
+`PECKWORKS_FIREWORK=<kind>` (peony, willow, chrys, ring, double, star, snow, tree, cross, pastel) plays five
+shells of one kind four seconds apart so each can be looked at alone.
+
 Read `ShootingStar.cs` (a sky happening that goes behind scenery) and `SkeletonEyes.cs` (one
 fixed to a prop) before writing one. They are the pattern.
 

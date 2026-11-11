@@ -209,8 +209,9 @@ internal sealed class SantaRig
         _red = Sprite.Glow(Math.Max(2, (int)(_u * 0.004f)), Color.FromArgb(255, 70, 60));
         _star = PaintSparkle(Math.Max(5, (int)(_u * 0.016f)));
 
-        // The pictures take a moment to paint: a helper thread does it while the snow is already falling.
-        Task.Run(() =>
+        // The pictures take a moment to paint: a helper thread does it while the snow is already falling
+        // (at a lower priority than the picture: see Resident.Quietly).
+        Resident.Quietly(() =>
         {
             try
             {

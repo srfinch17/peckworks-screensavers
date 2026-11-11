@@ -96,7 +96,7 @@ internal sealed class Book
             Ox[t] = w / 2; Oy[t] = h - below - 1;
             var row = new Sprite[spec.N]; Pages[t] = row;
             int oxx = Ox[t], oyy = Oy[t];
-            Parallel.For(0, spec.N, i =>
+            Resident.QuietFor(spec.N, i =>
             {
                 row[i] = Sprite.Paint(w, h, g =>
                 {

@@ -236,23 +236,17 @@ internal sealed class ReindeerHerd : Resident
             long alloc0 = GC.GetAllocatedBytesForCurrentThread();
             var sets = new ReindeerSet[count];
             // Each animal is painted by its own thread at once (the painter's scratch bitmap is per thread): three animals take about as long as the slowest.
-            var jobs = new Task[count];
-            for (int i = 0; i < count; i++)
+            QuietFor(count, k =>                       // a few low-priority threads, never every core: see Resident.QuietFor
             {
-                int k = i;
-                jobs[k] = Task.Run(() =>
+                try
                 {
-                    try
-                    {
-                        sets[k] = ReindeerArt.Build(heights[k], _r[k].Kind);
-                        _r[k].Mark = PaintMark(heights[k]);
-                        PointF nose = sets[k].Nose[ReindeerArt.HeadPages - 1];
-                        _r[k].MarkDx = ReindeerArt.NeckX + nose.X - 0.22f;
-                    }
-                    finally { ReindeerArt.ReleaseScratch(); }
-                });
-            }
-            Task.WaitAll(jobs);
+                    sets[k] = ReindeerArt.Build(heights[k], _r[k].Kind);
+                    _r[k].Mark = PaintMark(heights[k]);
+                    PointF nose = sets[k].Nose[ReindeerArt.HeadPages - 1];
+                    _r[k].MarkDx = ReindeerArt.NeckX + nose.X - 0.22f;
+                }
+                finally { ReindeerArt.ReleaseScratch(); }
+            });
             _log?.WriteLine("Reindeer build: " + ReindeerArt.Timing);
             _log?.WriteLine($"Reindeer build: animals painted ({sw.ElapsedMilliseconds} ms, {(GC.GetAllocatedBytesForCurrentThread() - alloc0) / 1048576.0:F1} MB allocated by the build thread)");
             // Small shared sprites: snow bits (three sizes), soft clouds (five sizes, for breath and puffs), one sparkle.
