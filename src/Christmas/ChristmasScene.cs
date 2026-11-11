@@ -23,6 +23,7 @@ internal sealed class ChristmasWorld
     public required FeederBirds Birds { get; init; }
     public required LogMice Mice { get; init; }
     public required Otters Otters { get; init; }
+    public required Squirrels Squirrels { get; init; }
 }
 
 /// <summary>
@@ -185,13 +186,14 @@ internal sealed class ChristmasScene : IScreensaverScene
         var birds = new FeederBirds(_scenery, settings.BirdCount, _rng, _board);
         var mice = new LogMice(_scenery, settings.MouseCount, _rng, _board);
         var otters = new Otters(_scenery, settings.OtterCount, _rng, _board);
-        _residents = [reindeer, field, snowman, birds, mice, otters];
+        var squirrels = new Squirrels(_scenery, settings.SquirrelCount, _rng, _board, birds);   // LAST: nobody else's luck moves
+        _residents = [reindeer, field, snowman, birds, mice, otters, squirrels];
 
         // ---- The stories ----
         var world = new ChristmasWorld
         {
             Scenery = _scenery, Board = _board, Santa = _santa,
-            Reindeer = reindeer, Field = field, Snowman = snowman, Birds = birds, Mice = mice, Otters = otters,
+            Reindeer = reindeer, Field = field, Snowman = snowman, Birds = birds, Mice = mice, Otters = otters, Squirrels = squirrels,
         };
         _stories = new StoryDirector(_happenings, _rng,
             [new SantaDelivery(world), new MiceTrimTree(world), new CarrotHeist(world)], settings.StoryPercent / 100f);

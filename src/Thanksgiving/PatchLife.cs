@@ -485,39 +485,6 @@ internal sealed class PatchLife
 
     // ================================================================ painting (once)
 
-    /// <summary>The lowest row of a page that has any paint in it (the bottom of the body on that page).</summary>
-    /// <summary>The middle column of what is painted on a page (the body's spine, for an upright squirrel).</summary>
-    private static int MiddleColumn(Sprite page)
-    {
-        int lo = page.Width, hi = -1;
-        for (int y = 0; y < page.Height; y++)
-            for (int x = 0; x < page.Width; x++)
-                if (page.PixelAt(x, y) >> 24 != 0) { if (x < lo) lo = x; if (x > hi) hi = x; }
-        return hi < 0 ? page.Width / 2 : (lo + hi) / 2;
-    }
-
-    /// <summary>
-    /// The two angles of a mount page at f (0 to 1): the whole body's turn and the front half's bend. Up onto the bark: the
-    /// bend leads (reaching up) over the first 0.55, then the body turns up while the bend straightens. Down off it (the
-    /// dismount, drawn mirrored, head first): the front half bends level toward the ground first, then the body comes down.
-    /// </summary>
-    private static (float Rot, float Pitch) MountAngles(float f, bool up)
-    {
-        static float S(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3f - 2f * x); }
-        if (up)
-        {
-            if (f < 0.55f) return (0f, -90f * S(f / 0.55f));
-            float e = S((f - 0.55f) / 0.45f);
-            return (-90f * e, -90f * (1f - e));
-        }
-        else
-        {
-            if (f < 0.55f) return (90f, -90f * S(f / 0.55f));
-            float e = S((f - 0.55f) / 0.45f);
-            return (90f * (1f - e), -90f * (1f - e));
-        }
-    }
-
     private static float Smooth01(float x) { x = Math.Clamp(x, 0f, 1f); return x * x * (3f - 2f * x); }
 
     /// <summary>The y of a maple crown's lower edge over its trunk: where a climbing squirrel goes into the leaves.</summary>
@@ -540,22 +507,6 @@ internal sealed class PatchLife
         return (x, stencil);
     }
 
-    private static int HighestRow(Sprite page)
-    {
-        for (int y = 0; y < page.Height; y++)
-            for (int x = 0; x < page.Width; x++)
-                if (page.PixelAt(x, y) >> 24 != 0) return y;
-        return 0;
-    }
-
-    private static int LowestRow(Sprite page)
-    {
-        for (int y = page.Height - 1; y >= 0; y--)
-            for (int x = 0; x < page.Width; x++)
-                if (page.PixelAt(x, y) >> 24 != 0) return y;
-        return page.Height - 1;
-    }
-
     private Sheet Make(int n, int w, int h, int ox, int by, Func<int, Sprite> page)
     {
         var sh = new Sheet { Pages = new Sprite[n], W = w, H = h, Ox = ox, By = by };
@@ -569,62 +520,22 @@ internal sealed class PatchLife
         _mouseRun = Make(8, mw, mh, mox, mby, i => Sprite.Paint(mw, mh, g => { g.TranslateTransform(mox, mby); g.ScaleTransform(_m, -_m); MouseArt.Paint(g, i / 8f, false, 0); }));
         _mouseStill = Make(2, mw, mh, mox, mby, i => Sprite.Paint(mw, mh, g => { g.TranslateTransform(mox, mby); g.ScaleTransform(_m, -_m); MouseArt.Paint(g, 0f, false, i + 1); }));
 
+        // THE SQUIRRELS: the shared animal library paints them (Core/Animals/Squirrel.cs, SquirrelBooks: moved out of here on
+        // 2026-11-10 with every page count, size, anchor and comment intact). Each variant is its coat at its own size; the books
+        // are copied into this class's own Sheet shape.
         for (int v = 0; v < Variants.Length; v++)
         {
             var (coat, scale) = Variants[v];
             float k = _k * scale;
-            var sq = new SqSheets { K = k };
-            int w = (int)(2.55f * k) + 6, h = (int)(1.9f * k) + 6, ox = (int)(1.75f * k) + 3, by = h - 4;
-            Sheet Ground(int n, Func<int, SquirrelArt.Pose> pose) => Make(n, w, h, ox, by, i => { var q = pose(i); q.Coat = coat; return SquirrelArt.Page(q, k, w, h, ox, by); });
-            sq.Run = Ground(32, i => SquirrelArt.Bound(i / 32f, 2.2f));   // 32: at 16 a bound 2.2 lengths long stepped the tail a seventh of a wave a page
-            for (int t = 0; t < 4; t++) { int tl = t; sq.Sit[t] = Ground(1, _ => SquirrelArt.Sit(1f, tl, false, false)); }
-            sq.Look = Ground(LookPages, i =>
+            var bk = Peckworks.Screensavers.Core.Animals.SquirrelBooks.Build(coat, k);
+            static Sheet Conv(Peckworks.Screensavers.Core.Animals.SquirrelSheet s) => new Sheet { Pages = s.Pages, W = s.W, H = s.H, Ox = s.Ox, By = s.By };
+            var sq = new SqSheets
             {
-                // Between the sit and the look: the head, its tilt and the tail's root eased between the two poses.
-                float f = i / (LookPages - 1f); f = f * f * (3f - 2f * f);
-                SquirrelArt.Pose a = SquirrelArt.Sit(1f, 0, false, false), b = SquirrelArt.Sit(1f, 0, true, false);
-                a.Head = new PointF(a.Head.X + (b.Head.X - a.Head.X) * f, a.Head.Y + (b.Head.Y - a.Head.Y) * f);
-                a.HeadTilt += (b.HeadTilt - a.HeadTilt) * f; a.TailBase += (b.TailBase - a.TailBase) * f;
-                return a;
-            });
-            sq.Dig = Ground(8, i => SquirrelArt.Dig(i / 8f));
-            sq.Rise = Ground(RisePages, i => SquirrelArt.Sit(0.2f + 0.8f * i / (RisePages - 1), 0, false, false));   // the crouch (page 0) up to the sit (the last)
-            sq.Turn = Ground(TurnPages, i => SquirrelArt.Turn(0.5f * (i + 1) / TurnPages));   // sitting, coming round from the profile to the front view; played back again mirrored
-            sq.Curl = Ground(CurlPages, i => SquirrelArt.Curl(0.5f * (i + 1) / CurlPages));   // running, the same way round
-            sq.RunNut = Ground(32, i => { var q = SquirrelArt.Bound(i / 32f, 2.2f); q.Acorn = 1; return q; });   // the bound with a nut in its mouth
-            sq.Eat = Ground(4, i => { var q = SquirrelArt.Sit(1f, 0, false, true); q.Acorn = 2; q.Nib = i / 3f; return q; });   // sitting up with the nut in its paws, chewing
-            sq.Hop = Ground(HopPages, i => SquirrelArt.Hop((i + 0.5f) / HopPages));   // the hop from a sit onto a pumpkin, and off again
-            // Climbing (the caper's pages): head up the trunk, and head-first down it; pitching up onto the bark and off it.
-            int cw = (int)(1.9f * k) + 6, ch = (int)(2.55f * k) + 6;
-            // The tail lies along the trunk on a climb (the bound's trailing arc stuck out sideways past the bark, and the stencil cut it).
-            SquirrelArt.Pose Cling(int i, float rot) { var q = SquirrelArt.Bound(i / 32f, 2.2f, cling: true); q.TailBase = 172f; q.TailCurl = -12f; q.TailS = 6f; q.TailWave = 4f; q.Rotate = rot; q.Coat = coat; return q; }
-            sq.Up = Make(32, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3, i => SquirrelArt.Page(Cling(i, -90f), k, cw, ch, (int)(1.9f * k) + 3, (int)(0.8f * k) + 3));
-            sq.Down = Make(32, cw, ch, 3, (int)(1.75f * k) + 3, i => SquirrelArt.Page(Cling(i, 90f), k, cw, ch, 3, (int)(1.75f * k) + 3));
-            // Where the body really is on those pages: the feet are the lowest painted row of the head-up page, the head the lowest of the head-down page (the first cut guessed 1.75 k and the climb's first frame jumped 59 px from the mount's last).
-            // The head-up climb is anchored at its ORIGIN: the clinging pose's hind feet sit at the pose's origin, and the whole
-            // picture turns about it, so the origin IS the hind feet. (The first version anchored by the lowest painted row, which on
-            // a head-up squirrel is the TAIL'S TIP hanging below the feet: the climb's first frame sat 0.8 of a length above the
-            // mount's last.) Head-first down, the lowest row really is the head.
-            sq.UpFoot = 0;
-            sq.DownHead = LowestRow(sq.Down.Pages[0]) - sq.Down.By;
-            sq.UpHead = sq.Up.By - HighestRow(sq.Up.Pages[0]);
-            sq.UpCol = MiddleColumn(sq.Up.Pages[0]); sq.DownCol = MiddleColumn(sq.Down.Pages[0]);
-            int sqw = (int)(4.0f * k) + 6, so = sqw / 2;
-            // The pitch onto the bark and off it: the CLINGING body (the same pose the climb's first page has, so the seam into the
-            // climb is the same picture) swung about its hind feet from level to upright, eased (slow at both ends), twelve pages over
-            // 0.42 s. The first version swung a SITTING squirrel up in four jumps and switched to the cling on the last page: a card flip.
-            // The mount BENDS (his line: "it should be able to BEND in the middle so that it looks like it would look if an animal
-            // went to climb a tree"): first the front half reaches up the bark (Pitch 0 to -90 about the hip, the hind feet still on
-            // the ground, the back humped), then the hind end follows (the whole body turns up, Rotate 0 to -90, while the bend
-            // straightens, Pitch back to 0), ending on exactly the climb's first page. The dismount is the same the other way about:
-            // head down the trunk, the front half reaches for the ground and bends level, then the hind end comes down after it.
-            // The hind feet stand OFF the trunk (the den trip's foot goal, TreeFor's Standoff) while the front half reaches up, and jump
-            // the gap onto the bark as the body turns up: the DRAW moves the page's origin from where the run ended to the trunk's
-            // column over the second phase (see Doing.Mount in Draw), so the run's last position, the mount's first page and the
-            // climb's first page all agree on where the feet are.
-            sq.MountUp = Make(MountPages, sqw, sqw, so, so, i => { var (rot, pitch) = MountAngles((i + 1) / (float)MountPages, up: true); var q = Cling(0, rot); q.Pitch = pitch; return SquirrelArt.Page(q, k, sqw, sqw, so, so); });
-            sq.MountDown = Make(MountPages, sqw, sqw, so, so, i => { var (rot, pitch) = MountAngles((i + 1) / (float)MountPages, up: false); var q = Cling(0, rot); q.Pitch = pitch; return SquirrelArt.Page(q, k, sqw, sqw, so, so); });
-            sq.MountUpCol = MiddleColumn(sq.MountUp.Pages[MountPages - 1]); sq.MountDownCol = MiddleColumn(sq.MountDown.Pages[0]);   // the upright page: the same picture as the climb's first, so the two seams meet
+                K = k, Run = Conv(bk.Run), RunNut = Conv(bk.RunNut), Look = Conv(bk.Look), Dig = Conv(bk.Dig), Rise = Conv(bk.Rise), Turn = Conv(bk.Turn), Eat = Conv(bk.Eat), Curl = Conv(bk.Curl), Hop = Conv(bk.Hop),
+                Up = Conv(bk.Up), Down = Conv(bk.Down), MountUp = Conv(bk.MountUp), MountDown = Conv(bk.MountDown),
+                UpFoot = bk.UpFoot, DownHead = bk.DownHead, UpHead = bk.UpHead, UpCol = bk.UpCol, DownCol = bk.DownCol, MountUpCol = bk.MountUpCol, MountDownCol = bk.MountDownCol,
+            };
+            for (int t = 0; t < 4; t++) sq.Sit[t] = Conv(bk.Sit[t]);
             _sq[v] = sq;
         }
 

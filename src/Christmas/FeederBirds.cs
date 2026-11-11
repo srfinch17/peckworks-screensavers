@@ -122,6 +122,12 @@ internal sealed class FeederBirds : Resident
     private int _lastPine = -1;   // the pine PinePoint last picked (-1: the bird came from or goes off the top of the screen)
     private bool _forcedDone;
     private bool _tableBanned => _time < _jayUntil;
+
+    /// <summary>True while a squirrel sits on the tray (Squirrels.cs sets it every frame): nobody lands there, and nobody lands in the snow under it (added 2026-11-10, the squirrels' bird table raid).</summary>
+    public bool TrayBlocked;
+
+    /// <summary>A squirrel arrives at the tray: every bird at the table scatters (the same scatter the jay makes) and none but the jay may come back for seconds. Added 2026-11-10 for the squirrels.</summary>
+    public void ClearTable(float seconds) { if (_birds.Length > 0) ScatterTable(null); _jayUntil = MathF.Max(_jayUntil, (float)_time + seconds); }
     private PointF _tableAt;
 
     public int Count => _birds.Length;
@@ -407,6 +413,7 @@ internal sealed class FeederBirds : Resident
             Perch p = _perches[i];
             float wt = p.Kind == Spot.Ground ? like[6] : like[(int)p.Kind];
             if (p.Owner >= 0 && p.Owner != b.Index) wt = 0;
+            if (TrayBlocked && p.Kind == Spot.Tray) wt = 0;
             if (_tableBanned && b.Kind != BirdKind.Jay && (p.Kind is Spot.Tray or Spot.Roof or Spot.Ground)) wt = 0;
             if (f != null)
                 wt = f switch
@@ -423,7 +430,7 @@ internal sealed class FeederBirds : Resident
         if (f is "bathe") { for (int i = 0; i < _perches.Count; i++) if (_perches[i].Kind == Spot.Ground) w[i] = 1f; }
         if (f is "seed") { for (int i = 0; i < _perches.Count; i++) if (_perches[i].Kind == Spot.Tray && _perches[i].Owner < 0) { w[i] = 1f; break; } }
         // the ground is one "perch" that is never full: add a virtual entry through the Ground like-weight
-        float groundW = like[6] * (_tableBanned && b.Kind != BirdKind.Jay ? 0f : 1f) * (f == null ? 1f : (f == "bathe" ? 1f : 0f));
+        float groundW = like[6] * (_tableBanned && b.Kind != BirdKind.Jay || TrayBlocked ? 0f : 1f) * (f == null ? 1f : (f == "bathe" ? 1f : 0f));
         float total = groundW;
         for (int i = 0; i < w.Length; i++) total += w[i];
         if (total <= 0f) return -1;
@@ -663,7 +670,7 @@ internal sealed class FeederBirds : Resident
         Roll(b, $"landed on {where}");
     }
 
-    private void ScatterTable(Bird jay)
+    private void ScatterTable(Bird? jay)
     {
         _jayUntil = (float)_time + Organic.Jitter(Rng, 14f);
         foreach (Bird o in _birds)
@@ -674,7 +681,7 @@ internal sealed class FeederBirds : Resident
             o.Plan = Rng.NextDouble() < 0.5 ? 1 : 0; o.AvoidTable = true; o.AfterFlush = true;
             BeginStartle(o, 0.05f + 0.3f * (float)Rng.NextDouble());
         }
-        Roll(jay, "jay clears the table");
+        if (jay != null) Roll(jay, "jay clears the table");
     }
 
     // ---------------------------------------------------------------- startle: crouch, then go
