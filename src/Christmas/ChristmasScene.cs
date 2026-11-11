@@ -186,8 +186,9 @@ internal sealed class ChristmasScene : IScreensaverScene
         var birds = new FeederBirds(_scenery, settings.BirdCount, _rng, _board);
         var mice = new LogMice(_scenery, settings.MouseCount, _rng, _board);
         var otters = new Otters(_scenery, settings.OtterCount, _rng, _board);
-        var squirrels = new Squirrels(_scenery, settings.SquirrelCount, _rng, _board, birds);   // LAST: nobody else's luck moves
-        _residents = [reindeer, field, snowman, birds, mice, otters, squirrels];
+        var squirrels = new Squirrels(_scenery, settings.SquirrelCount, _rng, _board, birds);
+        var predators = new Predators(_scenery, settings.PredatorPercent, _rng, _board, field, mice, squirrels);   // LAST: it takes the dice last, so nobody else's luck moves
+        _residents = [reindeer, field, snowman, birds, mice, otters, squirrels, predators];
 
         // ---- The stories ----
         var world = new ChristmasWorld
@@ -197,6 +198,10 @@ internal sealed class ChristmasScene : IScreensaverScene
         };
         _stories = new StoryDirector(_happenings, _rng,
             [new SantaDelivery(world), new MiceTrimTree(world), new CarrotHeist(world)], settings.StoryPercent / 100f);
+        // NO STORY BEGINS WHILE A HUNTER IS OUT. (On film an owl that had just missed a mouse sat on a mound while the mice's tree-trimming story
+        // began beside it: three mice carried baubles and a star past its feet.) A predator already waits for a story to end (Lull); this is the
+        // other half: the stories wait for the wolf or the owl to leave.
+        _stories.Hold = () => predators.WolfOn || predators.OwlOn;
 
         // Test aid: PECKWORKS_NOTICE="Loud;0.5;0.8;0.8;6" pins that kind of notice at (x, y as
         // fractions of the screen) with a reach in U at that second, to watch everybody react.

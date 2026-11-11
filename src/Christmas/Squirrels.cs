@@ -109,6 +109,8 @@ internal sealed class Squirrels : Resident
         public int RetrieveIx = -1;                    // the cache this squirrel is on its way to dig up
         public int HopArg;                             // what the hop in progress is: 0 a plain hop, 7 off a trunk, 8 down off cover, 100 plus a cover's number up onto it
         public bool Dipped;                            // this climb has already made its pine's bough dip
+        // PREDATORS (Predators.cs): Taken is "an owl has this one": nothing of it runs until Restore's timer is out and a replacement comes down a pine.
+        public bool Taken; public float RestoreIn; public int HomePine; public float FearX = float.NaN;
     }
 
     private struct Cache { public bool On; public float X, Y, Life; public int Owner; }
@@ -142,6 +144,56 @@ internal sealed class Squirrels : Resident
     public int Count => _sq.Length;
     public PointF SquirrelAt(int i) => i >= 0 && i < _sq.Length ? new PointF(_sq[i].X, _sq[i].Y) : PointF.Empty;
     public bool IsVisible(int i) => i >= 0 && i < _sq.Length && _sq[i].Visible;
+
+    // ---------------------------------------------------------------- what a PREDATOR may ask of the squirrels (Predators.cs)
+    // FEYNMAN VERSION: the owl may take a squirrel that is out on the snow far from a pine, and the wolf may chase one up a trunk. Both need:
+    // is it OUT on the open snow (InOpen: not in a pine, on a perch, on the tray, or taken), where are its feet (FeetOf), may I take it NOW
+    // (Seize: false for the last squirrel), and a replacement later (Restore: it comes down its pine, the normal entrance).
+    /// <summary>Is squirrel i out on the open snow (not in or on a pine, not on a perch or the tray, not taken)?</summary>
+    public bool InOpen(int i)
+    {
+        if (i < 0 || i >= _sq.Length) return false;
+        Sq c = _sq[i];
+        // out on the snow: not in or on a pine, a perch or the tray, EXCEPT a squirrel that is bounding for its pine (Flee, a Go step): it is still in the open
+        bool onSnow = c.Pine == -1 || c.Ep == Doing.Flee && c.Step.Doing == St.Go;
+        return !c.Taken && c.Visible && onSnow && c.Cover < 0 && !c.OnTray && c.Step.Doing is St.Go or St.Sit or St.Dig or St.Bury or St.Eat or St.Stuff;
+    }
+    /// <summary>The pine squirrel i is bound for or on (-1 none): a wolf that chased it goes to that trunk.</summary>
+    /// <summary>The pine squirrel i WOULD run to if the danger stood at dangerX (the very rule BeginFlee uses), so a wolf can choose only a squirrel whose pine lies away from it.</summary>
+    public int PineFor(int i, float dangerX) => i >= 0 && i < _sq.Length ? NearestPine(_sq[i], dangerX) : 0;
+    public int PineOf(int i) => i >= 0 && i < _sq.Length ? _sq[i].Pine : -1;
+    /// <summary>Is squirrel i scolding from a trunk (so a wolf below it may look up)?</summary>
+    public bool Scolding(int i) => i >= 0 && i < _sq.Length && _sq[i].Step.Doing == St.Scold;
+    /// <summary>Where squirrel i's feet are.</summary>
+    public PointF FeetOf(int i) => SquirrelAt(i);
+    /// <summary>The squirrel a wolf is chasing or an owl has its eye on has not noticed it yet (-1 none): it does not flee at the predator's Threat until the chase begins.</summary>
+    public void Stalked(int i) => _stalked = i;
+    private int _stalked = -1;
+    /// <summary>How many squirrels are still alive (not taken).</summary>
+    public int LeftCount { get { int n = 0; foreach (Sq c in _sq) if (!c.Taken) n++; return n; } }
+    /// <summary>Squirrel i is taken THIS frame. False if it is not in the open or it is the last one.</summary>
+    public bool Seize(int i)
+    {
+        if (!InOpen(i) || LeftCount < 2) return false;
+        Sq c = _sq[i];
+        c.Taken = true; c.RestoreIn = 1e9f; c.Visible = false; c.QN = 0; c.Turning = false; c.Curl = false; c.Carry = 0; c.Witness = -1; c.Cover = -1; c.OnTray = false;
+        c.HomePine = NearestPine(c); c.Pace.Halt(); c.Step.Begin(St.Den, 1e9f); c.Ep = Doing.Home; c.NearOv = -1;
+        if (_tableUser == i) _tableUser = -1;
+        Roll(c, $"SEIZED at {c.X:0},{c.Y:0}");
+        return true;
+    }
+    /// <summary>A replacement for taken squirrel i comes down its pine after "afterSeconds" (the normal entrance).</summary>
+    public void Restore(int i, float afterSeconds) { if (i >= 0 && i < _sq.Length && _sq[i].Taken) _sq[i].RestoreIn = Math.Max(0.1f, afterSeconds); }
+    private void ReviveSquirrel(Sq c)
+    {
+        // the replacement waits (a few seconds at a time) while another squirrel is on the same pine's trunk
+        foreach (Sq o in _sq) if (o != c && !o.Taken && o.Pine == c.HomePine && o.Step.Doing is St.Mount or St.Climb or St.Descend or St.Exit or St.Scold) { c.RestoreIn = 3f; return; }
+        c.Taken = false; c.Pine = c.HomePine; c.Ep = Doing.Entrance;
+        var pn = S.Pines[c.Pine];
+        c.X = pn.X; c.Y = pn.Foot; c.Level = 0; c.LevelFrom = 0; c.Up = HiddenUp(c.Pine, _lv0K); c.Visible = false;
+        c.Step.Begin(St.Den, 0.6f + (float)Rng.NextDouble());
+        Roll(c, $"RESTORED: a new squirrel waits in pine {c.Pine} and will come down");
+    }
 
     public Squirrels(ChristmasScenery s, int count, Random sceneRng, Noticeboard board, FeederBirds birds) : base(s, sceneRng, board)
     {
@@ -295,6 +347,7 @@ internal sealed class Squirrels : Resident
         bool table = false;
         foreach (Sq c in _sq)
         {
+            if (c.Taken) { c.Visible = false; c.RestoreIn -= dt; if (c.RestoreIn <= 0f) ReviveSquirrel(c); continue; }       // taken by an owl: nothing of it runs until its replacement comes down a pine
             float px = c.X, py = c.Y;
             Tick(c, dt);
             if (c.OnTray) table = true;
@@ -343,10 +396,12 @@ internal sealed class Squirrels : Resident
     {
         if (c.Step.Doing == St.Scold) { ScoldWatch(c); return; }
         if (c.Ep == Doing.Flee) return;
+        if (c.Index == _stalked) return;                  // the squirrel a wolf or an owl has its eye on has not noticed yet
         Reaction r = c.Senses.Check(Board, new PointF(c.X, c.Y), c, out Notice n);
         if (r == Reaction.None) return;
         if (_log != null) _log.WriteLine($"{Board.Time:0.000} Squirrels {c.Index} reaction {r} cause {n.Kind} at {n.At.X:0},{n.At.Y:0}");
         bool danger = n.Kind is Sense.Threat || (n.Kind is Sense.Loud && r is Reaction.Flee);
+        if (danger) c.FearX = n.At.X;                    // a flight runs to a pine AWAY from the danger (NearestPine penalises pines on its side)
         if (r == Reaction.Flee || (r == Reaction.Freeze && n.Kind == Sense.Threat) || (danger && r == Reaction.Freeze))
         {
             if (c.Step.Doing is St.Den or St.Exit) return;               // inside the pine already: safe
@@ -679,7 +734,7 @@ internal sealed class Squirrels : Resident
         return null;
     }
 
-    private int NearestPine(Sq c)
+    private int NearestPine(Sq c, float avoidX = float.NaN)
     {
         int best = -1; float bd = float.MaxValue;
         for (int i = 0; i < S.Pines.Count; i++)
@@ -687,6 +742,7 @@ internal sealed class Squirrels : Resident
             float d = MathF.Abs(S.Pines[i].X - c.X) + 0.4f * MathF.Abs(S.Pines[i].Foot - c.Y);
             // a pine another squirrel is on or going up is not crowded again this second (they go one after the other)
             foreach (Sq o in _sq) if (o != c && o.Pine == i && o.Step.Doing is St.Mount or St.Climb && o.Up < 1.2f * KAt(o.Level)) d += 0.3f * _u;
+            if (!float.IsNaN(avoidX) && (S.Pines[i].X - c.X) * (avoidX - c.X) > 0f) d += 0.6f * _u;       // a pine on the danger's side of the squirrel is the last choice
             if (d < bd && HomeReach(c, i)) { bd = d; best = i; }
         }
         if (best < 0) best = 0;
@@ -801,7 +857,7 @@ internal sealed class Squirrels : Resident
     {
         bool tall = c.Cover >= 0 || c.OnTray;
         c.Ep = Doing.Flee; c.EpT = 0; c.QN = 0; c.Turning = false; c.Curl = false;
-        int pi = NearestPine(c); c.Pine = pi;
+        int pi = NearestPine(c, c.FearX); c.Pine = pi; c.FearX = float.NaN;
         if (c.Cover >= 0) { var cv = S.Covers[c.Cover]; Push(c, St.Hop, cv.Foot.X + (c.X < cv.Foot.X ? -1 : 1) * cv.HalfW * 0.9f, cv.Foot.Y + 0.02f * _u, 0.4f * KAt(c.Level)); c.Cover = -1; c.NearOv = -1; }
         PointF st = PineStand(c, pi, out int dir);
         float k = KAt(Math.Min(c.Level, 1));

@@ -551,20 +551,22 @@ animals living in it. Snow falls on a low horizon with a village glowing down in
 mountains behind it. A railway line with sleepers and telegraph poles runs across the valley floor. A big log cabin with warm windows and a smoking chimney stands among pines strung with
 pastel lights that twinkle. In front lies a snowfield with a frozen pond (and a hole in its ice), a lamp
 post, a fallen log, a bird table, a tiny fir tree and holly bushes, with bare branches reaching in from the
-top corners. Everything near is hidden correctly by whatever stands nearer than it, the same depth trick
+top corners. Scattered over the snow is COVER for the small animals to hide behind: red-twig shrubs under
+snow, huddles of boulders, a stump and brush piles. There are no holes in the snow. Everything near is hidden correctly by whatever stands nearer than it, the same depth trick
 Thanksgiving uses for its pumpkins.
 
 ![Christmas](docs/images/christmas.png)
 
 - **The night is live.** The brighter stars twinkle, every lit window in the village wanders and now and then
-  goes dark for a while (somebody went to bed) and comes back, the cabin's windows glow like firelight, smoke
+  goes dark for a while (somebody went to bed) and comes back, about two village houses in three wear a string of
+  tiny twinkling holiday bulbs along the eave and roof, the cabin's windows glow like firelight, smoke
   drifts from the chimney, the lamp post's flame gutters inside a halo, the snow glitters in flashes, and every
   bulb (pink, mint, baby blue, lavender, butter, peach) brightens and dims on its own rhythm. The snow is the
   Sakura petal engine drawing soft white dots.
 - **Santa's sleigh crosses the sky** behind the overhanging branches, pulled by eight reindeer in four pairs
   with Rudolph alone in front, his red nose glowing. Every reindeer gallops on its own beat (no two are in
   step), a gang line runs down the middle of the team from the sleigh to Rudolph and sags and tightens with
-  the beat, stardust drops from the runners, the team rises and dips along its path, and where it crosses the
+  the beat, a gentle sparkle trail of stardust is left behind the runners, the team rises and dips along its path, and where it crosses the
   moon it turns into a silhouette. Rudolph's nose throws a faint red pool of light on the snow that slides
   across the field beneath him as he passes. A flight is an event, not a constant: the first comes about nine
   seconds in, and after each one there is a pause of 45 to 105 seconds (40 to 90 after the delivery story),
@@ -580,17 +582,21 @@ Thanksgiving uses for its pumpkins.
   off his muzzle. Four stretches of clear snow are where the herd lives: they walk past the snowman, the bird
   table, the lamp post and the cabin's door but never stop, graze or lie there. The calf plays, and now and
   then tries to fly like the ones overhead.
-- **Snowshoe hares and a red fox.** The hares come up out of their burrows one after another over the first
-  twenty seconds, then sit with twitching noses, wash their faces, hop, stand tall to look, and now and then
-  spring into the air for joy. A glance is only the head coming up: the body does not change. The fox is a
+- **Snowshoe hares and a red fox.** The hares start out hidden behind the cover and come out round its end
+  one after another over the first twenty seconds, then sit with twitching noses, wash their faces, hop, stand
+  tall to look, and now and then spring into the air for joy. A glance is only the head coming up: the body
+  does not change. The fox is a
   visitor: it trots in, listens for a mouse under the snow, leaps and dives in head first (a drawn dive, and a
-  drawn climb back out with a face full of snow), sits, curls up to sleep under a thickening dusting of snow
-  (a drawn curl), and goes away again. When it stalks a hare, the fox pulls up into a low watch pose with its
-  ears on the hare, and holds it until the hare bolts or four and a half seconds pass. The hare rears up,
-  thumps twice (the other hares hear it and bolt too) and zigzags AWAY from the fox to a burrow on the far
-  side; the fox gallops after it and gives up at the hole. The hare always gets away, and later its ears come
-  up out of the snow somewhere else: ears, eyes, head, a look round, a hop out.
-- **A snowman** stands in the near snow and never walks, but he watches. He wakes as the scene begins (eyes shut for a second, then open, a small stretch). He jumps at a bang and his hat flies
+  drawn climb back out with a face full of snow, leaving a soft dent, never a hole), sits, curls up to sleep
+  under a thickening dusting of snow (a drawn curl), and goes away again. When it stalks a hare, the fox pulls
+  up into a low watch pose with its ears on the hare, and holds it until the hare bolts or four and a half
+  seconds pass. The hare rears up, thumps twice (the other hares hear it and bolt too) and zigzags AWAY from
+  the fox to a piece of cover on the far side and goes round its end to the back. The fox gallops after it,
+  trots up and noses round the cover (snow shaken off a shrub falls on its head) while the hare slips out of
+  the other end and bolts for the next one. The hare always gets away. Hidden, a hare lies flat behind a low
+  stone or sits behind a shrub, and every few seconds it peeks: ears first, then the head, a look each way,
+  and down again.
+- **A snowman** (1.8 m tall by the field's own metre, so he is in scale with the reindeer) stands in the near snow and never walks, but he watches. He wakes as the scene begins (eyes shut for a second, then open, a small stretch). He jumps at a bang and his hat flies
   off, tips the hat to Santa, shivers, catches a snowflake on his carrot, yawns, dozes off and wakes with a
   start, waves at the cabin, and shakes the snow off his arms.
 - **Birds at the bird table**: cardinals, chickadees and at most one bossy blue jay. They land on the tray, the
@@ -598,15 +604,32 @@ Thanksgiving uses for its pumpkins.
   squabble, scatter when the jay comes and all go up at once at a threat. Every change of picture dissolves into
   the next over a few frames, so nothing flickers.
 - **Mice in the fallen log** come out slowly (a nose, whiskers, a head that looks both ways), run in dashes
-  with frozen stops between, sit up, wash their faces, fetch seeds, box nose to nose, dive into the snow and
-  tunnel when frightened (and climb out of the snow in a drawn climb: a head in a swelling mound, then the
-  shoulders, then standing), and bolt for the hole. A mouse works through whole activities (a wander, a sit,
-  a wash, a tunnel, a tussle) rather than a string of unrelated moves, and every change of facing is a drawn
+  with frozen stops between, sit up, wash their faces, fetch seeds, box nose to nose, and when frightened bolt for the nearest
+  cover away from the danger (or back to the log), round the back of it, where they stay safe until they
+  peek out and carry on. A mouse works through whole activities (a wander, a sit,
+  a wash, a hide behind cover, a tussle) rather than a string of unrelated moves, and every change of facing is a drawn
   turn on the spot.
 - **Otters on the frozen pond** come and go through the hole in the ice: they surface, haul out over the rim,
   gallop, run up and belly slide, stand up like periscopes, roll on their backs, eat a fish and wrestle. They arrive one at a time, each head coming
   up in the hole a few seconds after the last, and their pictures dissolve into each other, so a turn or a
   stop never snaps.
+- **Red squirrels in the pines.** The same squirrel Thanksgiving uses (it lives in the shared animal library,
+  `Core/Animals/Squirrel.cs`) in a winter coat. Each comes down a pine trunk head first, spiralling round it,
+  hops off onto the snow and bounds away; going home it climbs back up into the boughs, and the bough it enters
+  dips and sheds a little snow. On the snow it sits up, looks round, goes round the cover (never through it)
+  and hops up onto a stump or boulder to eat a pine cone. It buries a cone in a shallow dish in the snow, and
+  another that watched may dig it up and be chased up a pine. It raids the bird table, climbing the post onto the tray
+  while the birds scatter. At a danger every squirrel runs up the nearest pine and scolds from the trunk.
+- **A wolf and an owl visit now and then.** Nothing about them is on screen, or costs anything, until a visit
+  begins. The wolf trots in, sniffs, looks about, and either creeps up on a hare or a squirrel and rushes it
+  (it can catch or miss), crosses the field, or sits and howls. The owl glides across, perches and looks
+  around, or stoops on a mouse, a hare or a squirrel, and it too can miss. A catch is told in a storybook way,
+  with a tumble in a cloud of snow, and the creature taken is replaced much later by a newcomer. The rest of
+  the field reacts: a stalking wolf is a threat the animals near it notice, and a howl is a loud noise that
+  the animals nearby notice. Visits are rare and come on their own schedule, and no story begins while a
+  hunter is out. (In this build only the OWL visits on its own, and it hunts mice and hares. The wolf's hunt is
+  still being staged on the snowfield's cover, so the wolf stays home unless a test dial calls it, and the
+  squirrel hunts are switched off.)
 - They notice each other and the happenings. Fireworks and the toy train are loud, the owl is a threat, a
   sliding snowball is something to glance at; a fox stalking or a bolting reindeer is read by the animals near
   it. Nobody reacts to a kind of animal, only to what a notice says. The field is kept calm: after a glance an
@@ -627,7 +650,7 @@ Thanksgiving uses for its pumpkins.
   | The sky | A shooting star to wish on. The northern lights ripple. Stars join up into a snowflake, a star, a tree, a candy cane or a bell. A firework show launched from the village (below). A gust of wind whirls snow across. A drift of golden fairy dust swoops through. |
   | The moon | An ice halo with a faint rainbow forms around it. |
   | Santa | A present tumbles off the sleigh and lands in the snow. |
-  | Far off | A toy train with lit windows crosses the valley on its track. A reindeer stands on the mountain ridge. |
+  | Far off | A toy train with lit windows crosses the valley on its track, slowly, with a chuffing plume of smoke that hangs along the sky. A reindeer stands on the mountain ridge. |
   | The snow | A snowball rolls across, growing. A clump of snow slides off a pine. |
   | The cabin and the lights | Smoke rings (and a heart) from the chimney. A wave of brightness runs through every light. The star on the tree flares and showers sparkles. |
   | The corners | Frost crystals grow across a corner of the glass. A snowy owl perches on a branch and blinks. |
@@ -649,7 +672,8 @@ Thanksgiving uses for its pumpkins.
 
 Settings: amount of snow, fall speed, breeze, flake size, how often a surprise happens (0 turns them off),
 how often a story plays (0 turns them off), how many reindeer (0 to 6, default 3), hares (0 to 6, default
-3; no hares means no fox), birds (0 to 10, default 5), mice (0 to 6, default 3) and otters (0 to 3, default 2),
+3; no hares means no fox), birds (0 to 10, default 5), mice (0 to 6, default 3) otters (0 to 3, default 2), squirrels (0 to 4, default 2) and predators (0 to 300 percent, default 100; how
+often the wolf and the owl visit, 0 means never),
 and "Draw width" (1600 to 3840 pixels, default 1920): the widest the scene is drawn, enlarged by Windows on a
 wider screen.
 

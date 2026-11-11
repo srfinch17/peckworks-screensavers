@@ -193,6 +193,9 @@ internal sealed class LogMice : Resident
         public float EnterDur = 0.8f;
         // -- COVER (round five): the cover it hides behind, its spot, the stage of the hide, the face's lean --
         public int Cov = -1, HideDir = 1, BStage; public float HideX, HideY, HideEdgeFar, BT, HideT, BFor, PeekHold, NextPeek, FearX; public bool BLeaving;
+        // PREDATORS (Predators.cs): Taken is "an owl or a wolf has this one": it is neither thought about nor drawn until Restore's timer runs out and
+        // a replacement comes out of the log by the normal coming-out performance. WolfAt is the Posted time of the last predator notice it answered.
+        public bool Taken; public float RestoreIn; public double WolfAt = -1;
     }
 
     private Sprite? _lipSp, _shadeSp; private int _lipX, _lipY, _shadeX, _shadeY;      // the log's two front pieces (the hollow's shade and the wood lip)
@@ -341,6 +344,54 @@ internal sealed class LogMice : Resident
 
     public PointF MouseAt(int i) => i >= 0 && i < _count ? new PointF(_mice[i].X, _mice[i].Y) : _door;
 
+    // ---------------------------------------------------------------- what a PREDATOR may ask of the mice (Predators.cs)
+    // FEYNMAN VERSION: the same four answers a hunter needs about a hare. WHERE are its feet (FeetOf), is it OUT in the open (InOpen: false in
+    // the log, behind a cover, or already taken), WHICH cover is it behind (CoverOf), and may I take it NOW (Seize: it vanishes from this frame;
+    // false for the last mouse, who is spared). The hunter then calls Restore, and a minute or two later a new mouse comes out of the log by the
+    // normal peek and hop.
+    private int _stalked = -1;
+    /// <summary>The mouse an owl has its eye on: it has not noticed anything yet (-1 none).</summary>
+    public void Stalked(int i) => _stalked = i;
+    /// <summary>How many mice are still alive (not taken).</summary>
+    public int LeftCount { get { int n = 0; foreach (Mouse m in _mice) if (!m.Taken) n++; return n; } }
+    /// <summary>Is mouse i out on the snow where a hunter can reach it (not in the log, not behind a cover, not taken, not lent to a story)?</summary>
+    public bool InOpen(int i)
+    {
+        if (i < 0 || i >= _count || _lent) return false;
+        Mouse m = _mice[i];
+        if (m.Taken || !m.Visible) return false;
+        return m.Mind.Doing is Doing.Hold or Doing.Rise or Doing.Sit or Doing.Wash or Doing.Fall or Doing.Box or Doing.Dig || m.Mind.Doing == Doing.Scurry && m.Trip != 21;
+    }
+    /// <summary>Where mouse i's feet are.</summary>
+    public PointF FeetOf(int i) => MouseAt(i);
+    /// <summary>The cover mouse i is behind or running to (null in the open or in the log).</summary>
+    public Cover? CoverOf(int i)
+    {
+        if (i < 0 || i >= _count) return null;
+        Mouse m = _mice[i];
+        bool hiding = m.Mind.Doing == Doing.Behind || m.Mind.Doing == Doing.Scurry && m.Trip is 20 or 21 or 22;
+        return hiding && m.Cov >= 0 && m.Cov < S.Covers.Count ? S.Covers[m.Cov] : null;
+    }
+    /// <summary>Mouse i is taken THIS frame: it stops being thought about and drawn. False if it is not in the open or it is the last mouse.</summary>
+    public bool Seize(int i)
+    {
+        if (!InOpen(i) || LeftCount < 2) return false;
+        Mouse m = _mice[i];
+        if (m.Partner != null) { Mouse o = m.Partner; if (o.Partner == m) o.Partner = null; if (o.Mind.Doing is Doing.Sit or Doing.Rise) { o.Trip = 0; o.Mind.Left = 0f; } m.Partner = null; }
+        m.Taken = true; m.RestoreIn = 1e9f; m.Visible = false; m.Dashing = false; m.Pausing = false; m.Pivoting = false; m.Carrying = false; m.Cov = -1; m.Trip = 0; m.Act = Act.Home; m.HeadOnly = false; m.UseStencil = false;
+        m.Mind.Begin(Doing.Home, Mind<Doing>.Forever);
+        _log?.WriteLine(FormattableString.Invariant($"{_clock:F3} LogMice {i} SEIZED at {m.X:F0},{m.Y:F0}"));
+        return true;
+    }
+    /// <summary>A replacement for taken mouse i comes out of the log after "afterSeconds" (the normal peek, then the hop out).</summary>
+    public void Restore(int i, float afterSeconds) { if (i >= 0 && i < _count && _mice[i].Taken) _mice[i].RestoreIn = MathF.Max(0.1f, afterSeconds); }
+    private void ReviveMouse(Mouse m)
+    {
+        m.Taken = false; m.X = _door.X; m.Y = _door.Y; m.Visible = false; m.Out = 0f; m.HomeFor = 0f; m.FirstOut = true; m.WolfAt = -1; m.Withdraw = false; m.Stuck = 0;
+        m.Mind.Begin(Doing.Home, 0.5f + 1.5f * (float)Rng.NextDouble());
+        _log?.WriteLine(FormattableString.Invariant($"{_clock:F3} LogMice {m.Index} RESTORED: a new mouse is in the log and will come out"));
+    }
+
     /// <summary>True when every mouse is inside the log and still (the story's CanBegin waits for it).</summary>
     public bool AllHome
     {
@@ -402,6 +453,7 @@ internal sealed class LogMice : Resident
         foreach (Mouse m in _mice)
         {
             m.Clock += dt;
+            if (m.Taken) { m.Visible = false; m.RestoreIn -= dt; if (m.RestoreIn <= 0f) ReviveMouse(m); continue; }       // taken by a predator: nothing of it runs until its replacement comes out of the log
             long q0 = _log != null ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
             if (!_lent) Think(m, dt);
             else m.Visible = false;
@@ -460,7 +512,10 @@ internal sealed class LogMice : Resident
 
     private void Think(Mouse m, float dt)
     {
-        m.Mind.Tick(dt);
+        // THE MOUSE AN OWL IS WATCHING STAYS WHERE IT IS. Think of a mouse washing its whiskers a little longer than it meant to: its own clock for
+        // "what next" stops while it stands there (it still blinks and flicks an ear), so it does not happen to trot home in the four seconds the owl
+        // needs to arrive. (Before this the owl's chosen mouse went home on its own timetable and the owl struck empty snow every time.)
+        if (!(m.Index == _stalked && !m.Dashing && !m.Pivoting)) m.Mind.Tick(dt);
         m.Senses.Tick(dt);
         m.Speak -= dt;
         m.T += dt;
@@ -490,8 +545,19 @@ internal sealed class LogMice : Resident
         if (open)
         {
             PointF me = new(m.X, m.Y);
+            // A PREDATOR'S THREAT (the wolf, the owl: Predators.cs) is heard from FARTHER than the fox's and answered at once (a flight, never rationed:
+            // fear is not a glance). The mouse an owl has its eye on has not noticed yet. One answer per notice (WolfAt).
+            if (m.Index != _stalked)
+                foreach (Notice n in Board.Live)
+                {
+                    if (n.Kind != Sense.Threat || n.Who is not Predators || n.Posted <= m.WolfAt) continue;
+                    float wx = n.At.X - m.X, wy = 2f * (n.At.Y - m.Y);
+                    if (MathF.Sqrt(wx * wx + wy * wy) > n.Reach * 1.5f) continue;
+                    m.WolfAt = n.Posted; Roll(m, "sees the predator"); React(m, Reaction.Flee, n);
+                    break;
+                }
             Reaction r = m.Senses.Check(Board, me, this, out Notice cause);
-            if (r != Reaction.None && cause.Who is not LogMice) React(m, r, cause);
+            if (r != Reaction.None && cause.Who is not LogMice and not Predators) React(m, r, cause);
         }
 
         switch (m.Mind.Doing)
@@ -825,6 +891,7 @@ internal sealed class LogMice : Resident
         float stride = m.Dashing ? m.StrideNow : StrideAt(m.Y);
         if (m.Pausing)
         {
+            if (m.Index == _stalked) return;              // the mouse an owl is watching goes on listening: its pause does not run out (see Think)
             m.PauseLeft -= dt;
             if (m.PauseLeft > 0f) return;
             if (_sendHome > 0f && m.Trip != 2 && m.Trip != 3) { StartHome(m); return; }

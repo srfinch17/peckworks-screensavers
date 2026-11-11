@@ -9,7 +9,7 @@ namespace Christmas;
 /// </summary>
 public sealed class ChristmasSettings : ScreensaverSettings
 {
-    private readonly IntSetting _density, _speed, _wind, _size, _surprises, _stories, _reindeer, _hares, _birds, _mice, _otters, _squirrels, _drawWidth;
+    private readonly IntSetting _density, _speed, _wind, _size, _surprises, _stories, _reindeer, _hares, _birds, _mice, _otters, _squirrels, _predators, _drawWidth;
 
     public ChristmasSettings() : base("Christmas")
     {
@@ -25,6 +25,7 @@ public sealed class ChristmasSettings : ScreensaverSettings
         _mice = Add(nameof(MouseCount), "Mice", 0, 6, 3, "");
         _otters = Add(nameof(OtterCount), "Otters", 0, 3, 2, "");
         _squirrels = Add(nameof(SquirrelCount), "Squirrels", 0, 4, 2, "");
+        _predators = Add(nameof(PredatorPercent), "Predators", 0, 300, 100, "%");
         _drawWidth = Add(nameof(DrawWidth), "Draw width", 1600, 3840, 1920, "px");
     }
 
@@ -63,6 +64,9 @@ public sealed class ChristmasSettings : ScreensaverSettings
 
     /// <summary>How many red squirrels live in the pines.</summary>
     public int SquirrelCount => _squirrels.Value;
+
+    /// <summary>How often a wolf or an owl visits (it hunts a hare, a mouse or a squirrel). 100 = a wolf every 3 to 6 minutes and an owl every 2 to 4, 0 = never.</summary>
+    public int PredatorPercent => _predators.Value;
 
     /// <summary>
     /// The widest the scene is ever drawn. On a wider screen (a 4K one) it is drawn at this width and Windows

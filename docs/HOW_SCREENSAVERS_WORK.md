@@ -79,6 +79,7 @@ src/
     Minds/Senses.cs                the noticeboard the scene pins what happens on, and each animal's attention that turns it into a reaction (look, freeze, flee, approach)
     Minds/Mover.cs                 moving like a living thing: a speed that eases and brakes onto the rest page (Pace), a heading that settles (Turn), slow drift and jittered timers (Organic)
     Minds/Herd.cs                  keeping a gap behind a leader and room between neighbours
+    Animals/Squirrel.cs            the approved squirrel (its pose painter, poses and flip-books, in any coat), shared by Thanksgiving and Christmas: bodies travel too
     Minds/Space.cs                 3D steering: Chain (a body's shape for touching), Feelers (room along a line, the smallest change of course) (see MINDS.md, section 8)
     ChimneySmoke.cs                puffs that rise, cool, spread and thin (Cabin by Stream)
     Photo/PhotoBackdrop.cs         a photo fitted to the screen, plus where its water is
@@ -167,7 +168,7 @@ a fed koi was as hungry as before and went straight back for the next.
   Christmas/                       falling snow, twinkling lights, a village, and a snowfield of residents
     Program.cs                     Main(), plus the definition
     ChristmasScene.cs              backdrop + the live lights (stars, village and cabin windows, lamp, glitter, bulbs) + smoke + Santa + the residents through one depth queue + the stories + the calm noticeboard + the one start for every resident + the shared engine dropping snow
-    ChristmasPainter.cs            paints the low-horizon night, the village in the valley, the log cabin, the pines and their lights, the snowfield with its frozen pond and ice hole, the toy train's track with its sleepers and telegraph poles, the lamp post, the fallen log, the bird table, the tiny fir and the holly; hands back the facts, the depth picture (NearDepth), the two bands of the field and the "who stands where" list
+    ChristmasPainter.cs            paints the low-horizon night, the village in the valley, the log cabin, the pines and their lights, the snowfield with its frozen pond and ice hole and its cover (shrubs, boulders, a stump, brush piles), the toy train's track with its sleepers and telegraph poles, the lamp post, the fallen log, the bird table, the tiny fir and the holly; hands back the facts, the depth picture (NearDepth), the two bands of the field and the "who stands where" list
     ChristmasSettings.cs           declares its knobs (including Draw width)
     Resident.cs                    the base class of everything that lives in the scene (its own dice, painting on a helper thread, Lull, Stamp) and the shared mind log
     ReindeerHerd.cs, ReindeerArt.cs      the grazing herd: minds and flip-books
@@ -175,6 +176,8 @@ a fed koi was as hungry as before and went straight back for the next.
     YardSnowman.cs, YardSnowmanArt.cs    the snowman who watches, drawn live from parts
     FeederBirds.cs, FeederBirdsArt.cs    the birds of the bird table
     LogMice.cs, LogMiceArt.cs, LogMiceDecor.cs   the mice of the fallen log, and the tiny fir's decorations
+    Squirrels.cs, SquirrelsArt.cs        the red squirrels of the pines: the shared squirrel in a winter coat, with a Christmas brain
+    Predators.cs, PredatorsArt.cs, PredatorsOwl.cs, PredatorsOwlArt.cs   the wolf and the owl that visit now and then (body, script, pictures)
     Otters.cs, OttersMind.cs, OttersArt.cs, OttersFx.cs   the otters on the pond: body, mind, pictures, small effects
     SantaRig.cs, SantaArt.cs, SantaFigure.cs   Santa's flight as a rig of parts a story can take over, the pictures, and Santa on foot
     Stories/                       SantaDelivery.cs, MiceTrimTree.cs, and CarrotHeist.cs (a placeholder that never plays)
@@ -200,7 +203,7 @@ a fed koi was as hungry as before and went straight back for the next.
     MouseParade.cs                 the fourth: four mice with acorns scattered by a swooping sparrow, hiding behind the pumpkins by depth
     PatchLife.cs                   the mice, birds and squirrels that live in the patch: a Mind each from Core/Minds, steps by Ground.StepRound among the pumpkins' feet, drawn far to near against the depth picture; the squirrels' nut doings (fetch, eat, bury, raid, chase), the gust's frenzy of visiting squirrels, their coats and dials, the running curl turn, the tree den (mount, climb, into the hole seen from behind, den, the face out, descend, dismount; a stencil for the trunk's inside), the pumpkin perch and the romp
     Nuts.cs                        the acorns on the ground (NutField): each nut falling, loose, carried, buried (a stash with an owner) or gone; the AcornDrop happening and the gust add to it, the squirrels take from it
-    SquirrelArt.cs                 how a squirrel is drawn and the poses it can take (the bound, a hop with its crouch and settle, a sitting turn through a symmetric front view, the running curl, sitting, digging, chattering) in one of three coats, shared with the fence squirrel
+    SquirrelArt.cs                 only an alias now: the squirrel (the bound, a hop, a sitting turn, the running curl, digging, chattering, three coats) moved to Core/Animals/Squirrel.cs, and Thanksgiving draws from it, pixel for pixel as before
     PoseSheet.cs                   test aid: PECKWORKS_SHEET=squirrel:<png> (or coyote:, rabbit:) paints every pose big on one sheet and quits (a painter is judged there first, every pose at once, against reference pictures, before it is watched moving)
     MouseArt.cs, BirdArt.cs        how a field mouse and a small songbird are drawn, shared by the stories and the patch's life
     Happenings/                    eighteen small random events (a turkey, a raccoon, a pheasant), one class per file
@@ -595,8 +598,56 @@ run to run. Now nobody begins until `ResidentsStart` (6 seconds) has passed and 
 seed is set) the start is pinned to exactly `ResidentsStart`: the scene waits there, up to a minute, for
 whoever is still painting, because a start that follows the painting moves from run to run and then no test can
 be repeated. (Nobody watches a test, so the pause costs nothing; on a screen it would be a freeze.) Each
-resident then makes an entrance: the herd walks in from an edge, the hares come up out of burrows, the otters
+resident then makes an entrance: the herd walks in from an edge, the hares come out from behind the cover, the otters
 surface through the hole in the ice one after another, the snowman wakes, the mice peek out of the log.
+
+*Smaller changes to the night.* The toy train runs at a third of its old speed and chuffs a plume of smoke (three
+puffs, then a breath) that hangs along the sky. The snowman is a man's height, 1.8 m, by the field's own `Metre(y)`
+(he had been far too big next to the reindeer). Two village houses in three wear a string of holiday bulbs along the
+eave and roof; each bulb is a single dot from that far off, and the scene gives it a small glow and a twinkle, the
+pines' trick at a fifth the size. The frost is feathery ferns growing in the top corners, and Santa's stardust is a
+gentle sparkle trail left behind the runners (it had looked like particles shooting up and down because the vertical
+speed had been multiplied by the screen's size twice).
+
+*Cover, not holes.* The first Christmas had burrows and snow holes for the hares and mice, and they read as
+"black holes next to a pond". They are gone. The painter now puts COVER on the snowfield (`ChristmasScenery.Covers`):
+red-twig shrubs under snow, huddles of boulders, a stump and brush piles, each sized by the field's own metre so a
+hare fits behind a shrub and a mouse behind a stone. Each piece goes into the depth picture with the nearness of its
+own foot, and carries a hiding place behind it. Hiding is then just the cardboard cut-out trick again: an animal whose
+feet stand a little farther away than the cover's foot is hidden by it, the way a cat is hidden by a sofa. A hare or
+mouse runs to the near end of the cover, goes ROUND the end to the back, settles (flat behind a low stone, sitting behind
+a shrub), peeks now and then (ears first, then the head), and later comes out round the end. The fox noses along the
+cover and goes round it; the hare slips out of the other end and bolts for the next piece. Only the otters keep a hole
+(in the ice), and birds still go into the pines (the bough dips and sheds snow). The squirrels also keep to the cover
+(round it, never through it) but their refuge is always a pine.
+
+*Bodies travel too.* The squirrel used to be Thanksgiving's own drawing. After many rounds it was approved, so it
+moved into the shared animal library, `Core/Animals/Squirrel.cs`: the pose painter, the poses and the flip-books, in
+any coat and size. Thanksgiving draws from it (checked pixel for pixel the same as before) and Christmas has squirrels
+on it in a winter coat. The rule: an approved animal moves to `Core/Animals`, and the next saver reuses it with a new
+coat and a new brain, never a new drawing. Christmas's squirrels (`Squirrels.cs`, knob "Squirrels", 0 to 4, default 2)
+come down and go up the pines in a spiral (the trunk hides the body, only the tail shows past its edge), bound over the
+snow, bury and dig up cones, raid the bird table, and sit on the log, a stump or a boulder.
+
+*The predators.* Now and then a wolf or an owl visits (`Predators.cs`, knob "Predators", 0 to 300 percent, default 100,
+0 means never). They are residents, but visitors in life: until a visit begins nothing is on screen, updated or paid
+for. A visit is a SCRIPT, a short list of steps (the wolf walks in, sniffs, looks about, picks a prey, creeps, rushes;
+the owl cruises, perches, stoops), and each step starts one drawn doing, a run of pictures that begins and ends on a
+named shared pose, so nothing ever jumps from one picture to another. The wolf can hunt a hare or a squirrel, cross
+the field, or howl; the owl can cross, perch, or hunt a mouse, a hare or a squirrel; either hunt may end in a catch or a
+miss. The owl flies at one size in the lane of its prey, and a soft shadow on the snow, sharper and nearer as it drops,
+is what reads as its height. The field reacts through the noticeboard: a stalking or rushing wolf pins a Threat, a howl
+pins a Loud, and the owl pins a Threat at its shadow once it is low. A seized animal leaves the field and a newcomer
+takes its place a minute or two later. The predators are built LAST, so they take the dice last and nobody else's luck
+moves. To watch one on purpose, set `PECKWORKS_PREDATOR` to `wolf`, `wolfmiss`, `wolfhowl`, `wolfcross`, `owlmouse`,
+`owlhare`, `owlmiss`, `owlperch` or `owlcross` (a forced visit begins at 6.5 s), or `many` for natural visits every
+minute or so, or `off`. Three rules were added when the hunts were filmed. The prey an owl is watching, or a wolf is
+creeping up on, stays where it is (its own "what next" clock stops, like a mouse washing its whiskers a little longer
+than it meant to), or it would wander home in the seconds the hunter needs to arrive. No story begins while a hunter
+is out (`StoryDirector.Hold`), and a hunter waits for a story to end. An owl on a perch pins a Threat at the perch's
+foot, so no mouse strolls past under it. STATE OF THIS BUILD: only the owl visits on its own, hunting mice and hares.
+The wolf stays home in a natural run (`WolfReady` in `Predators.cs`) until its hunt has passed on film on the cover
+scene, and the squirrel hunts are switched off; the test dials still force all of them.
 
 *Four: draw width.* `ChristmasSettings.DrawWidth` (the "Draw width" knob, 1600 to 3840, default 1920) is what
 `MaxRenderWidth` in `Program.cs` returns. On a wider screen the scene is drawn at that width and Windows
