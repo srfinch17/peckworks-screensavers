@@ -20,7 +20,7 @@ namespace Christmas.Happenings;
 /// </summary>
 internal sealed class FrostCrystals : Happening
 {
-    private const int MaxSegments = 420;
+    private const int MaxSegments = 900;
     private const float Reach = 0.30f;           // how far the stems reach from the corner, in U
     private static readonly Color Frost = Color.FromArgb(210, 235, 255);
     private static readonly Color Shade = Color.FromArgb(70, 100, 160);   // a deep blue under-line, so frost shows on pale snow too
@@ -34,7 +34,8 @@ internal sealed class FrostCrystals : Happening
     }
 
     private readonly ChristmasScenery _s;
-    private readonly Sprite _glint;
+    private readonly Sprite _glint, _haze, _bloom;
+    private PointF _corner;
     private readonly List<Seg> _segs = [];
     private Random _rng = new();
 
@@ -45,6 +46,8 @@ internal sealed class FrostCrystals : Happening
     {
         _s = s;
         _glint = Sprite.Glow(Math.Max(2, (int)(s.U * 0.008f)), Color.FromArgb(235, 245, 255));
+        _haze = Sprite.Glow(Math.Max(8, (int)(s.U * 0.30f)), Color.FromArgb(200, 224, 255));     // the breath of frost fogging the corner of the pane
+        _bloom = Sprite.Glow(Math.Max(2, (int)(s.U * 0.014f)), Color.FromArgb(214, 232, 255));    // the soft white body of a frond
     }
 
     public override void Begin(Random rng)
@@ -53,15 +56,19 @@ internal sealed class FrostCrystals : Happening
         _segs.Clear();
         float u = _s.U;
         // Pick a corner. (cornerX, cornerY) is the corner; (dirX, dirY) points into the screen from it.
-        float dirX = rng.Next(2) == 0 ? 1 : -1, dirY = rng.Next(2) == 0 ? 1 : -1;
+        // TOP corners only. Frost is pale: over the dark sky it reads as frost on the pane; in a bottom corner
+        // it lay over the white snow, where only its dark under-line showed, as a web of hard black cracks (his
+        // line: "the cracking ice that started in the lower right is broken").
+        float dirX = rng.Next(2) == 0 ? 1 : -1, dirY = 1;
         var corner = new PointF(dirX > 0 ? 0 : _s.Width - 1, dirY > 0 ? 0 : _s.Height - 1);
+        _corner = corner;
         float diag = MathF.Atan2(dirY, dirX);                // the direction straight into the screen
 
         // Five main stems fanned across the quarter-circle of directions that point into the screen.
-        const int stems = 5;
+        const int stems = 7;
         for (int i = 0; i < stems; i++)
         {
-            float a = diag + (i - (stems - 1) / 2f) * 0.30f + 0.08f * ((float)rng.NextDouble() - 0.5f);
+            float a = diag + (i - (stems - 1) / 2f) * 0.24f + 0.08f * ((float)rng.NextDouble() - 0.5f);
             Grow(corner, a, u * Reach * (0.75f + 0.3f * (float)rng.NextDouble()), 0, 0f);
         }
     }
@@ -74,7 +81,8 @@ internal sealed class FrostCrystals : Happening
     private void Grow(PointF from, float angle, float length, int level, float startTime)
     {
         float u = _s.U;
-        float piece = u * (level == 0 ? 0.03f : 0.02f);
+        float piece = u * (level == 0 ? 0.014f : 0.010f);   // short pieces: a frond CURVES, and long pieces made a wire frame
+        float curl = 0.10f * ((float)_rng.NextDouble() - 0.5f) + (level == 0 ? 0f : 0.05f * (_rng.Next(2) == 0 ? 1 : -1));   // each frond bends one way all along, like a fern
         int count = Math.Max(1, (int)(length / piece));
         float speed = u * (level == 0 ? 0.045f : 0.04f);     // pixels per second
         PointF p = from;
@@ -82,11 +90,11 @@ internal sealed class FrostCrystals : Happening
         float dir = angle;
         for (int i = 0; i < count && _segs.Count < MaxSegments; i++)
         {
-            dir += 0.12f * ((float)_rng.NextDouble() - 0.5f);                  // a slight wobble, so it is not ruler-straight
+            dir += curl + 0.06f * ((float)_rng.NextDouble() - 0.5f);           // the frond's own curl, and a slight wobble
             var q = new PointF(p.X + MathF.Cos(dir) * piece, p.Y + MathF.Sin(dir) * piece);
             float done = time + piece / speed;
             _segs.Add(new Seg { A = p, B = q, T0 = time, T1 = done, Level = level, Tip = i == count - 1 });
-            if (level < 2 && i >= 1 && i < count - 1)
+            if (level < 2 && i >= 2 && i < count - 1 && i % 2 == 0)
             {
                 // From this joint, maybe grow a branch each side, leaning forward about 60 degrees.
                 for (int side = -1; side <= 1; side += 2)
@@ -105,7 +113,10 @@ internal sealed class FrostCrystals : Happening
     {
         float u = _s.U;
         float fade = Fade(t, Seconds, 0.4f, 4f);
-        float basic = Math.Max(1f, u * 0.002f);
+        float basic = Math.Max(1f, u * 0.0014f);
+
+        // The pane fogs first: a wide soft bloom in the corner that the ferns then grow out of.
+        _haze.DrawCentered(fb, _corner.X, _corner.Y, 0.34f * fade * MathF.Min(1f, t / 5f));
 
         for (int i = 0; i < _segs.Count; i++)
         {
@@ -113,9 +124,31 @@ internal sealed class FrostCrystals : Happening
             if (t <= g.T0) continue;
             float k = Math.Min(1f, (t - g.T0) / (g.T1 - g.T0));   // how much of this piece has grown
             var end = new PointF(g.A.X + (g.B.X - g.A.X) * k, g.A.Y + (g.B.Y - g.A.Y) * k);
-            float thick = Math.Max(1f, basic * (g.Level == 0 ? 1.6f : g.Level == 1 ? 1.2f : 0.8f));
-            fb.Line(g.A, end, Shade, 0.25f * fade, thick + 1.5f);
-            fb.Line(g.A, end, Frost, 0.6f * fade, thick);
+            float thick = Math.Max(1f, basic * (g.Level == 0 ? 1.5f : g.Level == 1 ? 1.1f : 0.8f));
+            // FEATHERY, NOT WIRY. Three things make ice ferns read as frost: a soft white body along each frond
+            // (a small glow, strongest on the main stems), a fine bright spine, and short BARBS standing off both
+            // sides all the way along, like the vanes of a feather. No dark under-line: it was the "cracks".
+            if (k >= 1f && g.Level < 2) _bloom.DrawCentered(fb, g.B.X, g.B.Y, (g.Level == 0 ? 0.34f : 0.20f) * fade);
+            fb.Line(g.A, end, Frost, (g.Level == 0 ? 0.75f : 0.55f) * fade, thick);
+            if (k >= 1f)
+            {
+                float dx = g.B.X - g.A.X, dy = g.B.Y - g.A.Y, len = MathF.Sqrt(dx * dx + dy * dy) + 1e-4f;
+                dx /= len; dy /= len;
+                float grown = MathF.Min(1f, (t - g.T1) / 0.6f);                              // a barb grows out over half a second after its piece
+                float barb = len * (g.Level == 0 ? 0.85f : g.Level == 1 ? 0.6f : 0.42f) * grown * (0.7f + 0.3f * ((i * 37) % 10) / 10f);
+                // 55 degrees forward of straight out, one each side
+                const float c = 0.5736f, sn = 0.8192f;
+                var tipL = new PointF(g.B.X + (dx * c - dy * sn) * barb, g.B.Y + (dy * c + dx * sn) * barb);
+                var tipR = new PointF(g.B.X + (dx * c + dy * sn) * barb, g.B.Y + (dy * c - dx * sn) * barb);
+                fb.Line(g.B, tipL, Frost, 0.42f * fade, 1f);
+                fb.Line(g.B, tipR, Frost, 0.42f * fade, 1f);
+                // And it glitters: a tip here and there catches the light on its own slow rhythm.
+                if (g.Tip || i % 9 == 0)
+                {
+                    float tw = MathF.Pow(MathF.Max(0f, MathF.Sin(t * (1.3f + (i % 5) * 0.4f) + i * 1.9f)), 10);
+                    if (tw > 0.03f) _glint.DrawCentered(fb, g.B.X, g.B.Y, tw * 0.9f * fade);
+                }
+            }
 
             // A glint on a tip that has just finished: bright at once, gone in 0.7 s.
             float since = t - g.T1;
