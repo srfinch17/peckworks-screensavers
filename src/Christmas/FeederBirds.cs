@@ -69,6 +69,7 @@ internal sealed class FeederBirds : Resident
         public float StartleT; public bool AvoidTable; public bool AfterFlush;
         public float Alpha = 1f;
         public float Ramp, Decel;   // a flight's lean-in (seconds) and slow-down (seconds): 0.15 off a perch, 0.34 onto one, 0 where a pine hides the bird
+        public bool BoughDone, Burst, InTree;   // BoughDone: this flight has shaken its bough once; Burst: the bird has broken out through the outline; InTree: it is inside the pine's outline      // this flight has already shaken its pine's bough (once per flight)
         public int Pine = -1;       // the pine a bird is coming out of or going into: it is drawn BEHIND that pine's outline, never faded
         public Sprite? Shown, Mid; public float MidT;   // the page last wanted, and the half-way page bridging a big pose change
         // perch business
@@ -468,6 +469,14 @@ internal sealed class FeederBirds : Resident
         return PinePoint(dest.X, dest);
     }
 
+    /// <summary>True when (x, y) is inside the pine's drawn outline (the same cone a bird is hidden behind).</summary>
+    private bool InsidePine(int i, float x, float y)
+    {
+        var p = S.Pines[i];
+        if (y < p.Top || y > p.Foot) return false;
+        return MathF.Abs(x - p.X) < 0.92f * Brushwork.PineHalfWidth(y, p.Top, p.Foot, _u);
+    }
+
     /// <summary>True when the point q is inside (or within a bird's size of) pine p's cone.</summary>
     private bool InCone(int i, PointF q)
     {
@@ -515,8 +524,13 @@ internal sealed class FeederBirds : Resident
         // out of a pine: it is hidden behind the pine for that part), cruise, and a slow-down over the last 0.34 s onto a
         // perch (the flare). A bird leaving INTO a pine does not slow: it goes behind the outline at full speed.
         bool fromPerch = b.Visible;
-        b.Ramp = fromPerch ? 0.15f : 0f;
-        b.Decel = leaving ? 0f : 0.34f;
+        // THE BOUGH (2026-11-10): a bird that goes INTO a pine slows and flares as it reaches the boughs (the same 0.34 s the landing
+        // uses), and one that comes OUT of a pine leans in slowly (0.35 s) while its bough shakes, so the snow falls first and the
+        // bird drops out of the tree after it. A bird off the top of the screen keeps its old take-off and exit.
+        bool intoPine = leaving && _lastPine >= 0, outOfPine = !fromPerch && _lastPine >= 0;
+        b.Ramp = fromPerch ? 0.15f : outOfPine ? 0.35f : 0f;
+        b.Decel = (leaving && !intoPine) ? 0f : 0.34f;
+        b.BoughDone = false; b.Burst = false; b.InTree = false;
         b.Len = Math.Clamp(dist / v + 0.5f * (b.Ramp + b.Decel), 0.8f, 4.5f);   // never under 0.8 s: a flutter between two perches still reads as a flight
         if (MathF.Abs(dx) > 2f) b.Dir = dx > 0 ? 1 : -1;
         b.X = from.X; b.Y = from.Y;
@@ -569,14 +583,26 @@ internal sealed class FeederBirds : Resident
         BirdBook bk = BookFor(b, e < 0.34f ? b.LvFrom : e < 0.67f ? (b.LvFrom + b.LvTo) / 2 : b.LvTo);
         b.Book = bk; b.Ground = false; b.Visible = true; b.Lift = 0f; b.Near = 255;
         b.Alpha = 1f;
-        bool landing = !b.Leaving && left < 0.34f;
+        bool landing = (!b.Leaving || b.Pine >= 0) && left < 0.34f;
+        // THE BOUGH. Going in: it dips at the very place the bird crosses the outline, the moment it does. Coming out: it rustles first (the
+        // bird is still hidden, snow falls), then dips again where the bird bursts out through the outline.
+        if (b.Pine >= 0)
+        {
+            bool inside = InsidePine(b.Pine, b.X, b.Y);
+            if (b.Leaving) { if (inside && !b.BoughDone) { b.BoughDone = true; StartBough(b.Pine, new PointF(b.X, b.Y), 0.0075f, 0f); } }
+            else
+            {
+                if (!b.BoughDone && b.T < 0.05f) { b.BoughDone = true; b.InTree = true; StartBough(b.Pine, b.From, 0.0055f, 0f); }
+                if (b.InTree && !inside && !b.Burst) { b.Burst = true; StartBough(b.Pine, new PointF(b.X, b.Y), 0.0075f, 0f); }
+            }
+        }
         if (landing)
         {
             int ix = Math.Clamp((int)((0.34f - left) / 0.34f * BirdBook.FlarePages), 0, BirdBook.FlarePages - 1);
             b.Page = bk.Flare[ix]; b.PageName = "flare" + ix;
             // the last flare pages are anchored by the front foot: the feet reach the perch exactly as the flight ends
         }
-        else if (b.Ramp > 0f && b.T < 0.05f)
+        else if (b.Ramp > 0f && b.T < 0.05f && b.Pine < 0)
         {
             // THE PUSH: legs straighten and the body springs up off the perch before the wings take over (crouch, push, flap)
             b.Page = bk.Hop[1]; b.PageName = "push";
@@ -605,7 +631,7 @@ internal sealed class FeederBirds : Resident
             b.Visible = false; b.PageName = "away";
             float baseT = b.Kind == BirdKind.Jay ? 20f : 9f;   // seconds away in the pines (11 at first: a third of every bird's time was spent unseen)
             float t = b.AfterFlush ? 5f + 14f * b.Timid + 3f * (float)Rng.NextDouble() : Organic.Jitter(Rng, baseT);
-            b.AfterFlush = false; b.AvoidTable = false;
+            b.AfterFlush = false; b.AvoidTable = false; if (_force == "flee") t = 2.2f + 0.7f * b.Index;   // test dial: after the flush every bird is back within 2 to 4 s
             b.Mind.Begin(Doing.Away, t);
             Roll(b, $"away for {t:0.0}");
             return;
@@ -1116,8 +1142,93 @@ internal sealed class FeederBirds : Resident
                 }
     }
 
+    // ---- THE BOUGH THAT DIPS (a bird going into a pine or coming out of one) ----
+    // A small patch of the pine's own painted pixels (cut from the backdrop, kept inside the pine's cone so it never covers a bird
+    // that is still outside) is drawn again a few pixels lower and springs back: a damped spring, down first, about 2.6 swings a
+    // second, gone in 1.6 s. Snow falls from it as it moves. Cheap: four slots, one tiny sprite per event.
+    private struct Bough { public bool On, Snowed; public float X, Y, T, Amp; public uint[]? Src; public int Px, Py, Pw, Ph, Pad, Pine; public float[]? Hx; }
+    private readonly Bough[] _boughs = new Bough[4];
+    private readonly Random _snowRng = new(7);   // the shaken snow's own dice: cosmetic only, so the birds' own rolls are never moved by a bough
+
+    private static float[] Hump(int n) { var h = new float[n]; for (int i = 0; i < n; i++) h[i] = MathF.Sin(MathF.PI * (i + 0.5f) / n); return h; }
+
+    private void StartBough(int pineIx, PointF at, float amp, float delay)
+    {
+        var pine = S.Pines[pineIx];
+        int pw = Math.Max(8, (int)(0.085f * _u)), ph = Math.Max(5, (int)(0.045f * _u)), pad = (int)MathF.Ceiling(amp * _u) + 3;
+        int x0 = Math.Clamp((int)at.X - pw / 2, 0, Math.Max(0, S.Width - pw)), y0 = Math.Clamp((int)at.Y - ph / 2, 0, Math.Max(0, S.Height - ph));
+        // the backdrop's own rows of the bough, with a margin above and below to draw from when the rows slide
+        uint[] src = new uint[pw * (ph + 2 * pad)];
+        for (int y = 0; y < ph + 2 * pad; y++)
+        {
+            int sy = Math.Clamp(y0 - pad + y, 0, S.Height - 1);
+            Array.Copy(S.Pixels, sy * S.Width + x0, src, y * pw, pw);
+        }
+        for (int i = 0; i < _boughs.Length; i++)
+            if (!_boughs[i].On) { _boughs[i] = new Bough { On = true, X = at.X, Y = at.Y, T = delay, Amp = amp * _u, Src = src, Hx = Hump(pw), Px = x0, Py = y0, Pw = pw, Ph = ph, Pad = pad, Pine = pineIx }; return; }
+    }
+
+    /// <summary>Snow shaken off a bough: it drops from the place and falls (gravity takes it), a few specks to a dozen.</summary>
+    private void SpawnFall(float x, float y, int n)
+    {
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < _parts.Length; j++)
+                if (!_parts[j].On)
+                {
+                    _parts[j] = new Particle { On = true, X = x + ((float)_snowRng.NextDouble() - 0.5f) * 0.05f * _u, Y = y + (float)_snowRng.NextDouble() * 0.01f * _u, Vx = ((float)_snowRng.NextDouble() - 0.5f) * 0.03f * _u, Vy = 0.01f * _u, T = 0f, Life = 0.7f + 0.5f * (float)_snowRng.NextDouble(), Size = (float)_snowRng.NextDouble(), Kind = 0 };
+                    break;
+                }
+    }
+
+    private void TickBoughs(float dt)
+    {
+        for (int i = 0; i < _boughs.Length; i++)
+        {
+            if (!_boughs[i].On) continue;
+            ref Bough b = ref _boughs[i];
+            b.T += dt;
+            if (!b.Snowed && b.T > 0.04f) { b.Snowed = true; SpawnFall(b.X, b.Y + 0.012f * _u, 10); }
+            else if (b.Snowed && b.T > 0.3f && b.T - dt <= 0.3f) SpawnFall(b.X, b.Y + 0.012f * _u, 4);
+            if (b.T > 1.6f) { b.On = false; b.Src = null; }
+        }
+    }
+
+    /// <summary>
+    /// The bough dips and springs back by sliding WHOLE ROWS of the pine's own picture: each row of the patch shows the backdrop row "off"
+    /// rows above it, where off is a damped spring times a hump (zero at the patch's top and bottom rows, so the join with the rest of the
+    /// tree never breaks). Whole pixel rows, no blending, no softening: nothing ghosts. Only inside the pine's outline (where a bird is hidden anyway).
+    /// </summary>
+    private void DrawBoughs(FrameBuffer fb)
+    {
+        for (int i = 0; i < _boughs.Length; i++)
+        {
+            if (!_boughs[i].On || _boughs[i].T <= 0f || _boughs[i].Src == null) continue;
+            Bough b = _boughs[i];
+            float dy = b.Amp * MathF.Exp(-3.2f * b.T) * MathF.Sin(MathF.Tau * 2.6f * b.T) * MathF.Min(1f, b.T / 0.08f);   // the push builds over the first 0.08 s
+            var pine = S.Pines[b.Pine];
+            for (int y = 0; y < b.Ph; y++)
+            {
+                float vy = dy * MathF.Sin(MathF.PI * (y + 0.5f) / b.Ph);
+                if (MathF.Abs(vy) < 0.5f) continue;
+                int row = b.Py + y;
+                if (row < pine.Top || row > pine.Foot || row >= fb.Height) continue;
+                float hw = 0.85f * Brushwork.PineHalfWidth(row, pine.Top, pine.Foot, _u);
+                int xa = Math.Max(b.Px, (int)MathF.Ceiling(pine.X - hw)), xb = Math.Min(b.Px + b.Pw - 1, (int)MathF.Floor(pine.X + hw));
+                for (int x = xa; x <= xb; x++)
+                {
+                    // the slide is a hump across the patch too (nothing at its left and right edges), so the patch has no seam anywhere
+                    int off = (int)MathF.Round(vy * b.Hx![x - b.Px]);
+                    if (off == 0) continue;
+                    int sy = Math.Clamp(y + b.Pad - off, 0, b.Ph + 2 * b.Pad - 1);
+                    fb.Pixels[row * fb.Width + x] = b.Src![sy * b.Pw + (x - b.Px)];
+                }
+            }
+        }
+    }
+
     private void TickParticles(float dt)
     {
+        TickBoughs(dt);
         for (int i = 0; i < _parts.Length; i++)
         {
             if (!_parts[i].On) continue;
@@ -1194,6 +1305,7 @@ internal sealed class FeederBirds : Resident
 
     private void DrawParticles(FrameBuffer fb)
     {
+        DrawBoughs(fb);
         for (int i = 0; i < _parts.Length; i++)
         {
             if (!_parts[i].On) continue;

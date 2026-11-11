@@ -11,10 +11,11 @@ namespace Christmas;
 internal sealed class OtterPages
 {
     public Sprite[,] Gallop = null!, Start = null!, Throw = null!, GetUp = null!, Glide = null!, Rest = null!, Up = null!, Stand = null!;
-    public Sprite[] Flop = null!, RollCycle = null!, SitDown = null!, Dive = null!;
+    public Sprite[] Flop = null!, RollCycle = null!, SitDown = null!, Dive = null!, DiveLook = null!;
     public Sprite[,] SitEat = null!;             // [fish left 0..2, chew 0..7]
     public Sprite[,,] Surf = null!;              // [rise 0..5, yaw bin, fish 0/1]
     public Sprite[,] Haul = null!;               // [page 0..7, fish 0/1]
+    public Sprite[,] HaulN = null!;              // the same haul-out turned 65 degrees toward us: out over the NEAR rim [page, fish]
     public Sprite[] Shadow = null!;              // by yaw bin
     public Sprite[] EatEnd = null!, Ball = null!, PairIn = null!;
     public Sprite[,,] RestVar = null!;           // [variant 0 blink, 1 ear flick, 2 whiskers, 3 tail curl; head 1..3 (index 0..2); yaw bin]
@@ -26,7 +27,9 @@ internal sealed class OtterPages
     public float P;                              // pixels in a metre
 
     // SILKY: a transition of T seconds has at least 30 * T pages (a page is held two frames at most while the body moves).
-    public const int GallopPages = 32, StartPages = 14, ThrowPages = 11, GetUpPages = 17, StandPages = 12, FlopPages = 18, RollPages = 36, SitDownPages = 17, DivePages = 40, HaulPages = 52, SurfPages = 14;
+    public const int GallopPages = 32, StartPages = 14, ThrowPages = 11, GetUpPages = 17, StandPages = 12, FlopPages = 18, RollPages = 36, SitDownPages = 17, DivePages = 62, DiveLookPages = 16, HaulPages = 52, SurfPages = 14;
+    // the dive: the look at the water at the rim, then the gather and the pour (seconds)
+    public const float DiveLookLen = 0.5f, DiveSheetLen = 1.15f;
     public const int GlidePages = 32, RestHeads = 17, EatChew = 24, EatEndPages = 17, ScratchPages = 24, PairPages = 10, BallPages = 36;
 }
 
@@ -52,7 +55,7 @@ internal sealed partial class Otters : Resident
                 long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
                 OtterPages built = Build(p);
                 long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
-                Warm(built); _pg = built;
+                BuildHole(); Warm(built); _pg = built;
                 if (Environment.GetEnvironmentVariable("PECKWORKS_MINDLOG") is { Length: > 0 } && MindLog.Open() is { } lg)
                     lock (lg) lg.WriteLine($"0.00 Otter build {System.Diagnostics.Stopwatch.GetElapsedTime(t0, t1).TotalMilliseconds:0} ms, warm-up {System.Diagnostics.Stopwatch.GetElapsedTime(t1).TotalMilliseconds:0} ms");
             }
@@ -118,11 +121,19 @@ internal sealed partial class Otters : Resident
         for (int r = 0; r < OtterPages.SurfPages; r++)
             for (int b = 0; b < OttersArt.Bins; b++)
                 for (int f = 0; f < 2; f++)
-                    g.Surf[r, b, f] = OttersArt.Page(OttersArt.Surf(r / (OtterPages.SurfPages - 1f), f * 0.9f), OttersArt.YawDeg(b), p, g.SurfW, g.SurfH, g.SurfOX, g.SurfOY);
+                    g.Surf[r, b, f] = OttersArt.Page(OttersArt.Surf(r / (OtterPages.SurfPages - 1f), f * 0.9f, 2f, 0.9f * MathF.Pow(1f - r / (OtterPages.SurfPages - 1f), 1.5f), r >= 8 && r <= 10 ? 1f : 0f), OttersArt.YawDeg(b), p, g.SurfW, g.SurfH, g.SurfOX, g.SurfOY);
         g.Haul = new Sprite[OtterPages.HaulPages, 2];
         for (int i = 0; i < OtterPages.HaulPages; i++)
             for (int f = 0; f < 2; f++)
                 g.Haul[i, f] = OttersArt.Page(i < 8 ? OttersArt.Haul(0f, f * 0.9f, 0.26f * (1f - i / 8f)) : OttersArt.Haul((i - 8) / (OtterPages.HaulPages - 9f), f * 0.9f), 0f, p, g.WideW, g.H, g.WideOX, g.OY);
+        g.HaulN = new Sprite[OtterPages.HaulPages, 2];
+        for (int i = 0; i < OtterPages.HaulPages; i++)
+            for (int f = 0; f < 2; f++)
+                g.HaulN[i, f] = OttersArt.Page(OttersArt.Haul(i < 8 ? 0f : (i - 8) / (OtterPages.HaulPages - 9f), f * 0.9f, 0.22f * MathF.Max(0f, 1f - i / 12f)), 65f * (1f - Sm(((i - 8) / (OtterPages.HaulPages - 9f) - 0.4f) / 0.6f)), p, g.WideW, g.H, g.WideOX, g.OY);
+        // THE DIVE (second pass): a look at the water from the rim, then the gather and the pour in, cut at the water line.
+        g.DiveLook = new Sprite[OtterPages.DiveLookPages];
+        for (int i = 0; i < OtterPages.DiveLookPages; i++)
+            g.DiveLook[i] = OttersArt.Page(OttersArt.DiveLook(i / (OtterPages.DiveLookPages - 1f)), 0f, p, g.DiveW, g.H, g.DiveOX, g.OY);
         g.Dive = new Sprite[OtterPages.DivePages];
         for (int i = 0; i < OtterPages.DivePages; i++)
             g.Dive[i] = OttersArt.Page(OttersArt.Dive(i / (OtterPages.DivePages - 1f)), 0f, p, g.DiveW, g.H, g.DiveOX, g.OY);
@@ -183,6 +194,13 @@ internal sealed partial class Otters : Resident
         }
     }
 
+    /// <summary>
+    /// (retired) The dive's own clock (SILKY, the holes brief): the old sheet ran the whole plunge in a quarter second (the body was gone
+    /// before the splash) and spent half its pages on an otter already under the water. Now the crouch and leap take the first third
+    /// (the pose function's t from 0 to 0.2), and the plunge, head in, body pouring in along its spine, the tail going last, takes the
+    /// other two thirds (t from 0.2 to 0.58, where the last of the tail has passed the water line).
+    /// </summary>
+    internal static float DiveT(float s) => s <= 0.35f ? s / 0.35f * 0.2f : 0.2f + (s - 0.35f) / 0.65f * 0.38f;
     private static float Sm(float t) { t = Math.Clamp(t, 0f, 1f); return t * t * (3f - 2f * t); }
 
     private static Skel HoldFish(Skel k)
@@ -223,7 +241,11 @@ internal sealed partial class Otters : Resident
         rows.Add(("surf fish", Row(i => g.Surf[5, i, 1], 9)));
         rows.Add(("haul", Row(i => g.Haul[i, 0], 16)));
         rows.Add(("haul fish", Row(i => g.Haul[i, 1], 16)));
-        rows.Add(("dive", Row(i => g.Dive[i], 10)));
+        rows.Add(("dive look", Row(i => g.DiveLook[i * 3], 6)));
+        rows.Add(("dive (every 4th page)", Row(i => g.Dive[Math.Min(OtterPages.DivePages - 1, i * 4)], 16)));
+        rows.Add(("haul near", Row(i => g.HaulN[i * 3, 0], 16)));
+        rows.Add(("peek / surface rises", Row(i => g.Surf[i, 4, 0], 14)));
+        rows.Add(("peek yaws", Row(i => g.Surf[3, i, 0], 9)));
         int cell = g.WideW, cellH = g.H, perRow = Math.Max(1, 1900 / cell);
         int total = 0; foreach (var r in rows) total += (r.Pages.Count + perRow - 1) / perRow;
         using var bmp = new Bitmap(perRow * cell, total * (cellH + 14) * 2 + 4);

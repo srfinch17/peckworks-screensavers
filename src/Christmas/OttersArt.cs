@@ -376,11 +376,11 @@ internal static class OttersArt
     }
 
     /// <summary>Head and neck up out of a hole in the ice, the body hanging in the water below the clip. "k" 0 (just the nose) to 1 (head and shoulders), "look" turns the head, "fish" holds a fish across the mouth.</summary>
-    public static Skel Surf(float rise, float fish, float lookPitch = 2f)
+    public static Skel Surf(float rise, float fish, float lookPitch = 2f, float whisk = 0f, float blink = 0f)
     {
         // Only the top of a flat, broad head shows: ears, eyes, nose and whiskers above the ripple line; the neck and the whole body
         // hang below it (hidden by the clip). "rise" lifts the head from just the nose to the top of the skull.
-        var k = new Skel();
+        var k = new Skel { Whisk = whisk, Blink = blink };
         float r = Sm(rise);
         float hy = -0.05f + 0.095f * r;                // the head's middle, against a water line at 0 (the clip shows down to -0.05)
         k.P[Skel.Chest] = V(-0.16f, hy - 0.24f);
@@ -448,53 +448,130 @@ internal static class OttersArt
         return k;
     }
 
-    /// <summary>
-    /// The dive: from standing at rest 0.93 m from the hole's edge, a short leap and a plunge, head first, the body
-    /// following the head along ONE path (an arch, then down), so it bends like a real otter and never kinks. The
-    /// water line is y = 0 at the hole.
-    /// </summary>
-    public static Skel Dive(float t)
+    // ======================================================================== THE DIVE, SECOND PASS (the holes brief, 2026-11-10)
+    //
+    // The old dive was a flat leap from a body length away: the otter flew across the ice and the hole's water in a dozen frames.
+    // A real otter WALKS to the edge, stops with its forepaws on the rim and LOOKS at the water (head dips), gathers (haunches rise,
+    // back arches), and then POURS in: the head goes down at the rim and every part of the spine follows the path the head took, like a
+    // train into a tunnel. The hind feet push off the ice, and the thick tail slides in last with a flick of its tip. Everything below
+    // the water line (y = 0, a fixed line on the page) is not drawn, so the body is truly going IN, at ONE fixed place on the rim.
+    //
+    // Body frame as everywhere: x forward, y up, origin under the middle of the standing otter. The RIM is at x = DiveRim in front of it.
+    public const float DiveRim = 0.24f;
+
+    /// <summary>Standing at the rim with the head dipping to look at the water (t 0 to 1): the rest pose with the head pitched down.</summary>
+    public static Skel DiveLook(float t) => Rest(0f, 4f - 42f * Sm(t));
+
+    /// <summary>The gathered pose: haunches up, chest low on the rim, forepaws planted, the head down over the water. The anticipation ends here and the pour begins.</summary>
+    private static Skel DiveGather()
     {
-        float e = t * (2f - 0.35f * t);
-        float uh = 0.365f + 1.6f * e;                       // where the head is along the path
-        // The path: flat ground until x = 0.30, then an arch up and over, plunging past the hole's edge (x about 0.93) into the water.
-        static Vector3 Path(float u)
-        {
-            if (u <= 0.30f) return V(u, 0.16f);
-            float tau = (u - 0.30f) / 0.9f;
-            return V(u, 0.16f + 0.9f * tau * (1f - 2.2f * tau));
-        }
-        // Walk back along the path by arc length "d" from the head's place (numerically, in small steps: it is only the build).
-        Vector3 Back(float d)
-        {
-            float u = uh; float acc = 0f; Vector3 prev = Path(u);
-            while (acc < d)
-            {
-                u -= 0.004f; Vector3 cur = Path(u);
-                acc += Vector3.Distance(cur, prev); prev = cur;
-                if (u < -2f) break;
-            }
-            return prev;
-        }
         var k = new Skel();
-        k.P[Skel.Head] = Back(0f);
-        k.P[Skel.Muzzle] = Back(0f) + (Path(uh + 0.01f) - Path(uh)) * 7f;
-        k.P[Skel.Neck] = Back(0.09f);
-        k.P[Skel.Chest] = Back(0.19f);
-        k.P[Skel.Mid] = Back(0.36f);
-        k.P[Skel.Hip] = Back(0.53f);
-        for (int i = 0; i < Skel.TailBeads; i++) k.P[Skel.Tail0 + i] = Back(0.58f + 0.055f * (i + 1));
+        k.P[Skel.Hip] = V(-0.13f, 0.235f); k.P[Skel.Mid] = V(0.02f, 0.20f); k.P[Skel.Chest] = V(0.17f, 0.125f);
+        HeadAt(k, V(0.255f, 0.115f), 0f, -40f);
+        PlantedLegs(k);
+        Tail(k, k.P[Skel.Hip] + V(-0.05f, -0.025f), -16f, 3f, 0f);
+        k.Clip = 1f;
+        return k;
+    }
+    private static void PlantedLegs(Skel k)
+    {
         for (int i = 0; i < 4; i++)
         {
             bool hind = i >= 2;
             Vector3 root = k.P[hind ? Skel.Hip : Skel.Chest];
-            Vector3 back = Vector3.Normalize(root - k.P[hind ? Skel.Mid : Skel.Neck]);
-            Vector3 top = new(root.X, root.Y - 0.02f, LegZ(i));
-            Leg(k, i, top, new Vector3(root.X + back.X * 0.16f, root.Y + back.Y * 0.16f - 0.01f, LegZ(i) * 1.2f));
+            Leg(k, i, new Vector3(root.X, root.Y - 0.02f, LegZ(i)), new Vector3(hind ? -0.14f + (i == 3 ? 0.012f : 0f) : 0.19f + (i == 1 ? 0.012f : 0f), 0.024f, LegZ(i) * 1.05f));
+        }
+    }
+
+    // The path the spine follows: the gathered body's own points (tail tip to head) as a polyline, then the head's path on in front of it
+    // (a smooth curve, dipping over the rim and plunging straight down into the water). A point "d" metres behind the head is the point
+    // "d" metres back along this whole polyline, so each part takes exactly the path the head took.
+    private static Vector3[]? _dvPts; private static float[]? _dvCum, _dvD; private static float _dvHeadA;
+    public static float DiveEntryX, DiveInT = 0.5f, DiveOutT = 0.9f, DiveS = 1.6f;
+    public const float DiveAnticip = 0.27f;
+    private static readonly object _dvLock = new();
+
+    private static void PrepDive()
+    {
+        lock (_dvLock)
+        {
+            if (_dvPts != null) return;
+            Skel b = DiveGather();
+            int[] order = [Skel.Tail0 + 6, Skel.Tail0 + 5, Skel.Tail0 + 4, Skel.Tail0 + 3, Skel.Tail0 + 2, Skel.Tail0 + 1, Skel.Tail0, Skel.Hip, Skel.Mid, Skel.Chest, Skel.Neck, Skel.Head];
+            var pts = new List<Vector3>();
+            foreach (int ix in order) pts.Add(new Vector3(b.P[ix].X, b.P[ix].Y, 0f));
+            Vector3 h0 = pts[^1];
+            // the head's way on: first along its own dip (40 degrees down), then curving to the vertical at the rim of the water
+            Vector3[] ctl = [h0, h0 + new Vector3(0.0383f, -0.0321f, 0), new Vector3(0.40f, -0.04f, 0), new Vector3(0.425f, -0.17f, 0), new Vector3(0.435f, -0.40f, 0), new Vector3(0.437f, -0.9f, 0), new Vector3(0.437f, -1.6f, 0), new Vector3(0.437f, -2.6f, 0)];
+            Vector3 Q(int i) => i < 0 ? ctl[0] + (ctl[0] - pts[^2]) : i >= ctl.Length ? ctl[^1] + (ctl[^1] - ctl[^2]) : ctl[i];
+            for (int sgm = 0; sgm < ctl.Length - 1; sgm++)
+                for (int j = 1; j <= 20; j++)
+                {
+                    float u = j / 20f, u2 = u * u, u3 = u2 * u;
+                    Vector3 p0 = Q(sgm - 1), p1 = Q(sgm), p2 = Q(sgm + 1), p3 = Q(sgm + 2);
+                    pts.Add(0.5f * (2f * p1 + (-p0 + p2) * u + (2f * p0 - 5f * p1 + 4f * p2 - p3) * u2 + (-p0 + 3f * p1 - 3f * p2 + p3) * u3));
+                }
+            var cum = new float[pts.Count];
+            for (int i = 1; i < pts.Count; i++) cum[i] = cum[i - 1] + Vector3.Distance(pts[i], pts[i - 1]);
+            int headIx = order.Length - 1;
+            _dvHeadA = cum[headIx];                      // arclength coordinate of the head at the start of the pour
+            var dd = new float[order.Length];
+            for (int i = 0; i < order.Length; i++) dd[i] = cum[headIx] - cum[i];   // how far behind the head each body point sits
+            _dvPts = [.. pts]; _dvCum = cum; _dvD = dd;
+            // where the head crosses the water line, and the tail tip: arclength from the head's start
+            float aw = 0f; DiveEntryX = 0.43f;
+            for (int i = headIx; i < pts.Count; i++) if (pts[i].Y <= 0f) { aw = cum[i] - _dvHeadA; DiveEntryX = pts[i].X; break; }
+            float dTip = dd[0];
+            DiveS = aw + dTip + 0.10f;
+            DiveInT = TFromS(aw); DiveOutT = TFromS(aw + dTip);
+        }
+    }
+    private static float SOf(float u) => DiveS * (0.35f * u + 0.65f * u * u);
+    private static float TFromS(float s) { float x = Math.Clamp(s / DiveS, 0f, 1f); float u = (-0.35f + MathF.Sqrt(0.1225f + 2.6f * x)) / 1.3f; return DiveAnticip + (1f - DiveAnticip) * u; }
+
+    private static Vector3 DvAt(float a)    // the point at arclength coordinate a (0 = the head's start)
+    {
+        float c = a + _dvHeadA; var cum = _dvCum!; var pts = _dvPts!;
+        if (c <= 0f) return pts[0] + (pts[0] - pts[1]) * (-c / MathF.Max(1e-4f, cum[1]));
+        if (c >= cum[^1]) return pts[^1];
+        int i = 1; while (i < cum.Length - 1 && cum[i] < c) i++;
+        float f = (c - cum[i - 1]) / MathF.Max(1e-5f, cum[i] - cum[i - 1]);
+        return Vector3.Lerp(pts[i - 1], pts[i], f);
+    }
+
+    /// <summary>The whole dive from the planted pose at the rim: t 0 to 1 (see DiveAnticip: the first part gathers, the rest pours in).</summary>
+    public static Skel Dive(float t)
+    {
+        PrepDive();
+        Skel look = DiveLook(1f), gather = DiveGather();
+        if (t < DiveAnticip) { Skel q = Skel.Lerp(look, gather, Sm(t / DiveAnticip)); q.Clip = 1f; return q; }
+        float u = (t - DiveAnticip) / (1f - DiveAnticip), s = SOf(u);
+        var k = new Skel(); var dd = _dvD!;
+        // dd order: tail6..tail0, hip, mid, chest, neck, head
+        for (int i = 0; i < 7; i++) k.P[Skel.Tail0 + 6 - i] = DvAt(s - dd[i]);
+        k.P[Skel.Hip] = DvAt(s - dd[7]); k.P[Skel.Mid] = DvAt(s - dd[8]); k.P[Skel.Chest] = DvAt(s - dd[9]); k.P[Skel.Neck] = DvAt(s - dd[10]); k.P[Skel.Head] = DvAt(s);
+        // the tail's tip flicks as it is about to go in: the last beads lift and kick (a short swell before the tip meets the water)
+        float aTip = s - dd[0], f = MathF.Sin(MathF.PI * Math.Clamp((aTip + 0.40f) / 0.36f, 0f, 1f));
+        for (int j = 4; j < 7; j++) { Vector3 q = k.P[Skel.Tail0 + j]; k.P[Skel.Tail0 + j] = new Vector3(q.X - 0.01f * f * (j - 3), q.Y + 0.045f * f * (j - 3), 0f); }
+        Vector3 hd = k.P[Skel.Head], tg = Vector3.Normalize(DvAt(s + 0.01f) - DvAt(s - 0.01f));
+        float pitch = MathF.Atan2(tg.Y, tg.X) * 180f / MathF.PI;
+        k.P[Skel.Muzzle] = hd + new Vector3(MathF.Cos(Rad(pitch - 9f)), MathF.Sin(Rad(pitch - 9f)), 0f) * 0.07f;
+        // legs: the paws stay planted on the rim ice until the part they hang from has passed, then lift and trail; the hind feet give a push first
+        float aCh = s - dd[9], aHip = s - dd[7];
+        for (int i = 0; i < 4; i++)
+        {
+            bool hind = i >= 2;
+            Vector3 root = k.P[hind ? Skel.Hip : Skel.Chest];
+            Vector3 neighbour = k.P[hind ? Skel.Mid : Skel.Neck];
+            Vector3 back = Vector3.Normalize(root - neighbour);
+            float w = hind ? Sm((aHip + 0.30f) / 0.30f) : Sm((aCh + 0.16f) / 0.22f);
+            Vector3 planted = new(hind ? -0.14f + (i == 3 ? 0.012f : 0f) : 0.19f + (i == 1 ? 0.012f : 0f), 0.024f, 0f);
+            Vector3 trail = new(root.X + back.X * 0.16f, root.Y + back.Y * 0.16f - 0.01f + (hind ? 0.05f * MathF.Sin(MathF.PI * w) : 0f), 0f);
+            Vector3 paw = Vector3.Lerp(planted, trail, w);
+            Leg(k, i, new Vector3(root.X, root.Y - 0.02f, LegZ(i)), new Vector3(paw.X, paw.Y, LegZ(i) * 1.1f));
         }
         k.Mouth = 0.1f; k.Clip = 1f;
-        // The first part of the dive is a blend from the rest pose, so the leap begins from the crouch with no jump.
-        { Skel r = Skel.Lerp(Rest(), k, Sm(t / 0.2f)); r.Clip = 1f; return r; }
+        return k;
     }
 
     /// <summary>

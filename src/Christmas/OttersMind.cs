@@ -88,7 +88,11 @@ internal sealed partial class Otters
         public float Speed;                                 // slide speed, pixels a second in the flat plane
         public float GoalX, GoalY, GoalHd, Stride;
         public bool HaveGoalHd, Panic, Braked, Chasing, Fish, WantFish;
-        public int Face = 1;
+        public float Fade = 1f;                                // the whole picture's opacity this frame (a peek fades in and out over a fifth of a second)
+        public float DiveLook = 0.5f;                         // seconds of the look at the water before the dive (a panicked dive looks for 0.15)
+        public bool Near; public float HX, HY;                // a haul-out over the NEAR rim; where the otter will stand when it is out
+        public float PeekT = -1f, NextPeek, PeekHd;           // a peek at the water while under (-1: not peeking)
+        public int Face = 1; public bool Ringed;               // the rings that tell of a head about to come up have been made
         public int HeadIdx = 2, HeadTarget = 2, Level;
         public float HeadF = 8f, HeadV, LevelF;             // the head's view as a float 0 to 16 (17 pages) driven by a spring, and the look-up height eased
         public double GOff;                                 // the glide's clock offset (a glide that follows the toboggan carries on from its pose)
@@ -273,8 +277,9 @@ internal sealed partial class Otters
     /// <summary>Where an otter stands to leap into the hole from the side "face" (+1: from the left, facing right), and where it enters.</summary>
     private void DiveSpot(int face, out float x, out float y, out float edge)
     {
-        edge = _hx - face * _hrx * 0.88f;
-        x = edge - face * 0.83f * _p;
+        // THE RIM (second pass): the otter stands with its forepaws on the near edge of the water, OttersArt.DiveRim metres in front of its middle.
+        edge = _hx - face * _hrx * 1.02f;
+        x = edge - face * OttersArt.DiveRim * _p;
         y = _hy + 0.25f * _hry;
     }
     private bool SpotOk(float x, float y) => S.OnPond(x, y, 1.06f) && !InHole(x, y, 1.12f);
@@ -319,6 +324,7 @@ internal sealed partial class Otters
         }
         Separate(dt);
         UpdateBits(dt);
+        UpdateLip(dt);
         if (_log != null) foreach (Otter o in _o)
         {
             // The place that is DRAWN: while two otters are one rolling ball, each is drawn half a pair-gap to its side of the ball's middle.
@@ -392,6 +398,7 @@ internal sealed partial class Otters
     private void UpdateUnder(Otter o, float dt)
     {
         o.Vis = false; o.Speed = 0f;
+        UpdatePeek(o, dt);
         // A line of bubbles under the ice, out from the hole and back, gives the swimmer away now and then.
         if (o.T > 1.2 && o.BubLen > 0f)
         {
@@ -408,14 +415,17 @@ internal sealed partial class Otters
                 if (o.BubS > 2f * o.BubLen) o.BubLen = 0f;
             }
         }
+        // RINGS FIRST: about 0.8 s before the head breaks the water the surface stirs (a ring, the reflection starts to rock).
+        if (!o.Ringed && o.M.Left < 0.8f && o.T > 1.0) { o.Ringed = true; AddRing(_hx, _hy, 0.45f); _wob = MathF.Max(_wob, 0.5f); }
         if (!o.M.Over) return;
+        o.Ringed = false; o.PeekT = -1f;
         // Up again. Often to look about, sometimes with a fish, sometimes straight out to haul onto the ice.
         o.X = _hx; o.Y = _hy;
         Begin(o, Doing.Surface, Organic.Jitter(Rng, 3.2f, 0.7f) + 1.2f);
         o.Hd = Rng.Next(2) == 0 ? 0f : MathF.PI;
         o.Fish = o.WantFish; o.WantFish = false;
         if (o.Alarm > 0f) o.M.Left = 2.5f + 1.5f * (float)Rng.NextDouble();               // a nervous peek, then down
-        AddRing(_hx, _hy, 1.2f);
+        AddRing(_hx, _hy, 1.2f); _wob = 1f;
         if (_log != null) Log($"{o.I} surfaces fish={o.Fish}");
     }
 
@@ -423,6 +433,8 @@ internal sealed partial class Otters
     {
         const float rise = 0.7f, sink = 0.6f;
         o.Spin = 0f;
+        // THE HEAD BREAKS THE SURFACE: water sheets off the flat head in the first half second (a thin stream of drops to both sides).
+        if (o.Stage == 1 && o.T < 0.55 && _fx.NextDouble() < dt * 34) Drip(o.X + (float)(_fx.NextDouble() - 0.5) * 0.3f * _p, o.Y - 0.03f * _p, 0.45f);
         // Which way the head faces: it turns about slowly, and follows a thing it has noticed.
         o.LookClock += dt;
         if (o.Stage == 1 && o.T > rise)
@@ -468,8 +480,21 @@ internal sealed partial class Otters
         int face = Rng.Next(2) == 0 ? 1 : -1;
         HaulSpot(face, out float x, out float y, out _);
         if (!SpotOk(x, y)) { face = -face; HaulSpot(face, out x, out y, out _); }
-        o.Face = face; o.Fish = fish;
+        o.Face = face; o.Fish = fish; o.Near = false;
         o.GoalX = x - face * 0.73f * _p; o.GoalY = y;                                           // where the head will be at the haul's first page
+        o.HX = x; o.HY = y;
+        // Some trips come out over the NEAR rim, toward us (the cosmetic dice, so the old runs keep their rolls): the head swims to the near
+        // side of the hole, the body is turned 65 degrees toward the viewer and comes round to the side view as it stands. The hole's front lip
+        // is in front of the part still in the water.
+        if (_fx.NextDouble() < 0.5 || Environment.GetEnvironmentVariable("PECKWORKS_OTTERHAUL") == "near")      // test dial: PECKWORKS_OTTERHAUL=near forces it
+        {
+            for (int tryFace = 0; tryFace < 2 && !o.Near; tryFace++)
+            {
+                int fc = tryFace == 0 ? face : -face;
+                float h0x = _hx - fc * 0.10f * _p, h0y = _hy + 0.35f * _hry, ox = h0x + fc * 0.29f * _p, oy = h0y + 0.13f * _p;
+                if (SpotOk(ox, oy)) { o.Near = true; o.Face = fc; o.GoalX = h0x; o.GoalY = h0y; o.HX = ox; o.HY = oy; }
+            }
+        }
         o.Stage = 4; o.T = 0; o.Speed = 0f;
     }
 
@@ -483,9 +508,8 @@ internal sealed partial class Otters
         {
             o.X = o.GoalX; o.Y = o.GoalY;
             Begin(o, Doing.Haul, 1.7f);
-            HaulSpot(o.Face, out float hx, out float hy, out _);
-            o.X = hx; o.Y = hy; o.Hd = o.Face > 0 ? 0f : MathF.PI;
-            if (_log != null) Log($"{o.I} hauls out face={o.Face} fish={o.Fish}");
+            o.X = o.HX; o.Y = o.HY; o.Hd = o.Face > 0 ? 0f : MathF.PI;
+            if (_log != null) Log($"{o.I} hauls out face={o.Face} fish={o.Fish} near={o.Near}");
             return;
         }
         o.X += dx / d * step; o.Y += dy / d * step;
@@ -499,6 +523,8 @@ internal sealed partial class Otters
     {
         const float len = 1.7f;
         o.Speed = 0f;
+        if (o.Stage == 0) { o.Stage = 1; AddRing(_hx, _hy, 1.0f); _wob = 1f; }                 // the forepaws slap the rim: the water rocks
+        if (o.Stage == 1 && o.T > 0.9) { o.Stage = 2; AddRing(_hx, _hy, 1.4f); _wob = MathF.Max(_wob, 0.8f); }   // the hips come out: a wider ring
         if (o.T < 1.0 && _fx.NextDouble() < dt * 22) Drip(o.X - o.Face * 0.5f * _p, o.Y, 1.2f);
         if (o.T >= len)
         {
@@ -510,14 +536,23 @@ internal sealed partial class Otters
 
     private void UpdateDive(Otter o, float dt)
     {
-        const float len = 1.35f;
+        float look = o.DiveLook, sheet = OtterPages.DiveSheetLen, len = look + sheet;
         o.Speed = 0f;
-        if (o.Stage == 0 && o.T > 0.62)
+        // The otter stands at the rim (stage 0 look, gather, then the pour); the body goes in at ONE place, OttersArt.DiveEntryX metres in front
+        // of its middle, and every splash and ring is made there.
+        float ex = o.X + o.Face * OttersArt.DiveEntryX * _p, ey = o.Y;
+        if (o.Stage == 0 && o.T > look + OttersArt.DiveInT * sheet)
         {
-            o.Stage = 1;                                                                        // the plunge: splash and ripples where the head went in
-            float ex = o.X + o.Face * 0.83f * _p;
-            Splash(ex, _hy + 0.1f * _hry);
-            AddRing(_hx, _hy, 1.5f);
+            o.Stage = 1;                                                                        // the head goes under: a splash, a ring where it broke the water, the hole rocks
+            Splash(ex, ey);
+            AddRing(ex, ey, 0.8f);
+        }
+        if (o.Stage == 1 && o.T > look + 0.5f * (OttersArt.DiveInT + OttersArt.DiveOutT) * sheet) { o.Stage = 2; AddRing(ex, ey, 1.3f); }   // the body pouring in: a second, wider ring
+        if (o.Stage == 2 && o.T > look + OttersArt.DiveOutT * sheet)
+        {
+            o.Stage = 3;                                                                        // the tail's tip goes last: a small plop, drops, one more ring
+            for (int i = 0; i < 7; i++) Drip(ex + (float)(_fx.NextDouble() - 0.5) * 0.15f * _p, ey, 0.9f);
+            Puff(ex, ey, 0.1f); AddRing(ex, ey, 0.6f); _wob = MathF.Max(_wob, 0.7f);
         }
         if (o.T >= len)
         {
@@ -776,6 +811,7 @@ internal sealed partial class Otters
 
     private void Arrive(Otter o)
     {
+        o.DiveLook = o.Panic ? 0.15f : OtterPages.DiveLookLen;
         o.Panic = false; o.Chasing = false;
         // A gallop that was cut short (a prop or the rim in the way) must not hand over to a doing that expects the otter AT its spot.
         if (o.Next != After.Rest && o.Next != After.Beg && o.Next != After.Wrestle && PlaneDist(o.X, o.Y, o.GoalX, o.GoalY) > 1.0f * _p)
@@ -784,7 +820,7 @@ internal sealed partial class Otters
         {
             case After.Dive: case After.DiveFish:
                 if (o.Face == 0) o.Face = Math.Cos(o.Hd) >= 0 ? 1 : -1;
-                Begin(o, Doing.Dive, 1.4f); if (_log != null) Log($"{o.I} dives"); break;
+                Begin(o, Doing.Dive, 4f); if (_log != null) Log($"{o.I} dives"); break;
             case After.Roll: StartRollNow(o); break;
             case After.Slide: BeginSlide(o); break;
             case After.Tobog: BeginTobog(o); break;
@@ -1208,6 +1244,7 @@ internal sealed partial class Otters
             case "stand": StartStand(o, float.NaN, float.NaN); break;
             case "roll": StartRoll(o); break;
             case "dive": GoDive(o, false, false); break;
+            case "peek": GoDive(o, false, false); break;
             case "fish": GoDive(o, false, true); break;
             case "flee": Board.Post(Sense.Threat, new PointF(o.X, o.Y), 1.2f * S.U, 1f, null); break;
             case "surface": o.M.Begin(Doing.Under, 0.1f); break;
@@ -1262,13 +1299,26 @@ internal sealed partial class Otters
     private void Present(Otter o)
     {
         OtterPages g = _pg!;
-        o.Vis = true; o.ShadowBin = -1; o.ShakeDX = 0f; o.LN = 0;
+        o.Vis = true; o.ShadowBin = -1; o.ShakeDX = 0f; o.LN = 0; o.Fade = 1f;
         o.FX = o.X; o.FY = o.Y;
         ComputeYaw(o.Hd, out int bin, out bool mir, out float binF);
         o.Mirror = mir; o.OX = g.OX; o.OY = g.OY;
         switch (o.M.Doing)
         {
-            case Doing.Under: o.Vis = false; break;
+            case Doing.Under:
+                {
+                    o.Vis = o.PeekT >= 0f;
+                    if (!o.Vis) break;
+                    // A PEEK: a nose and a pair of eyes at the water (the surface sheet at about 0.4 of its rise), a look round, and down again.
+                    float pt = o.PeekT, fr = pt < 0.5f ? Sm(pt / 0.5f) : pt < 1.8f ? 1f - 0.06f * MathF.Sin((pt - 0.5f) * 3.1f) : 1f - Sm((pt - 1.8f) / 0.5f);
+                    int n = OtterPages.SurfPages, lvl = Math.Clamp((int)MathF.Round(fr * 0.55f * (n - 1)), 0, n - 1);
+                    int lo = Math.Clamp((int)binF, 0, OttersArt.Bins - 1); float f = binF - lo;
+                    if (f < 0.03f || lo + 1 >= OttersArt.Bins) Layer(o, g.Surf[lvl, lo, 0], 1f);
+                    else { Layer(o, g.Surf[lvl, lo, 0], 1f - f); Layer(o, g.Surf[lvl, lo + 1, 0], f); }
+                    o.OX = g.SurfOX; o.OY = g.SurfOY; o.PageKind = "peek"; o.PageIdx = lvl;
+                    o.Fade = Sm(MathF.Min(pt / 0.2f, (2.3f - pt) / 0.2f));
+                    break;
+                }
             case Doing.Surface:
                 {
                     // The head rises over 0.7 s, holds, and sinks again over 0.6 s: 14 pages, an eased height.
@@ -1285,15 +1335,25 @@ internal sealed partial class Otters
             case Doing.Haul:
                 {
                     int i = Math.Min(OtterPages.HaulPages - 1, (int)(o.T / 1.7 * OtterPages.HaulPages));
-                    Layer(o, g.Haul[i, o.Fish ? 1 : 0], 1f); o.OX = g.WideOX; o.Mirror = o.Face < 0; o.PageKind = "haul"; o.PageIdx = i;
+                    Layer(o, (o.Near ? g.HaulN : g.Haul)[i, o.Fish ? 1 : 0], 1f); o.OX = g.WideOX; o.Mirror = o.Face < 0; o.PageKind = "haul"; o.PageIdx = i;
                     o.ShadowBin = i >= OtterPages.HaulPages * 3 / 4 ? OttersArt.SideBin : -1;
                     break;
                 }
             case Doing.Dive:
                 {
-                    int i = Math.Min(OtterPages.DivePages - 1, (int)(Math.Min(1.0, o.T / 1.35) * OtterPages.DivePages));
-                    Layer(o, g.Dive[i], 1f); o.OX = g.DiveOX; o.Mirror = o.Face < 0; o.PageKind = "dive"; o.PageIdx = i;
-                    o.ShadowBin = i < OtterPages.DivePages * 5 / 14 ? OttersArt.SideBin : -1;
+                    // First the look at the water from the rim (the head dips and holds), then the gather and the pour, one sheet.
+                    if (o.T < o.DiveLook)
+                    {
+                        int li = Math.Clamp((int)MathF.Round(MathF.Min(1f, (float)o.T / (0.6f * o.DiveLook)) * (OtterPages.DiveLookPages - 1)), 0, OtterPages.DiveLookPages - 1);
+                        Layer(o, g.DiveLook[li], 1f); o.PageKind = "divelook"; o.PageIdx = li;
+                    }
+                    else
+                    {
+                        int i = Math.Min(OtterPages.DivePages - 1, (int)((o.T - o.DiveLook) / OtterPages.DiveSheetLen * OtterPages.DivePages));
+                        Layer(o, g.Dive[i], 1f); o.PageKind = "dive"; o.PageIdx = i;
+                    }
+                    o.OX = g.DiveOX; o.Mirror = o.Face < 0;
+                    o.ShadowBin = o.T < o.DiveLook + 0.6 * OtterPages.DiveSheetLen ? OttersArt.SideBin : -1;     // the shadow stays down until the body has mostly gone in     // the shadow of a body going in stays until the head is in
                     break;
                 }
             case Doing.Rest:
@@ -1415,8 +1475,9 @@ internal sealed partial class Otters
         foreach (Otter o in _o)
         {
             if (o.M.Doing == Doing.Wrestle && o.I != Math.Min(o.I, o.Partner) && _o[o.Partner].Stage is >= 1 and <= 3) continue;   // the pair is one picture, drawn by the lower number
-            if (o.Vis && o.Spr != null) q.Add(o.M.Doing == Doing.Surface || o.M.Doing == Doing.Haul || o.M.Doing == Doing.Dive ? _hy + 0.25f * _hry : o.Y, this, o.I);
+            if (o.Vis && o.Spr != null) q.Add(o.M.Doing == Doing.Surface || o.M.Doing == Doing.Haul || o.M.Doing == Doing.Dive || o.M.Doing == Doing.Under ? _hy + 0.25f * _hry : o.Y, this, o.I);
         }
+        q.Add(_hy + 0.27f * _hry, this, 1002);                                    // the hole's front lip: just after the otter that stands in the hole
         q.Add(S.Height + 1f, this, 1001);                                         // droplets and puffs: over everything
     }
 
@@ -1425,6 +1486,7 @@ internal sealed partial class Otters
         if (_pg == null) return;
         if (index == 1000) { DrawIce(fb); return; }
         if (index == 1001) { DrawBits(fb); return; }
+        if (index == 1002) { if (_lipA > 0.01f) _lip?.DrawSmooth(fb, _lipX, _lipY, _lipA); return; }
         Otter o = _o[index];
         if (!o.Vis || o.Spr == null) return;
         // On the drift the otter stands ON the snow clump that the depth picture counts as a nearer prop: it must not be hidden by it.
@@ -1445,7 +1507,7 @@ internal sealed partial class Otters
         // The blended pages (see Present): the first at full strength, each next laid over it at its share.
         for (int li = 0; li < o.LN; li++)
         {
-            Sprite sp = o.Lay[li]!; float al = o.LA[li];
+            Sprite sp = o.Lay[li]!; float al = o.LA[li] * o.Fade;
             if (onDrift) sp.DrawSmooth(fb, o.FX - (o.Mirror ? sp.Width - 1 - o.OX : o.OX), o.FY - o.OY, al, null, o.Mirror, S.NearDepth, 254);   // at a fraction of a pixel: a slide glides
             else Stamp(fb, sp, o.FX + o.ShakeDX, o.FY, o.OX, o.OY, o.Mirror, al);
         }
