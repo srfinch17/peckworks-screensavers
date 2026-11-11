@@ -550,8 +550,8 @@ Christmas Eve at a log cabin in the north woods, rebuilt the way Thanksgiving wa
 animals living in it. Snow falls on a low horizon with a village glowing down in the valley and snowy
 mountains behind it. A railway line with sleepers and telegraph poles runs across the valley floor. A big log cabin with warm windows and a smoking chimney stands among pines strung with
 pastel lights that twinkle. In front lies a snowfield with a frozen pond (and a hole in its ice), a lamp
-post, a fallen log, a bird table, a tiny fir tree and holly bushes, with bare branches reaching in from the
-top corners. Scattered over the snow is COVER for the small animals to hide behind: red-twig shrubs under
+post, a fallen log, a bird table, a tiny fir tree and holly bushes, with big bare branches hanging in close from the
+top corners, strung with fat pastel bulbs (the branches are the nearest thing in the picture, so they and their bulbs are painted 1.7 times the size of everything else). Scattered over the snow is COVER for the small animals to hide behind: red-twig shrubs under
 snow, huddles of boulders, a stump and brush piles. There are no holes in the snow. Everything near is hidden correctly by whatever stands nearer than it, the same depth trick
 Thanksgiving uses for its pumpkins.
 
@@ -562,7 +562,9 @@ Thanksgiving uses for its pumpkins.
   tiny twinkling holiday bulbs along the eave and roof, the cabin's windows glow like firelight, smoke
   drifts from the chimney, the lamp post's flame gutters inside a halo, the snow glitters in flashes, and every
   bulb (pink, mint, baby blue, lavender, butter, peach) brightens and dims on its own rhythm. The snow is the
-  Sakura petal engine drawing soft white dots.
+  Sakura petal engine drawing soft white dots, and a flake that falls past a bulb takes that bulb's colour
+  for a moment, then fades back to white as it drifts away (the scene keeps a small map of where each bulb's
+  light reaches, and each flake looks itself up on it).
 - **Santa's sleigh crosses the sky** behind the overhanging branches, pulled by eight reindeer in four pairs
   with Rudolph alone in front, his red nose glowing. Every reindeer gallops on its own beat (no two are in
   step), a gang line runs down the middle of the team from the sleigh to Rudolph and sags and tightens with

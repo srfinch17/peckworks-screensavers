@@ -481,7 +481,7 @@ internal sealed class FeederBirds : Resident
     {
         var p = S.Pines[i];
         if (y < p.Top || y > p.Foot) return false;
-        return MathF.Abs(x - p.X) < 0.92f * Brushwork.PineHalfWidth(y, p.Top, p.Foot, _u);
+        return MathF.Abs(x - p.X) < 0.92f * Brushwork.PineHalfWidth(y, p.Top, p.Foot, S.PineU);
     }
 
     /// <summary>True when the point q is inside (or within a bird's size of) pine p's cone.</summary>
@@ -489,7 +489,7 @@ internal sealed class FeederBirds : Resident
     {
         var p = S.Pines[i];
         if (q.Y < p.Top || q.Y > p.Foot) return false;
-        return MathF.Abs(q.X - p.X) < 1.1f * Brushwork.PineHalfWidth(q.Y, p.Top, p.Foot, _u) + 0.04f * _u;
+        return MathF.Abs(q.X - p.X) < 1.1f * Brushwork.PineHalfWidth(q.Y, p.Top, p.Foot, S.PineU) + 0.04f * _u;
     }
 
     /// <summary>
@@ -513,7 +513,7 @@ internal sealed class FeederBirds : Resident
         // Low on the tree and near its trunk, where the cone is wide: the whole bird (about 40 px long) must fit INSIDE the
         // outline when it gets there, or it would end its flight in plain sight and then vanish.
         float y = p.Top + (0.50f + 0.30f * (float)Rng.NextDouble()) * (p.Foot - p.Top);
-        float hw = Brushwork.PineHalfWidth(y, p.Top, p.Foot, _u);
+        float hw = Brushwork.PineHalfWidth(y, p.Top, p.Foot, S.PineU);
         return new PointF(p.X + ((float)Rng.NextDouble() - 0.5f) * hw * 0.6f, y);
     }
 
@@ -1219,7 +1219,7 @@ internal sealed class FeederBirds : Resident
                 if (MathF.Abs(vy) < 0.5f) continue;
                 int row = b.Py + y;
                 if (row < pine.Top || row > pine.Foot || row >= fb.Height) continue;
-                float hw = 0.85f * Brushwork.PineHalfWidth(row, pine.Top, pine.Foot, _u);
+                float hw = 0.85f * Brushwork.PineHalfWidth(row, pine.Top, pine.Foot, S.PineU);
                 int xa = Math.Max(b.Px, (int)MathF.Ceiling(pine.X - hw)), xb = Math.Min(b.Px + b.Pw - 1, (int)MathF.Floor(pine.X + hw));
                 for (int x = xa; x <= xb; x++)
                 {
@@ -1302,7 +1302,7 @@ internal sealed class FeederBirds : Resident
             for (int y = y0; y < y1; y++)
             {
                 if (y < pine.Top || y > pine.Foot) continue;
-                float hw = 0.92f * Brushwork.PineHalfWidth(y, pine.Top, pine.Foot, _u);
+                float hw = 0.92f * Brushwork.PineHalfWidth(y, pine.Top, pine.Foot, S.PineU);
                 int a = Math.Max(x0, (int)MathF.Ceiling(pine.X - hw)), c = Math.Min(x1, (int)MathF.Floor(pine.X + hw) + 1);
                 for (int x = a; x < c; x++) _mask![y * S.Width + x] = pass == 1;
             }

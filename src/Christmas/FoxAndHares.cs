@@ -535,7 +535,7 @@ internal sealed class FoxAndHares : Resident
         if (!RoutePoint(dir, w1x, sp.Y) || !RoutePoint(dir, sp.X, sp.Y)) return false;
         if (!RouteShallow(dir)) return false;
         float D = (sp.X - h.X) * dir, cyc = (flee ? FoxAndHaresArt.HareFleeD : FoxAndHaresArt.HareHopD) * HU(h.Y);
-        if (!PlanBounds(D, cyc, flee ? 0.75f : 0.80f, flee ? 1.35f : 1.25f, out int n, out float k)) return false;
+        if (!PlanBounds(D, cyc, flee ? 0.70f : 0.80f, flee ? 1.40f : 1.25f, out int n, out float k)) return false;
         if (!RouteFree(dir, hu, i)) return false;
         if (commit) { CommitRoute(h, dir, n, k); h.ToHide = true; h.NextSpot = spotIdx; sp.Who = i; h.BX = sp.X; h.BY = sp.Y; }
         return true;
@@ -561,10 +561,10 @@ internal sealed class FoxAndHares : Resident
                 if (!RoutePoint(dir, p2x, ry)) continue;
                 if (_coverLog) Log($"exit try dir {dir} len {ln} row {ry:F0}: landing {p2x:F0} in-screen {p2x >= 0.04f * S.Width && p2x <= 0.96f * S.Width} stand {S.CanStand(p2x, ry, 0.3f * hu)} crowded {S.Crowded(p2x, ry, 0.6f * hu, this, i)}");
                 if (p2x < 0.04f * S.Width || p2x > 0.96f * S.Width || !Valid(p2x, ry, 0.3f * hu, true) || Covered(p2x, ry, 0.5f * hu, 0.9f * hu) || (!_lax && S.Crowded(p2x, ry, 0.6f * hu, this, i))) continue;       // the landing must be open snow, not behind a prop (a hare out of a cover up in the herd's band may land there: it hides again or hops down)
-                if (_coverLog) Log($"   landing ok at {p2x:F0}: shallow {RouteShallow(dir, 0.40f)}, bounds {PlanBounds((p2x - sp.X) * dir, cyc, flee ? 0.75f : 0.80f, flee ? 1.35f : 1.25f, out _, out _)} (D {(p2x - sp.X) * dir:F0} cyc {cyc:F0}), free {RouteFree(dir, hu, i)}");
+                if (_coverLog) Log($"   landing ok at {p2x:F0}: shallow {RouteShallow(dir, 0.40f)}, bounds {PlanBounds((p2x - sp.X) * dir, cyc, flee ? 0.70f : 0.80f, flee ? 1.40f : 1.25f, out _, out _)} (D {(p2x - sp.X) * dir:F0} cyc {cyc:F0}), free {RouteFree(dir, hu, i)}");
                 if (!RouteShallow(dir, 0.40f)) continue;
                 float D = (p2x - sp.X) * dir;
-                if (!PlanBounds(D, cyc, flee ? 0.75f : 0.80f, flee ? 1.35f : 1.25f, out int n, out float k)) continue;
+                if (!PlanBounds(D, cyc, flee ? 0.70f : 0.80f, flee ? 1.40f : 1.25f, out int n, out float k)) continue;
                 if (!RouteFree(dir, hu, i)) continue;
                 if (commit) { CommitRoute(h, dir, n, k); h.ToHide = false; }
                 return true;
@@ -590,7 +590,7 @@ internal sealed class FoxAndHares : Resident
         float ex = dir > 0 ? W + 2.5f * hu : -2.5f * hu;
         if (!RoutePoint(dir, ex, _ty[_tn - 1])) return false;
         float D = (ex - h.X) * dir, cyc = (flee ? FoxAndHaresArt.HareFleeD : FoxAndHaresArt.HareHopD) * hu;
-        if (!PlanBounds(D, cyc, flee ? 0.75f : 0.80f, flee ? 1.35f : 1.25f, out int n, out float k)) return false;
+        if (!PlanBounds(D, cyc, flee ? 0.70f : 0.80f, flee ? 1.40f : 1.25f, out int n, out float k)) return false;
         if (_coverLog) Log($"off try dir {dir}: points {_tn}, D {D:F0} cyc {cyc:F0}, free {RouteFree(dir, hu, i)}");
         if (!RouteFree(dir, hu, i)) return false;
         if (commit) { CommitRoute(h, dir, n, k); h.ToHide = false; h.RouteOff = true; h.OffSide = dir; }
@@ -1547,7 +1547,12 @@ internal sealed class FoxAndHares : Resident
             PlanEnter(h, i, pick, away, true, true);
             Log($"hare{i} flees away from {h.FearX:F0}: cover {_spots[pick].Cov} at {_spots[pick].X:F0},{_spots[pick].Y:F0}, {h.Hops} bounds of {h.HopK:F2}");
         }
-        else if (PlanOff(h, i, away, true, true, false) || (_fox == null || _fox.Mind.Doing == FD.Away || MathF.Abs(_fox.X - h.X) > 0.5f * U) && PlanOff(h, i, -away, true, true, false)) Log($"hare{i} flees away from {h.FearX:F0}: no cover in reach, it bolts off the {(h.RDir > 0 ? "right" : "left")} side");
+        // A BOUND STRETCHES 0.70 TO 1.40 OF ITS NATURAL LENGTH when fleeing (see PlanBounds's callers). With 0.75 to 1.35 there was a hole: a run of
+        // 1.36 to 1.49 bounds fitted neither one long bound nor two short ones, so a hare 1.3 m from its shrub was told "nowhere to run".
+        // AND A HARE WHOSE ROW IS BLOCKED (another hare sits on it) CHANGES ROWS: the same shallow slant a hare uses to leave a pocket (WalkOut),
+        // always AWAY from the danger, never across it. Like stepping round somebody in a corridor instead of standing still behind them.
+        else if (PlanOff(h, i, away, true, true, false) || PlanOff(h, i, away, true, true, false, -0.9f * unit) || PlanOff(h, i, away, true, true, false, 0.9f * unit)
+              || PlanOff(h, i, away, true, true, false, -1.8f * unit) || PlanOff(h, i, away, true, true, false, 1.8f * unit) || (_fox == null || _fox.Mind.Doing == FD.Away || MathF.Abs(_fox.X - h.X) > 0.5f * U) && PlanOff(h, i, -away, true, true, false)) Log($"hare{i} flees away from {h.FearX:F0}: no cover in reach, it bolts off the {(h.RDir > 0 ? "right" : "left")} side");
         else { Log($"hare{i} flees away from {h.FearX:F0}: nowhere to run, it freezes"); BeginHare(h, HD.Tall, 5f); return; }
         if (alertFor > 0.01f) { BeginHare(h, HD.Tall, MathF.Max(0.5f, alertFor) + 0.35f); h.BoltPending = true; h.BoltDir = h.RDir; }
         else StartBoltNow(h, h.RDir, i);

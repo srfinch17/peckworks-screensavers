@@ -45,6 +45,9 @@ internal sealed class ChristmasScenery
     public required PointF ChimneyTop { get; init; }                    // where the smoke comes out
     public required int CabinBulbs { get; init; }                       // the first this-many entries of Lights are the bulbs along the cabin's roof
     public required List<(float X, float Foot, float Top)> Pines { get; init; } // each pine: trunk x, where it meets the snow, its tip (ask Brushwork.PineHalfWidth for its width at any height)
+    public required float PineU { get; init; }                          // the pines' own measuring stick (the screen's u times ChristmasPainter.PineK): hand THIS to Brushwork.PineHalfWidth, never the screen's u
+    public required int PineBulbs { get; init; }                        // this many entries of Lights, straight after the cabin's, are the bulbs on the pines (bigger bulbs, a bigger glow)
+    public required int BranchBulbFirst { get; init; }                  // the entries of Lights from this one to the end are the bulbs on the corner branches (the biggest bulbs: the branches hang nearest)
     public required int StarPine { get; init; }                         // which pine wears the star
     public required PointF StarAt { get; init; }                        // the star on top of it
     public required List<PointF> CornerBranchSpots { get; init; }       // points on the bare corner branches' thin twigs and tips
@@ -297,6 +300,15 @@ internal static class ChristmasPainter
     private static readonly Color SnowShade = Color.FromArgb(150, 172, 222);   // snow in shadow is blue, never grey: it is lit by the sky
 
     /// <summary>What PaintCabin measured while it painted, so the facts handed to the scene are the painted ones and not a second guess.</summary>
+    /// <summary>How much bigger than the rest of the picture the lit pines are painted (see "THE PINES HAVE THEIR OWN MEASURING STICK" in Paint). 1 = as always.</summary>
+    public const float PineK = 1f;
+    /// <summary>How much bigger than the rest of the picture the bare corner branches are painted: they hang nearest of all (see PaintCornerBranches).</summary>
+    public const float BranchK = 1.7f;
+    /// <summary>A branch bulb is this much bigger again than the branch's own scale would make it.</summary>
+    public const float BranchBulbK = 1.5f;
+    /// <summary>A pine's bulb is this much bigger again than the tree's own scale would make it. 1 = as always.</summary>
+    public const float PineBulbK = 1f;
+
     private readonly record struct CabinFacts(SizeF Wall, float RoofRise, RectangleF[] Windows, RectangleF Door, PointF ChimneyTop, int Bulbs);
 
     public static ChristmasScenery Paint(int w, int h, Random rng)
@@ -356,23 +368,33 @@ internal static class ChristmasPainter
 
         // (X as a fraction of the width, height in u). Tallest first in each
         // group, so the shorter trees in front overlap the taller ones behind.
+        const float StarPineTall = 0.45f;       // the star's pine
         (float X, float Height)[] pines =
         [
             (0.05f, 0.44f), (0.23f, 0.37f), (0.14f, 0.30f), (0.34f, 0.22f),
-            (0.88f, 0.45f), (0.80f, 0.33f), (0.96f, 0.31f),
+            (0.88f, StarPineTall), (0.80f, 0.33f), (0.96f, 0.31f),
         ];
+        // THE PINES HAVE THEIR OWN MEASURING STICK, pineU (PineK times the screen's u): a thing looks nearer when EVERYTHING about it grows
+        // together, like walking up to a tree, so one number grows a pine's height, boughs, snow, wire and bulbs at once. PineK is 1 today (the
+        // pines are the size they always were): on 2026-11-11 they were tried at 1.45 after a misreading of his line about "the foreground
+        // trees" (he meant the corner branches), and big pines under big branches was a smear of bulbs. Everybody who needs a pine's shape
+        // (the birds, the squirrels) asks with ChristmasScenery.PineU, never the screen's u, so the knob can be turned without anyone
+        // perching in the air beside a tree that grew.
+        float pineU = u * PineK;
         var pineFacts = new List<(float X, float Foot, float Top)>();
+        int pineBulbFirst = lights.Count;
         foreach (var p in pines)
         {
-            float x = w * p.X, foot = ground.YAt(x) + u * 0.02f, top = foot - u * p.Height;
-            Brushwork.Pine(g, x, top, foot, u, rng, snowy: true);
-            StringLights(g, x, top, foot, u, rng, lights);
+            float x = w * p.X, foot = ground.YAt(x) + u * 0.02f, top = foot - pineU * p.Height;
+            Brushwork.Pine(g, x, top, foot, pineU, rng, snowy: true);
+            StringLights(g, x, top, foot, pineU, rng, lights);
             pineFacts.Add((x, foot, top));
         }
+        int pineBulbs = lights.Count - pineBulbFirst;
         // The star goes on the tallest tree (the one at 88% across, number 4 in the list).
         const int starPine = 4;
-        float starX = w * 0.88f, starY = ground.YAt(starX) + u * 0.02f - u * 0.45f - u * 0.008f;
-        PaintStar(g, starX, starY, u * 0.016f);
+        float starX = w * 0.88f, starY = ground.YAt(starX) + u * 0.02f - pineU * StarPineTall - pineU * 0.008f;
+        PaintStar(g, starX, starY, pineU * 0.016f);
         lights.Add((new PointF(starX, starY), Butter));
 
         // ---- The near props. Where each stands (its FOOT), then its soft shadow, then the prop itself. ----
@@ -481,6 +503,7 @@ internal static class ChristmasPainter
 
         g.Flush();
         uint[] upToBranches = Brushwork.ToPixels(bmp);   // a third stencil copy: "unchanged since here" = no corner branch in front
+        int branchBulbFirst = lights.Count;
         List<PointF> cornerSpots = PaintCornerBranches(g, w, h, u, rng, lights);
 
         g.Flush();
@@ -498,7 +521,7 @@ internal static class ChristmasPainter
             FarRange = farRange, NearRange = nearRange, Ground = ground,
             CabinFoot = cabinFoot, CabinWall = cabin.Wall, CabinRoofRise = cabin.RoofRise,
             CabinWindows = cabin.Windows, CabinDoor = cabin.Door, ChimneyTop = cabin.ChimneyTop, CabinBulbs = cabin.Bulbs,
-            Pines = pineFacts, StarPine = starPine, StarAt = new PointF(starX, starY),
+            Pines = pineFacts, PineU = pineU, PineBulbs = pineBulbs, BranchBulbFirst = branchBulbFirst, StarPine = starPine, StarAt = new PointF(starX, starY),
             CornerBranchSpots = cornerSpots,
             Stars = stars, VillageWindows = villageWindows, VillageLights = villageLights,
             Lamp = lamp, LampFoot = lampFoot, LampBar = (new PointF(lamp.X, lamp.Y + lampTall * 0.130f), lampTall * 0.075f), Pond = pond, IceHole = iceHole,
@@ -1399,7 +1422,7 @@ internal static class ChristmasPainter
             g.DrawLines(wire, run);
             foreach (PointF at in run)
             {
-                PaintBulb(g, at, u, color);
+                PaintBulb(g, at, u * PineBulbK, color);
                 lights.Add((at, color));
                 color = (color + 1) % Pastels.Length;   // the colors take turns along the string
             }
@@ -1432,12 +1455,17 @@ internal static class ChristmasPainter
     private static List<PointF> PaintCornerBranches(Graphics g, int w, int h, float u, Random rng, List<(PointF At, int Color)> lights)
     {
         Color wood = Color.FromArgb(30, 26, 40);
+        // THE BRANCHES HANG CLOSE TO US (his line, 2026-11-11: "i meant the branches hanging in the foreground with the lights in them", "larger
+        // and closer so the lights look like light and not small dots in a field of small snow dots"). They are the nearest thing in the picture,
+        // so they get the biggest measuring stick: bu, the screen's u times BranchK. Longer limbs, thicker wood, twigs farther apart, and bulbs
+        // (BranchBulbK bigger again) that are plainly bigger than a snowflake. Like holding a twig at arm's length against a far hillside.
+        float bu = u * BranchK;
         Brushwork.BranchSeed[] seeds =
         [
-            new(new PointF(-w * 0.01f, h * 0.05f), 0.30f, u * 0.44f, u * 0.018f, 3),            // top left, reaching right
-            new(new PointF(w * 1.01f, h * 0.03f), MathF.PI - 0.30f, u * 0.42f, u * 0.017f, 3),  // top right, reaching left
+            new(new PointF(-w * 0.01f, h * 0.05f), 0.30f, bu * 0.44f, bu * 0.018f, 3),            // top left, reaching right
+            new(new PointF(w * 1.01f, h * 0.03f), MathF.PI - 0.30f, bu * 0.42f, bu * 0.017f, 3),  // top right, reaching left
         ];
-        List<PointF> spots = Brushwork.Branches(g, seeds, u, rng, wood, wood, wood, bare: true);
+        List<PointF> spots = Brushwork.Branches(g, seeds, bu, rng, wood, wood, wood, bare: true);
         // Every third spot: a bulb on all of them clumps into one bright smear.
         // In the tiny preview box the twigs are only a pixel or two apart, so there it is every ninth.
         int skip = u < 250 ? 9 : 3;
@@ -1446,7 +1474,7 @@ internal static class ChristmasPainter
             PointF at = spots[i];
             if (at.X < 0 || at.X >= w || at.Y < 0 || at.Y >= h) continue;
             int color = rng.Next(Pastels.Length);
-            PaintBulb(g, at, u, color);
+            PaintBulb(g, at, bu * BranchBulbK, color);
             lights.Add((at, color));
         }
         return spots;

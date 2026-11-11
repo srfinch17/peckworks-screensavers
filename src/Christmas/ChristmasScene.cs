@@ -67,6 +67,64 @@ internal sealed class ChristmasScene : IScreensaverScene
         public float Phase, Speed;
     }
 
+    /// <summary>
+    /// THE SNOW TAKES THE COLOUR OF A LIGHT IT FALLS PAST (his idea, 2026-11-11: "the snow that fell near a light took the lights color in
+    /// reflection as it goes past and then goes back to whatever color it was when it gets far enough away").
+    ///
+    /// The bulbs never move, so the question "what bulb light falls HERE?" has the same answer every frame. So it is answered ONCE, for every
+    /// small square of the screen, and kept as a map: like a weather map of colour. Each bulb stamps a soft disc on the map, strongest at the
+    /// bulb and fading to nothing at its reach. A flake then only looks up the square it is in (one lookup, not a search through 500 bulbs).
+    /// Where two bulbs' discs overlap the square holds their mix, weighted by which is nearer.
+    ///
+    /// The bulbs' pastels are pale, and a white flake mixed toward pale pink still looks white. So the light's colour is the pastel pushed
+    /// AWAY from white by the same distance again (pink becomes rose): the flake reads as coloured at a glance.
+    /// </summary>
+    private void BuildSnowLight(int width, int height)
+    {
+        _slCell = Math.Max(2, (int)(_u / 270f));
+        _slW = width / _slCell + 1; _slH = height / _slCell + 1;
+        int n = _slW * _slH;
+        float[] sr = new float[n], sg = new float[n], sb = new float[n], sw = new float[n];
+        _slK = new float[n];
+        for (int li = 0; li < _lights.Length; li++)
+        {
+            ref readonly Light l = ref _lights[li];
+            bool pine = li >= _pineFirst && li < _pineEnd;
+            float reach = (li >= _branchFirst ? _u * BranchBulbU : pine ? _scenery.PineU * ChristmasPainter.PineBulbK : _u) * 0.035f;       // how far a bulb's colour carries: a big pine bulb about 80 pixels at 1080p, a small one about 40
+            Color c = ChristmasPainter.Pastels[l.Color];
+            float cr = Math.Max(0, 2 * c.R - 255), cg = Math.Max(0, 2 * c.G - 255), cb = Math.Max(0, 2 * c.B - 255);   // the pastel pushed away from white
+            int x0 = Math.Max(0, (int)((l.X - reach) / _slCell)), x1 = Math.Min(_slW - 1, (int)((l.X + reach) / _slCell));
+            int y0 = Math.Max(0, (int)((l.Y - reach) / _slCell)), y1 = Math.Min(_slH - 1, (int)((l.Y + reach) / _slCell));
+            for (int cy = y0; cy <= y1; cy++)
+                for (int cx = x0; cx <= x1; cx++)
+                {
+                    float dx = (cx + 0.5f) * _slCell - l.X, dy = (cy + 0.5f) * _slCell - l.Y;
+                    float d = MathF.Sqrt(dx * dx + dy * dy);
+                    if (d >= reach) continue;
+                    float wt = (1f - d / reach) * (1f - d / reach);      // 1 at the bulb, easing to 0 at the reach
+                    int i = cy * _slW + cx;
+                    sr[i] += cr * wt; sg[i] += cg * wt; sb[i] += cb * wt; sw[i] += wt;
+                    if (wt > _slK[i]) _slK[i] = wt;                      // the strength is the NEAREST bulb's, so ten bulbs together are not ten times as strong
+                }
+        }
+        _slR = new byte[n]; _slG = new byte[n]; _slB = new byte[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (sw[i] <= 0f) continue;
+            _slR[i] = (byte)(sr[i] / sw[i]); _slG[i] = (byte)(sg[i] / sw[i]); _slB[i] = (byte)(sb[i] / sw[i]);
+            _slK[i] *= 0.9f;
+        }
+    }
+
+    /// <summary>The falling snow's question (PetalField.LightAt): the bulb light at a spot, read off the map.</summary>
+    private (int R, int G, int B, float K) SnowLight(float x, float y)
+    {
+        int cx = (int)(x / _slCell), cy = (int)(y / _slCell);
+        if (x < 0 || y < 0 || cx >= _slW || cy >= _slH) return (0, 0, 0, 0f);
+        int i = cy * _slW + cx;
+        return (_slR[i], _slG[i], _slB[i], _slK[i]);
+    }
+
     /// <summary>The residents do nothing before this many seconds: their flip-books are painting on a helper thread, and a start pinned to a time makes every test run begin the same way.</summary>
     private const double ResidentsStart = 6.0;
 
@@ -75,6 +133,14 @@ internal sealed class ChristmasScene : IScreensaverScene
     private readonly PetalField _snow;
     private readonly Light[] _lights;
     private readonly Sprite[] _bulbGlows;           // one soft glow per pastel color
+    private readonly Sprite[] _pineGlows;           // the same, bigger, for the bulbs on the pines
+    private readonly Sprite[] _branchGlows;         // the same, bigger still, for the bulbs on the corner branches
+    private readonly int _branchFirst;              // the entries of _lights from here to the end are the corner branches' bulbs
+    private const float BranchBulbU = ChristmasPainter.BranchK * ChristmasPainter.BranchBulbK;   // a branch bulb's size as a multiple of a plain bulb's
+    private byte[] _slR = [], _slG = [], _slB = [];  // the light map for the falling snow (see BuildSnowLight): the colour of the bulb light in each small square of the screen
+    private float[] _slK = [];                       // ... and how strong it is there (0 = none, about 0.9 = right at a bulb)
+    private int _slW, _slH, _slCell = 4;             // the map's size in squares, and a square's side in pixels
+    private readonly int _pineFirst, _pineEnd;      // which entries of _lights are the pines' bulbs (from _pineFirst up to, not including, _pineEnd)
     private readonly SantaRig _santa;
     private readonly HappeningDirector _happenings;
     private readonly ChimneySmoke _smoke;           // the cabin's chimney, live (Core/ChimneySmoke.cs)
@@ -121,12 +187,20 @@ internal sealed class ChristmasScene : IScreensaverScene
 
         // ---- Lights: every bulb gets its own rhythm, so they do not blink in step ----
         _bulbGlows = ChristmasPainter.Pastels.Select(c => Sprite.Glow((int)(_u * 0.012f), c)).ToArray();
+        // The pines' bulbs have their own glow, sized by the pines' own scale (ChristmasPainter.PineK and PineBulbK; both 1 today, so it matches the plain one).
+        _pineGlows = ChristmasPainter.Pastels.Select(c => Sprite.Glow((int)(_scenery.PineU * ChristmasPainter.PineBulbK * 0.012f), c)).ToArray();
+        _pineFirst = _scenery.CabinBulbs; _pineEnd = _scenery.CabinBulbs + _scenery.PineBulbs;
+        // ... and the corner branches' bulbs are the biggest of all (the branches hang nearest to us).
+        _branchGlows = ChristmasPainter.Pastels.Select(c => Sprite.Glow((int)(_u * BranchBulbU * 0.010f), c)).ToArray();
+        _branchFirst = _scenery.BranchBulbFirst;
         _lights = _scenery.Lights.Select(l => new Light
         {
             X = l.At.X, Y = l.At.Y, Color = l.Color,
             Phase = (float)(_rng.NextDouble() * Math.PI * 2),
             Speed = 1.0f + 2.6f * (float)_rng.NextDouble(),
         }).ToArray();
+        BuildSnowLight(width, height);
+        _snow.LightAt = SnowLight;
 
         _santa = new SantaRig(_scenery);
 
@@ -354,10 +428,11 @@ internal sealed class ChristmasScene : IScreensaverScene
         // 4. The lights. sin() swings between -1 and 1; the arithmetic turns
         //    that into "between 35% and 100% bright", so a bulb dims but
         //    never goes fully out.
-        foreach (ref readonly Light l in _lights.AsSpan())
+        for (int li = 0; li < _lights.Length; li++)
         {
+            ref readonly Light l = ref _lights[li];
             float bright = 0.35f + 0.65f * (0.5f + 0.5f * (float)Math.Sin(_time * l.Speed + l.Phase));
-            _bulbGlows[l.Color].DrawCentered(fb, l.X, l.Y, bright);
+            (li >= _branchFirst ? _branchGlows : li >= _pineFirst && li < _pineEnd ? _pineGlows : _bulbGlows)[l.Color].DrawCentered(fb, l.X, l.Y, bright);
         }
 
         // 4a. The snow's glitter and the lamp. A sparkle is sin() raised to a

@@ -209,8 +209,8 @@ internal sealed class Squirrels : Resident
         _pineBough = new float[s.Pines.Count];
         for (int i = 0; i < s.Pines.Count; i++)
         {
-            _pineHalf[i] = Math.Max(1.5f, 0.0035f * _u);
-            _pineBough[i] = s.Pines[i].Foot - 0.022f * _u;     // the painter's lowest row of boughs ends at Foot - 0.03 U with its tips drooping about 0.008 U lower near the trunk
+            _pineHalf[i] = Math.Max(1.5f, 0.0035f * s.PineU);
+            _pineBough[i] = s.Pines[i].Foot - 0.022f * s.PineU;     // the painter's lowest row of boughs ends at Foot - 0.03 U with its tips drooping about 0.008 U lower near the trunk
         }
         _pineOrder = [3, 1, 5, 4, 0, 2, 6];
         // The levels: four sizes between the far pines' lane and the bottom edge, equal steps of pixels-to-the-metre.
@@ -1434,7 +1434,7 @@ internal sealed class Squirrels : Resident
                 if (y < pine.Top || y > pine.Foot) continue;
                 if (y <= bough)
                 {
-                    float hw = 0.92f * Brushwork.PineHalfWidth(y, pine.Top, pine.Foot, _u);
+                    float hw = 0.92f * Brushwork.PineHalfWidth(y, pine.Top, pine.Foot, S.PineU);
                     int a = Math.Max(x0, (int)MathF.Ceiling(pine.X - hw)), c2 = Math.Min(x1, (int)MathF.Floor(pine.X + hw) + 1);
                     for (int x = a; x < c2; x++) _mask![y * S.Width + x] = pass == 1;
                 }
@@ -1484,7 +1484,7 @@ internal sealed class Squirrels : Resident
                 if (MathF.Abs(vy) < 0.5f) continue;
                 int row = b.Py + y;
                 if (row < pine.Top || row > pine.Foot || row >= fb.Height) continue;
-                float hw = 0.85f * Brushwork.PineHalfWidth(row, pine.Top, pine.Foot, _u);
+                float hw = 0.85f * Brushwork.PineHalfWidth(row, pine.Top, pine.Foot, S.PineU);
                 int xa = Math.Max(b.Px, (int)MathF.Ceiling(pine.X - hw)), xb = Math.Min(b.Px + b.Pw - 1, (int)MathF.Floor(pine.X + hw));
                 for (int x = xa; x <= xb; x++)
                 {

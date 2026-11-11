@@ -84,6 +84,14 @@ public sealed class PetalField
         Snow,
     }
 
+    /// <summary>
+    /// COLOURED LIGHT ON THE SNOW (optional; only snow asks). A scene with lamps or bulbs hands over a question: "what light falls at this
+    /// spot?" The answer is a colour and a strength K (0 = no light here, 1 = right beside a bulb). A flake at that spot is mixed toward the
+    /// colour by K, so a flake drifting past a pink bulb turns pink and fades back to white as it falls away: like dust crossing a torch beam.
+    /// The petal code knows nothing about bulbs; the scene knows nothing about flakes. Left null (every other saver), nothing changes.
+    /// </summary>
+    public Func<float, float, (int R, int G, int B, float K)>? LightAt { get; set; }
+
     /// <summary>The outline of each falling thing. Cherry petals unless a scene says otherwise.</summary>
     public FlakeShape Shape { get; set; } = FlakeShape.Petal;
 
@@ -368,6 +376,12 @@ public sealed class PetalField
         int g = (int)((pale.G + (deep.G - pale.G) * p.Pink) * Tint.G);
         int b = (int)((pale.B + (deep.B - pale.B) * p.Pink) * Tint.B);
         float opacity = (0.5f + 0.5f * p.Z) * p.Fade;   // far flakes are fainter
+        if (LightAt != null)
+        {
+            // Near a bulb the flake borrows the bulb's colour, and shows up a little more (a lit flake is brighter than one in the dark).
+            var (lr, lg, lb, k) = LightAt(p.X, p.Y);
+            if (k > 0f) { r += (int)((lr - r) * k); g += (int)((lg - g) * k); b += (int)((lb - b) * k); opacity += (1f - opacity) * 0.5f * k; }
+        }
 
         int reach = (int)MathF.Ceiling(radius) + 1;
         int x0 = Math.Max(0, (int)p.X - reach), x1 = Math.Min(fb.Width - 1, (int)p.X + reach);
