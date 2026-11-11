@@ -66,7 +66,7 @@ internal sealed class SantaRig
     public static readonly float[] PhaseOff = [0f, 0.618f, 0.236f, 0.854f, 0.472f, 0.090f, 0.708f, 0.326f, 0.944f];
     public const float SleighBack = -6.9f;                                       // the sleigh's centre, behind the front point (s)
     private const float GaitRate = 1.5f;                                         // gallop beats a second: 20 pages at 1.5 is 30 pages a second, two frames a page at 60
-    private const int Motes = 72;                                                // the stardust ring buffer
+    private const int Motes = 200;                                               // the stardust ring buffer
 
     private readonly ChristmasScenery _scenery;
     private readonly float _s, _u;
@@ -169,7 +169,7 @@ internal sealed class SantaRig
     private int _mhead;
     private float _emit, _emitRed;
     /// <summary>Stardust per second falling from the runners (a story turns it up for a burst).</summary>
-    public float DustRate = 70f;
+    public float DustRate = 55f;
 
     public SantaRig(ChristmasScenery scenery)
     {
@@ -486,7 +486,7 @@ internal sealed class SantaRig
             if (_mage[i] >= _mlife[i]) continue;
             _mage[i] += dt;
             _mx[i] += _mvx[i] * dt; _my[i] += _mvy[i] * dt;
-            _mvx[i] *= 1f - 0.9f * dt; _mvy[i] = _mvy[i] * (1f - 0.9f * dt) + _u * 0.05f * dt;       // drag, and a slow fall
+            _mvx[i] *= 1f - 1.6f * dt; _mvy[i] = _mvy[i] * (1f - 1.6f * dt) + _u * 0.012f * dt;      // it hangs where it was shed, slows, and sinks very gently
         }
         if (!show) return;
         _emit += dt * DustRate;
@@ -495,7 +495,14 @@ internal sealed class SantaRig
         while (_emit >= 1f)
         {
             _emit -= 1f;
-            Spawn(ox + Jit(0.12f), oy + Jit(0.06f), -_dirOf() * Jit01(0.02f) * _u, Jit(0.03f) * _u, (byte)(_rng.Next(4) == 0 ? 2 : _rng.Next(2)), 0.9f + 1.0f * (float)_rng.NextDouble());
+            // A GENTLE SPARKLE "EXHAUST" (his words): each mote is simply LEFT BEHIND where the runners were, with
+            // the smallest drift, and twinkles out over two or three seconds, so a soft glittering ribbon trails
+            // the sleigh. (The first version multiplied the up-and-down speed by the screen's size TWICE, a units
+            // slip: motes were fired straight up and down at thousands of pixels a second. His line: "it looks
+            // like particles shooting up and down from the back".) Speeds here are in pixels a second, small ones.
+            float drift = _u * 0.006f;
+            Spawn(ox + Jit(0.16f), oy + Jit(0.07f), -_dirOf() * drift * (float)_rng.NextDouble(), drift * ((float)_rng.NextDouble() - 0.35f),
+                  (byte)(_rng.Next(5) == 0 ? 2 : _rng.Next(2)), 1.8f + 1.4f * (float)_rng.NextDouble());
         }
         // Rudolph's nose sheds a few red sparks that drift back.
         _emitRed += dt * 7f;
@@ -503,7 +510,7 @@ internal sealed class SantaRig
         while (_emitRed >= 1f)
         {
             _emitRed -= 1f;
-            Spawn(nose.X + Jit(0.05f), nose.Y + Jit(0.05f), -_dirOf() * (0.02f + 0.03f * (float)_rng.NextDouble()) * _u, Jit(0.02f) * _u, 3, 0.5f + 0.5f * (float)_rng.NextDouble());
+            Spawn(nose.X + Jit(0.05f), nose.Y + Jit(0.05f), -_dirOf() * _u * 0.004f, _u * 0.004f * ((float)_rng.NextDouble() - 0.4f), 3, 0.6f + 0.6f * (float)_rng.NextDouble());   // left behind, like the runners' dust (the same units slip was here)
         }
     }
 
@@ -746,7 +753,7 @@ internal sealed class SantaRig
         for (int i = 0; i < Motes; i++)
         {
             if (_mage[i] >= _mlife[i]) continue;
-            float k = _mage[i] / _mlife[i], a = (1 - k) * (1 - k) * (0.65f + 0.35f * MathF.Sin(_mage[i] * 19f + i));
+            float k = _mage[i] / _mlife[i], a = MathF.Min(1f, _mage[i] * 8f) * (1 - k) * (0.60f + 0.40f * MathF.Sin(_mage[i] * 9f + i * 1.7f));   // eased in, a slow twinkle, a long fade
             Sprite sp = _mkind[i] == 0 ? _gold! : _mkind[i] == 1 ? _white! : _mkind[i] == 2 ? _star! : _red!;
             sp.DrawCentered(fb, _mx[i], _my[i], a * (_mkind[i] == 2 ? 0.95f : 0.85f), stencil);
         }
