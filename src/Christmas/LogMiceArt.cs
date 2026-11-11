@@ -854,8 +854,8 @@ internal static class LogMiceArt
     private static int PagesIn(Book b) => b switch
     {
         Book.Run => RunPages, Book.Stand => StandPages, Book.Rise => RisePages, Book.Sit => SitPages, Book.Wash => WashPages,
-        Book.Box => BoxPages, Book.Leap => 2, Book.Plunge => PlungePages, Book.Walk => WalkPages, Book.WalkUp => WalkPages,
-        Book.Front => FrontPages, Book.Head => 1, Book.Turn => TurnPages, Book.TurnUp => 5, Book.Emerge => EmergePages, Book.Dig => DigPages, Book.Raise => 8, _ => 1,
+        Book.Box => BoxPages, Book.Leap => 1, Book.Plunge => 1, Book.Walk => WalkPages, Book.WalkUp => WalkPages,
+        Book.Front => FrontPages, Book.Head => 1, Book.Turn => TurnPages, Book.TurnUp => 5, Book.Emerge => 1, Book.Dig => 1, Book.Raise => 8, _ => 1,
     };
 
     /// <summary>The pose of one page of one book.</summary>

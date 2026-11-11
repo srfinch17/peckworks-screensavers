@@ -11,13 +11,13 @@ namespace Christmas;
 //   before the mouse commits. It runs in DASHES of half a second with FROZEN stops between (a
 //   mouse that stops is a mouse that listens). It sits up on its haunches, nose going, forepaws at
 //   its chest; it washes its face with both paws. It carries a seed home in its mouth, in dashes.
-//   When frightened it bolts for the hole, or, with no hole near, dives into the snow where it
-//   stands and tunnels, and its head comes up a little way on with a cap of snow on it.
+//   When frightened it bolts for the nearest cover (a stone, a stump, a brush pile, a bush) that is not on the
+//   threat's side, round the back of it, or for the log; there is no hole in the snow (round five).
 //   Two mice meet nose to nose and box for a second, and one hops back.
 //
 // Three dials per mouse, dealt at birth so no two are alike: BOLD (0 timid .. 1 bold: how far it
 // roams, whether it commits when it peeks, how readily it flees rather than freezes), CURIOUS (how
-// often it peeks, sits up, looks) and PLAYFUL (tunnelling and tussling). A mood: HUNGRY rises
+// often it peeks, sits up, looks) and PLAYFUL (tussling). A mood: HUNGRY rises
 // slowly and sends it to the bird table; a seed found drops it.
 //
 // EVERY MOVE IS A DASH of a whole number of strides. The stride is the bound's cycle (about 1.3
@@ -34,7 +34,7 @@ namespace Christmas;
 //   Hold    : any reaction; its timer.                                 Leaves: all four feet down.
 //   Dash    : never cut mid-dash (a dash is n strides, planned); a Flee waits for the dash to land.
 //   Rise/Sit/Wash/Fall: a Threat drops it (Fall) and flees.            Leaves: all four feet down.
-//   Plunge/Under: nothing (a mouse under the snow hears nothing).      Leaves: Pop, then Hold.
+//   Behind  : nothing (a hidden mouse is safe: it ignores the board).     Leaves: round the end of its cover, side on, then the next activity.
 //   Box     : a Threat/Loud ends it at once.                           Leaves: both Fall, then Hold.
 // A state's exit never writes a value the next state eases (the pace's odometer is zeroed when a dash
 // STARTS, never when one ends).
@@ -134,12 +134,12 @@ internal sealed class LogMice : Resident
     // The PHASE a mouse is in this very moment (what the body is doing)...
     // Enter (round of 2026-11-10): the walk INTO the log after the hop up to the lip. Cut short by: nothing (a mouse going in is committed,
     // like a dash). Leaves: out of sight inside, tail last, then Home.
-    private enum Doing { Home, Peek, Hop, Hold, Scurry, Rise, Sit, Wash, Fall, Dig, Plunge, Under, Pop, Box, Enter }
+    private enum Doing { Home, Peek, Hop, Hold, Scurry, Rise, Sit, Wash, Fall, Dig, Behind, Box, Enter }
 
     // ...and the ACTIVITY it is part of (what a child would say it is doing). One activity runs through many phases:
-    // "Wander" is dash, listen, dash, listen; "Tunnel" is the dive, the ride under the snow and the pop-up. Decisions are
+    // "Wander" is dash, listen, dash, listen; "Hide" is the run to a cover, the wait behind it, the peeks and the way out. Decisions are
     // made once per activity, never per phase, and the mind log's doing column is the ACTIVITY (the phase follows it).
-    private enum Act { Home, Emerge, Wander, Sit, Wash, Nibble, Forage, Tunnel, Tussle, Watch, Flee, Return }
+    private enum Act { Home, Emerge, Wander, Sit, Wash, Nibble, Forage, Hide, Tussle, Watch, Flee, Return }
 
     private sealed class Mouse
     {
@@ -157,7 +157,7 @@ internal sealed class LogMice : Resident
         public double PendingLook = -99.0;  // a look that arrived mid-doing, taken at the next stop if still fresh
         public bool FirstOut = true;        // the first peek is the entrance: it always commits
         public bool Withdraw; public int DoorWaits; public int Stuck; public bool Trimmed;
-        public float SitFor, FallFrom = 1f; public bool FleePending, PostPop, TussleHop; public int HopAway; public Doing LoggedPhase = Doing.Peek; public int PopDir = 1;                // seconds of sitting this activity asks for
+        public float SitFor, FallFrom = 1f; public bool FleePending, TussleHop; public int HopAway; public Doing LoggedPhase = Doing.Peek;                // seconds of sitting this activity asks for
         public float StrideNow;             // pixels in one stride, fixed at the start of a dash
         public float Ux, Uy, Remaining;     // the dash's direction and the strides still to go
         public float Speed;                 // pixels per second as last moved (for the log)
@@ -176,44 +176,30 @@ internal sealed class LogMice : Resident
         // -- how it is drawn this frame --
         public LogMiceArt.Book Book; public int Page; public bool Visible, UseStencil, Mirror;
         public float DrawX, DrawY; public int Size;
-        public float MoundGrow, MoundX, MoundY; public bool MoundOn, Ridge;
-        public float HomeFor, FurrowX, FurrowY;
+        public float HomeFor;
         public float HeadRise; public bool HeadOnly;
         public float Speak;                 // cooldown on the board posts
         public PointF HopFrom, HopTo; public float HopT, HopLen;
-        public PointF UnderFrom, UnderTo; public float UnderLen, UnderDur, UnderT;
         public double Clock;
         public float DashEndX, DashEndY;
         // -- holes (round of 2026-11-10) --
         public float Shade;                 // 0 to 1: how dark the log's inside is on this mouse (only a side-view mouse in the hollow)
         public bool LipOn;                  // the log's front lip is stamped over this mouse this frame
         public float HopArc = 0.30f;        // a hop's height in mouse units
-        public PointF BoundTo;              // where the bound toward a dive ends (the hole is one mouse length ahead of it)
-        public bool PopReuse;               // the mouse comes up through a hole that is already open
-        public int Hole = -1;               // the snow hole this mouse is using (an index into _holes)
-        public bool DiveOn; public int DivePage;     // drawn from the dive sheet this frame
         public float EnterDist;             // pixels the walk into the log covers
         public float GlintT = -1f;          // eyes in the dark (a Home mouse): seconds into the glint, -1 = none
         public float NextGlint = 5f;
-        public int PopHole = -1; public bool DiveSeen; public float RidgeA = 1f; public bool InOnly;
-        public int ReuseHole = -1;          // an old hole this mouse is walking to
-        public bool SkipLoop, Digging;      // a dive into an old hole has no scrabble; true while the dig is on
-        public float DigLen = 1f, DiveDur = 0.8f, EnterDur = 0.8f;
-        public int DigPage;
+        public bool InOnly;
+        public float EnterDur = 0.8f;
+        // -- COVER (round five): the cover it hides behind, its spot, the stage of the hide, the face's lean --
+        public int Cov = -1, HideDir = 1, BStage; public float HideX, HideY, HideEdgeFar, BT, HideT, BFor, PeekHold, NextPeek, FearX; public bool BLeaving;
     }
 
-    /// <summary>A hole in the snow, kept (the mice reuse them). It opens as the mouse arrives, stays, then slowly drifts closed.</summary>
-    private struct Hole { public float X, Y, Open, Born; public bool On; public int Size; public bool Busy; public float TX, TY; public bool Slide; }
-    private readonly Hole[] _holes = new Hole[6];
-    private readonly Sprite[][][] _holeArt = new Sprite[3][][];             // [size][0 back, 1 lip][opening level]
-    private readonly LogMiceArt.DiveSheet[] _dives = new LogMiceArt.DiveSheet[3];
-    private Sprite? _lipSp, _shadeSp; private int _lipX, _lipY, _shadeX, _shadeY;
+    private Sprite? _lipSp, _shadeSp; private int _lipX, _lipY, _shadeX, _shadeY;      // the log's two front pieces (the hollow's shade and the wood lip)
 
     private readonly Mouse[] _mice;
     private readonly int _count;
     private readonly LogMiceArt.Sheet[] _sheets = new LogMiceArt.Sheet[3];
-    private readonly Sprite[][] _mounds = new Sprite[3][];
-    private readonly Sprite[] _ridges = new Sprite[3];
     private readonly Sprite[] _puffGlow = new Sprite[2];
     private Sprite? _seed;
     private readonly float _unit;               // pixels in one mouse unit at the bottom of the screen
@@ -233,7 +219,7 @@ internal sealed class LogMice : Resident
     private struct Flake { public float X, Y, Vx, Vy, Age, Life; public int Size; public bool On; }
     private readonly Flake[] _puffs = new Flake[48];
     private int _puffAt;
-    private struct Print { public float X, Y, Age; public bool On, Furrow; }
+    private struct Print { public float X, Y, Age; public bool On; }
     private readonly Print[] _prints = new Print[200];
     private int _printAt;
 
@@ -310,16 +296,6 @@ internal sealed class LogMice : Resident
             {
                 float k = MathF.Max(2.2f, u0 * ks[i]);
                 _sheets[i] = LogMiceArt.BuildSheet(k);
-                { var mm = new Sprite[12]; for (int j = 0; j < 12; j++) mm[j] = LogMiceArt.PaintMound(k, 0.05f + 0.025f * j); _mounds[i] = mm; }       // twelve heights, so the dive's mound grows without a step
-            }
-            for (int i = 0; i < 3; i++) _ridges[i] = LogMiceArt.PaintRidge(MathF.Max(2.4f, u0 * ks[i]));
-            for (int i = 0; i < 3; i++)
-            {
-                float k = MathF.Max(2.2f, u0 * ks[i]);
-                _dives[i] = LogMiceArt.BuildDive(k);
-                var back = new Sprite[LogMiceArt.HoleLevels]; var lip = new Sprite[LogMiceArt.HoleLevels];
-                for (int j = 0; j < LogMiceArt.HoleLevels; j++) { back[j] = LogMiceArt.PaintHole(k, j / (float)(LogMiceArt.HoleLevels - 1), false); lip[j] = LogMiceArt.PaintHole(k, j / (float)(LogMiceArt.HoleLevels - 1), true); }
-                _holeArt[i] = new[] { back, lip };
             }
             BuildLogFront();
             _seed = LogMiceArt.PaintSeed(u0);
@@ -362,7 +338,6 @@ internal sealed class LogMice : Resident
     public float UnitAt(float y) => _sheets[SizeIdx(y)]?.K ?? _unit;
     public Sprite? SnowPuff(int i) => _puffGlow[i];
     public Sprite? SeedSprite => _seed;
-    public Sprite[] Mounds(float y) => _mounds[SizeIdx(y)];
 
     public PointF MouseAt(int i) => i >= 0 && i < _count ? new PointF(_mice[i].X, _mice[i].Y) : _door;
 
@@ -532,9 +507,7 @@ internal sealed class LogMice : Resident
             case Doing.Wash: if (m.Mind.Over || _sendHome > 0f) { m.Trip = 10; Begin(m, Doing.Sit, 1.0f + 0.6f * (float)Rng.NextDouble()); } break;
             case Doing.Fall: if (m.T >= RiseLen) { if (m.FleePending) { m.FleePending = false; DoFlee(m); } else if (m.TussleHop) { m.TussleHop = false; HopBack(m); } else EndActivity(m); } break;
             case Doing.Dig: ThinkDig(m, dt); break;
-            case Doing.Plunge: ThinkPlunge(m, dt); break;
-            case Doing.Under: ThinkUnder(m, dt); break;
-            case Doing.Pop: ThinkPop(m, dt); break;
+            case Doing.Behind: ThinkBehind(m, dt); break;
             case Doing.Box: ThinkBox(m, dt); break;
         }
         if (m.Mind.Doing != Doing.Scurry) { m.Dashing = false; }
@@ -639,20 +612,11 @@ internal sealed class LogMice : Resident
                 return;
             }
             m.X = m.HopTo.X; m.Y = m.HopTo.Y;                     // it lands where the hop was bound (the door, or a snow spot after a tussle)
-            if (m.ReuseHole >= 0) { BeginReuseDive(m); return; }  // the little hop that set its feet over an old hole
             Begin(m, Doing.Hold, 0.9f + 0.7f * (float)Rng.NextDouble());
         }
     }
 
     private const float EnterLen = 0.8f;
-
-    /// <summary>The mouse stands on the exact spot for an old hole: lean in, coil and dive (no scrabble, the hollow is there).</summary>
-    private void BeginReuseDive(Mouse m)
-    {
-        int hi = m.ReuseHole; m.ReuseHole = -1; m.Trip = 0;
-        if (hi >= 0 && PickTunnelEnd(m, out PointF to)) SetDive(m, to, hi, false);
-        else { if (hi >= 0) _holes[hi].Busy = false; EndActivity(m); }
-    }
 
     /// <summary>The walk into the log: the lean in is slow (the weight goes forward first), then the body pours in, run pages by the distance walked so no foot slides.</summary>
     private void ThinkEnter(Mouse m, float dt)
@@ -682,7 +646,6 @@ internal sealed class LogMice : Resident
     /// moment of the next activity: a trip begins with a listen, a sit with the rise), so nothing short sits between two doings.</summary>
     private void EndActivity(Mouse m)
     {
-        if (m.ReuseHole >= 0) { _holes[m.ReuseHole].Busy = false; m.ReuseHole = -1; }       // an old hole it was walking to is free again
         m.LastAct = m.Act;
         Decide(m);
     }
@@ -709,25 +672,24 @@ internal sealed class LogMice : Resident
         float wSit = hid ? 0f : L(Act.Sit, 0.9f + 0.9f * m.Curious) * live;
         float wWash = hid ? 0f : L(Act.Wash, 0.5f + 0.7f * (1f - m.Bold)) * live;
         float wForage = lull || home ? 0f : L(Act.Forage, 0.15f + 1.2f * m.Hungry);
-        float wTunnel = L(Act.Tunnel, 0.3f + 0.8f * m.Play) * live;
+        float wHide = lull ? 0.15f : L(Act.Hide, 0.55f + 0.9f * (1f - m.Bold)) * live;       // behind a cover (was the tunnel)
         float wTussle = partner ? L(Act.Tussle, 0.5f + 1.2f * m.Play) : 0f;
         float wWatch = lull || home ? 0f : L(Act.Watch, 0.4f + 0.8f * m.Curious);
-        Span<float> w = stackalloc float[] { wWander, wSit, wWash, wForage, wTunnel, wTussle, wHome, 0f, 0f, wWatch };
+        Span<float> w = stackalloc float[] { wWander, wSit, wWash, wForage, wHide, wTussle, wHome, 0f, 0f, wWatch };
         int pick = Dice.Pick(Rng, w);
         if (m.LastAct == Act.Emerge && !home && _force == null) pick = 0;        // the first thing after coming out is a wander away from the doorstep, so the next mouse's way is clear
         if (_force != null)
-            pick = _force switch { "sit" => 1, "wash" => 2, "forage" => 3, "tunnel" => 4, "tussle" => partner ? 5 : 0, "home" => 6, "flee" => 7, "dive" => 8, "watch" => 9, _ => pick };
-        Roll(m, pick switch { 0 => "wander", 1 => "sit", 2 => "wash", 3 => "forage", 4 => "tunnel", 5 => "tussle", 7 => "flee (test)", 8 => "dive (test)", 9 => "watch", _ => "home" });
+            pick = _force switch { "sit" => 1, "wash" => 2, "forage" => 3, "hide" => 4, "tussle" => partner ? 5 : 0, "home" => 6, "flee" => 7, "watch" => 9, _ => pick };
+        Roll(m, pick switch { 0 => "wander", 1 => "sit", 2 => "wash", 3 => "forage", 4 => "hide", 5 => "tussle", 7 => "flee (test)", 9 => "watch", _ => "home" });
         switch (pick)
         {
             case 1: m.Act = Act.Sit; m.SitFor = 4.5f + 4f * (float)Rng.NextDouble(); m.Trip = 0; Begin(m, Doing.Rise, RiseLen); break;
             case 2: m.Act = Act.Wash; m.Trip = 9; Begin(m, Doing.Rise, RiseLen); break;      // trip 9 = "wash when you are up"
             case 3: StartForage(m); break;
-            case 4: StartTunnel(m); break;
+            case 4: if (!StartHide(m, false)) StartWander(m); break;
             case 5: StartTussle(m); break;
             case 6: StartHome(m); break;
-            case 7: if (Distance(m.X, m.Y, _door.X, _door.Y) < 0.45f * S.U) { StartHome(m); m.Fast = true; } else StartDive(m); break;   // test dial: a flight
-            case 8: StartDive(m); break;                                                                                                // test dial: the dive into the snow
+            case 7: if (Distance(m.X, m.Y, _door.X, _door.Y) < 0.45f * S.U) { StartHome(m); m.Fast = true; } else if (!StartHide(m, true)) StartHome(m); break;   // test dial: a flight
             case 9: StartWatch(m); break;
             default: StartWander(m); break;
         }
@@ -869,7 +831,7 @@ internal sealed class LogMice : Resident
             // arrived?
             float toGoal = Distance(m.X, m.Y, m.GoalX, m.GoalY);
             // (a mouse going home hops in from up to two strides and a half away: a dash is two strides at least and the door is a small place, so a closer test looped at it, turn and turn about)
-            if (toGoal < (m.Trip == 2 ? 2.4f : m.Trip == 3 ? 0.9f : 1.45f) * stride) { ArriveAtGoal(m); return; }       // (a dash is two strides at least: closer than one and a half, it is there)
+            if (toGoal < (m.Trip == 2 ? 2.4f : m.Trip == 3 ? 0.9f : m.Trip == 21 ? 0.40f : 1.45f) * stride) { ArriveAtGoal(m); return; }       // (a dash is two strides at least: closer than one and a half, it is there)
             if (m.T > 30f && m.Trip != 2) { m.Trip = 0; EndActivity(m); return; }                    // a trip that has not finished in 30 s is given up
             // the goal is behind: a REVERSAL IS A TURN, drawn
             float dx = m.GoalX - m.X;
@@ -917,7 +879,7 @@ internal sealed class LogMice : Resident
         float maxDy = 0.55f * MathF.Max(MathF.Abs(dx), 1.5f * stride);
         dy = Math.Clamp(dy, -maxDy, maxDy);
         float dist = MathF.Sqrt(dx * dx + dy * dy);
-        if (Distance(m.X, m.Y, m.GoalX, m.GoalY) < (m.Trip == 2 ? 2.4f : m.Trip == 3 ? 0.9f : 1.45f) * stride) { ArriveAtGoal(m); return; }       // (the TRUE distance, the same test as the pause's: two different tests for 'arrived' was a turn-back-and-forth loop at the door)
+        if (Distance(m.X, m.Y, m.GoalX, m.GoalY) < (m.Trip == 2 ? 2.4f : m.Trip == 3 ? 0.9f : m.Trip == 21 ? 0.40f : 1.45f) * stride) { ArriveAtGoal(m); return; }       // (the TRUE distance, the same test as the pause's: two different tests for 'arrived' was a turn-back-and-forth loop at the door)
         int strides = (int)Math.Clamp(MathF.Round(dist / stride), 2f, m.Fast ? 8f : 5f);
         // do not overshoot: a dash that would pass the goal by over a stride is shortened
         if (strides * stride > dist + 0.6f * stride && strides > 2) strides--;
@@ -958,8 +920,7 @@ internal sealed class LogMice : Resident
                     return;
                 }
                 if (m.Stuck < 4 || m.Trip == 2 && m.Stuck < 10) { m.Pausing = true; m.PauseLeft = 1.5f; return; }       // wait, look, try again
-                if (m.Fast && m.Trip == 2 && Distance(m.X, m.Y, _door.X, _door.Y) > 0.12f * S.U) { StartDive(m); return; }
-                m.Trip = 0; EndActivity(m);
+                                m.Trip = 0; EndActivity(m);
                 return;
             }
         }
@@ -983,22 +944,15 @@ internal sealed class LogMice : Resident
             case 1: Begin(m, Doing.Dig, 1.5f); break;
             case 2: EnterHole(m); break;
             case 3: BeginBoxApproach(m); break;
-            case 4:
+            case 20:
             {
-                // standing where its paws will be over an old hole: face it (a drawn turn if the walk left it facing away), then lean in and dive
-                int side = _holes[m.ReuseHole].X >= m.X ? 1 : -1;
-                if (m.Dir != side) { StartPivot(m, side, false); m.Pausing = true; m.PauseLeft = 0f; break; }
-                // a dash lands within a stride and a half of its goal, but the dive sheet must start exactly one dig-offset behind the hole: a little hop sets the feet
-                float ex = m.GoalX - m.X, ey = m.GoalY - m.Y;
-                if (ex * ex + ey * ey > 2.25f)
-                {
-                    m.HopFrom = new PointF(m.X, m.Y); m.HopTo = new PointF(m.GoalX, m.GoalY); m.HopT = 0f; m.HopLen = 0.34f; m.HopArc = 0.10f; m.HomeBound = false;
-                    Begin(m, Doing.Hop, Mind<Doing>.Forever);
-                    break;
-                }
-                BeginReuseDive(m);
+                // at the cover's near end, a stride or three short of the spot: a listen and a look back (the head up), then in along the row behind it
+                m.GoalX = m.HideX; m.GoalY = m.HideY; m.Trip = 21; m.Pausing = true; m.PauseLeft = m.Fast ? 0.05f : 0.35f;
+                if (!m.Fast) { StartLook(m); }
                 break;
             }
+            case 21: BeginBehind(m); break;
+            case 22: m.Trip = 0; m.Cov = -1; m.Act = Act.Hide; EndActivity(m); break;
             case 5:
             {
                 // at the rim: face the ice (a drawn turn if the walk here left it facing away), then sit and watch
@@ -1059,200 +1013,159 @@ internal sealed class LogMice : Resident
         }
     }
 
-    // ---------------- Tunnel: plunge, travel under the snow, pop up ----------------
+    // ---------------- COVER: going behind a stone, a stump, a brush pile or a bush (round five, "no holes") ----------------
+    //
+    // FEYNMAN VERSION. There are no holes in the snow. A mouse hides the way a mouse hides behind a rock: it runs to the near END of the
+    // cover, slows (a listen, a look back), and runs on round the end to the back, head first, the body following the same path and the tail
+    // last. The painter put the cover in the depth picture with the nearness of ITS foot; the mouse's feet are a little farther than that, so the
+    // picture itself hides it a part at a time as it passes behind the edge. Nothing fades, nothing shrinks, nothing sinks.
+    // Behind the cover it sits, hidden. Every 6 to 15 s it PEEKS ROUND THE END: it turns head on (the drawn half turn), leans out until a third
+    // of its face is past the edge (nose, whiskers, one eye), looks, blinks, leans back and turns side on again. To go, it peeks first, then
+    // runs round the end it faces into the open. A cover takes two mice (a brush pile three), each its own place.
+    //
+    // WHAT CAN CUT A HIDE SHORT: nothing (a hidden mouse is safe, so it ignores the board); SendHome ends it at the next quiet moment. Leaves: in
+    // the open on the row behind the cover's end, side on, all four feet down, then the next activity.
 
-    // ---- the snow holes: kept, reused, drifting shut after a minute and a quarter ----
-
-    /// <summary>Opens a new hole (the oldest free one is dug over) and returns its index. It starts shut when "open" is 0 and the mouse opens it.</summary>
-    private int NewHole(float x, float y, float open)
+    /// <summary>Pixels of cover standing straight above (x, y): the depth picture's nearer pixels, counted up from the feet (gaps of two pixels bridged).</summary>
+    private int CoverRunAt(float x, float y, int limit)
     {
-        int pick = -1; float oldest = float.MaxValue;
-        for (int i = 0; i < _holes.Length; i++)
+        int W = S.Width, px = (int)x; byte me = S.Nearness(y); byte[] nd = S.NearDepth;
+        if (px < 0 || px >= W) return 0;
+        int run = 0, gap = 0;
+        for (int k = 1; k <= limit; k++)
         {
-            if (!_holes[i].On) { pick = i; break; }
-            if (!_holes[i].Busy && _holes[i].Born < oldest) { oldest = _holes[i].Born; pick = i; }
+            int py = (int)y - k; if (py < 0) break;
+            if (nd[py * W + px] > me) { run = k; gap = 0; } else if (++gap > 2) break;
         }
-        if (pick < 0) pick = 0;
-        _holes[pick] = new Hole { X = x, Y = y, Open = open, Born = (float)_clock, On = true, Size = SizeIdx(y), Busy = true };
-        return pick;
+        return run;
     }
 
-    /// <summary>An open hole that is not in use and lies within about a mouse length of (x, y): digging or surfacing there uses IT (a second hole drawn on top of an old one popped the old one away).</summary>
-    private int HoleNear(float x, float y, float k)
+    /// <summary>Is a mouse standing at (x, y) hidden all over (a mouse's body is 0.5 of a unit each side and 0.7 tall)? Measured on the depth picture, the thing that does the hiding.</summary>
+    private bool HiddenFully(float x, float y)
     {
-        for (int i = 0; i < _holes.Length; i++)
-            if (_holes[i].On && !_holes[i].Busy && _holes[i].Open > 0.3f && Distance(x, y, _holes[i].X, _holes[i].Y) < 0.6f * k) return i;
-        return -1;
+        float k = UnitAt(y); int lim = (int)(1.1f * k), best = int.MaxValue;
+        for (float dx = -0.55f * k; dx <= 0.55f * k; dx += 2f) best = Math.Min(best, CoverRunAt(x + dx, y, lim));
+        return best >= 0.72f * k;
     }
 
-    private void StartTunnel(Mouse m)
+    /// <summary>x of the cover's end at a mouse's low height, scanning from x in direction dir (gaps of three pixels bridged).</summary>
+    private float EdgeOf(float x, float y, int dir, float limit)
     {
-        float k = UnitAt(m.Y);
-        // an old hole, now and then: the mouse WALKS to it (to the spot its paws will be over it) and dives straight in, no digging
-        if (Rng.NextDouble() < 0.5)
-            for (int i = 0; i < _holes.Length; i++)
-            {
-                Hole h = _holes[i];
-                float d = Distance(m.X, m.Y, h.X, h.Y);
-                if (!h.On || h.Busy || h.Open < 0.8f || d < 0.09f * S.U || d > 0.30f * S.U) continue;
-                int side = h.X >= m.X ? 1 : -1;
-                float sx = h.X - side * LogMiceArt.DigHoleOffset * k, sy = h.Y;
-                if (!Can(sx, sy, 5f) || !Can(h.X, h.Y, 3f) || !LineOk(m.X, m.Y, sx, sy) || Blocked(m, sx, sy) || HiddenAt(sx, sy)) continue;
-                Roll(m, "reuse hole"); m.Act = Act.Tunnel; m.GoalX = sx; m.GoalY = sy; m.Trip = 4; m.Fast = false; m.ReuseHole = i; _holes[i].Busy = true;
-                Begin(m, Doing.Scurry, Mind<Doing>.Forever);
-                m.Pausing = true; m.PauseLeft = 0.4f + 0.4f * (float)Rng.NextDouble(); m.Stuck = 0;
-                return;
-            }
-        if (!PickTunnelEnd(m, out PointF to)) { StartWander(m); return; }
-        SetDive(m, to, -1, false);
-    }
-
-    /// <summary>Where a tunnel comes up: a spot a few lengths away on valid, unhidden ground (false if twelve tries find none).</summary>
-    private bool PickTunnelEnd(Mouse m, out PointF to)
-    {
-        to = default;
-        for (int tries = 0; tries < 12; tries++)
+        int W = S.Width; byte me = S.Nearness(y); byte[] nd = S.NearDepth;
+        int py = (int)(y - 0.2f * UnitAt(y)); float edge = x; int gap = 0;
+        if (py < 0 || py >= S.Height) return x;
+        for (float d = 0; d < limit; d += 1f)
         {
-            float len = (0.10f + 0.12f * (float)Rng.NextDouble()) * S.U;
-            float ang = ((float)Rng.NextDouble() * 2f - 1f) * 0.4f + (Rng.Next(2) == 0 ? 0f : MathF.PI);
-            float gx = m.X + len * MathF.Cos(ang), gy = m.Y + len * 0.5f * MathF.Sin(ang);
-            gx = Math.Clamp(gx, 0.06f * S.Width, 0.66f * S.Width); gy = Math.Clamp(gy, LaneLo(gx), LaneHi(gx));
-            if (!Can(gx, gy, 6f) || !LineOk(m.X, m.Y, gx, gy) || Blocked(m, gx, gy) || HiddenAt(gx, gy)) continue;
-            to = new PointF(gx, gy);
-            return true;
+            int px = (int)(x + dir * d); if (px < 0 || px >= W) break;
+            if (nd[py * W + px] > me) { edge = x + dir * d; gap = 0; } else if (++gap > 3) break;
         }
-        return false;
+        return edge;
+    }
+
+    private int CoverUse(Mouse me, int ci)
+    {
+        int n = 0;
+        foreach (Mouse o in _mice) if (o != me && o.Cov == ci && (o.Mind.Doing == Doing.Behind || o.Trip is 20 or 21)) n++;
+        return n;
     }
 
     /// <summary>
-    /// The dive's plan, shared by the tunnel and the flight. THE MOUSE DIGS WHERE IT STANDS (its paws over the hole it opens: the hole
-    /// is "DigHoleOffset" mouse units ahead of its feet, UnderFrom is the hole's centre), coils over it, and dives from the dive
-    /// sheet; then it travels under the snow to "to". An old hole ("existing" is its index) is not dug again: the mouse leans in,
-    /// coils and goes. A flight ("fast") is the same performance in half the time.
+    /// Chooses a cover for mouse m and starts the run to its near end (Trip 20, then in behind it, Trip 21). A mouse fits behind anything the picture
+    /// really hides it behind. flee: not on the threat's side, farther afield. False if no cover is near enough (a fleeing mouse then makes for the log).
     /// </summary>
-    private void SetDive(Mouse m, PointF to, int existing, bool fast)
+    private bool StartHide(Mouse m, bool flee)
     {
-        float k = UnitAt(m.Y);
-        PointF h = existing >= 0 ? new PointF(_holes[existing].X, _holes[existing].Y) : new PointF(m.X + m.Dir * LogMiceArt.DigHoleOffset * k, m.Y);
-        m.UnderFrom = h; m.UnderTo = to;
-        m.UnderLen = Distance(h.X, h.Y, to.X, to.Y);
-        m.UnderDur = Math.Max(2.5f, m.UnderLen / (0.07f * S.U));
-        m.Act = Act.Tunnel;
-        m.SkipLoop = existing >= 0;
-        m.DigLen = existing >= 0 ? 0.30f : fast ? 0.50f : 1.05f;
-        m.DiveDur = fast ? 0.52f : 0.80f;
-        m.Digging = true;
-        Begin(m, Doing.Plunge, m.DigLen + m.DiveDur);
-        int near = existing >= 0 ? -1 : HoleNear(h.X, h.Y, k);          // an old hole right where the paws would dig: dig in IT
-        if (near >= 0) { _holes[near].Busy = true; _holes[near].TX = h.X; _holes[near].TY = h.Y; _holes[near].Slide = true; }       // it settles onto the paws' spot while they scrabble
-        m.Hole = existing >= 0 ? existing : near >= 0 ? near : NewHole(h.X, h.Y, 0f);
-        m.PopReuse = false;
-        if (existing >= 0) { _holes[existing].Busy = true; _holes[existing].Open = 1f; }
-    }
-
-    /// <summary>The page of the dig book at "T" seconds into a dig that lasts "len": the lean in (0 to 7), the scrabble (8 to 23, two strokes), the coil (24 to 27).</summary>
-    private static int DigPageAt(float T, float len, bool skipLoop)
-    {
-        float f = Math.Clamp(T / MathF.Max(len, 0.01f), 0f, 0.9999f);
-        float aIn = skipLoop ? 0.55f : 0.27f, aCoil = skipLoop ? 0.45f : 0.14f;
-        if (f < aIn) return Math.Min(7, (int)(f / aIn * 8f));
-        if (f >= 1f - aCoil) return 24 + Math.Min(3, (int)((f - (1f - aCoil)) / aCoil * 4f));
-        float g = (f - aIn) / (1f - aIn - aCoil);
-        return 8 + Math.Min(15, (int)(g * 16f));
-    }
-
-    private void ThinkPlunge(Mouse m, float dt)
-    {
-        // 0 to DigLen: the mouse stands and DIGS (the forepaws rake, snow flies back between the hind legs, a dark hollow opens under the paws);
-        // then DiveDur: the dive sheet: head down into the mouth, the back arching over the lip, every part following the head, the hind feet
-        // kick, the tail whips in last. The front lip covers what has gone in.
-        float hx = m.UnderFrom.X, hy = m.UnderFrom.Y, k = UnitAt(m.Y);
-        if (m.T < m.DigLen)
+        float U = S.U; int best = -1; float bestCost = float.MaxValue;
+        float bx = 0, by = 0, w1x = 0, ef = 0; int bdir = 1;
+        for (int ci = 0; ci < S.Covers.Count; ci++)
         {
-            m.Speed = 0f;
-            if (m.Hole >= 0 && !m.SkipLoop) _holes[m.Hole].Open = MathF.Max(_holes[m.Hole].Open, Organic.Smooth((m.T - 0.10f * m.DigLen) / (0.80f * m.DigLen)));
-            // snow thrown back with each stroke: specks from the paws, back between the hind legs
-            float stroke = m.DigLen * 0.17f;
-            if (!m.SkipLoop && m.T > stroke && (int)(m.T * (m.DigLen < 0.8f ? 22f : 12f)) != (int)((m.T - dt) * (m.DigLen < 0.8f ? 22f : 12f)))
+            Cover c = S.Covers[ci];
+            int use = CoverUse(m, ci), cap = c.Kind == CoverKind.BrushPile ? 3 : 2;
+            if (use >= cap) continue;
+            float y = c.Hide.Y, k = UnitAt(y), stride = StrideAt(y);
+            float x = c.Hide.X + (use == 0 ? 0f : use == 1 ? 0.55f : -0.55f) * c.HideHalf;
+            if (!HiddenFully(x, y) || !Can(x, y, 3f)) continue;
+            float d = Distance(m.X, m.Y, c.Foot.X, c.Foot.Y);
+            if (d > (flee ? 0.55f : 0.40f) * U || d < 3f * stride) continue;
+            if (flee && (c.Foot.X - m.X) * (m.FearX - m.X) > 0f && MathF.Abs(m.FearX - m.X) < 0.45f * U) continue;
+            int dir = m.X < c.Foot.X ? 1 : -1;
+            float edge = EdgeOf(x, y, -dir, c.HalfW * 1.6f);
+            int n = Math.Max(3, (int)MathF.Ceiling(((x - (edge - dir * 1.0f * k)) * dir) / stride));
+            float w1 = x - dir * n * stride;
+            if (MathF.Abs(y - m.Y) > 0.45f * MathF.Abs(w1 - m.X)) continue;       // a lane change is a shallow diagonal: the row behind the cover must be reachable from here
+            if (!Can(w1, y, 3f) || !LineOk(m.X, m.Y, w1, y) || Blocked(m, w1, y) || PathBlocked(m, m.X, m.Y, w1, y)) continue;
+            float cost = d + (use > 0 ? 0.05f * U : 0f);
+            if (cost < bestCost) { bestCost = cost; best = ci; bx = x; by = y; w1x = w1; ef = EdgeOf(x, y, dir, c.HalfW * 1.6f); bdir = dir; }
+        }
+        if (best < 0) return false;
+        m.Cov = best; m.HideX = bx; m.HideY = by; m.HideDir = bdir; m.HideEdgeFar = ef;
+        m.Act = flee ? Act.Flee : Act.Hide; m.GoalX = w1x; m.GoalY = by; m.Trip = 20; m.Fast = flee;
+        Roll(m, $"hide behind cover {best} ({S.Covers[best].Kind}) at {bx:F0},{by:F0}{(flee ? " (flight)" : "")}");
+        Begin(m, Doing.Scurry, Mind<Doing>.Forever);
+        m.Pausing = true; m.PauseLeft = flee ? 0.05f : 0.4f + 0.4f * (float)Rng.NextDouble(); m.Stuck = 0;
+        return true;
+    }
+
+    private void BeginBehind(Mouse m)
+    {
+        m.Pausing = false; m.Dashing = false; m.Pace.Halt();
+        Begin(m, Doing.Behind, Mind<Doing>.Forever);
+        m.BStage = 0; m.BT = 0f; m.HideT = 0f; m.BLeaving = false;
+        m.BFor = (m.Fast ? 14f : 8f) + 16f * (float)Rng.NextDouble();
+        m.NextPeek = (float)_clock + 4f + 6f * (float)Rng.NextDouble();
+        m.Fast = false; m.Carrying = false;
+    }
+
+    /// <summary>How far (px) the head-on face leans out: until the face's middle is a little way inside the cover's far edge (about a third of the face shows).</summary>
+    private float LeanFor(Mouse m) => MathF.Max(0f, ((m.HideEdgeFar - m.HideDir * 0.10f * UnitAt(m.HideY)) - m.HideX) * m.HideDir);
+
+    private void ThinkBehind(Mouse m, float dt)
+    {
+        m.BT += dt; m.HideT += dt; m.Speed = 0f;
+        float k = UnitAt(m.HideY);
+        switch (m.BStage)
+        {
+            case 0: if (m.BT >= 0.45f) { m.BStage = 1; m.BT = 0f; } break;
+            case 1:
+                if (m.HideT >= m.BFor || _sendHome > 0f) { m.BLeaving = true; m.BStage = 2; m.BT = 0f; m.PeekHold = 0.8f + 0.6f * (float)Rng.NextDouble(); }
+                else if (_clock >= m.NextPeek) { m.BStage = 2; m.BT = 0f; m.PeekHold = 1.3f + 1.2f * (float)Rng.NextDouble(); }
+                break;
+            case 2: if (m.BT >= 0.30f) { m.BStage = 3; m.BT = 0f; } break;                                   // the half turn, side on to head on
+            case 3: m.X = m.HideX + m.HideDir * LeanFor(m) * Organic.Smooth(m.BT / 0.40f); if (m.BT >= 0.40f) { m.BStage = 4; m.BT = 0f; } break;
+            case 4: if (m.BT >= m.PeekHold) { m.BStage = 5; m.BT = 0f; } break;
+            case 5:
+                m.X = m.HideX + m.HideDir * LeanFor(m) * (1f - Organic.Smooth(m.BT / 0.40f));
+                if (m.BT >= 0.40f) { m.X = m.HideX; m.BStage = 6; m.BT = 0f; }
+                break;
+            default:
+                if (m.BT >= 0.30f)
+                {
+                    m.BStage = 1; m.BT = 0f; m.NextPeek = (float)_clock + 6f + 9f * (float)Rng.NextDouble();
+                    if (m.BLeaving) StartExit(m);
+                }
+                break;
+        }
+    }
+
+    /// <summary>The way out: run on round the end the mouse faces (head first, the body following), a stride and a half past it, on the same row; the other end if that one is taken.</summary>
+    private void StartExit(Mouse m)
+    {
+        float k = UnitAt(m.HideY), stride = StrideAt(m.HideY);
+        for (int pass = 0; pass < 2; pass++)
+        {
+            int dir = pass == 0 ? m.HideDir : -m.HideDir;
+            float edge = pass == 0 ? m.HideEdgeFar : EdgeOf(m.X, m.HideY, dir, 200f);
+            float ex = edge + dir * 1.8f * stride;
+            if (Can(ex, m.HideY, 3f) && LineOk(m.X, m.HideY, ex, m.HideY) && !Blocked(m, ex, m.HideY))
             {
-                float sp = (m.DigLen < 0.8f ? 1.3f : 1f) * S.U / 1080f;
-                Puff(m.X + m.Dir * 0.35f * k, m.Y - 0.08f * k, -m.Dir * (120f + 80f * (float)Rng.NextDouble()) * sp, -(20f + 40f * (float)Rng.NextDouble()) * sp, 2);
-                Puff(m.X + m.Dir * 0.30f * k, m.Y - 0.05f * k, -m.Dir * (100f + 80f * (float)Rng.NextDouble()) * sp, -(10f + 30f * (float)Rng.NextDouble()) * sp, 2);
+                m.BLeaving = false; m.GoalX = ex; m.GoalY = m.HideY; m.Trip = 22; m.Fast = false; m.Act = Act.Hide;
+                Roll(m, "comes out round the " + (dir > 0 ? "right" : "left") + " end");
+                Begin(m, Doing.Scurry, Mind<Doing>.Forever);
+                m.Pausing = true; m.PauseLeft = 0.1f; m.Stuck = 0;
+                return;
             }
         }
-        else
-        {
-            m.Digging = false;
-            if (m.Hole >= 0) _holes[m.Hole].Open = 1f;
-            float tt = m.T - m.DigLen;
-            // the nose goes in and the hind legs follow: specks thrown at the lip each time
-            if (tt >= m.DiveDur * 0.36f && tt - dt < m.DiveDur * 0.36f) for (int i = 0; i < 4; i++) Puff(hx + ((float)Rng.NextDouble() - 0.5f) * 8f, hy + 0.2f * k, ((float)Rng.NextDouble() - 0.5f) * 60f, -45f - 30f * (float)Rng.NextDouble(), 2);
-            if (tt >= m.DiveDur * 0.72f && tt - dt < m.DiveDur * 0.72f) for (int i = 0; i < 5; i++) Puff(hx + ((float)Rng.NextDouble() - 0.5f) * 8f, hy + 0.2f * k, ((float)Rng.NextDouble() - 0.5f) * 80f, -60f - 40f * (float)Rng.NextDouble(), 2);
-        }
-        if (m.T >= m.DigLen + m.DiveDur)
-        {
-            m.UnderT = 0f; Begin(m, Doing.Under, m.UnderDur);
-            m.X = hx; m.Y = hy;
-            if (m.Hole >= 0) { _holes[m.Hole].Busy = false; _holes[m.Hole].Open = 1f; }
-        }
-    }
-
-    private void ThinkUnder(Mouse m, float dt)
-    {
-        m.UnderT += dt;
-        float f = Math.Clamp(m.UnderT / m.UnderDur, 0f, 1f);
-        float fe = Organic.Smooth(f);                       // the ridge sets off and comes to rest softly, like everything else
-        m.X = m.UnderFrom.X + (m.UnderTo.X - m.UnderFrom.X) * fe; m.Y = m.UnderFrom.Y + (m.UnderTo.Y - m.UnderFrom.Y) * fe;
-        m.Speed = m.UnderLen / m.UnderDur * 6f * f * (1f - f);
-        // the furrow it leaves: a faint dimpled line, a dot every couple of pixels, fading over a few seconds
-        if (m.UnderT <= dt * 1.5f) { m.FurrowX = m.X; m.FurrowY = m.Y; }
-        while (Distance(m.X, m.Y, m.FurrowX, m.FurrowY) >= 2.2f)
-        {
-            float d = Distance(m.X, m.Y, m.FurrowX, m.FurrowY);
-            m.FurrowX += (m.X - m.FurrowX) / d * 2.2f; m.FurrowY += (m.Y - m.FurrowY) / d * 2.2f;
-            _prints[_printAt] = new Print { X = m.FurrowX, Y = m.FurrowY + 1.2f, Age = 0f, On = true, Furrow = true }; _printAt = (_printAt + 1) % _prints.Length;
-        }
-        if (f >= 1f)
-        {
-            Begin(m, Doing.Pop, PopLen); m.PopDir = m.UnderTo.X >= m.UnderFrom.X ? 1 : -1;
-            // the hole the mouse comes up through: an old open one (no bulge, it goes straight to the climb) or a new one the snow splits for
-            int nh = m.PopReuse ? -1 : HoleNear(m.X, m.Y, UnitAt(m.Y));
-            if (nh >= 0) { m.PopHole = nh; _holes[nh].Busy = true; m.PopReuse = true; m.X = _holes[nh].X; m.Y = _holes[nh].Y; }       // (the ridge has sunk away by now: no one sees the little step)
-            else if (!m.PopReuse) m.PopHole = NewHole(m.X, m.Y, 0f);
-            if (m.PopReuse) m.T = PopClimbAt;
-            if (m.PopDir == 0) m.PopDir = 1;
-        }
-    }
-
-    private const float PopClimbAt = 0.8f;       // seconds into the pop-up when the climb out begins (before it: the snow bulges and splits)
-    private const float ClimbLen = 1.3f;
-    private const float PopLen = PopClimbAt + ClimbLen;
-
-    private void ThinkPop(Mouse m, float dt)
-    {
-        // THE SNOW BREAKS (0 to 0.8 s): the ground bulges (a mound swells), it cracks with a burst of snow and specks, the mound sags into the rim
-        // as the hole opens; THEN THE CLIMB (0.8 to 2.1 s, the Emerge sheet): the head at the lip, the paws on the rim, the heave, out
-        // standing BESIDE the hole. The hole stays.
-        float k = UnitAt(m.Y);
-        if (m.PopHole >= 0 && m.PopHole < _holes.Length)
-        {
-            if (m.T < PopClimbAt && !m.PopReuse) _holes[m.PopHole].Open = Organic.Smooth((m.T - 0.40f) / 0.40f);
-            else _holes[m.PopHole].Open = 1f;
-        }
-        if (!m.PopReuse && m.T >= 0.40f && m.T - dt < 0.40f)
-        {
-            Puff(m.X, m.Y - 2f, -26f, -46f, 2); Puff(m.X, m.Y - 2f, 28f, -50f, 2); Puff(m.X, m.Y - 2f, 0f, -60f, 2);
-            for (int i = 0; i < 9; i++) Puff(m.X + ((float)Rng.NextDouble() - 0.5f) * 6f, m.Y - 3f, ((float)Rng.NextDouble() - 0.5f) * 90f, -70f - 50f * (float)Rng.NextDouble(), 2);   // a few specks flung up
-        }
-        if (m.T >= PopLen)
-        {
-            if (m.PopHole >= 0 && m.PopHole < _holes.Length) { _holes[m.PopHole].Busy = false; _holes[m.PopHole].Born = (float)_clock; }
-            m.PopHole = -1; m.PopReuse = false;
-            m.X += m.PopDir * 0.95f * k;                       // it stands beside the hole, never on top of it
-            m.Tail.Reset(); m.Tail.Reveal = 0f;
-            Begin(m, Doing.Hold, 0.9f + 0.6f * (float)Rng.NextDouble());
-            StartPivot(m, m.PopDir, true);                     // head on to the side view, the way it will go: a drawn turn, not a switch
-        }
+        m.BLeaving = false; m.BFor = m.HideT + 5f;                   // both ends taken: it stays behind a little longer
     }
 
     // ---------------- Tussle ----------------
@@ -1262,7 +1175,7 @@ internal sealed class LogMice : Resident
     {
         foreach (Mouse o in _mice)
         {
-            if (o == me || o == me.Partner || o.Mind.Doing is Doing.Home or Doing.Peek) continue;
+            if (o == me || o == me.Partner || o.Mind.Doing is Doing.Home or Doing.Peek || (me.Cov >= 0 && o.Cov == me.Cov)) continue;       // (two mice that share a cover keep their own places on its row)
             if (Distance(o.X, o.Y, x, y) < r) return true;
             if (o.Mind.Doing == Doing.Scurry && Distance(o.GoalX, o.GoalY, x, y) < r) return true;
         }
@@ -1365,6 +1278,7 @@ internal sealed class LogMice : Resident
     private void React(Mouse m, Reaction r, Notice cause)
     {
         Doing d = m.Mind.Doing;
+        m.FearX = cause.At.X;
         if (_log != null) Roll(m, $"react {r} {cause.Kind}");       // no string is built when nobody is logging
         switch (r)
         {
@@ -1395,21 +1309,9 @@ internal sealed class LogMice : Resident
 
     private void DoFlee(Mouse m)
     {
-        if (m.ReuseHole >= 0) { _holes[m.ReuseHole].Busy = false; m.ReuseHole = -1; }
         float toDoor = Distance(m.X, m.Y, _door.X, _door.Y);
-        if (toDoor < 0.45f * S.U || m.Carrying) { StartHome(m); m.Fast = true; }
-        else StartDive(m);
-        m.Act = Act.Flee;
-    }
-
-    private void StartDive(Mouse m)
-    {
-        // a frightened mouse far from home dives into the snow where it stands and stays under, then peeks
-        // (the same dive as a tunnel's, the whole performance: the hole opens, the bound, the sheet; it comes up a little way on)
-        float len = 0.06f * S.U;
-        float gx = m.X + m.Dir * (len + 1.4f * UnitAt(m.Y)); if (!Can(gx, m.Y, 6f)) gx = m.X + m.Dir * 1.4f * UnitAt(m.Y);
-        SetDive(m, new PointF(gx, m.Y), -1, true);
-        m.UnderDur = 3.5f + 3f * (float)Rng.NextDouble();
+        // A THREAT: to the nearest cover that is not on the threat's side (round the back of it); none in reach, the log (a flight home)
+        if (m.Carrying || !StartHide(m, true)) { StartHome(m); m.Fast = true; }
         m.Act = Act.Flee;
     }
 
@@ -1432,19 +1334,6 @@ internal sealed class LogMice : Resident
 
     private void TickParticles(float dt)
     {
-        // a hole nobody is using drifts shut, slowly, a minute and a quarter after its last use (it stays a good while, mice come back to it)
-        for (int i = 0; i < _holes.Length; i++)
-        {
-            if (_holes[i].On && _holes[i].Slide)
-            {
-                float ef = Math.Min(1f, dt * 9f);
-                _holes[i].X += (_holes[i].TX - _holes[i].X) * ef; _holes[i].Y += (_holes[i].TY - _holes[i].Y) * ef;
-                if (MathF.Abs(_holes[i].TX - _holes[i].X) + MathF.Abs(_holes[i].TY - _holes[i].Y) < 0.05f) { _holes[i].X = _holes[i].TX; _holes[i].Y = _holes[i].TY; _holes[i].Slide = false; }
-            }
-            if (!_holes[i].On || _holes[i].Busy || _clock - _holes[i].Born < 75.0) continue;
-            _holes[i].Open -= dt / 20f;
-            if (_holes[i].Open < 0.06f) _holes[i].On = false;
-        }
         for (int i = 0; i < _puffs.Length; i++)
         {
             if (!_puffs[i].On) continue;
@@ -1458,7 +1347,7 @@ internal sealed class LogMice : Resident
         {
             if (!_prints[i].On) continue;
             _prints[i].Age += dt;
-            if (_prints[i].Age > (_prints[i].Furrow ? 5f : 7f)) _prints[i].On = false;
+            if (_prints[i].Age > 7f) _prints[i].On = false;
         }
     }
 
@@ -1490,8 +1379,8 @@ internal sealed class LogMice : Resident
     private void PrepareDraw(Mouse m, float dt)
     {
         LogMiceArt.Book book = LogMiceArt.Book.Stand; int page = 0;
-        m.Visible = true; m.UseStencil = false; m.MoundOn = false; m.HeadOnly = false; m.Ridge = false;
-        m.DiveOn = false; m.Shade = 0f; m.LipOn = false; m.InOnly = false; m.RidgeA = 1f;
+        m.Visible = true; m.UseStencil = false; m.HeadOnly = false;
+        m.Shade = 0f; m.LipOn = false; m.InOnly = false;
         if (m.Tail.Reveal < 1f) m.Tail.Reveal = Math.Min(1f, m.Tail.Reveal + dt / 0.40f);
         m.DrawX = m.X; m.DrawY = m.Y; m.Mirror = m.Dir < 0;
         float k = UnitAt(m.Y);
@@ -1556,9 +1445,6 @@ internal sealed class LogMice : Resident
             }
             case Doing.Hold:
                 book = LogMiceArt.Book.Stand; page = StandPage(m, blink, sniff);
-                // just up out of the snow: the mound sags away under the turn instead of vanishing
-                if (m.Pivoting && m.PostPop) { m.MoundOn = true; m.MoundGrow = 0.3f * (1f - Organic.Smooth((m.PivotT - 0.22f) / 0.22f)); m.MoundX = m.X; m.MoundY = m.Y; m.DrawY = m.Y + 0.1f * k * (1f - Organic.Smooth((m.PivotT - 0.22f) / 0.22f)); }
-                else m.PostPop = false;
                 break;
             case Doing.Scurry:
                 if (m.Dashing) { book = LogMiceArt.Book.Run; page = m.Pace.Page(1f, LogMiceArt.RunPages); }
@@ -1572,53 +1458,27 @@ internal sealed class LogMice : Resident
             case Doing.Dig:
                 book = LogMiceArt.Book.Stand; page = m.T < 1.1f ? (((int)(m.T * 9f)) % 2 == 0 ? 7 : 6) : 6;
                 break;
-            case Doing.Plunge:
+            case Doing.Behind:
             {
-                if (m.T < m.DigLen)
+                // hidden behind its cover (the depth picture does the hiding): standing, sniffing, ears moving; to PEEK it turns head on by the drawn half turn
+                // (side on, seven in-betweens, head on), leans out until a third of its face is past the edge, looks, blinks, leans back, turns side on again
+                book = LogMiceArt.Book.Stand; page = StandPage(m, blink, sniff);
+                if (m.BStage >= 2)
                 {
-                    // the dig: lean in, two strokes of the scrabble (a hollow opening under the paws, snow flying back), the coil over the hole
-                    book = LogMiceArt.Book.Dig; page = DigPageAt(m.T, m.DigLen, m.SkipLoop);
+                    float u = m.BStage == 2 ? Organic.Smooth(m.BT / 0.30f) : m.BStage == 6 ? 1f - Organic.Smooth(m.BT / 0.30f) : 1f;
+                    int pose = Math.Min(8, (int)(u * 8.999f));
+                    if (pose == 0) { book = LogMiceArt.Book.Stand; page = 0; }
+                    else if (pose == 8) { book = LogMiceArt.Book.Front; page = blink ? 1 : 0; m.Mirror = false; }
+                    else book = LogMiceArt.Book.Turn;
+                    if (pose >= 1 && pose <= 7) page = pose - 1;
                 }
-                else
-                {
-                    // the dive sheet, anchored on the hole's centre (its first page is the dig's last page, standing where the mouse stood)
-                    m.Visible = false; m.DiveOn = true;
-                    m.DivePage = Math.Clamp((int)((m.T - m.DigLen) / m.DiveDur * LogMiceArt.DivePages), 0, LogMiceArt.DivePages - 1);
-                    m.DrawX = m.UnderFrom.X; m.DrawY = m.UnderFrom.Y;
-                }
-                break;
-            }
-            case Doing.Under:
-            {
-                m.Visible = false; m.MoundOn = true; m.Ridge = true; m.MoundGrow = 0.7f + 0.15f * MathF.Sin(m.UnderT * 11f); m.MoundX = m.X; m.MoundY = m.Y;
-                // the ridge shows once it has left the hole's mouth, and sinks away as it comes to rest (the bulge takes over)
-                float leave = Distance(m.X, m.Y, m.UnderFrom.X, m.UnderFrom.Y) / k;
-                m.RidgeA = Organic.Smooth((leave - 0.5f) / 0.7f) * (1f - Organic.Smooth((m.UnderT - (m.UnderDur - 0.4f)) / 0.4f));
-                if (m.RidgeA < 0.02f) m.MoundOn = false;
-                break;
-            }
-            case Doing.Pop:
-            {
-                // before the climb: the ground bulges, then splits (a mound that swells and sags into the new hole's rim)
-                if (m.T < PopClimbAt)
-                {
-                    m.Visible = false; m.MoundX = m.X; m.MoundY = m.Y;
-                    float grow = m.PopReuse ? 0f : m.T < 0.40f ? Organic.Smooth(m.T / 0.40f) * 0.95f : 0.95f * (1f - Organic.Smooth((m.T - 0.40f) / 0.40f));
-                    m.MoundOn = grow > 0.03f; m.MoundGrow = grow;
-                    break;
-                }
-                // THE CLIMB OUT: a drawn sheet (see LogMiceArt.PaintEmerge): the head at the lip, the paws on the rim, the heave, up to standing head on,
-                // eased slow-fast-slow. The sheet's cut-off line is the hole's lower mouth edge, hidden under the front lip. It ends beside the hole.
-                float r = Organic.Smooth(Math.Clamp((m.T - PopClimbAt) / ClimbLen, 0f, 1f));
-                book = LogMiceArt.Book.Emerge; page = (int)MathF.Round(r * (LogMiceArt.EmergePages - 1));
-                m.HeadOnly = true;
-                float sh = Organic.Smooth((r - 0.55f) / 0.45f);
-                m.DrawX = m.X + m.PopDir * 0.95f * k * sh; m.DrawY = m.Y + LogMiceArt.MouthRy * k * (1f - sh);
                 break;
             }
         }
         // ---- a turn on the spot overrides the page (the position stays the doing's own): side, three-quarters, head on, and out ----
         float tailSide = m.Mirror ? -1f : 1f;
+        bool peeking = m.Mind.Doing == Doing.Behind && m.BStage >= 2;
+        if (peeking) tailSide = m.Dir >= 0 ? 1f : -1f;
         if (m.Pivoting && m.Visible)
         {
             // seventeen poses over the turn: standing side on, the seven in-betweens, head on, the seven back out, standing side on
@@ -1633,7 +1493,7 @@ internal sealed class LogMice : Resident
         // ---- the tail: rooted on the page's rump (the standing page's, while turning), dragged along the path ----
         if (m.Visible && !m.HeadOnly && _sheets[m.Size] != null)
         {
-            MouseAnchors a = _sheets[m.Size].Anchor(m.Pivoting ? LogMiceArt.Book.Stand : book, m.Pivoting ? 0 : page);
+            MouseAnchors a = _sheets[m.Size].Anchor(m.Pivoting || peeking ? LogMiceArt.Book.Stand : book, m.Pivoting || peeking ? 0 : page);
             float kk = _sheets[m.Size].K;
             var root = new PointF(m.DrawX + tailSide * a.Tail.X * kk, m.DrawY - a.Tail.Y * kk);
             m.Tail.Update(root, tailSide >= 0f ? 1f : -1f, m.DrawY, 0.30f * kk, dt, m.Speed / MathF.Max(1f, 9f * kk));
@@ -1650,15 +1510,8 @@ internal sealed class LogMice : Resident
         {
             Mouse m = _mice[i];
             if (m.Mind.Doing == Doing.Home) continue;
-            if (!m.Visible && !m.MoundOn && !m.DiveOn) continue;
+            if (!m.Visible) continue;
             q.Add(m.Y, this, i);
-        }
-        // the snow holes: the BACK (dark mouth) a hair before anything standing on its row, the FRONT LIP a hair after, so a mouse is between them
-        for (int i = 0; i < _holes.Length; i++)
-        {
-            if (!_holes[i].On || _holes[i].Open < 0.06f) continue;
-            q.Add(_holes[i].Y - 0.4f, this, 3000 + i);
-            q.Add(_holes[i].Y + 0.4f, this, 3500 + i);
         }
         Decor.Collect(q, this);
         q.Add(100000f, this, 1000);            // the snow thrown up and the prints: over everything on the ground
@@ -1667,18 +1520,11 @@ internal sealed class LogMice : Resident
     public override void DrawOne(FrameBuffer fb, int index)
     {
         if (index == 1000) { DrawParticles(fb); CaptureFrame(fb); return; }
-        if (index >= 3000) { DrawHole(fb, index >= 3500 ? index - 3500 : index - 3000, index >= 3500); return; }
         if (index >= 2000) { Decor.DrawIndex(fb, index - 2000); return; }
         Mouse m = _mice[index];
         LogMiceArt.Sheet sh = _sheets[m.Size];
         if (sh == null) return;
         float k = sh.K;
-        if (m.DiveOn && _dives[m.Size] != null)
-        {
-            // the dive: its own sheet, anchored on the hole's centre (the front lip, drawn after, hides what has gone in)
-            LogMiceArt.DiveSheet dv = _dives[m.Size];
-            S.Stamp(fb, dv.Pages[m.DivePage], m.DrawX, m.DrawY, dv.OriginX, dv.OriginY, m.Mirror, 1f);
-        }
         bool atHole = m.UseStencil;
         byte[]? depth = atHole ? null : S.NearDepth;
         int near = atHole ? 254 : S.Nearness(m.Y);
@@ -1691,7 +1537,7 @@ internal sealed class LogMice : Resident
         if (m.Visible)
         {
             Sprite page = sh.Page(m.Book, m.Page);
-            if (atHole)   // (at the hole the stencil does the hiding, and the mouse crosses only a few pixels)
+            if (atHole)   // (at the log the stencil does the hiding, and the mouse crosses only a few pixels)
             {
                 int left = (int)MathF.Round(m.DrawX) - (m.Mirror ? page.Width - 1 - sh.OriginX : sh.OriginX), top = (int)MathF.Round(m.DrawY) - sh.OriginY;
                 page.Draw(fb, left, top, 1f, st, m.Mirror, depth, near);
@@ -1708,37 +1554,6 @@ internal sealed class LogMice : Resident
         // the log's FRONT PIECE, stamped after the mouse: the hollow's inside darkens what has gone in (a shade deepening toward the back),
         // and the lip under the hollow (cut from the backdrop's own pixels) hides the feet that are below it
         if (atHole && (m.Shade > 0.01f || m.LipOn)) DrawLogFront(fb, m.Shade, m.LipOn);
-        if (m.MoundOn)
-        {
-            if (m.Ridge && _ridges[m.Size] != null)
-            {
-                // a narrow raised ridge with a lit top and a blue shadow line, bobbing a little as the mouse pushes along under it
-                Sprite rd = _ridges[m.Size];
-                int lift = (int)MathF.Round(0.04f * k * (m.MoundGrow - 0.7f) * 8f);
-                if (m.RidgeA > 0.02f) S.Stamp(fb, rd, m.MoundX, m.MoundY + 0.05f * k, rd.Width / 2, rd.Height - 1 - (int)(0.10f * k) + lift, m.Dir < 0, m.RidgeA);
-            }
-            else
-            {
-            Sprite[] ms = _mounds[m.Size];
-            int gi = Math.Clamp((int)MathF.Round(m.MoundGrow * 11f), 0, 11);
-            if (m.MoundGrow > 0.03f)
-                S.Stamp(fb, ms[gi], m.MoundX, m.MoundY + 0.05f * k, ms[gi].Width / 2, ms[gi].Height - 1 - (int)(0.11f * k), false, 1f);
-            }
-        }
-    }
-
-    // ---- the pieces of the holes ----
-
-    /// <summary>One piece of a snow hole (the back before the mouse, the front lip after), at its own opening, stamped on the hole's centre.</summary>
-    private void DrawHole(FrameBuffer fb, int i, bool front)
-    {
-        Hole h = _holes[i];
-        if (!h.On) return;
-        Sprite[][]? set = _holeArt[h.Size];
-        if (set == null) return;
-        int lvl = Math.Clamp((int)MathF.Round(h.Open * (LogMiceArt.HoleLevels - 1)), 0, LogMiceArt.HoleLevels - 1);
-        Sprite sp = set[front ? 1 : 0][lvl];
-        S.Stamp(fb, sp, h.X, h.Y, sp.Width / 2, sp.Height / 2, false, 1f);
     }
 
     /// <summary>
@@ -1846,7 +1661,7 @@ internal sealed class LogMice : Resident
         for (int i = 0; i < _prints.Length; i++)
         {
             if (!_prints[i].On) continue;
-            float a = (_prints[i].Furrow ? 0.62f : 0.5f) * (1f - _prints[i].Age / (_prints[i].Furrow ? 5f : 7f));
+            float a = 0.5f * (1f - _prints[i].Age / 7f);
             int x = (int)_prints[i].X, y = (int)_prints[i].Y;
             if (x < 1 || y < 1 || x >= fb.Width - 1 || y >= fb.Height - 1 || S.NearDepth[y * fb.Width + x] != 0) continue;
             fb.Pixels[y * fb.Width + x] = FrameBuffer.Blend(fb.Pixels[y * fb.Width + x], 120, 142, 200, a);

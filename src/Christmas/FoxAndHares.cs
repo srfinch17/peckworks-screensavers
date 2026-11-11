@@ -14,18 +14,26 @@ namespace Christmas;
 /// sleeps under a thickening dusting of snow, and then goes away again for a while, so the hares get long quiet
 /// stretches. About a third of the time the fox is off screen or asleep.
 ///
-/// THE BURROWS (round three, "holes and hiding"): each hare owns two or three holes, placed at the start on open ground and kept all
-/// night. A hole is a PLACE drawn in two pieces (FoxAndHaresArt.PaintHoleBack before the animal, PaintHoleFront after it), so a hare
-/// that dives, hides or climbs out goes down BEHIND real snow, never fading. A hare with no burrow in reach digs one (HD.Dig). While
-/// down it peeks at the lip now and then (ears, eyes, a look, sinking). The fox noses a burrow with its muzzle over the mouth and its
-/// mousing plunge opens a crater with a rim that stays a while.
+/// COVER, NOT HOLES (round five; his line: "these holes all over the place for the mice... that's no good. have a bunch of rocks and
+/// shrubs and other things for them to hide in. not black holes next to a pond"). There is NO hole in the snow any more. The painter
+/// puts stones and bushes on the field (ChristmasScenery.Covers) and puts each in the depth picture with the nearness of its own
+/// foot; a hare whose feet stand a little FARTHER than that foot is hidden by it, the way a cat is hidden by a sofa.
+///   HIDING: the hare runs to the near END of a cover on a gentle curve, slows, and goes ROUND the end to the back (head first, the body
+///   following the same path, the white tail last), settles, and is behind the cover. Behind a LOW stone it lies flat (the LOAF:
+///   ears back, chin down); behind a bush tall enough it simply sits. Every 6 to 15 s it PEEKS: the ears go up first, then the head,
+///   a slow look one way and the other, a blink, and down again (behind a bush it stands up on its hind legs for a look).
+///   COMING OUT: a peek, then it rises, turns if it must, and hops round the end it faces, head first, and sits in the open.
+///   THE FOX nosing round a cover: it trots up to the near end, slows, reaches its muzzle at the twigs or over the stones (snow shaken
+///   off the bush falls on its head), and goes round the end; the hare breaks out of the OTHER end and bolts for the next cover. A
+///   hare with no cover in reach bolts off the side of the screen and comes back the same way later. The fox's MOUSING plunge leaves a
+///   soft pale dent, never a hole, and its head is hidden by a low white mound of snow while it is in.
 ///
 /// THE STORY BETWEEN THEM (the part a child watches): when the fox stalks a hare (low, slow, ears flat) the hare notices
 /// (a Threat posted on the noticeboard), rears up tall, THUMPS twice (a Friend notice, so every other hare in earshot
-/// sits up and bolts too), turns and bolts in a zigzag for a burrow it picked, and DIVES into the snow with a puff. The
-/// fox gallops after it, skids to a stop at the hole, noses it, digs twice, and gives up and sits. The hare ALWAYS gets
-/// away (it is faster and has the head start). After a while two ears come up out of the snow somewhere else, then the
-/// eyes, a look round, and it pops out and carries on.
+/// sits up and bolts too), turns and bolts for the nearest cover on the far side from the fox, round its near end and in behind it. The
+/// fox gallops after it, skids to a stop, trots up to the cover, sniffs round its end and goes round it. The hare ALWAYS gets
+/// away (it is faster and has the head start). After a while it peeks (ears first, then the head) from behind its new
+/// cover, a look round, and it comes out round the end and carries on.
 ///
 /// WHAT IS PINNED ON THE BOARD (a poster gets a bout and a rest, never every frame for minutes):
 ///   fox stalking or chasing: Threat at the fox, reach 0.35 U, weight 1, every 0.5 s while it lasts;
@@ -41,9 +49,12 @@ namespace Christmas;
 ///
 /// TEST VARIABLES: PECKWORKS_FOXHARE=natural (default) or one of
 ///   mouse (the fox is standing at x 0.72 w and starts mousing at 6 s), stalk (fox and hare 0 placed, the stalk starts at
-///   6 s and the hare bolts, the chase and the dig follow), sleep (the fox curls up at 6 s), groom, binky, nibble, tall,
-///   thump (hare 0 does that at 6 s), peek (hare 0 is in its burrow and comes up at 6 s), look (the fox and hare 0 look
-///   up at 6 s), nose (the fox is 2.8 m from hare 0's burrow, hare 0 is down in it: it walks up, noses the mouth, digs, gives up).
+///   6 s and the hare bolts to cover, the chase and the nosing follow), sleep (the fox curls up at 6 s), groom, binky, nibble, tall,
+///   thump (hare 0 does that at 6 s), look (the fox and hare 0 look up at 6 s), hide (hare 0 is in the open near its cover and
+///   goes behind it at 14 s, calmly), peek (hare 0 is behind its cover and peeks at 14 s), out (hare 0 is behind its cover and
+///   comes out at 14 s), flee (hare 0 bolts for the nearest cover at 14 s), offscreen (no cover is near: it bolts off the side),
+///   nose (the fox is 2.8 m from hare 0's cover, hare 0 is behind it: it walks up, noses round the end, and the hare breaks out the other end).
+///   PECKWORKS_COVERLOG=1 writes each hide spot's measured coverage to the mind log.
 ///   PECKWORKS_STALKSIDE=L or R puts the stalk's fox on the left or right of hare 0. PECKWORKS_FOXHARES=off makes the count 0 (the "without me" timing). PECKWORKS_SHEET=fox;file.png or
 ///   hares;file.png writes the pose sheet and a night strip. PECKWORKS_MINDLOG writes a line per animal per frame and
 ///   one per roll and reaction.
@@ -55,15 +66,16 @@ internal sealed class FoxAndHares : Resident
     //   Nibble: reach, bite for a few seconds, unreach; cut by Alert/Bolt, leaves the hare sitting where it stands.
     //   Groom: 5.5 s script, cut by a reaction.          Go/Hop/Land: a run of whole hops; a reaction cuts it at the next
     //   rest page (it lands first, so the feet are planted).  Tall: up on its hind legs, cut by nothing but time.
-    //   Thump: tall, two strikes, then Bolt (cannot be cut).  Binky: one leap, never cut.  Bolt: runs to its burrow.
-    //   Dive: into the snow.  Under: gone, waits for the fox to be far.  Peek: ears, eyes, head, then Sit.  Turn: 0.45 s.
-    private enum HD { Sit, Look, Nibble, Groom, Go, Hop, Land, Tall, Thump, Binky, Bolt, Dive, Under, Peek, Turn, Dig }
+    //   Thump: tall, two strikes, then Bolt (cannot be cut).  Binky: one leap, never cut.  Bolt: runs to cover (or off the screen).
+    //   Hidden: behind a cover, in stages (settle into a loaf, idle, a peek: rise, look, lower, and the way out). Only the FOX cutting in
+    //   (it reaches the cover) ends it early, by the quickest eased rise; it leaves from the sit pose. Turn: 0.45 s.
+    private enum HD { Sit, Look, Nibble, Groom, Go, Hop, Land, Tall, Thump, Binky, Bolt, Hidden, Turn }
     // Fox doings. Mouse is one doing with stages (listen, coil, leap, dive in, plunge, back out, shake, wipe, sneeze):
     // nothing cuts it once the leap has begun; a Loud during the listening stage ends it (the fox looks up).
-    private enum FD { Away, Go, Trot, Settle, Stand, Look, Turn, SitIn, Sit, SitOut, CurlIn, Asleep, Wake, Mouse, StalkIn, Stalk, StalkOut, DashIn, Chase, Skid, Nose, Dig, Leave, Watch }
+    private enum FD { Away, Go, Trot, Settle, Stand, Look, Turn, SitIn, Sit, SitOut, CurlIn, Asleep, Wake, Mouse, StalkIn, Stalk, StalkOut, DashIn, Chase, Skid, Nose, Leave, Watch }
 
-    private const int HB_Sit = 0, HB_Look = 1, HB_Reach = 2, HB_Nibble = 3, HB_Groom = 4, HB_Hop = 5, HB_Flee = 6, HB_Settle = 7, HB_TallIn = 8, HB_Tall = 9, HB_Thump = 10, HB_Binky = 11, HB_Dive = 12, HB_Peek = 13, HB_Turn = 14, HB_Twig = 15, HB_NLook = 16, HB_SettleF = 17, HB_BurB = 18, HB_BurF = 19, HB_Dig = 20;
-    private const int FB_Stand = 0, FB_Look = 1, FB_Trot = 2, FB_Settle0 = 3, FB_Settle1 = 4, FB_Stalk = 5, FB_StalkIn = 6, FB_Gallop = 7, FB_Skid = 8, FB_Sit = 9, FB_SitIn = 10, FB_CurlIn = 11, FB_Sleep = 12, FB_Listen = 13, FB_Coil = 14, FB_Leap = 15, FB_DiveIn = 16, FB_Plunge = 17, FB_BackOut = 18, FB_Shake = 19, FB_Wipe = 20, FB_Sneeze = 21, FB_Dig = 22, FB_NoseIn = 23, FB_Nose = 24, FB_Turn = 25, FB_DashIn = 26, FB_Lower = 27, FB_Watch = 28, FB_Wake0 = 29, FB_CraB = 33, FB_CraF = 34;
+    private const int HB_Sit = 0, HB_Look = 1, HB_Reach = 2, HB_Nibble = 3, HB_Groom = 4, HB_Hop = 5, HB_Flee = 6, HB_Settle = 7, HB_TallIn = 8, HB_Tall = 9, HB_Thump = 10, HB_Binky = 11, HB_Turn = 12, HB_Twig = 13, HB_NLook = 14, HB_SettleF = 15, HB_Loaf = 16, HB_LoafRise = 17;
+    private const int FB_Stand = 0, FB_Look = 1, FB_Trot = 2, FB_Settle0 = 3, FB_Settle1 = 4, FB_Stalk = 5, FB_StalkIn = 6, FB_Gallop = 7, FB_Skid = 8, FB_Sit = 9, FB_SitIn = 10, FB_CurlIn = 11, FB_Sleep = 12, FB_Listen = 13, FB_Coil = 14, FB_Leap = 15, FB_DiveIn = 16, FB_Plunge = 17, FB_BackOut = 18, FB_Shake = 19, FB_Wipe = 20, FB_Sneeze = 21, FB_NoseIn = 22, FB_Nose = 23, FB_Turn = 24, FB_DashIn = 25, FB_Lower = 26, FB_Watch = 27, FB_Wake0 = 28, FB_DentB = 32, FB_DentF = 33;
     private const int Tiers = 2;                                         // the lanes are a narrow band now (SmallBandTop down), three size steps are under four percent apart
     private const float HareScale = 0.45f * 1.3f;                         // a hare's body length in metres, with the storybook factor
     private const float HopBase = 1.45f, BoltSpeed = 8.0f;                // hare: units a second (lollop, bolt)
@@ -80,7 +92,7 @@ internal sealed class FoxAndHares : Resident
         public float Odo, GX, GY, LastFrac, HopK = 1f; public int Hops;
         public bool Turning; public float TurnT; public int TurnFrom, TurnTo; public HD After = HD.Sit; public float AfterFor;
         public HD Next = HD.Sit;                       // what to do when a run of hops ends
-        public float BX, BY, ToBX, ToBY;               // the burrow it dives into, and where it will come up
+        public float BX, BY;                           // the hide spot it runs to or sits in (the fox chases toward it)
         public float ThumpCool, BreathT, JinkT, Dur; public int Thumps; public double HeardAt = -1;
         public float FearX, FearY; public bool FearFox, BoltPending; public int BoltDir; public float TurnQuick = 1f;
         public Pace Pace = new(40f); public int Twig = -1; public float GlanceCool;
@@ -92,14 +104,23 @@ internal sealed class FoxAndHares : Resident
         public double PendAt = -1, Fz1 = -99, Fz2 = -99; public Resp Resp;
         public float Gx, Gy;                              // the GLIDE of a fast sheet: where the body really is minus where this page painted it (units)
         public Book? PBk; public int PPg; public bool PMir, PVis; public float PX, PY, PUnit;   // the previous frame's page, for the pose-pop log
-        // THE BURROWS (round three): the hare owns a few holes; Cur is the one it is in, at or going to; Perf is true while the hare is drawn AT its hole
-        // (so the hole's back piece goes down before the page and the front lip after it); DOx and DOy blend the last bound's arrival error out of the dive;
-        // the hide: HidePk is a peek at the lip while Under, PkT its clock, PkHold how long the eyes stay up, NextPeek the scene time of the next one.
-        public int Cur = -1, OpenPg = FoxAndHaresArt.OpenN - 1; public bool Perf, HidePk, DigPending; public float DOx, DOy, PkT, PkHold; public double NextPeek;
+        // COVER (round five). Spot is the hide spot it is behind, or running to (-1 none). THE ROUTE is a path in the open that never doubles back
+        // in x: up to four points (RX, RY), the run's own x-distance eased in y between them, so a hare goes round the end of a cover on a curve.
+        // ToHide: the run in hand ends in a hide (land, then Hidden). Hidden is played in stages: HStage 0 settle into the loaf, 1 idle,
+        // 2 rise (a peek, or the way out), 3 hold and look, 4 lower. HT is the stage's clock, HideT the whole hide's, HideFor how long it means to stay,
+        // PkHold how long the head stays up, NextPeek the scene time of the next peek. Leaving: the hide is over (peek, then out); Breaking: out NOW (the fox).
+        // Off: it ran off the screen's side and waits there (not drawn) OffFor seconds, then walks back in from OffSide.
+        public int Spot = -1, NextSpot = -1, RN, RDir = 1, HStage, OffSide, ExitFails; public bool RouteOn, RouteOff, ToHide, Leaving, Breaking, Off; public float HT, HideT, HideFor, PkHold, OffFor;
+        public readonly float[] RX = new float[4], RY = new float[4]; public double NextPeek;
     }
-    /// <summary>A burrow: a place, there from the first frame to the last. Who is the hare using it right now (-1 none); Open 0..7 how far it is dug.</summary>
-    private sealed class Bur { public float X, Y; public int Owner, Who = -1, Open = FoxAndHaresArt.OpenN - 1; }
-    /// <summary>The crater of a fox's mousing plunge: it stays on the snow and softens (fades) over a while.</summary>
+    /// <summary>
+    /// A HIDE SPOT: the place behind a cover where a hare's feet go. X, Y are the feet (a little farther than the cover's foot, so the cover's depth
+    /// hides what it is taller than); Low is true where only a lying hare (the loaf) is hidden, false where a sitting hare is; CoverU the measured
+    /// hidden height there in hare units; EdgeL and EdgeR the x of the cover's two ends at the hare's height (a hare goes round an end); FrontY the
+    /// row in the open it comes out on. Who is the hare in or bound for it (-1 none).
+    /// </summary>
+    private sealed class Spot { public int Cov; public float X, Y, CoverU, EdgeL, EdgeR, FrontY; public bool Low; public int Who = -1; }
+    /// <summary>The soft dent of a fox's mousing plunge: it stays on the snow, a pale dimple that fades.</summary>
     private struct Crater { public float X, Y; public double Born; public bool Live; }
     private enum Resp { None, Thump, Bolt, Freeze }
 
@@ -122,7 +143,8 @@ internal sealed class FoxAndHares : Resident
         public bool NoseNext; public float NoseT; public int Fail;        // after the chase: wait for the hare to be under, then walk up to the hole and nose it
         public float Gx, Gy;                             // the glide of the leap sheet
         public float StrideK = 1f, PrevPh; public int Plan;     // a PLANNED walk to a hole: the stride is stretched (0.8 to 1.25) so a whole number of half strides ends exactly at the spot, on a rest page
-        public int NoseBur = -1, CraI = -1, CraOpen = 7; public bool Perf;   // the burrow it is nosing (drawn in two pieces round it), its crater and how far open it is, true while drawn AT a hole
+        public int NoseSpot = -1, CraI = -1, CraOpen = 7; public bool Perf;   // the hide spot whose cover it is nosing round; its dent and how far pressed in it is; true while its head is behind the dent's front mound
+        public int Rounds; public bool RoundNext, Loose, SnowDone; public int NoseDir = 1;      // how many times round a cover this hunt; set when the sniff is over and it goes round the end; which way it faces at the cover
     }
 
     private struct Decal { public float X, Y; public byte Kind; public double Born; }
@@ -140,7 +162,8 @@ internal sealed class FoxAndHares : Resident
     private readonly Decal[] _decals = new Decal[160];
     private int _decalAt, _decalLive;
     private readonly Puff[] _puffs = new Puff[96];
-    private readonly List<Bur> _bur = new();
+    private readonly List<Spot> _spots = new();
+    private readonly bool _coverLog = Environment.GetEnvironmentVariable("PECKWORKS_COVERLOG") == "1";
     private readonly Crater[] _cra = new Crater[4];
     private int _craAt;
     private readonly StreamWriter? _log = MindLog.Open();
@@ -170,6 +193,7 @@ internal sealed class FoxAndHares : Resident
         _yLo = float.MaxValue; _yHi = float.MinValue;
         for (int i = 0; i <= 10; i++) { float x = W * (0.02f + 0.96f * i / 10f); _yLo = MathF.Min(_yLo, s.FieldPoint(x, 0.18f).Y); _yHi = MathF.Max(_yHi, s.FieldPoint(x, 0.64f).Y); }
         _yLo = MathF.Max(_yLo, s.SmallBandTop);          // the herd keeps the rows above SmallBandTop: the small animals live at or below it, so the lane table starts there
+        foreach (Cover cv in s.Covers) if (cv.Kind is CoverKind.Shrub or CoverKind.Rocks) _yLo = MathF.Min(_yLo, cv.Hide.Y - 1f);      // ...except for the hide rows behind the bushes, which lie a little above it
         for (int t = 0; t < Tiers; t++)
         {
             _tierY[t] = _yLo + (_yHi - _yLo) * (t + 0.5f) / Tiers;
@@ -181,20 +205,16 @@ internal sealed class FoxAndHares : Resident
         _h = new H[_n];
         float[] timid = Traits.Deal(Rng, Math.Max(1, _n)), curious = Traits.Deal(Rng, Math.Max(1, _n)), play = Traits.Deal(Rng, Math.Max(1, _n));
         float[] homes = [0.66f, 0.945f, 0.10f, 0.96f, 0.60f, 0.15f, 0.74f, 0.96f];       // (none within 0.6 of the snowman's height of him)
+        if (_test is "stalk" or "nose" or "peek" or "out" or "break" or "flee" or "hide" or "offscreen") homes[0] = 0.92f;       // the test hare lives at the cover by the far right pines, which has open ground on both sides
+        if (float.TryParse(Environment.GetEnvironmentVariable("PECKWORKS_HARE0X"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float h0x)) homes[0] = h0x;      // test aid: where hare 0 starts (a fraction of the width), to pick its cover
         var twigs = new List<(float, float)>();
         for (int i = 0; i < _n; i++)
         {
             var h = new H { Timid = timid[i], Curious = curious[i], Play = play[i], IdleOff = (float)Rng.NextDouble() * 24f, Dir = Rng.Next(2) == 0 ? 1 : -1 };
             h.Att = new Attention(0.25f + 0.6f * h.Timid, 0.2f + 0.7f * h.Curious) { Keen = 1.4f };
             PlaceNear(homes[i] * W, 0.5f * W, out h.X, out h.Y, 0.35f * HareScale * 0.1f * s.U);
-            // ITS BURROWS: two or three holes of its own on open ground (the first is where it starts, underground), kept all night
-            AddBurrows(i, h, homes[i] * W);
-            // THE ENTRANCE: every hare starts underground in a burrow of its own and comes up, one after another, over the first 20 s
-            h.Mind.Begin(HD.Under, 3f + 6.5f * i + 3f * (float)Rng.NextDouble()); h.Vis = false;
-            h.BX = h.ToBX = h.X; h.BY = h.ToBY = h.Y; h.EDir = h.Dir;
-            if (!Valid(h.X + h.EDir * 0.85f * HU(h.Y), h.Y, 0.3f)) h.EDir = -h.EDir;
-            h.NextPeek = 2.0 + 3.0 * Rng.NextDouble() + 5.0 * i;    // the first hide-and-peek at its own hole (the entrance)
-            _h[i] = h;                              // its burrows are on the snow from the very first frame (see Collect)
+            h.IdleOff = 2.4f;
+            _h[i] = h;
             for (int k = 0; k < 2; k++)
             {
                 for (int tries = 0; tries < 30; tries++)
@@ -206,6 +226,10 @@ internal sealed class FoxAndHares : Resident
                 }
             }
         }
+        // THE COVER: the hide spots behind the painter's stones and bushes, measured off the depth picture; THE ENTRANCE: every hare begins behind a
+        // cover of its own (the nearest free spot to its home) and comes out, one after another, over the first 20 s, by the same performance as ever
+        BuildSpots();
+        for (int i = 0; i < _n; i++) StartHidden(i, _h[i], homes[i] * W, i == 0 && _test is "peek" or "out" or "nose" or "break" ? 1e9f : 3.5f + 6.5f * i + 3f * (float)Rng.NextDouble());
         _twigs = [.. twigs];
         if (_n > 0)
         {
@@ -243,13 +267,7 @@ internal sealed class FoxAndHares : Resident
                 [
                     Oval(0.07f * hu * 1.4f, 0.035f * hu, Color.FromArgb(150, 150, 168, 206)),       // 0 hare hind print
                     Oval(0.03f * hu * 1.4f, 0.02f * hu, Color.FromArgb(140, 150, 168, 206)),        // 1 hare fore print
-                    Sprite.Paint((int)MathF.Max(6, 0.5f * hu) + 2, (int)MathF.Max(4, 0.2f * hu) + 2, g =>
-                    {
-                        float w = MathF.Max(6, 0.5f * hu), h2 = MathF.Max(4, 0.2f * hu);
-                        using var rim = new SolidBrush(Color.FromArgb(235, 244, 255)); using var hole = new SolidBrush(Color.FromArgb(200, 70, 90, 150));
-                        g.FillEllipse(rim, 1, 1, w, h2); g.FillEllipse(hole, 1 + w * 0.2f, 1 + h2 * 0.25f, w * 0.6f, h2 * 0.5f);
-                    }),                                                                              // 2 a burrow
-                    Oval(0.035f * m * 1.5f, 0.02f * m, Color.FromArgb(140, 140, 158, 200)),         // 3 fox print
+                    Oval(0.035f * m * 1.5f, 0.02f * m, Color.FromArgb(140, 140, 158, 200)),         // 2 fox print
                 ];
             }
             _puffSprites = puffs; _decalSprites = decals; _hb = hbooks; _fb = fbooks;
@@ -266,51 +284,276 @@ internal sealed class FoxAndHares : Resident
 
     // ================================================================ places and sizes
 
+    // ================================================================ COVER: the hide spots, the routes round them
+
     /// <summary>
-    /// MAY A BURROW BE DUG HERE? Open ground the hare can stand on at both sides of the hole (it dives in from one side and
-    /// climbs out on either), not behind or half behind a prop (the bird table's post, the tiny fir, the lamp post, the snowman),
-    /// at least two hare lengths from every prop's foot, off the pond's rim, and well apart from any other burrow.
+    /// HOW MUCH COVER STANDS ABOVE (x, y)? Pixels, counted upward from the feet while the depth picture says a thing NEARER than something
+    /// standing at y is there (a gap of two pixels or less is bridged: a bush is made of twigs). The depth picture is exactly what will hide
+    /// the hare, so this is a MEASUREMENT of what will be hidden, not a guess from the painter's numbers.
     /// </summary>
-    private bool BurrowOk(float x, float y, bool strict = true)
+    private int CoverRun(float x, float y, int limit)
     {
-        float unit = HU(y);
-        if (!HRest(x, y, 0.4f * unit) || !HRest(x - 1.45f * unit, y, 0.3f * unit) || !HRest(x + 1.45f * unit, y, 0.3f * unit)) return false;      // the hare gathers a body length and a half short of the hole, on either side
-        if (S.OnPond(x, y, 1.30f)) return false;
-        foreach (PointF p in new[] { S.FeederFoot, S.SaplingFoot, S.SnowmanFoot, S.LampFoot })
+        int W = S.Width, px = (int)x; byte me = S.Nearness(y); byte[] nd = S.NearDepth;
+        if (px < 0 || px >= W) return 0;
+        int run = 0, gap = 0;
+        for (int k = 1; k <= limit; k++)
         {
-            float dx = x - p.X, dy = 2f * (y - p.Y);
-            if (MathF.Sqrt(dx * dx + dy * dy) < 2.0f * unit) return false;
+            int py = (int)y - k; if (py < 0) break;
+            if (nd[py * W + px] > me) { run = k; gap = 0; } else if (++gap > 2) break;
         }
-        foreach (Bur b in _bur) { float dx = x - b.X, dy = 1.4f * (y - b.Y); if (MathF.Sqrt(dx * dx + dy * dy) < 1.8f * unit) return false; }
-        float fu = FU(y);
-        // the fox must be able to WALK up from the side it comes from: a clear lane from 2.6 m out to 1.4 m out on AT LEAST ONE side (a snowman or a prop must never close the approach from both)
-        if (!LineClear(x - 2.6f * fu, y, x - 1.4f * fu, y, 0.35f * fu) && !LineClear(x + 2.6f * fu, y, x + 1.4f * fu, y, 0.35f * fu)) return false;
-        if (!strict) return true;                                                  // (after many failures the fox is not asked to stand on both sides)
-        if (!FRest(x - 1.4f * fu, y, 0.5f * fu) || !FRest(x + 1.4f * fu, y, 0.5f * fu)) return false;
+        return run;
+    }
+
+    /// <summary>The shortest run of cover across a hare's body (from 0.45 of a body length behind the feet to 0.55 ahead of them), in hare units.</summary>
+    private float CoverU(float x, float y)
+    {
+        float hu = HU(y); int lim = (int)(2.2f * hu), best = int.MaxValue;
+        for (float dx = -0.45f * hu; dx <= 0.55f * hu; dx += 2f) best = Math.Min(best, CoverRun(x + dx, y, lim));
+        return best / hu;
+    }
+
+    /// <summary>How far (x) the cover reaches from x in direction dir at a hare's low height (0.18 of a body length up): where its end is. Gaps of three pixels are bridged.</summary>
+    private float CoverEdge(float x, float y, int dir, float limit)
+    {
+        int W = S.Width; byte me = S.Nearness(y); byte[] nd = S.NearDepth;
+        int py = (int)(y - 0.18f * HU(y)); float edge = x; int gap = 0;
+        if (py < 0 || py >= S.Height) return x;
+        for (float d = 0; d < limit; d += 1f)
+        {
+            int px = (int)(x + dir * d); if (px < 0 || px >= W) break;
+            if (nd[py * W + px] > me) { edge = x + dir * d; gap = 0; } else if (++gap > 3) break;
+        }
+        return edge;
+    }
+
+    /// <summary>
+    /// THE HIDE SPOTS. For each bush and stone on the field, the best places behind it for a hare (a big cover takes two hares, a small one
+    /// one): feet a little farther than the cover's foot, where the depth picture hides the most of a body. A spot where a SITTING hare is
+    /// hidden (its ears at 0.93 of a body length) is a sitting spot; one that hides at least 0.46 (a lying hare's height) is a LOAF spot;
+    /// less than that is no hiding place for a hare. A hare uses a Shrub or Rocks only.
+    /// </summary>
+    private void BuildSpots()
+    {
+        float W = S.Width;
+        for (int ci = 0; ci < S.Covers.Count; ci++)
+        {
+            Cover c = S.Covers[ci];
+            if (c.Kind is not (CoverKind.Shrub or CoverKind.Rocks)) continue;
+            float y = c.Hide.Y, hu = HU(y);
+            float xBest = 0f, uBest = -1f, xOther = 0f, uOther = -1f;
+            for (float x = c.Foot.X - c.HalfW * 0.85f; x <= c.Foot.X + c.HalfW * 0.85f; x += 2f)
+            {
+                float u = CoverU(x, y);
+                if (u > uBest + 0.001f) { uBest = u; xBest = x; }
+            }
+            // the second hare: the best place at least one body length from the first
+            for (float x = c.Foot.X - c.HalfW * 0.85f; x <= c.Foot.X + c.HalfW * 0.85f; x += 2f)
+            {
+                if (MathF.Abs(x - xBest) < 1.05f * hu) continue;
+                float u = CoverU(x, y);
+                if (u > uOther + 0.001f) { uOther = u; xOther = x; }
+            }
+            if (Environment.GetEnvironmentVariable("PECKWORKS_COVERLOG") == "1") Log($"cover {ci} {c.Kind} foot {c.Foot.X:F0},{c.Foot.Y:F0} halfW {c.HalfW:F0} h {c.Height:F0} hide row {y:F0}: best x {xBest:F0} hides {uBest:F2} hare lengths, second x {xOther:F0} hides {uOther:F2} (hare unit {hu:F1} px)");
+            void Add(float x, float u)
+            {
+                if (u < 0.46f || x < 0.03f * W || x > 0.97f * W || !S.CanStand(x, y, 0.2f * hu)) return;
+                float lim = c.HalfW * 1.5f;
+                var sp = new Spot { Cov = ci, X = x, Y = y, CoverU = u, Low = u < 0.97f };
+                sp.EdgeL = CoverEdge(x, y, -1, lim); sp.EdgeR = CoverEdge(x, y, 1, lim);
+                sp.FrontY = MathF.Max(S.SmallBandTop + 0.006f * S.U, y);
+                _spots.Add(sp);
+            }
+            Add(xBest, uBest);
+            if (c.Kind == CoverKind.Shrub || c.HalfW * 2f >= 2.4f * hu) Add(xOther, uOther);
+        }
+        for (int k = 0; k < _spots.Count; k++) Log($"spot {k}: cover {_spots[k].Cov} at {_spots[k].X:F0},{_spots[k].Y:F0} {(_spots[k].Low ? "loaf" : "sit")} hides {_spots[k].CoverU:F2}, ends {_spots[k].EdgeL:F0} to {_spots[k].EdgeR:F0}");
+    }
+
+    /// <summary>The start of the scene: hare i is behind the free spot nearest its home, hidden for "after" seconds, facing the end it will come out of.</summary>
+    private void StartHidden(int i, H h, float homeX, float after)
+    {
+        int best = -1; float bd = float.MaxValue;
+        for (int k = 0; k < _spots.Count; k++)
+        {
+            if (_spots[k].Who >= 0) continue;
+            float d = MathF.Abs(_spots[k].X - homeX);
+            if (d < bd) { bd = d; best = k; }
+        }
+        if (best < 0) { h.Mind.Begin(HD.Sit, 4f + 3f * i); h.Clock = 0f; return; }       // no cover for it: it simply sits where it was put
+        Spot sp = _spots[best]; sp.Who = i; h.Spot = best; h.X = sp.X; h.Y = sp.Y; h.BX = sp.X; h.BY = sp.Y;
+        h.Dir = sp.X < S.Width * 0.5f ? 1 : -1;                                        // toward the middle of the screen
+        if (!PlanExit(h, i, sp, h.Dir, false, false)) h.Dir = -h.Dir;
+        BeginHidden(h, i, after);
+        h.NextPeek = 1e9;                                                              // its only look before the way out is the way out's own
+    }
+
+    /// <summary>A hare is behind its cover: the stages begin (a low cover: it settles into a loaf first).</summary>
+    private void BeginHidden(H h, int i, float stayFor)
+    {
+        Spot sp = _spots[h.Spot];
+        BeginHare(h, HD.Hidden, Mind<HD>.Forever);
+        h.IdleOff = 2.4f; h.HStage = sp.Low ? 0 : 1; h.HT = 0f; h.HideT = 0f; h.HideFor = stayFor;
+        h.Leaving = false; h.Breaking = false; h.ToHide = false; h.RouteOn = false; h.Resp = Resp.None; h.GoFlee = false; h.Off = false;
+        h.NextPeek = _time + 5.0 + 6.0 * Rng.NextDouble();
+        h.BX = sp.X; h.BY = sp.Y;
+    }
+
+    // ---- routes: a path in the open that never doubles back in x ----
+
+    private readonly float[] _tx = new float[4], _ty = new float[4]; private int _tn;
+    private bool _lax;      // after three failed tries to leave a cover the way out ignores bodies standing on it (a hare that never leaves is worse than one that waits a stride for somebody to move)
+
+    /// <summary>Puts a point on the route being drawn up; false if it doubles back in x (or is too close to the last one) for travel in direction dir.</summary>
+    private bool RoutePoint(int dir, float x, float y)
+    {
+        if (_tn > 0 && (x - _tx[_tn - 1]) * dir < 1f) return false;
+        _tx[_tn] = x; _ty[_tn] = y; _tn++;
         return true;
     }
 
-    /// <summary>Deals a hare its burrows at the start: the first one is where it starts (underground), then two more spread over its ground.</summary>
-    private void AddBurrows(int owner, H h, float cx)
+    /// <summary>The y of the route at x: each stretch between two points eased in y (slow, quicker, slow), so a route round the end of a cover is a CURVE, never a corner.</summary>
+    private float RouteY(H h, float x)
     {
-        int first = -1;
-        for (int n = 0; n < 3; n++)
+        float t = (x - h.RX[0]) * h.RDir;
+        for (int k = 0; k < h.RN - 1; k++)
         {
-            float spread = n == 0 ? 0.06f : 0.55f;
-            for (int tries = 0; tries < 160; tries++)
-            {
-                float x = (n == 0 || first < 0 ? cx : _bur[first].X) + ((float)Rng.NextDouble() * 2f - 1f) * spread * S.U * (1f + tries / 20f);
-                PointF p = S.FieldPoint(x, 0.22f + 0.38f * (float)Rng.NextDouble());
-                if (!BurrowOk(p.X, p.Y, tries < 70)) continue;
-                _bur.Add(new Bur { X = p.X, Y = p.Y, Owner = owner });
-                if (first < 0) first = _bur.Count - 1;
-                break;
-            }
+            float a = (h.RX[k] - h.RX[0]) * h.RDir, b = (h.RX[k + 1] - h.RX[0]) * h.RDir;
+            if (t <= b || k == h.RN - 2) { float u = Math.Clamp((t - a) / MathF.Max(1f, b - a), 0f, 1f); return h.RY[k] + (h.RY[k + 1] - h.RY[k]) * FoxAndHaresArt.Sm(u); }
         }
-        if (first < 0) { _bur.Add(new Bur { X = h.X, Y = h.Y, Owner = owner }); first = _bur.Count - 1; }      // nowhere clean at all: its start spot
-        h.Cur = first; _bur[first].Who = owner; h.X = _bur[first].X; h.Y = _bur[first].Y;
-        int own = 0; foreach (Bur b in _bur) if (b.Owner == owner) own++;
-        Log($"hare{owner} owns {own} burrows, starting in the one at {h.X:F0},{h.Y:F0}");
+        return h.RY[h.RN - 1];
+    }
+
+    /// <summary>
+    /// Is the drawn-up route (in _tx, _ty) walkable and free? Every eight pixels: feet allowed (off the ice, clear of every prop, the cover's own
+    /// base strip), nobody else standing there. Past the screen's side edges nothing is tested (a hare running off the screen).
+    /// </summary>
+    private bool RouteFree(int dir, float unit, int self)
+    {
+        float W = S.Width;
+        float x0 = _tx[0], x1 = _tx[_tn - 1];
+        for (float x = x0 + dir * 8f; (x1 - x) * dir > 0f; x += dir * 8f)
+        {
+            float y = RouteYTemp(x, dir);
+            if (x < 0.02f * W || x > 0.98f * W) continue;
+            if (!S.CanStand(x, y, 0.25f * unit) || (!_lax && S.Crowded(x, y, 0.5f * unit, this, self))) return false;
+        }
+        return true;
+    }
+
+    private float RouteYTemp(float x, int dir)
+    {
+        float t = (x - _tx[0]) * dir;
+        for (int k = 0; k < _tn - 1; k++)
+        {
+            float a = (_tx[k] - _tx[0]) * dir, b = (_tx[k + 1] - _tx[0]) * dir;
+            if (t <= b || k == _tn - 2) { float u = Math.Clamp((t - a) / MathF.Max(1f, b - a), 0f, 1f); return _ty[k] + (_ty[k + 1] - _ty[k]) * FoxAndHaresArt.Sm(u); }
+        }
+        return _ty[_tn - 1];
+    }
+
+    /// <summary>Every stretch must lean no more than a shallow diagonal (0.28 of its x-length): a lane change is a slant, never a slide up the screen.</summary>
+    private bool RouteShallow(int dir, float maxSlope = 0.28f)
+    {
+        for (int k = 0; k < _tn - 1; k++) if (MathF.Abs(_ty[k + 1] - _ty[k]) > maxSlope * (_tx[k + 1] - _tx[k]) * dir) return false;
+        return true;
+    }
+
+    /// <summary>n whole bounds of cycle cyc over an x-distance D, each stretched by k within kMin..kMax (the nearest to even), so the last bound lands exactly on the rest page at the end.</summary>
+    private static bool PlanBounds(float D, float cyc, float kMin, float kMax, out int n, out float k)
+    {
+        n = Math.Max(1, (int)MathF.Round(D / cyc)); k = 1f; float best = float.MaxValue; bool ok = false;
+        for (int c = Math.Max(1, n - 1); c <= n + 1; c++)
+        {
+            float kk = D / (c * cyc); if (kk < kMin || kk > kMax) continue;
+            float err = MathF.Abs(kk - 1f); if (err < best) { best = err; n = c; k = kk; ok = true; }
+        }
+        return ok;
+    }
+
+    /// <summary>Takes the route in _tx, _ty as hare h's own, with its bounds: the route is now what h.X, h.Y follow.</summary>
+    private void CommitRoute(H h, int dir, int n, float k)
+    {
+        h.RN = _tn; h.RDir = dir; for (int q = 0; q < _tn; q++) { h.RX[q] = _tx[q]; h.RY[q] = _ty[q]; }
+        h.Hops = n; h.HopK = k; h.RouteOn = true; h.RouteOff = false;
+    }
+
+    /// <summary>
+    /// THE RUN TO COVER: from where the hare is (or from behind another cover, "fromHidden": out along that one's row past its far end first),
+    /// on a curve to the near END of the cover, a body length short of its edge, then in along the hide row to the spot, the whole body passing
+    /// behind the cover's edge a part at a time. Head first, the same way it was running: nothing turns round. commit false only asks "could it".
+    /// </summary>
+    private bool PlanEnter(H h, int i, int spotIdx, int dir, bool flee, bool commit, bool fromHidden = false)
+    {
+        Spot sp = _spots[spotIdx]; float hu = HU(sp.Y);
+        _tn = 0;
+        if (!RoutePoint(dir, h.X, h.Y)) return false;
+        if (fromHidden && h.Spot >= 0)
+        {
+            Spot from = _spots[h.Spot];
+            if (!RoutePoint(dir, dir > 0 ? from.EdgeR + 0.8f * hu : from.EdgeL - 0.8f * hu, from.Y)) return false;
+        }
+        float w1x = dir > 0 ? sp.EdgeL - 0.80f * hu : sp.EdgeR + 0.80f * hu;
+        if (!RoutePoint(dir, w1x, sp.Y) || !RoutePoint(dir, sp.X, sp.Y)) return false;
+        if (!RouteShallow(dir)) return false;
+        float D = (sp.X - h.X) * dir, cyc = (flee ? FoxAndHaresArt.HareFleeD : FoxAndHaresArt.HareHopD) * HU(h.Y);
+        if (!PlanBounds(D, cyc, flee ? 0.75f : 0.80f, flee ? 1.35f : 1.25f, out int n, out float k)) return false;
+        if (!RouteFree(dir, hu, i)) return false;
+        if (commit) { CommitRoute(h, dir, n, k); h.ToHide = true; h.NextSpot = spotIdx; sp.Who = i; h.BX = sp.X; h.BY = sp.Y; }
+        return true;
+    }
+
+    /// <summary>
+    /// THE WAY OUT: from the spot along the hide row to a body length past the cover's end the hare faces (dir), then down on a curve to the row in the
+    /// open (the spot's FrontY). Head first; the body follows the same path; it sits when it lands. commit false only asks "could it".
+    /// </summary>
+    private bool PlanExit(H h, int i, Spot sp, int dir, bool flee, bool commit)
+    {
+        float hu = HU(sp.Y);
+        float p1x = dir > 0 ? sp.EdgeR + 0.80f * hu : sp.EdgeL - 0.80f * hu;
+        float cyc = (flee ? FoxAndHaresArt.HareFleeD : FoxAndHaresArt.HareHopD) * hu;
+        // a few ways out: the landing a little farther along (a prop may stand at the first), down on the open row or straight on along the hide row
+        foreach (float ln in new[] { 1.5f, 2.6f, 3.8f, 5.5f, 7.5f })
+            foreach (float ry in new[] { sp.FrontY })
+            {
+                _tn = 0;
+                if (!RoutePoint(dir, sp.X, sp.Y) || !RoutePoint(dir, p1x, sp.Y)) return false;
+                float dy = ry - sp.Y;
+                float p2x = p1x + dir * MathF.Max(ln * hu, MathF.Abs(dy) / 0.38f);
+                if (!RoutePoint(dir, p2x, ry)) continue;
+                if (_coverLog) Log($"exit try dir {dir} len {ln} row {ry:F0}: landing {p2x:F0} in-screen {p2x >= 0.04f * S.Width && p2x <= 0.96f * S.Width} stand {S.CanStand(p2x, ry, 0.3f * hu)} crowded {S.Crowded(p2x, ry, 0.6f * hu, this, i)}");
+                if (p2x < 0.04f * S.Width || p2x > 0.96f * S.Width || !Valid(p2x, ry, 0.3f * hu, true) || Covered(p2x, ry, 0.5f * hu, 0.9f * hu) || (!_lax && S.Crowded(p2x, ry, 0.6f * hu, this, i))) continue;       // the landing must be open snow, not behind a prop (a hare out of a cover up in the herd's band may land there: it hides again or hops down)
+                if (_coverLog) Log($"   landing ok at {p2x:F0}: shallow {RouteShallow(dir, 0.40f)}, bounds {PlanBounds((p2x - sp.X) * dir, cyc, flee ? 0.75f : 0.80f, flee ? 1.35f : 1.25f, out _, out _)} (D {(p2x - sp.X) * dir:F0} cyc {cyc:F0}), free {RouteFree(dir, hu, i)}");
+                if (!RouteShallow(dir, 0.40f)) continue;
+                float D = (p2x - sp.X) * dir;
+                if (!PlanBounds(D, cyc, flee ? 0.75f : 0.80f, flee ? 1.35f : 1.25f, out int n, out float k)) continue;
+                if (!RouteFree(dir, hu, i)) continue;
+                if (commit) { CommitRoute(h, dir, n, k); h.ToHide = false; }
+                return true;
+            }
+        return false;
+    }
+    /// <summary>
+    /// THE RUN OFF THE SCREEN (no cover in reach): along the hare's row (from behind a cover, out past its far end first) to two and a half body lengths
+    /// beyond the side edge in direction dir. It waits there out of sight and walks back in the same way.
+    /// </summary>
+    private bool PlanOff(H h, int i, int dir, bool flee, bool commit, bool fromHidden)
+    {
+        float hu = HU(h.Y), W = S.Width;
+        _tn = 0;
+        if (!RoutePoint(dir, h.X, h.Y)) return false;
+        if (fromHidden && h.Spot >= 0)
+        {
+            Spot from = _spots[h.Spot];
+            if (!RoutePoint(dir, dir > 0 ? from.EdgeR + 0.8f * hu : from.EdgeL - 0.8f * hu, from.Y)) return false;
+        }
+        float ex = dir > 0 ? W + 2.5f * hu : -2.5f * hu;
+        if (!RoutePoint(dir, ex, _ty[_tn - 1])) return false;
+        float D = (ex - h.X) * dir, cyc = (flee ? FoxAndHaresArt.HareFleeD : FoxAndHaresArt.HareHopD) * hu;
+        if (!PlanBounds(D, cyc, flee ? 0.75f : 0.80f, flee ? 1.35f : 1.25f, out int n, out float k)) return false;
+        if (_coverLog) Log($"off try dir {dir}: points {_tn}, D {D:F0} cyc {cyc:F0}, free {RouteFree(dir, hu, i)}");
+        if (!RouteFree(dir, hu, i)) return false;
+        if (commit) { CommitRoute(h, dir, n, k); h.ToHide = false; h.RouteOff = true; h.OffSide = dir; }
+        return true;
     }
 
     private int TierOf(float y) => Math.Clamp((int)MathF.Floor((y - _yLo) / MathF.Max(1f, _yHi - _yLo) * Tiers), 0, Tiers - 1);
@@ -318,18 +561,16 @@ internal sealed class FoxAndHares : Resident
     private float FU(float y) => _fUnit[TierOf(y)];
 
     /// <summary>May feet stand at (x, y)? On the snowfield between depth 0.18 and 0.60, the ice and every prop's foot excluded (ChristmasScenery.CanStand).</summary>
-    private bool Valid(float x, float y, float room)
+    private bool Valid(float x, float y, float room, bool loose = false)
     {
         float W = S.Width;
         if (x < 0.02f * W || x > 0.98f * W) return false;
         float wy = S.WalkY(x), d = (y - wy) / (S.Height - wy);
-        if (d < 0.18f || d > 0.64f || y < S.SmallBandTop) return false;     // never in the herd's band
+        if (loose) { if (d < 0.10f || d > 0.80f || y < S.HerdBandTop - 0.03f * S.U) return false; }       // a fox at a cover may stand on the rows behind it, up in the herd's band (nobody's feet are there: S.Crowded sees to that)
+        else if (d < 0.18f || d > 0.64f || y < S.SmallBandTop) return false;     // never in the herd's band
         // never rest BEHIND the bird table or the tiny fir (the props would hide most of the animal: it would read as missing)
         if (MathF.Abs(x - S.FeederFoot.X) < 0.075f * S.U && y <= S.FeederFoot.Y + 3f && y > S.FeederTray.At.Y) return false;
         if (MathF.Abs(x - S.SaplingFoot.X) < MathF.Max(0.04f * S.U, S.SaplingHeight * 0.45f) && y <= S.SaplingFoot.Y + 3f && y > S.SaplingFoot.Y - S.SaplingHeight) return false;
-        // a burrow is a hole in the ground: nobody walks, hops or stops ON one (the hare's own dive and the fox's nosing keep their distance by their own rules)
-        float bu = HU(y);
-        for (int k = 0; k < _bur.Count; k++) { Bur b = _bur[k]; if (MathF.Abs(x - b.X) < 0.55f * bu && MathF.Abs(y - b.Y) < 0.35f * bu) return false; }
         return S.CanStand(x, y, room);
     }
 
@@ -449,7 +690,7 @@ internal sealed class FoxAndHares : Resident
         HD.Sit or HD.Look => "Sit",
         HD.Go => h.GoFlee ? "Flee" : "Move",
         HD.Hop or HD.Land => "Move",
-        HD.Thump or HD.Bolt or HD.Dive => "Flee",
+        HD.Thump or HD.Bolt => "Flee",
         _ => h.Mind.Doing.ToString(),
     };
 
@@ -579,9 +820,16 @@ internal sealed class FoxAndHares : Resident
         h.Gx = 0f; h.Gy = 0f;
         float unit = HU(h.Y);
         bool mir = h.Dir < 0;
-        h.Vis = h.Mind.Doing != HD.Under || h.HidePk;
+        h.Vis = !h.Off;                       // a hare behind a cover is still DRAWN: the cover hides it, nothing else does (only one off the screen's side is not)
         HD d = h.Mind.Doing;
-        h.Perf = d is HD.Dive or HD.Peek or HD.Dig || (d == HD.Under && h.HidePk);
+        if (h.Off)
+        {
+            // waiting off the side of the screen after a run for the edge: it comes back the same way, walking in
+            h.OffFor -= dt;
+            if (h.OffFor <= 0f) ReturnFromOff(h, i);
+            LogHare(i, h, dt);
+            return;
+        }
 
         if (h.Turning)
         {
@@ -775,8 +1023,7 @@ internal sealed class FoxAndHares : Resident
                 if (h.Clock >= 0.24f)
                 {
                     h.Odo = FoxAndHaresArt.HopRest; h.LastFrac = FoxAndHaresArt.HopRest;
-                    if (h.GoFlee && h.DigPending) { h.DigPending = false; StartDig(h, i); }
-                    else if (h.GoFlee) { h.Mind.Begin(HD.Bolt, 12f); h.Clock = 0; h.Dur = 12f; h.HopsDone = 0; Log($"hare{i} bolts to a burrow at {h.BX:F0},{h.BY:F0}"); }
+                    if (h.GoFlee) { h.Mind.Begin(HD.Bolt, Mind<HD>.Forever); h.Clock = 0; h.Dur = 12f; h.HopsDone = 0; Log(h.RouteOff ? $"hare{i} bolts off the screen's side" : h.ToHide ? $"hare{i} bolts for the cover at {h.BX:F0},{h.BY:F0}" : $"hare{i} bolts out from behind its cover"); }
                     else { h.Mind.Begin(HD.Hop, Mind<HD>.Forever); h.Clock = 0; h.HopsDone = 0; }
                 }
                 break;
@@ -790,19 +1037,25 @@ internal sealed class FoxAndHares : Resident
                 float step = HopBase * mult * unit * dt;
                 float cyc = FoxAndHaresArt.HareHopD * unit * h.HopK;
                 h.Odo += step / cyc; h.X += h.Dir * step;
-                float dxLeft = MathF.Max(1f, (h.GX - h.X) * h.Dir);
-                h.Y += Math.Clamp((h.GY - h.Y) * Math.Min(1f, step / dxLeft), -0.6f * step, 0.6f * step);
+                if (h.RouteOn) h.Y = RouteY(h, h.X);        // a run to or from cover follows its curve
+                else
+                {
+                    float dxLeft = MathF.Max(1f, (h.GX - h.X) * h.Dir);
+                    h.Y += Math.Clamp((h.GY - h.Y) * Math.Min(1f, step / dxLeft), -0.6f * step, 0.6f * step);
+                }
                 float f2 = h.Odo - MathF.Floor(h.Odo);
                 Show(h, HB_Hop, (int)(f2 * 24f) % 24, mir);
                 HareLandings(h, f2, unit, FoxAndHaresArt.HareHopD, false);
                 // at every rest page: is somebody standing where the next hop would land, or has a reaction asked for a stop? Then this is the last hop.
+                // (A run to cover is never cut by a reaction: heading for cover IS the reaction; only a body in the way stops it, and then it gives up the hide.)
                 int crossed = (int)MathF.Floor(h.Odo - FoxAndHaresArt.HopRest);
                 if (crossed > h.HopsDone)
                 {
                     h.HopsDone = crossed;
-                    if (crossed < h.Hops && (h.Resp != Resp.None || S.Crowded(h.X + h.Dir * cyc * 0.9f, h.Y, 0.5f * unit, this, i))) h.Hops = crossed;
+                    bool crowd = crossed < h.Hops && S.Crowded(h.X + h.Dir * cyc * 0.9f, h.RouteOn ? RouteY(h, h.X + h.Dir * cyc * 0.9f) : h.Y, 0.5f * unit, this, i);
+                    if (crossed < h.Hops && ((h.Resp != Resp.None && !h.RouteOn) || crowd)) { h.Hops = crossed; if (h.RouteOn) AbortRoute(h); }
                 }
-                if (h.Odo >= FoxAndHaresArt.HopRest + h.Hops) { h.Pace.Halt(); BeginHare(h, HD.Land, 0.24f); }
+                if (h.Odo >= FoxAndHaresArt.HopRest + h.Hops) { h.Pace.Halt(); ArriveRun(h, i); }
                 break;
             }
             case HD.Land:
@@ -810,7 +1063,9 @@ internal sealed class FoxAndHares : Resident
                 Show(h, h.GoFlee ? HB_SettleF : HB_Settle, Math.Min(7, (int)(h.Clock / 0.24f * 8f)), mir);
                 if (h.Mind.Over)
                 {
+                    bool wasFlee = h.GoFlee;
                     h.GoFlee = false;
+                    if (h.ToHide && h.NextSpot >= 0) { h.Spot = h.NextSpot; h.NextSpot = -1; BeginHidden(h, i, wasFlee ? 14f + 14f * (float)Rng.NextDouble() : 9f + 16f * (float)Rng.NextDouble()); break; }      // it is behind its cover: now it hides
                     if (h.Resp != Resp.None) { h.Next = HD.Sit; ApplyResp(h, i); }
                     else if (h.Next != HD.Sit) { HD nx = h.Next; h.Next = HD.Sit; StartNibbleNow(h, 5f + 4f * (float)Rng.NextDouble()); }
                     else AfterActivity(h, i, HD.Hop);
@@ -833,145 +1088,94 @@ internal sealed class FoxAndHares : Resident
             }
             case HD.Bolt:
             {
-                // BOLT: a fast zigzag (the lane wanders) to ITS burrow; the pace eases up under a cap, never starts at full speed.
-                // The run was PLANNED in GoBolt: a whole number of bounds (h.Hops), each a touch stretched or squeezed (h.HopK), so the
-                // n-th gathered rest page lands the hare exactly DiveRun short of the hole. It dives there, from the rest page.
+                // BOLT: a fast run along its ROUTE (round the near end of a cover and in behind it, or off the screen's side); the pace eases up under a
+                // cap, never starts at full speed. The run was PLANNED (PlanEnter, PlanOff, PlanExit): a whole number of bounds (h.Hops), each a touch
+                // stretched or squeezed (h.HopK), so the n-th gathered rest page lands the hare exactly at the end of the route.
                 h.Pace.Want = BoltSpeed * unit;
                 float step = h.Pace.Tick(dt);
                 float cyc = FoxAndHaresArt.HareFleeD * unit * h.HopK;
                 h.Odo += step / cyc; h.X += h.Dir * step;
-                h.JinkT -= dt;
-                float toB = (h.BX - h.X) * h.Dir;
-                if (h.JinkT <= 0f)
-                {
-                    h.JinkT = 0.25f + 0.25f * (float)Rng.NextDouble();
-                    float lastLeg = 1.6f * FoxAndHaresArt.HareFleeD * unit;
-                    float amp = Math.Clamp(toB / lastLeg, 0f, 1f);                      // the zigzag dies away as the hole comes up, so the last bounds run straight at it
-                    float ny = h.Y + ((float)Rng.NextDouble() * 2f - 1f) * 0.045f * amp * (S.Height - S.WalkY(h.X));
-                    if (toB < lastLeg) ny = h.Y + (h.BY - h.Y) * Math.Clamp(1f - toB / lastLeg, 0f, 1f);
-                    if (Valid(h.X + h.Dir * 0.08f * U, ny, 0.3f * unit) && LineClear(h.X, ny, h.BX, h.BY, 0.3f * unit)) h.GY = ny;
-                }
-                h.Y += Math.Clamp(h.GY - h.Y, -0.55f * step, 0.55f * step);
+                if (h.RouteOn) h.Y = RouteY(h, h.X);
                 float f2 = h.Odo - MathF.Floor(h.Odo);
                 Show(h, HB_Flee, (int)(f2 * 16f) % 16, mir);
                 bool rest = h.LastFrac < 0.9375f && f2 >= 0.9375f && f2 - h.LastFrac < 0.5f;
                 HareLandings(h, f2, unit, FoxAndHaresArt.HareFleeD, true);
-                if (rest && ++h.HopsDone >= h.Hops) BeginDive(h, i);
+                if (rest && ++h.HopsDone >= h.Hops) ArriveRun(h, i);
                 break;
             }
-            case HD.Dive:
+            case HD.Hidden:
             {
-                // the sheet carries the whole motion; the sprite's origin is the HOLE. The burrow's two pieces are stamped round it (DrawOne2):
-                // the back before the page, the front lip after it, so whatever is lower than the lip's top is really hidden by snow in front.
-                float f = Math.Min(0.999f, h.Clock / FoxAndHaresArt.DiveSecs);
+                // BEHIND COVER, in stages (see the field notes on H): 0 settle into the loaf (a low cover only), 1 idle, 2 rise, 3 hold and look, 4 lower.
+                // The hare never moves while hidden; the cover's depth hides what it is lower than. Every stage hands over on the pose the next begins on:
+                // the loaf rise's page 0 is the loaf and its page 23 is the sit page; the tall-in book's page 0 is the sit page and its page 11 the stand.
+                Spot sp = _spots[h.Spot]; bool low = sp.Low;
+                h.X = sp.X; h.Y = sp.Y; h.HT += dt; h.HideT += dt;
+                bool foxClose = FoxClose(sp);
+                if (!h.Breaking && FoxAtCover(sp)) BreakOut(h, i);
+                switch (h.HStage)
                 {
-                    int pg = Math.Min(FoxAndHaresArt.DiveN - 1, (int)MathF.Round(f * (FoxAndHaresArt.DiveN - 1))); Show(h, HB_Dive, pg, mir); PointF gl = h.Bk!.GlideAt(f, pg);
-                    float blend = 1f - FoxAndHaresArt.Sm(f / 0.30f);                       // the last bound's arrival error (a few pixels) melts away over the first 0.3 s
-                    h.Gx = gl.X + h.DOx * blend; h.Gy = gl.Y + h.DOy * blend;
-                }
-                if (!h.DivePuff && f >= 0.46f)
-                {
-                    h.DivePuff = true;
-                    Burst(h.X + h.Dir * 0.10f * unit, h.Y, unit, 8, 0.45f, 0.55f, 1);        // the nose goes in: snow jumps off the lip
-                    Log($"hare{i} dives into its burrow at {h.X:F0},{h.Y:F0}");
-                }
-                if (!h.PkPuff1 && f >= 0.68f) { h.PkPuff1 = true; Burst(h.X, h.Y, unit, 5, 0.35f, 0.40f, 0); }       // the hind feet kick
-                if (h.Clock >= FoxAndHaresArt.DiveSecs)
-                {
-                    h.Mind.Begin(HD.Under, 7f + 8f * (float)Rng.NextDouble()); h.Clock = 0; h.Dur = 9f; h.Vis = false; h.DivePuff = false; h.PkPuff1 = false;
-                    PickEmerge(h); h.NextPeek = _time + 3.5 + 3.0 * Rng.NextDouble(); h.HidePk = false;
-                }
-                break;
-            }
-            case HD.Dig:
-            {
-                // a hare with no burrow in reach digs one: see StartDig. 10 pages in (the gather to the dig crouch), TWO scrape cycles of
-                // 24 pages (0.7 s each), 10 pages out (back to the gather pose the dive starts from); the hole opens in 12 steps as it goes.
-                const float T1 = 10f / 30f, T2 = 2f * 24f / 34f, T3 = 10f / 30f;
-                float c = h.Clock; int pg; int cycPg = -1;
-                if (c < T1) pg = (int)(c / T1 * 10f);
-                else if (c < T1 + T2) { cycPg = (int)((c - T1) / T2 * 48f) % 24; pg = 10 + cycPg; }
-                else pg = 34 + Math.Min(9, (int)((c - T1 - T2) / T3 * 10f));
-                Show(h, HB_Dig, pg, mir);
-                h.OpenPg = Math.Clamp((int)(c / (T1 + T2 + T3) * FoxAndHaresArt.OpenN), 0, FoxAndHaresArt.OpenN - 1); _bur[h.Cur].Open = h.OpenPg;
-                // the paw throws snow BACK out of the hole at the two strokes of every cycle: a fan of clods and powder over the shoulder
-                bool stroke = cycPg == 5 || cycPg == 17;
-                if (stroke)
-                {
-                    if (!h.DivePuff)
+                    case 0:
                     {
-                        h.DivePuff = true;
-                        for (int k = 0; k < 11; k++) Emit(0, h.X + h.Dir * 0.60f * unit, h.Y, 0.10f * unit, -h.Dir * (0.35f + 0.9f * (float)Rng.NextDouble()) * unit, (0.7f + 0.9f * (float)Rng.NextDouble()) * unit, 0.55f + 0.2f * (float)Rng.NextDouble(), k % 3 == 0 ? 1 : 0, 0.95f, 2.6f * unit);
-                        Burst(h.X + h.Dir * 0.55f * unit, h.Y, unit, 4, 0.5f, 0.4f, 1);
+                        float s = 1f - FoxAndHaresArt.Sm(h.HT / 0.7f);
+                        Show(h, HB_LoafRise, (int)MathF.Round(s * 23f), mir);
+                        if (h.HT >= 0.7f) { h.HStage = 1; h.HT = 0f; h.Clock = 0f; }
+                        break;
                     }
-                }
-                else h.DivePuff = false;
-                if (c >= T1 + T2 + T3) { _bur[h.Cur].Open = FoxAndHaresArt.OpenN - 1; h.OpenPg = FoxAndHaresArt.OpenN - 1; h.DivePuff = false; BeginDive(h, i); }
-                break;
-            }
-            case HD.Under:
-            {
-                // Underground: nothing is drawn but the burrow itself, except now and then (every 6 to 15 s) when the ears, then the eyes, come up
-                // to the lip, look round and sink again: somebody is always in there. It surfaces only when the fox is far.
-                Bur b = _bur[h.Cur]; h.X = b.X; h.Y = b.Y;
-                bool foxNear = _fox != null && _fox.Mind.Doing != FD.Away && MathF.Abs(_fox.X - b.X) < (_fox.Mind.Doing == FD.Asleep ? 0.12f : 0.30f) * U;
-                if (h.HidePk)
-                {
-                    // ears up (1.0 s, eased), a held look with the head breathing (0.6 to 1.4 s), sinking (0.9 s): pages 0..30 of the climb-out sheet
-                    h.PkT += dt;
-                    const float up = 1.0f, down = 0.9f;
-                    int pg;
-                    if (h.PkT < up) pg = (int)MathF.Round(FoxAndHaresArt.Sm(h.PkT / up) * 30f);
-                    else if (h.PkT < up + h.PkHold) pg = 30 - (int)MathF.Round(2.4f * (0.5f - 0.5f * MathF.Cos(MathF.Tau * (h.PkT - up) / h.PkHold)));
-                    else pg = 30 - (int)MathF.Round(FoxAndHaresArt.Sm((h.PkT - up - h.PkHold) / down) * 30f);
-                    Show(h, HB_Peek, pg, h.EDir < 0);
-                    if (h.PkT >= up + h.PkHold + down) { h.HidePk = false; h.NextPeek = _time + 6.0 + 9.0 * Rng.NextDouble(); h.Vis = false; }
-                    else h.Vis = true;
-                    break;
-                }
-                h.Vis = false;
-                if (h.Mind.Over && foxNear && h.Clock < 40f) PickEmerge(h);       // the fox is near the hole it meant to come up at: choose another
-                b = _bur[h.Cur];
-                int mi = Array.IndexOf(_h, h);
-                bool crowded = S.Crowded(b.X, b.Y, 0.5f * unit + 0.9f * unit, this, mi) || S.Crowded(b.X + h.EDir * 0.85f * unit, b.Y, 0.5f * unit, this, mi);
-                if (h.Mind.Over && crowded && h.Clock < 60f) { PickEmerge(h); h.Mind.Left = 1.0f; }
-                else if (h.Mind.Over && (!foxNear || h.Clock >= 40f))
-                {
-                    h.Dir = h.EDir; h.Vis = true;
-                    h.Mind.Begin(HD.Peek, Mind<HD>.Forever); h.Clock = 0;
-                    Burst(h.X, h.Y, unit, 3, 0.2f, 0.2f, 0);
-                    Show(h, HB_Peek, 0, h.Dir < 0);
-                    Log($"hare{i} climbs out of its burrow at {h.X:F0},{h.Y:F0}");
-                }
-                else if (!h.Mind.Over && _time >= h.NextPeek && !foxNear && h.Mind.Left > 4f && _hb != null)
-                {
-                    Log($"hare{i} peeks out of its burrow");
-                    h.HidePk = true; h.PkT = 0f; h.PkHold = 0.6f + 0.8f * (float)Rng.NextDouble(); h.Vis = true;
-                    Show(h, HB_Peek, 0, h.EDir < 0);
-                }
-                break;
-            }
-            case HD.Peek:
-            {
-                // ears, eyes, head, a look round, shoulders, a hop OUT and a settle (FoxAndHaresArt.HEmerge, 2.4 s, anchored at the hole)
-                // the sheet has 40 pages on a time map: slow through the ears, eyes and head (the first 60 percent of the time covers
-                // 62 percent of the pages), quick through the hop out (22 percent of the time, 31 percent of the pages: about 21 pages a second)
-                float c = Math.Min(0.999f, h.Clock / 2.6f);
-                float u = c < 0.60f ? c / 0.60f * 0.62f : c < 0.82f ? 0.62f + (c - 0.60f) / 0.22f * 0.26f : 0.88f + (c - 0.82f) / 0.18f * 0.12f;
-                { int pg = Math.Min(71, (int)MathF.Round(u * 71f)); Show(h, HB_Peek, pg, mir); PointF gl = h.Bk!.GlideAt(u, pg); h.Gx = gl.X; h.Gy = gl.Y; }
-                if (!h.PkPuff1 && u >= 0.70f) { h.PkPuff1 = true; Burst(h.X, h.Y, unit, 5, 0.35f, 0.35f, 1); }
-                if (!h.PkPuff2 && u >= 0.88f) { h.PkPuff2 = true; Burst(h.X + h.Dir * 0.85f * unit, h.Y, unit, 3, 0.25f, 0.2f, 0); }
-                if (h.Clock >= 2.6f)
-                {
-                    h.X += h.Dir * 0.85f * unit;                 // the sheet's last page has the body 0.85 ahead of the hole: the origin moves to the body
-                    if (h.Cur >= 0 && _bur[h.Cur].Who == i) _bur[h.Cur].Who = -1;          // the hole is free again (it stays the hare's own)
-                    BeginSit(h, 4f + 5f * (float)Rng.NextDouble());
-                    Show(h, HB_Sit, 2, mir);                      // and the sit page is on the frame at once (the origin and the page change together)
+                    case 1:
+                    {
+                        if (low) Show(h, HB_Loaf, Cyc(h.Clock, 8f, 24, 0f), mir); else Show(h, HB_Sit, Cyc(h.Clock, 20f, 48, h.IdleOff), mir);
+                        bool gate = low || SitGate(h);
+                        bool leave = h.Breaking || h.Leaving || (h.HideT >= h.HideFor && !foxClose) || h.HideT > 60f;
+                        if (leave && gate)
+                        {
+                            // the way out is a PEEK first (a rise and a look), then out; a bolt from the fox skips the look
+                            if (!h.Leaving && !h.Breaking) { h.Leaving = true; }
+                            if (h.Breaking && !low) StartPlanned(h, i);
+                            else { h.HStage = 2; h.HT = 0f; h.PkHold = 0.9f + 0.7f * (float)Rng.NextDouble(); }
+                        }
+                        else if (_time >= h.NextPeek && !foxClose && gate && h.HideT < h.HideFor - 3.5f) { h.HStage = 2; h.HT = 0f; h.PkHold = 1.3f + 1.4f * (float)Rng.NextDouble(); }
+                        break;
+                    }
+                    case 2:
+                    {
+                        float dur = h.Breaking ? 0.45f : 0.95f, s = FoxAndHaresArt.Sm(Math.Min(1f, h.HT / dur));
+                        if (low) Show(h, HB_LoafRise, (int)MathF.Round(s * 23f), mir); else Show(h, HB_TallIn, (int)MathF.Round(s * 11f), mir);
+                        if (h.HT >= dur)
+                        {
+                            if (low && h.Breaking) StartPlanned(h, i);
+                            else { h.HStage = 3; h.HT = 0f; h.Clock = 0f; }
+                        }
+                        break;
+                    }
+                    case 3:
+                    {
+                        // the hold: a sit (or, behind a bush, a stand on the hind legs) with its own idle: the ears swivel one at a time, the nose works, a blink
+                        bool gate;
+                        if (low) { Show(h, HB_Sit, Cyc(h.Clock, 20f, 48, 2.4f), mir); gate = SitGate(h); }
+                        else { int hp = Cyc(h.Clock, 16f, 24, 0f); Show(h, HB_Tall, hp, mir); gate = hp is 0 or 1 or 10 or 22 or 23; }
+                        if (h.HT >= (h.Breaking ? 0.25f : h.PkHold) && gate)
+                        {
+                            if (low && (h.Leaving || h.Breaking)) StartPlanned(h, i);        // already on the sit pose: out
+                            else { h.HStage = 4; h.HT = 0f; }
+                        }
+                        break;
+                    }
+                    default:
+                    {
+                        float dur = h.Breaking ? 0.40f : 0.85f, s = 1f - FoxAndHaresArt.Sm(Math.Min(1f, h.HT / dur));
+                        if (low) Show(h, HB_LoafRise, (int)MathF.Round(s * 23f), mir); else Show(h, HB_TallIn, (int)MathF.Round(s * 11f), mir);
+                        if (h.HT >= dur)
+                        {
+                            h.HStage = 1; h.HT = 0f; h.Clock = 0f; h.NextPeek = _time + 6.0 + 9.0 * Rng.NextDouble();
+                            if (!low && (h.Leaving || h.Breaking)) StartPlanned(h, i);       // lowered to the sit pose: out
+                        }
+                        break;
+                    }
                 }
                 break;
             }
         }
-        if (h.Vis && h.Mind.Doing != HD.Under) S.Occupy(this, i, h.X, h.Y, 0.5f * unit);
+        if (h.Vis) S.Occupy(this, i, h.X, h.Y, 0.5f * unit);
         LogHare(i, h, dt);
     }
 
@@ -1043,9 +1247,9 @@ internal sealed class FoxAndHares : Resident
         bool lull = Lull;
         int twig = NearestTwig(h);
         bool pal = false;
-        for (int j = 0; j < _n; j++) if (j != i && MathF.Abs(_h[j].X - h.X) < 0.35f * S.U && _h[j].Mind.Doing is not (HD.Under or HD.Peek)) pal = true;
+        for (int j = 0; j < _n; j++) if (j != i && MathF.Abs(_h[j].X - h.X) < 0.35f * S.U && _h[j].Mind.Doing is not HD.Hidden && !_h[j].Off) pal = true;
         // a sit is the rest between doings: now it travels, forages (at a twig, or at the snow itself), washes, stands tall, or plays
-        int face = Dice.Pick(Rng, [0.0f, 0.28f, 0.18f, lull ? 0.05f : 0.38f, 0.05f, lull ? 0f : 0.03f + (pal ? 0.20f : 0.03f) * h.Play]);
+        int face = Dice.Pick(Rng, [0.0f, 0.28f, 0.18f, lull ? 0.05f : 0.38f, 0.05f, lull ? 0f : 0.03f + (pal ? 0.20f : 0.03f) * h.Play, lull ? 0.10f : 0.42f]);
         if (Covered(h.X, h.Y, 0.5f * HU(h.Y), 0.9f * HU(h.Y))) face = 3;                // sitting half behind a prop: travel to a clear spot first
         switch (face)
         {
@@ -1054,6 +1258,7 @@ internal sealed class FoxAndHares : Resident
             case 3: StartHop(h, i); break;
             case 4: BeginHare(h, HD.Tall, 5f + 3f * (float)Rng.NextDouble()); break;
             case 5: BeginHare(h, HD.Binky, 1.1f); break;
+            case 6: if (!StartHide(h, i)) BeginSit(h, SitFor()); break;                  // rest out of sight behind a cover (a run round its end, a loaf, a peek now and then)
             default: BeginSit(h, SitFor()); break;
         }
     }
@@ -1170,87 +1375,49 @@ internal sealed class FoxAndHares : Resident
         Log($"hare{i} sees the {(h.FearFox ? "threat" : "noise")} and rears up to thump");
     }
 
-    /// <summary>Starts a bolt: after sitting tall for "alertFor" seconds (a hare that heard a thump, at least 0.4 s), away from the cause, to a burrow it picks.</summary>
+    /// <summary>The settings every flight starts from: the bound counter on its rest page, the pace braked and quick to lean in.</summary>
+    private void SetBoltRun(H h)
+    {
+        float unit = HU(h.Y);
+        h.GY = h.Y; h.JinkT = 0.2f; h.Odo = FoxAndHaresArt.HopRest; h.LastFrac = FoxAndHaresArt.HopRest;
+        h.Pace.Halt(); h.Pace.Accel = 30f * unit;
+        h.Turning = false;
+    }
+
+    /// <summary>
+    /// Starts a bolt: after sitting tall for "alertFor" seconds (a hare that heard a thump, at least 0.4 s), AWAY from the cause, to COVER. It picks
+    /// the nearest free hide spot on the far side from the danger (never across it: the fox must not be nearer the cover than the hare is) that a
+    /// clean run reaches (PlanEnter: round the cover's near end, in behind it); none in reach, it runs off the screen's side and comes back the same
+    /// way later (PlanOff); and if even that is blocked it stands tall and freezes.
+    /// </summary>
     private void GoBolt(H h, int i, float alertFor)
     {
         float U = S.U, unit = HU(h.Y);
         int away = h.FearX >= h.X ? -1 : 1;
         // a fox that is close is judged by where it IS now, not where the notice said it was (it may have trotted past)
         if (_fox != null && _fox.Mind.Doing != FD.Away && MathF.Abs(_fox.X - h.X) < 0.35f * U && MathF.Abs(_fox.X - h.X) > 0.4f * unit) away = _fox.X >= h.X ? -1 : 1;
-        // THE FLIGHT RUNS AWAY, TO ONE OF ITS OWN BURROWS. One on the far side from the danger (never across it: the fox must not be
-        // nearer the hole than the hare is), at least a bound and a half off, within 0.75 U, with a clear run and nobody using it.
-        // The run is then PLANNED as a whole number of bounds, each a touch stretched or squeezed (0.8 to 1.3), so the hare arrives
-        // on the gathered rest page exactly DiveRun short of the hole. No burrow like that: it will DIG one where it is (StartDig).
-        h.BX = h.X; h.BY = h.Y; h.Resp = Resp.None; h.DigPending = false;
-        float cycU = FoxAndHaresArt.HareFleeD * unit;
+        h.Resp = Resp.None; h.ToHide = false; h.RouteOn = false;
         int pick = -1; float bestD = float.MaxValue;
-        for (int k = 0; k < _bur.Count; k++)
+        for (int k = 0; k < _spots.Count; k++)
         {
-            Bur b = _bur[k];
-            if (b.Who >= 0 && b.Who != i) continue;
-            if (b.Owner != i && _bur.Count > 3 * _n) continue;
-            float run = (b.X - h.X) * away - FoxAndHaresArt.DiveRun * unit;
-            if (run < 0.8f * cycU || run > 0.75f * U) continue;
-            if (MathF.Abs(b.Y - h.Y) > 0.45f * run + 0.08f * U) continue;
-            if (_fox != null && _fox.Mind.Doing != FD.Away && MathF.Abs(b.X - _fox.X) < MathF.Abs(h.X - _fox.X) + 0.05f * U && (b.X - _fox.X) * (h.X - _fox.X) > 0f) continue;
-            if (!LineClear(h.X, h.Y, b.X - away * (FoxAndHaresArt.DiveRun + 0.1f) * unit, b.Y, 0.3f * unit) || S.Crowded(b.X, b.Y, 0.9f * unit, this, i)) continue;
+            Spot sp = _spots[k];
+            if (sp.Who >= 0 && sp.Who != i) continue;
+            float run = (sp.X - h.X) * away;
+            if (run < 1.6f * unit || run > 0.8f * U) continue;
+            if (_fox != null && _fox.Mind.Doing != FD.Away && MathF.Abs(sp.X - _fox.X) < MathF.Abs(h.X - _fox.X) + 0.05f * U && (sp.X - _fox.X) * (h.X - _fox.X) > 0f) continue;
+            if (!PlanEnter(h, i, k, away, true, false)) continue;
             if (run < bestD) { bestD = run; pick = k; }
         }
-        h.GY = h.Y; h.JinkT = 0.2f; h.Odo = FoxAndHaresArt.HopRest; h.LastFrac = FoxAndHaresArt.HopRest;
-        h.Pace.Halt(); h.Pace.Accel = 30f * unit;
-        h.Turning = false;
+        SetBoltRun(h);
         if (pick >= 0)
         {
-            Bur b = _bur[pick];
-            if (h.Cur >= 0 && _bur[h.Cur].Who == i) _bur[h.Cur].Who = -1;
-            h.Cur = pick; b.Who = i; h.BX = b.X; h.BY = b.Y;
-            float run = (b.X - h.X) * away - FoxAndHaresArt.DiveRun * unit;
-            int n = Math.Max(1, (int)MathF.Round(run / cycU));
-            float kk = run / (n * cycU);
-            if (kk > 1.3f && n > 0) { n++; kk = run / (n * cycU); }
-            h.Hops = n; h.HopK = Math.Clamp(kk, 0.75f, 1.35f);
-            Log($"hare{i} flees away from {h.FearX:F0}: its burrow at {h.BX:F0},{h.BY:F0}, {n} bounds of {h.HopK:F2}");
+            PlanEnter(h, i, pick, away, true, true);
+            Log($"hare{i} flees away from {h.FearX:F0}: cover {_spots[pick].Cov} at {_spots[pick].X:F0},{_spots[pick].Y:F0}, {h.Hops} bounds of {h.HopK:F2}");
         }
-        else { h.DigPending = true; h.HopK = 1f; Log($"hare{i} flees away from {h.FearX:F0}: no burrow in reach, it will dig one"); }
-        if (alertFor > 0.01f) { BeginHare(h, HD.Tall, MathF.Max(0.5f, alertFor) + 0.35f); h.BoltPending = true; h.BoltDir = away; }
-        else StartBoltNow(h, away, i);
-    }
-
-    /// <summary>
-    /// THE DIVE BEGINS: the hare is on a gathered rest page DiveRun short of the hole (give or take the little arrival error, which
-    /// the dive's glide melts away). From here the sprite's origin is the HOLE, and the hole's two pieces are stamped round the page.
-    /// </summary>
-    private void BeginDive(H h, int i)
-    {
-        float unit = HU(h.Y); Bur b = _bur[h.Cur];
-        h.DOx = ((h.X - (b.X - h.Dir * FoxAndHaresArt.DiveRun * unit)) * h.Dir) / unit;
-        h.DOy = (b.Y - h.Y) / unit;
-        h.X = b.X; h.Y = b.Y; h.BX = b.X; h.BY = b.Y; h.Pace.Halt();
-        h.OpenPg = FoxAndHaresArt.OpenN - 1; b.Open = FoxAndHaresArt.OpenN - 1;
-        BeginHare(h, HD.Dive, FoxAndHaresArt.DiveSecs); Show(h, HB_Dive, 0, h.Dir < 0);
-    }
-
-    /// <summary>
-    /// A hare with no burrow in reach DIGS one where it stands, ahead of its nose (a hole's place is DiveRun in front of the body, the
-    /// dive sheet's own spot): the settle pages have already put it on the gather; it crouches, scrapes with the forepaws, snow flies
-    /// back, the hole opens in steps, it rises back to the gather and dives. The new hole is its own from then on.
-    /// </summary>
-    private void StartDig(H h, int i)
-    {
-        float unit = HU(h.Y);
-        float hx = h.X + h.Dir * FoxAndHaresArt.DiveRun * unit;
-        if (!Valid(hx, h.Y, 0.3f * unit) || !HRest(hx, h.Y, 0.3f * unit))
-        {
-            // nowhere to dig: it settles back from the gather into a sit (the bolt's own settle sheet, forwards: no pop) and sits tight
-            Log($"hare{i} cannot dig here: it settles and sits tight"); h.Pace.Halt(); BeginHare(h, HD.Land, 0.24f); return;
-        }
-        if (h.Cur >= 0 && _bur[h.Cur].Who == i) _bur[h.Cur].Who = -1;
-        _bur.Add(new Bur { X = hx, Y = h.Y, Owner = i, Who = i, Open = 0 });
-        h.Cur = _bur.Count - 1; h.BX = hx; h.BY = h.Y; h.OpenPg = 0;
-        h.Pace.Halt();
-        BeginHare(h, HD.Dig, Mind<HD>.Forever); h.DivePuff = false;
-        Show(h, HB_Dig, 0, h.Dir < 0);
-        Log($"hare{i} digs a new burrow at {hx:F0},{h.Y:F0}");
+        else if (PlanOff(h, i, away, true, true, false) || (_fox == null || _fox.Mind.Doing == FD.Away || MathF.Abs(_fox.X - h.X) > 0.5f * U) && PlanOff(h, i, -away, true, true, false)) Log($"hare{i} flees away from {h.FearX:F0}: no cover in reach, it bolts off the {(h.RDir > 0 ? "right" : "left")} side");
+        else { Log($"hare{i} flees away from {h.FearX:F0}: nowhere to run, it freezes"); BeginHare(h, HD.Tall, 5f); return; }
+        if (alertFor > 0.01f) { BeginHare(h, HD.Tall, MathF.Max(0.5f, alertFor) + 0.35f); h.BoltPending = true; h.BoltDir = h.RDir; }
+        else StartBoltNow(h, h.RDir, i);
     }
 
     private void StartBoltNow(H h, int away, int i)
@@ -1260,48 +1427,157 @@ internal sealed class FoxAndHares : Resident
         else BeginHare(h, HD.Go, 0.24f);
     }
 
-    /// <summary>
-    /// Picks which of the hare's OWN burrows it will come up out of (another one than it went into if there is one: it travelled under the
-    /// snow), and which way round it faces: a free burrow, not under the fox, nobody standing on it, with room for the hop out.
-    /// </summary>
-    private void PickEmerge(H h)
+    /// <summary>A planned run is over: the hare is at the last point of its route (the snap is the last bound's few pixels of error). Off the screen: it waits there. At cover: it lands (the settle pages) and hides. Otherwise it lands in the open.</summary>
+    private void ArriveRun(H h, int i)
     {
-        float U = S.U, unit = HU(h.Y);
-        int me = Array.IndexOf(_h, h);
-        int old = h.Cur;
-        if (old >= 0 && _bur[old].Who == me) _bur[old].Who = -1;
-        int best = -1, bestN = 0;
-        for (int pass = 0; pass < 2 && best < 0; pass++)
+        h.Pace.Halt();
+        if (h.RouteOn)
         {
-            for (int k = 0; k < _bur.Count; k++)
+            h.X = h.RX[h.RN - 1]; h.Y = h.RY[h.RN - 1]; h.RouteOn = false;
+            if (h.RouteOff)
             {
-                Bur b = _bur[k];
-                if (b.Who >= 0 || (b.Owner != me && pass == 0) || (k == old && pass == 0 && CountOwn(me) > 1)) continue;
-                bool foxNear = _fox != null && _fox.Mind.Doing != FD.Away && MathF.Abs(_fox.X - b.X) < 0.35f * U;
-                if (foxNear && pass == 0) continue;
-                float u = HU(b.Y);
-                if (S.Crowded(b.X, b.Y, 1.4f * u, this, me)) continue;
-                // the weight: the dice choose among those that qualify (reservoir sampling, no allocation)
-                bestN++; if (Rng.Next(bestN) == 0) best = k;
+                h.RouteOff = false; h.Off = true; h.OffFor = 14f + 16f * (float)Rng.NextDouble(); h.OffSide = h.RDir; h.GoFlee = false; h.Vis = false;
+                if (h.Spot >= 0) { _spots[h.Spot].Who = -1; h.Spot = -1; }
+                BeginHare(h, HD.Hidden, Mind<HD>.Forever);
+                Log($"hare{i} is off the screen's {(h.OffSide > 0 ? "right" : "left")} side for {h.OffFor:F0} s");
+                return;
+            }
+            if (h.Spot >= 0) { _spots[h.Spot].Who = -1; h.Spot = -1; }    // out and clear of the cover it was behind: its spot is free again
+        }
+        BeginHare(h, HD.Land, 0.24f);
+    }
+
+    /// <summary>A run to cover that cannot go on (a body in the way): the hare stops where it is, on a rest page, and the hide is given up.</summary>
+    private void AbortRoute(H h)
+    {
+        h.RouteOn = false; h.RouteOff = false;
+        if (h.ToHide && h.NextSpot >= 0) { _spots[h.NextSpot].Who = -1; h.NextSpot = -1; }
+        h.ToHide = false;
+    }
+
+    /// <summary>The hare that waited off the screen's side walks back in from it: facing in, to a goal eight or so hops along its own row.</summary>
+    private void ReturnFromOff(H h, int i)
+    {
+        float W = S.Width, unit = HU(h.Y); int side = h.OffSide >= 0 ? 1 : -1;
+        h.Off = false; h.Vis = true; h.Dir = -side;
+        h.X = side > 0 ? W + 2.5f * unit : -2.5f * unit;
+        float cyc = FoxAndHaresArt.HareHopD * unit;
+        for (int tries = 0; tries < 16; tries++)
+        {
+            float gx = side > 0 ? W * (0.93f - 0.12f * (float)Rng.NextDouble()) : W * (0.07f + 0.12f * (float)Rng.NextDouble());
+            float gy = Math.Clamp(h.Y + ((float)Rng.NextDouble() - 0.5f) * 0.08f * S.U, S.SmallBandTop + 0.006f * S.U, S.FieldPoint(gx, 0.62f).Y);
+            if (!HRest(gx, gy, 0.3f * unit) || S.Crowded(gx, gy, 0.7f * unit, this, i)) continue;
+            h.Y = gy;
+            if (PlanHop(h, gx, gy, -side, 0.88f, 1.12f, 0.15f)) { Log($"hare{i} walks back in from the {(side > 0 ? "right" : "left")} side"); return; }
+        }
+        // nowhere clean to walk to: it appears at the edge's inner foot and sits (never mid-screen out of nothing: it is a body length inside the edge)
+        PlaceNear(side > 0 ? 0.92f * W : 0.08f * W, 0.1f * W, out float ox, out float oy, 0.3f * unit); h.X = ox; h.Y = oy;
+        BeginSit(h, 3f);
+    }
+
+    /// <summary>Hide spot sp's cover has the fox near (within 0.3 U in x, on the screen, awake): no peeking, no leaving.</summary>
+    private bool FoxClose(Spot sp) => _fox != null && _fox.Mind.Doing is not (FD.Away or FD.Asleep) && MathF.Abs(_fox.X - sp.X) < 0.30f * S.U && MathF.Abs(_fox.Y - sp.Y) < 0.25f * S.U;
+
+    /// <summary>The fox is AT the cover: at an end of it or behind it (within one and a half metres of the end, on the cover's rows). The hare breaks out of the other end.</summary>
+    private bool FoxAtCover(Spot sp)
+    {
+        if (_fox == null || _fox.Mind.Doing is FD.Away or FD.Asleep) return false;
+        Cover c = S.Covers[sp.Cov]; float fu = FU(_fox.Y);
+        // only when it comes ROUND (it has sniffed at the end and begun to go round it) or is right at the cover: a fox that merely stands at the near end is sniffing
+        bool round = _fox.RoundNext && _fox.NoseSpot >= 0 && _spots[_fox.NoseSpot].Cov == sp.Cov;
+        return (round || MathF.Abs(_fox.X - c.Foot.X) < 0.7f * c.HalfW) && MathF.Abs(_fox.Y - sp.Y) < 1.2f * fu;
+    }
+
+    /// <summary>
+    /// THE FOX HAS COME ROUND TO THE COVER: the hare goes out of the end FARTHEST from the fox, quickly, to the next cover (round the near end of it,
+    /// in behind it) or, with none in reach, off the screen's side. It first comes up to the sit pose by the quickest EASED rise (a flight from
+    /// danger starts from whatever pose is on screen through a short recover, never a cut), turns if it must, and runs.
+    /// </summary>
+    private void BreakOut(H h, int i)
+    {
+        Spot sp = _spots[h.Spot];
+        int away = sp.X >= _fox!.X ? 1 : -1;
+        h.FearX = _fox.X; h.FearY = _fox.Y; h.FearFox = true;
+        int pick = -1; float bestD = float.MaxValue; float unit = HU(h.Y);
+        for (int k = 0; k < _spots.Count; k++)
+        {
+            Spot s2 = _spots[k];
+            if (k == h.Spot || (s2.Who >= 0 && s2.Who != i)) continue;
+            float run = (s2.X - h.X) * away;
+            if (run < 2.2f * unit || run > 0.8f * S.U) continue;
+            if (MathF.Abs(s2.X - _fox.X) < MathF.Abs(h.X - _fox.X) + 0.05f * S.U && (s2.X - _fox.X) * (h.X - _fox.X) > 0f) continue;
+            if (!PlanEnter(h, i, k, away, true, false, true)) continue;
+            if (run < bestD) { bestD = run; pick = k; }
+        }
+        if (pick >= 0)
+        {
+            PlanEnter(h, i, pick, away, true, true, true);
+            Log($"hare{i} breaks out of the cover (the fox is at its end): away {(away > 0 ? "right" : "left")}, to cover {_spots[pick].Cov} at {_spots[pick].X:F0},{_spots[pick].Y:F0}");
+        }
+        else if (PlanOff(h, i, away, true, true, true)) Log($"hare{i} breaks out of the cover: no cover in reach, it bolts off the screen's side");
+        else return;                       // boxed in: it stays down
+        h.Breaking = true; h.Leaving = true;
+    }
+
+    /// <summary>
+    /// The hare is on the SIT pose behind its cover and means to go: start the planned run (a break-out has planned its own; a calm leave plans the
+    /// way out round the end it faces, or the other end after a turn). Turns first if the route faces the other way, then the settle pages backwards
+    /// (the sit rising into the gather), then the hops or the bolt.
+    /// </summary>
+    private void StartPlanned(H h, int i)
+    {
+        Spot sp = _spots[Math.Max(0, h.Spot)];
+        if (!h.RouteOn)
+        {
+            int dir = h.Dir;
+            _lax = h.ExitFails >= 3;
+            if (!PlanExit(h, i, sp, dir, h.Breaking, true) && !PlanExit(h, i, sp, -dir, h.Breaking, true) && !PlanOff(h, i, dir, h.Breaking, true, true) && !PlanOff(h, i, -dir, h.Breaking, true, true))
+            {
+                // both ends blocked (a hare or the fox stands there): it stays down a while longer
+                h.ExitFails++; _lax = false;
+                h.Leaving = false; h.Breaking = false; h.HideFor = h.HideT + 6f; h.HT = 0f; h.Clock = 0f; h.NextPeek = _time + 8.0;
+                h.HStage = sp.Low && h.HStage != 1 ? 4 : 1;            // a low cover: lower from the sit pose back to the loaf (eased), never a cut; a bush: it is already on the sit pose
+                return;
             }
         }
-        if (best < 0) best = old;
-        h.Cur = best; _bur[best].Who = me;
-        Bur c = _bur[best]; h.BX = h.ToBX = c.X; h.BY = h.ToBY = c.Y;
-        h.EDir = Rng.Next(2) == 0 ? 1 : -1;
-        float cu = HU(c.Y);
-        if (!HRest(c.X + h.EDir * 0.85f * cu, c.Y, 0.3f * cu) || S.Crowded(c.X + h.EDir * 0.85f * cu, c.Y, 0.5f * cu, this, me)) h.EDir = -h.EDir;
+        h.Leaving = false;
+        bool flee = h.Breaking; h.Breaking = false;
+        h.GoFlee = flee; h.ExitFails = 0; _lax = false;
+        if (flee) { SetBoltRun(h); h.Resp = Resp.None; }
+        else { h.Pace.Halt(); }
+        if (h.RDir != h.Dir) StartTurn(h, h.RDir, HD.Go, flee ? 0.5f : 1f, 0.24f);
+        else BeginHare(h, HD.Go, 0.24f);
+        Log($"hare{i} leaves its cover {(flee ? "at a bolt" : "calmly")}: {(h.RDir > 0 ? "right" : "left")} end, {h.Hops} bounds of {h.HopK:F2}");
     }
 
-    /// <summary>The burrow nearest (x, y) within 0.4 U, or -1.</summary>
-    private int NearestBur(float x, float y)
+    /// <summary>
+    /// A CALM HIDE: the hare means to rest out of sight behind the nearest free cover that a clean run reaches (a lollop, not a bolt): round the near
+    /// end, in behind it. False if none does (it then simply sits on).
+    /// </summary>
+    private bool StartHide(H h, int i)
     {
-        int best = -1; float bd = 0.4f * S.U;
-        for (int k = 0; k < _bur.Count; k++) { float dx = _bur[k].X - x, dy = 2f * (_bur[k].Y - y); float d = MathF.Sqrt(dx * dx + dy * dy); if (d < bd) { bd = d; best = k; } }
-        return best;
+        float U = S.U, unit = HU(h.Y);
+        int pick = -1, pdir = 1; float bestD = float.MaxValue;
+        for (int k = 0; k < _spots.Count; k++)
+        {
+            Spot sp = _spots[k];
+            if (sp.Who >= 0) continue;
+            float dx = sp.X - h.X; int dir = dx >= 0 ? 1 : -1; float run = MathF.Abs(dx);
+            if (run < 2.2f * unit || run > 0.62f * U) continue;
+            if (MathF.Abs(sp.Y - h.Y) > 0.30f * run) continue;
+            if (!PlanEnter(h, i, k, dir, false, false)) continue;
+            float cost = run + (dir == h.Dir ? 0f : 0.2f * unit);
+            if (cost < bestD) { bestD = cost; pick = k; pdir = dir; }
+        }
+        if (pick < 0) return false;
+        PlanEnter(h, i, pick, pdir, false, true);
+        h.GoFlee = false; h.Next = HD.Sit;
+        if (pdir != h.Dir) StartTurn(h, pdir, HD.Go, 1f, 0.24f); else BeginHare(h, HD.Go, 0.24f);
+        Log($"hare{i} goes to hide behind cover {_spots[pick].Cov} at {_spots[pick].X:F0},{_spots[pick].Y:F0}: {h.Hops} hops of {h.HopK:F2}");
+        return true;
     }
 
-    private int CountOwn(int me) { int n = 0; foreach (Bur b in _bur) if (b.Owner == me) n++; return n; }
+    private int CountOwn(int me) { int n = 0; foreach (Spot s in _spots) if (s.Who == me) n++; return n; }
 
     // ---------------------------------------------------------------- the fox
 
@@ -1343,7 +1619,7 @@ internal sealed class FoxAndHares : Resident
         float best = 0.55f * S.U;
         for (int j = 0; j < _n; j++)
         {
-            if (_h[j].Mind.Doing is HD.Under or HD.Dive or HD.Peek or HD.Bolt or HD.Dig) continue;
+            if (_h[j].Mind.Doing is HD.Hidden or HD.Bolt || _h[j].Off || _h[j].ToHide || BoltRun(_h[j])) continue;        // a hare behind cover or running for it is not in sight to be stalked
             float d = MathF.Abs(_h[j].X - _fox.X) + 1.3f * MathF.Abs(_h[j].Y - _fox.Y);
             if (d < best) { best = d; idx = j; }
         }
@@ -1359,7 +1635,7 @@ internal sealed class FoxAndHares : Resident
         f.Gx = 0f; f.Gy = 0f;
         FD d = f.Mind.Doing;
         bool mir = f.Dir < 0;
-        f.Perf = (d == FD.Nose && f.NoseBur >= 0) || (d == FD.Mouse && f.Stage >= 3 && f.Stage <= 5 && f.CraI >= 0);
+        f.Perf = d == FD.Mouse && f.Stage >= 3 && f.Stage <= 5 && f.CraI >= 0;
         if (d != FD.Away) { f.OnScreen += dt; S.Occupy(this, 100, f.X, f.Y, 0.5f * 0.95f * unit); }
 
         if (d == FD.Away)
@@ -1429,7 +1705,7 @@ internal sealed class FoxAndHares : Resident
                     if ((Crossed(RestA) || Crossed(RestB)) && --f.Plan == 1) { Log($"fox brakes at {f.X:F0} (stop meant at {f.GX:F0}) phase {ph:F3} odo {f.Odo:F2}"); BrakeToRest(f, stride * f.StrideK, unit, [RestA, RestB]); }
                 }
                 f.PrevPh = ph;
-                if (_fb != null && f.Pg % 6 == 0 && f.Pg != f.LastPrint) { f.LastPrint = f.Pg; Track(f.X + f.Dir * 0.25f * unit, f.Y, 3); }
+                if (_fb != null && f.Pg % 6 == 0 && f.Pg != f.LastPrint) { f.LastPrint = f.Pg; Track(f.X + f.Dir * 0.25f * unit, f.Y, 2); }
                 float left = (f.GX - f.X) * f.Dir;
                 if (d == FD.Leave)
                 {
@@ -1443,7 +1719,13 @@ internal sealed class FoxAndHares : Resident
             {
                 int rb = f.RestIdx == 0 ? FB_Settle0 : FB_Settle1;
                 ShowF(f, rb, Math.Min(7, (int)(f.Clock / 0.22f * 8f)), mir);
-                if (f.Clock >= 0.22f) { if (f.NoseNext && MathF.Abs(f.HoleX - f.X) < 1.3f * unit) { f.NoseNext = false; BeginFox(f, FD.Nose, Mind<FD>.Forever); f.Stage = 0; f.NoseBur = NearestBur(f.HoleX, f.Y); } else if (f.NoseNext) { f.NoseNext = false; Log("fox could not get to the hole: it gives up"); BeginFox(f, FD.Stand, 3.5f + 2f * (float)Rng.NextDouble()); } else BeginFox(f, FD.Stand, 4f + 5f * (float)Rng.NextDouble()); }
+                if (f.Clock >= 0.22f)
+                {
+                    if (f.NoseNext && f.NoseSpot >= 0 && f.Dir == f.NoseDir && MathF.Abs(f.HoleX - (f.X + f.Dir * 0.46f * unit)) < 0.5f * unit) { f.NoseNext = false; BeginFox(f, FD.Nose, Mind<FD>.Forever); f.Stage = 0; f.SnowDone = false; }
+                    else if (f.NoseNext) { f.NoseNext = false; f.Loose = false; Log("fox could not get to the cover: it gives up"); BeginFox(f, FD.Stand, 3.5f + 2f * (float)Rng.NextDouble()); }
+                    else if (f.RoundNext) { f.RoundNext = false; f.Rounds++; EndRound(f); }
+                    else BeginFox(f, FD.Stand, 4f + 5f * (float)Rng.NextDouble());
+                }
                 break;
             }
             case FD.Stand:
@@ -1458,25 +1740,33 @@ internal sealed class FoxAndHares : Resident
                 }
                 if (f.NoseNext)
                 {
-                    // the hare dived; the fox stands where it pulled up, watching, until the tail has gone, then walks up to the hole
+                    // the hare is behind a cover; the fox stands where it pulled up, watching, until it IS behind it (the tail has gone round), then
+                    // walks up to the cover's near end on a planned stride and noses round it
                     f.NoseT += dt;
                     H? tg = f.Target >= 0 ? _h[f.Target] : null;
-                    bool under = tg == null || tg.Mind.Doing is HD.Under or HD.Peek;
+                    bool under = tg != null && tg.Mind.Doing == HD.Hidden && tg.Spot >= 0 && !tg.Off;
                     if (under && f.NoseT > 0.3f)
                     {
-                        float dist = (f.HoleX - f.X) * f.Dir - 0.42f * unit;       // the muzzle (0.46 m ahead of the fox's feet when it noses) ends a little way over the mouth
-                        if (dist < 0.25f * unit) { f.NoseNext = false; BeginFox(f, FD.Nose, Mind<FD>.Forever); f.Stage = 0; f.NoseBur = NearestBur(f.HoleX, f.Y); }
+                        Spot sp = _spots[tg!.Spot];
+                        int dirF = sp.X >= f.X ? 1 : -1;
+                        if (dirF != f.Dir) { StartFoxTurn(f, dirF, FD.Stand); break; }          // face the cover first (a drawn turn)
+                        float ne = dirF > 0 ? sp.EdgeL : sp.EdgeR;                              // the near end, where the fox noses
+                        f.NoseSpot = tg.Spot; f.NoseDir = dirF; f.Loose = true;
+                        f.HoleX = ne + dirF * 0.12f * unit; f.HoleY = sp.Y;
+                        float dist = (f.HoleX - f.X) * f.Dir - 0.46f * unit;                    // the muzzle (0.46 m ahead of the fox's feet when it noses) ends a little way over the cover's edge
+                        if (dist < 0.25f * unit && MathF.Abs(f.HoleY - f.Y) < 0.12f * unit) { f.NoseNext = false; BeginFox(f, FD.Nose, Mind<FD>.Forever); f.Stage = 0; f.SnowDone = false; }
+                        else if (dist < 0.25f * unit) { f.NoseNext = false; f.Loose = false; Log("fox is at the cover's end but on the wrong row: it gives up"); BeginFox(f, FD.Stand, 3f); }
                         else
                         {
-                            f.GX = f.X + f.Dir * dist; f.GY = f.Y; f.GoLeave = false; f.RestIdx = Rng.Next(2); f.Pace.Halt();
-                            // THE APPROACH IS PLANNED: a whole number of half strides, each a touch stretched, ends on a rest page exactly at the spot, so the muzzle lands over the burrow's mouth
+                            f.GX = f.X + f.Dir * dist; f.GY = f.HoleY; f.GoLeave = false; f.RestIdx = Rng.Next(2); f.Pace.Halt();
+                            // THE APPROACH IS PLANNED: a whole number of half strides, each a touch stretched, ends on a rest page exactly at the spot, so the muzzle lands at the cover's end
                             float dm = dist / unit, half = 0.5f * FoxAndHaresArt.FoxTrotStride; int kk = (int)MathF.Round(dm / half);
                             f.StrideK = 1f; f.Plan = 0;
                             if (kk >= 2) { float kf = dm / (kk * half); if (kf >= 0.8f && kf <= 1.25f) { f.StrideK = kf; f.Plan = kk; } }
-                            Log($"fox plans its walk to the hole: {kk} half strides of {f.StrideK:F2}, plan {f.Plan}, dist {dist:F0} px"); BeginFox(f, FD.Go, 0.22f);
+                            Log($"fox plans its walk to the cover's end: {kk} half strides of {f.StrideK:F2}, plan {f.Plan}, dist {dist:F0} px"); BeginFox(f, FD.Go, 0.22f);
                         }
                     }
-                    else if (f.NoseT > 6f) f.NoseNext = false;
+                    else if (f.NoseT > 6f) { f.NoseNext = false; f.Loose = false; }
                     break;
                 }
                 if (f.Mind.Over && StandGate(f)) RollFox(f);
@@ -1542,7 +1832,7 @@ internal sealed class FoxAndHares : Resident
             case FD.Stalk:
             {
                 float stride = FoxAndHaresArt.FoxStalkStride;
-                bool have = f.Target >= 0 && _h[f.Target].Mind.Doing is not (HD.Under or HD.Dive or HD.Peek) && !Covered(f.X, f.Y, 0.55f * unit, 0.6f * unit);     // a stalk never goes on half behind a prop
+                bool have = f.Target >= 0 && _h[f.Target].Mind.Doing is not HD.Hidden && !_h[f.Target].Off && !Covered(f.X, f.Y, 0.55f * unit, 0.6f * unit);     // a stalk never goes on half behind a prop
                 H? t = have ? _h[f.Target] : null;
                 bool hareAlarmed = t != null && (t.Mind.Doing is HD.Thump or HD.Bolt || BoltRun(t));       // a hare that only freezes (Tall) is still being crept up on
                 {
@@ -1585,7 +1875,7 @@ internal sealed class FoxAndHares : Resident
                     f.StageT += dt;
                     ShowF(f, FB_Watch, 12 + (int)(f.StageT * 12f) % 24, mir);
                     Breathe(f, unit);
-                    bool lost = t == null || t.Mind.Doing is HD.Under or HD.Dive or HD.Peek;
+                    bool lost = t == null || t.Mind.Doing is HD.Hidden || t.Off;
                     if (!lost && BoltRun(t!) && !Lull) { f.After2 = FD.DashIn; f.Stage = 2; f.StageT = 0f; }
                     else if (lost || f.StageT > 4.5f || Lull) { f.After2 = FD.StalkOut; f.Stage = 2; f.StageT = 0f; }
                 }
@@ -1615,11 +1905,15 @@ internal sealed class FoxAndHares : Resident
             {
                 float stride = FoxAndHaresArt.FoxGallopStride;
                 H? t = f.Target >= 0 ? _h[f.Target] : null;
-                bool hareGone = t == null || t.Mind.Doing is HD.Under or HD.Peek;
+                bool hidden = t != null && t.Mind.Doing == HD.Hidden && t.Spot >= 0 && !t.Off;      // behind its cover: out of sight
+                bool bound = t != null && t.ToHide && t.NextSpot >= 0;                                             // running for a cover
+                bool hareGone = t == null || t.Off || hidden;
                 float tx, ty;
-                if (t != null && !hareGone) { tx = t.Mind.Doing is HD.Dive ? t.BX : t.X; ty = t.Y; f.HoleX = t.BX; f.HoleY = t.BY; }
+                if (t != null && !hareGone) { tx = t.X; ty = t.Y; if (bound) { f.HoleX = t.BX; f.HoleY = t.BY; } }
                 else { tx = f.HoleX; ty = f.HoleY; }
-                bool hasHole = t != null && (t.Mind.Doing is HD.Dive or HD.Under or HD.Peek or HD.Dig);
+                bool hasHole = bound || hidden;
+                f.Loose = hasHole || f.NoseNext || f.RoundNext;
+                if (hidden) { f.HoleX = _spots[t!.Spot].X; f.HoleY = _spots[t.Spot].Y; }
                 if (hasHole)
                 {
                     f.StopX = f.HoleX - f.Dir * 1.45f * unit;                    // it pulls up short of the hole: the diving hare's body lies 0.6 m behind it, and nothing stands inside anything
@@ -1636,7 +1930,7 @@ internal sealed class FoxAndHares : Resident
                     // 0.9 m long, the hare 0.6), a hare that is only rearing up is kept three metres off
                     float easeF = 1f;
                     float gapM = t == null ? 99f : (t.X - f.X) * f.Dir / unit;
-                    if (t != null && !hareGone && (BoltRun(t) || t.Mind.Doing == HD.Dive)) easeF = Math.Clamp((gapM - 1.6f) / 0.9f, 0f, 1f);
+                    if (t != null && !hareGone && (BoltRun(t) || t.ToHide)) easeF = Math.Clamp((gapM - 1.6f) / 0.9f, 0f, 1f);
                     else if (t != null && !hareGone) easeF = Math.Clamp((gapM - 2.2f) / 2.5f, 0.12f, 1f);
                     f.Pace.Want = FoxChaseV * unit * easeF;
                     float step = f.Pace.Tick(dt);
@@ -1650,7 +1944,7 @@ internal sealed class FoxAndHares : Resident
                 bool atGather = MathF.Abs(ph - gatherPh) < 1.2f / 16f || MathF.Abs(ph - gatherPh) > 1f - 1.2f / 16f;
                 float toStop = hasHole ? (f.StopX - f.X) * f.Dir : 99f;
                 bool pastIt = hasHole && toStop < -0.2f * unit;
-                if (!f.SkidGo && ((hasHole && toStop < 1.5f * unit && (atGather || toStop < 0.7f * unit)) || f.Mind.Over || (!Valid(f.X + f.Dir * 0.3f * unit, f.Y, 0.3f * unit) && f.Clock > 0.5f)))
+                if (!f.SkidGo && ((hasHole && toStop < 1.5f * unit && (atGather || toStop < 0.7f * unit)) || f.Mind.Over || (!Valid(f.X + f.Dir * 0.3f * unit, f.Y, 0.3f * unit, f.Loose) && f.Clock > 0.5f)))
                 {
                     f.SkidGo = true; f.Pace.Brake(MathF.Max(0.5f * unit, toStop < 99f ? toStop : 0.8f * unit)); f.Braked = true; f.Clock = 0;
                     Log($"fox skids to a stop (hole at {f.HoleX:F0}, stop {f.StopX:F0}, at {f.X:F0})");
@@ -1672,28 +1966,58 @@ internal sealed class FoxAndHares : Resident
             }
             case FD.Nose:
             {
-                // nose at the burrow (about 1.6 s), dig twice (1.4 s, snow flying), nose again, give up (then it sits)
+                // SNIFFING ROUND THE COVER (about 5 s): the head reaches out to the cover's end (0.35 s), three sniff cycles of the muzzle at the twigs
+                // or over the stones (snow shaken off a bush falls on its head in the second), the head comes back (0.35 s). Then it goes ROUND the end.
+                // Every stage is a whole number of cycles, so each joins the next on its first page.
                 float c = f.Clock;
-                // every stage is a whole number of cycles, so each joins the next on its first page: nose-in 0.35 s, one nose cycle
-                // (24 pages at 18 a second = 1.333 s), two dig cycles (21 pages at 30 a second = 0.7 s each), one more nose cycle, nose-out 0.35 s
-                const float NC = 24f / 18f;
-                float tN1 = 0.35f + NC, tD = tN1 + 1.4f, tN2 = tD + NC;
+                const float NC = 24f / 18f;                                   // one sniff cycle: 24 pages at 18 a second
+                float tEnd = 0.35f + 3f * NC;
                 if (c < 0.35f) ShowF(f, FB_NoseIn, Math.Min(9, (int)(c / 0.35f * 10f)), mir);
-                else if (c < tN1) ShowF(f, FB_Nose, Cyc(c - 0.35f, 18f, 24, 0f), mir);
-                else if (c < tD)
+                else if (c < tEnd) ShowF(f, FB_Nose, Cyc(c - 0.35f, 18f, 24, 0f), mir);
+                else ShowF(f, FB_NoseIn, Math.Max(0, 9 - (int)((c - tEnd) / 0.35f * 10f)), mir);
+                // snow shaken off the bush falls on its head (seven clumps over half a second, from the bush's top down to the head), then a small puff where they land
+                if (f.NoseSpot >= 0 && S.Covers[_spots[f.NoseSpot].Cov].Kind == CoverKind.Shrub && c > 1.9f && c < 2.45f && ((int)(c * 14f)) != ((int)((c - dt) * 14f)))
+                    Emit(0, f.X + f.Dir * (0.34f + 0.12f * (float)Rng.NextDouble()) * unit, f.Y, 0.78f * unit, f.Dir * 0.05f * unit, -0.1f * unit, 0.32f, 0, 0.95f, 2.4f * unit);
+                if (!f.SnowDone && c > 2.25f && f.NoseSpot >= 0 && S.Covers[_spots[f.NoseSpot].Cov].Kind == CoverKind.Shrub)
                 {
-                    int pg = Cyc(c - tN1, 30f, 21, 0f);
-                    ShowF(f, FB_Dig, pg, mir);
-                    if (pg == 10 && f.Stage == 0) { f.Stage = 1; SprayAt(f, unit); }
-                    if (pg == 0 || pg == 20) f.Stage = 0;
+                    f.SnowDone = true;
+                    Burst(f.X + f.Dir * 0.40f * unit, f.Y, unit, 5, 0.30f, 0.30f, 0);
                 }
-                else if (c < tN2) ShowF(f, FB_Nose, Cyc(c - tD, 18f, 24, 0f), mir);
-                else ShowF(f, FB_NoseIn, Math.Max(0, 9 - (int)((c - tN2) / 0.35f * 10f)), mir);
-                if (c >= 0.35f + NC + 1.4f + NC + 0.35f) { f.NoseBur = -1; f.Reverse = false; BeginFox(f, FD.SitIn, 0.6f); Log("fox gives up on the burrow and sits"); }
+                if (c >= tEnd + 0.35f) { f.Reverse = false; Log("fox is done sniffing at the cover: it goes round the end"); StartRound(f); }
                 break;
             }
         }
         LogFox(f, dt);
+    }
+
+    /// <summary>
+    /// AFTER THE SNIFF: the fox goes ROUND the cover. It trots on along the row it noses on, past the cover's far end, so it passes right behind the
+    /// cover (hidden by it a part at a time, head first) and comes out the other side; the hare, behind it, breaks out of the end farthest from the
+    /// fox when the fox comes round (FoxAtCover). If the way is not open it sits.
+    /// </summary>
+    private void StartRound(F f)
+    {
+        float unit = FU(f.Y);
+        Spot sp = _spots[Math.Max(0, f.NoseSpot)];
+        float far = f.NoseDir > 0 ? sp.EdgeR : sp.EdgeL;
+        float gx = far + f.NoseDir * 1.5f * unit, gy = sp.Y;
+        if (gx < 0.04f * S.Width || gx > 0.96f * S.Width || !Valid(gx, gy, 0.4f * unit, true) || S.Crowded(gx, gy, 0.7f * unit, this, 100)) { f.Loose = false; f.Rounds++; BeginFox(f, FD.SitIn, 0.6f); f.Reverse = false; return; }
+        f.GX = gx; f.GY = gy; f.GoLeave = false; f.RestIdx = Rng.Next(2); f.Pace.Halt(); f.RoundNext = true; f.Loose = true;
+        float dist = (gx - f.X) * f.Dir, dm = dist / unit, half = 0.5f * FoxAndHaresArt.FoxTrotStride; int kk = (int)MathF.Round(dm / half);
+        f.StrideK = 1f; f.Plan = 0;
+        if (kk >= 2) { float kf = dm / (kk * half); if (kf >= 0.8f && kf <= 1.25f) { f.StrideK = kf; f.Plan = kk; } }
+        BeginFox(f, FD.Go, 0.22f);
+    }
+
+    /// <summary>The fox has come round the cover. One round or two, then it gives up the hunt: a sit, or a stand (the stalk's cooldown keeps it from starting again at once).</summary>
+    private void EndRound(F f)
+    {
+        f.Loose = false; f.NoseSpot = -1;
+        bool again = f.Rounds < 2 && Rng.NextDouble() < 0.5 && !Lull && f.Target >= 0 && _h[f.Target].Mind.Doing == HD.Hidden && _h[f.Target].Spot >= 0 && !_h[f.Target].Off;
+        if (again) { f.NoseNext = true; f.NoseT = 0f; f.Loose = true; BeginFox(f, FD.Stand, 3f); Log("fox goes round a second cover"); return; }
+        f.Rounds = 0;
+        if (Rng.NextDouble() < 0.5) { f.Reverse = false; BeginFox(f, FD.SitIn, 0.6f); Log("fox gives up the hunt and sits"); }
+        else BeginFox(f, FD.Stand, 3.5f + 2.5f * (float)Rng.NextDouble());
     }
 
     /// <summary>
@@ -1713,14 +2037,14 @@ internal sealed class FoxAndHares : Resident
         if (step > 0f)
         {
             float half = 0.5f * 0.95f * unit;
-            float lowRow = S.SmallBandTop + 1f;
+            float lowRow = f.Loose ? 0f : S.SmallBandTop + 1f;
             // is the way to row yt (reached over a lane, then held) clear at 1, 1.8, 2.6 and 3.4 m ahead?
             bool BadRow(float yt)
             {
                 for (int k = 1; k <= 4; k++)
                 {
                     float d = (0.2f + 0.8f * k) * unit, px = f.X + f.Dir * d, py = f.Y + (yt - f.Y) * MathF.Min(1f, d / lane);
-                    if ((!edge && !Valid(px, py, 0.3f * unit)) || py < lowRow || S.Crowded(px, py, half, this, 100)) return true;
+                    if ((!edge && !Valid(px, py, 0.3f * unit, f.Loose)) || py < lowRow || S.Crowded(px, py, half, this, 100)) return true;
                 }
                 return false;
             }
@@ -1933,7 +2257,7 @@ internal sealed class FoxAndHares : Resident
         FD.Stand or FD.Look => "Stand",
         FD.SitIn or FD.Sit => "Sit",
         FD.CurlIn or FD.Asleep or FD.Wake => "Sleep",
-        FD.StalkIn or FD.Stalk or FD.StalkOut or FD.DashIn or FD.Chase or FD.Skid or FD.Nose or FD.Dig or FD.Watch => "Hunt",
+        FD.StalkIn or FD.Stalk or FD.StalkOut or FD.DashIn or FD.Chase or FD.Skid or FD.Nose or FD.Watch => "Hunt",
         _ => f.Mind.Doing.ToString(),
     };
 
@@ -1988,29 +2312,51 @@ internal sealed class FoxAndHares : Resident
             case "mouse": FoxAt(0.72f, 0.35f, 1); Calm(); f.Mind.Begin(FD.Stand, 0.2f); f.Clock = 0; StartMouseNow(f); break;
             case "sleep": FoxAt(0.80f, 0.30f, -1); f.Reverse = false; BeginFox(f, FD.SitIn, 0.6f); f.SleepAfter = true; break;
             case "stalk":
+            case "hide":
+            case "flee":
+            case "offscreen":
             {
-                // hare 0 sits 0.30 U from one of ITS burrows, the fox on its far side: the hare bolts for the burrow
-                Bur b0 = _bur[Math.Max(0, h0.Cur)]; int sd = b0.X + 0.36f * S.U < 0.93f * W ? 1 : -1;
-                if (!LineClear(b0.X + sd * 0.30f * S.U, b0.Y, b0.X, b0.Y, 0.3f * HU(b0.Y))) sd = -sd;          // the hare's way to the burrow must be open (no bird table between)
+                // hare 0 is put in the open 0.30 U from the cover of its own spot (facing it); for "stalk" the fox is on its far side
+                // (the hare bolts for the cover, the fox chases, noses round it, and the hare breaks out of the other end); "hide" sends it behind the cover calmly
+                // at 6 s; "flee" bolts it there at once; "offscreen" takes every cover away first, so it runs off the side of the screen.
+                int sIdx = Math.Max(0, h0.Spot >= 0 ? h0.Spot : 0); Spot s0 = _spots[sIdx];
+                int sd = s0.X + 0.36f * S.U < 0.93f * W ? 1 : -1;
                 if (_test == "stalk" && Environment.GetEnvironmentVariable("PECKWORKS_STALKSIDE") is string ss) sd = ss == "L" ? -1 : 1;
-                PointF p = new PointF(b0.X + sd * 0.30f * S.U, b0.Y); h0.X = p.X; h0.Y = p.Y; h0.Dir = -sd; h0.Mind.Begin(HD.Sit, 60f); h0.Timid = 0.6f; h0.Att.Timid = 0.7f; h0.Vis = true; h0.HidePk = false;
-                for (int i = 1; i < _n; i++) { PointF q = S.FieldPoint((0.30f + 0.03f * i) * W, 0.22f); _h[i].X = q.X; _h[i].Y = q.Y; _h[i].Mind.Begin(HD.Sit, 60f); }
-                f.X = h0.X + sd * 0.36f * S.U; f.Y = h0.Y; f.Dir = -sd; f.Mind.Begin(FD.Stand, 3f); f.Clock = 0; f.OnScreen = 0; _nextAway = 9999f; f.Target = 0; StartStalk(f, h0); break;
+                if (h0.Spot >= 0) { _spots[h0.Spot].Who = -1; h0.Spot = -1; }
+                float hy = MathF.Max(s0.Y, S.SmallBandTop + 0.012f * S.U);
+                h0.X = s0.X + sd * 0.30f * S.U; h0.Y = hy; h0.Dir = -sd; h0.Vis = true; h0.Off = false; h0.Timid = 0.6f; h0.Att.Timid = 0.7f;
+                BeginHare(h0, HD.Sit, 60f);
+                for (int i = 1; i < _n; i++) { PointF q = S.FieldPoint((0.30f + 0.03f * i) * W, 0.22f); _h[i].X = q.X; _h[i].Y = q.Y; if (_h[i].Spot >= 0) { _spots[_h[i].Spot].Who = -1; _h[i].Spot = -1; } _h[i].Vis = true; BeginHare(_h[i], HD.Sit, 60f); }
+                if (_test == "offscreen") foreach (Spot sp2 in _spots) sp2.Who = 99;
+                if (_test == "hide") { if (!StartHide(h0, 0)) Log("test hide: no clean run to a cover"); }
+                else if (_test is "flee" or "offscreen") { h0.FearX = h0.X + h0.Dir * -0.4f * S.U; h0.FearY = h0.Y; h0.FearFox = true; GoBolt(h0, 0, 0f); }
+                else { f.X = h0.X + sd * 0.36f * S.U; f.Y = hy; f.Dir = -sd; f.Mind.Begin(FD.Stand, 3f); f.Clock = 0; f.OnScreen = 0; _nextAway = 9999f; f.Target = 0; StartStalk(f, h0); }
+                break;
             }
             case "groom": Calm(); h0.Mind.Begin(HD.Sit, 60f); BeginHare(h0, HD.Groom, 5.5f); break;
             case "binky": Calm(); BeginHare(h0, HD.Binky, 1.1f); break;
             case "nibble": { Calm(); int tw = NearestTwig(h0); if (tw >= 0) StartNibbleTrip(h0, tw); break; }
             case "tall": Calm(); BeginHare(h0, HD.Tall, 4f); break;
             case "thump": Calm(); h0.FearX = h0.X + (h0.Dir * 0.4f * S.U); h0.FearY = h0.Y; h0.FearFox = true; StartThump(h0, 0); break;
-            case "peek": Calm(); h0.BX = h0.X; h0.BY = h0.Y; h0.ToBX = h0.X; h0.ToBY = h0.Y; h0.Vis = false; h0.Mind.Begin(HD.Under, 0.1f); break;
+            case "break":
+            {
+                // the fox has sniffed at the near (left) end of hare 0's cover and is going round it: the hare breaks out of the far end, off the screen's side, and comes back
+                Calm(); Spot sb = _spots[h0.Spot];
+                f.X = sb.EdgeL - 1.2f * funit; f.Y = sb.Y; f.Dir = 1; f.Mind.Begin(FD.Stand, 99f); f.Clock = 0; f.OnScreen = 0; _nextAway = 9999f;
+                f.NoseSpot = h0.Spot; f.NoseDir = 1; f.RoundNext = true; f.Target = 0;
+                break;
+            }
+            case "peek": Calm(); h0.NextPeek = _time; break;                                // hare 0 has been behind its cover since the start (HideFor is huge): it peeks now
+            case "out": Calm(); h0.HideFor = 0f; h0.Leaving = false; break;                // ...and now it comes out: a peek, then round the end it faces
             case "nose":
             {
-                // the fox stands 3.2 m from the last hare's burrow (it is down in it), facing it, and walks up to nose it
-                Calm(); int ti = _n - 1; H ht = _h[ti]; Bur b = _bur[Math.Max(0, ht.Cur)]; ht.Mind.Begin(HD.Under, 200f); ht.Vis = false; ht.HidePk = false; ht.NextPeek = 1e9;
-                int sd = -1;
-                if (!LineClear(b.X - 2.8f * funit, b.Y, b.X - 0.45f * funit, b.Y, 0.4f * funit)) sd = 1;       // the side with an open lane
-                f.X = b.X + sd * 2.8f * funit; f.Y = b.Y; f.Dir = -sd; f.Mind.Begin(FD.Stand, 99f); f.Clock = 0; f.OnScreen = 0; _nextAway = 9999f;
-                f.HoleX = b.X; f.HoleY = b.Y; f.Target = ti; f.NoseNext = true; f.NoseT = 0f; break;
+                // the fox stands 3.2 m from the near end of hare 0's cover, facing it; the hare is behind it. The fox walks up, noses round the end, goes round; the hare breaks out the other end.
+                Calm(); Spot sn = _spots[h0.Spot]; int sd = sn.X < W * 0.5f ? -1 : 1;
+                if (!Valid(sn.X + sd * (MathF.Abs(sn.X - (sd < 0 ? sn.EdgeL : sn.EdgeR)) + 3.2f * funit), sn.Y, 0.3f * funit, true)) sd = -sd;
+                float ne = sd < 0 ? sn.EdgeL : sn.EdgeR;
+                f.X = ne + sd * 3.2f * funit; f.Y = MathF.Max(sn.Y, S.HerdBandTop); f.Dir = -sd; f.Mind.Begin(FD.Stand, 99f); f.Clock = 0; f.OnScreen = 0; _nextAway = 9999f;
+                f.Target = 0; f.NoseNext = true; f.NoseT = 0f; f.Loose = true;
+                break;
             }
             case "look": FoxAt(0.78f, 0.30f, 1); Board.Post(Sense.Movement, new PointF(f.X, S.Height * 0.1f), 0.8f * S.U, 1f, this); break;
         }
@@ -2023,18 +2369,10 @@ internal sealed class FoxAndHares : Resident
     public override void Collect(DepthQueue q)
     {
         if (_n == 0 || _hb == null) return;
-        for (int i = 0; i < _n; i++) if (_h[i].Vis && _h[i].Bk != null) q.Add(_h[i].Y, this, i);
+        for (int i = 0; i < _n; i++) if (_h[i].Vis && !_h[i].Off && _h[i].Bk != null) q.Add(_h[i].Y, this, i);
         if (_fox != null && _fox.Mind.Doing != FD.Away && _fox.Bk != null) q.Add(_fox.Y, this, 100);
         if (_decalLive > 0) q.Add(-1f, this, 200);
         for (int k = 0; k < _twigs.Length; k++) q.Add(_twigs[k].Y - 1f, this, 300 + k);
-        // the burrows are places: on the snow from the first frame to the last. One a hare (or the fox, nosing it) is performing at draws itself, in two pieces round the animal.
-        for (int k = 0; k < _bur.Count; k++)
-        {
-            Bur b = _bur[k];
-            if (b.Who >= 0 && _h[b.Who].Perf && _h[b.Who].Cur == k) continue;
-            if (_fox != null && _fox.Perf && _fox.NoseBur == k) continue;
-            q.Add(b.Y - 0.5f, this, 400 + k);
-        }
         for (int k = 0; k < _cra.Length; k++)
             if (_cra[k].Live && _time - _cra[k].Born < 42.0 && !(_fox != null && _fox.Perf && _fox.CraI == k && _fox.Mind.Doing == FD.Mouse)) q.Add(_cra[k].Y - 0.5f, this, 700 + k);
         for (int i = 0; i < _puffs.Length; i++) if (_puffs[i].On) q.Add(_puffs[i].Y + 0.5f, this, 1000 + i);
@@ -2047,16 +2385,9 @@ internal sealed class FoxAndHares : Resident
         long d0 = System.Diagnostics.Stopwatch.GetTimestamp(); DrawOne2(fb, index); _tickD += System.Diagnostics.Stopwatch.GetTimestamp() - d0; _costStamps += index == 200 ? _decalLive : 1;
     }
 
-    /// <summary>One piece of a burrow (front: the near lip, else the back with the dark mouth), at the hole's own place and the lane's size.</summary>
-    private void StampBur(FrameBuffer fb, Bur b, bool front)
-    {
-        Book bk = _hb![front ? HB_BurF : HB_BurB]; int t = TierOf(b.Y);
-        Stamp(fb, bk.Pages[t][Math.Clamp(b.Open, 0, bk.Count - 1)], b.X, b.Y, bk.Ox[t], bk.Oy[t]);
-    }
-
     private void StampCra(FrameBuffer fb, Crater c, int open, bool front, float op)
     {
-        Book bk = _fb![front ? FB_CraF : FB_CraB]; int t = TierOf(c.Y);
+        Book bk = _fb![front ? FB_DentF : FB_DentB]; int t = TierOf(c.Y);
         Stamp(fb, bk.Pages[t][Math.Clamp(open, 0, bk.Count - 1)], c.X, c.Y, bk.Ox[t], bk.Oy[t], false, op);
     }
 
@@ -2069,9 +2400,7 @@ internal sealed class FoxAndHares : Resident
             // the glide moves the DRAWING (through the page's origin) without moving the feet the depth picture is asked about
             float un = _hUnit[t];
             float gxs = (h.Mir ? -h.Gx : h.Gx) * un; int sy = (int)MathF.Round(-h.Gy * un);
-            if (h.Perf && h.Cur >= 0) StampBur(fb, _bur[h.Cur], false);                                   // the hole's back, then the hare, then the hole's front lip OVER the hare
             Stamp(fb, h.Bk.Pages[t][h.Pg], h.X + gxs, h.Y, h.Bk.Ox[t], h.Bk.Oy[t] - sy, h.Mir);          // x goes in as a float (the stamp is sub-pixel), y through the origin so the depth test keeps the true feet
-            if (h.Perf && h.Cur >= 0) StampBur(fb, _bur[h.Cur], true);          // x goes in as a float (the stamp is sub-pixel), y through the origin so the depth test keeps the true feet
         }
         else if (index == 100)
         {
@@ -2079,10 +2408,10 @@ internal sealed class FoxAndHares : Resident
             int t = TierOf(f.Y);
             float un = _fUnit[t];
             float gxs = (f.Mir ? -f.Gx : f.Gx) * un; int sy = (int)MathF.Round(-f.Gy * un);
-            bool nose = f.Perf && f.Mind.Doing == FD.Nose, cra = f.Perf && f.Mind.Doing == FD.Mouse;
-            if (nose) StampBur(fb, _bur[f.NoseBur], false); else if (cra) StampCra(fb, _cra[f.CraI], f.CraOpen, false, 1f);
+            bool cra = f.Perf && f.Mind.Doing == FD.Mouse;
+            if (cra) StampCra(fb, _cra[f.CraI], f.CraOpen, false, 1f);              // the dent's soft back piece, then the fox, then the low white mound in front of its head
             Stamp(fb, f.Bk.Pages[t][f.Pg], f.X + gxs, f.Y, f.Bk.Ox[t], f.Bk.Oy[t] - sy, f.Mir);
-            if (nose) StampBur(fb, _bur[f.NoseBur], true); else if (cra) StampCra(fb, _cra[f.CraI], f.CraOpen, true, 1f);
+            if (cra) StampCra(fb, _cra[f.CraI], f.CraOpen, true, 1f);
         }
         else if (index == 200)
         {
@@ -2090,7 +2419,7 @@ internal sealed class FoxAndHares : Resident
             for (int i = 0; i < _decalLive; i++)
             {
                 Decal d = _decals[i];
-                double age = _time - d.Born; float life = d.Kind == 2 ? 45f : 16f;
+                double age = _time - d.Born; float life = 16f;
                 if (age >= life) continue;
                 int t = TierOf(d.Y); Sprite sp = _decalSprites![t][d.Kind];
                 float op = (float)(1.0 - Math.Max(0.0, (age - life * 0.4) / (life * 0.6)));
@@ -2102,10 +2431,6 @@ internal sealed class FoxAndHares : Resident
             Crater c = _cra[index - 700]; double age = _time - c.Born;
             float op = age < 12.0 ? 1f : (float)Math.Max(0.0, 1.0 - (age - 12.0) / 30.0);          // the crater softens: it holds for twelve seconds, then fades over thirty
             StampCra(fb, c, 7, false, op); StampCra(fb, c, 7, true, op);
-        }
-        else if (index >= 400 && index < 700)
-        {
-            Bur b = _bur[index - 400]; StampBur(fb, b, false); StampBur(fb, b, true);
         }
         else if (index >= 300 && index < 400)
         {

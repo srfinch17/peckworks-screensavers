@@ -413,7 +413,7 @@ internal static class ChristmasPainter
         float MetreAt(float y) => 0.10f * u * (0.36f + 0.64f * Math.Clamp((y - crestMin) / (h - crestMin), 0f, 1f));
         (float X, float Depth, CoverKind Kind, float Wide, float Tall)[] coverPlan =
         [
-            (0.105f, 0.36f, CoverKind.Shrub, 1.25f, 0.85f),      // left of the pond, by the tree line
+            (0.075f, 0.52f, CoverKind.Shrub, 1.25f, 0.85f),      // left of the pond (well below the herd's rows: at 0.36 the reindeer grazed behind it with their legs hidden)
             (0.165f, 0.60f, CoverKind.Rocks, 1.30f, 0.50f),      // on the pond's left shore
             (0.300f, 0.93f, CoverKind.BrushPile, 1.50f, 0.50f),  // below the pond, toward the log
             (0.455f, 0.90f, CoverKind.Rocks, 1.10f, 0.42f),      // at the pond's near right corner
@@ -421,7 +421,7 @@ internal static class ChristmasPainter
             (0.610f, 0.88f, CoverKind.Stump, 0.75f, 0.55f),      // between the tiny fir and the bird table
             (0.745f, 0.52f, CoverKind.Rocks, 1.20f, 0.48f),      // right of the bird table
             (0.800f, 0.90f, CoverKind.BrushPile, 1.40f, 0.48f),  // near right
-            (0.925f, 0.44f, CoverKind.Shrub, 1.30f, 0.90f),      // far right, by the pines
+            (0.925f, 0.58f, CoverKind.Shrub, 1.30f, 0.90f),      // far right (below the herd's rows, like the left one)
         ];
         var covers = new List<Cover>();
         foreach (var cp in coverPlan)

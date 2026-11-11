@@ -511,25 +511,16 @@ internal static partial class FoxAndHaresArt
         return q;
     }
 
-    /// <summary>DIGGING at a burrow: the head down at the hole, the near foreleg scraping back along the snow, then lifting forward. t cycles (0.7 s).</summary>
-    public static FPose FDig(float t)
-    {
-        var q = FStand(0.1f);
-        q.NeckAng = -20f; q.HeadAng = -64f; q.Pitch = -5f + 3f * MathF.Sin(MathF.Tau * t); q.Body = P(0f, 0.29f - 0.012f * MathF.Sin(MathF.Tau * t));
-        q.FootFF = P(0.24f, 0f);
-        if (t < 0.5f) q.FootFN = P(Lerp(0.27f, 0.12f, Sm(t / 0.5f)), 0f);                               // scrape: back along the snow
-        else q.FootFN = P(Lerp(0.12f, 0.27f, Sm((t - 0.5f) / 0.5f)), 0.14f * MathF.Sin(MathF.PI * (t - 0.5f) / 0.5f));   // recover: lifted, forward (the cycle starts and ends on the resting paw)
-        q.EarF = 24f; q.EarN = 24f; q.TailAng = -6f + 4f * MathF.Sin(MathF.Tau * t); q.TailCurl = 4f;
-        return q;
-    }
-
-    /// <summary>Nosing at the hole: stand with the muzzle down at the snow, the nose working. t cycles.</summary>
+    /// <summary>
+    /// SNIFFING AT COVER (the fox nosing round a bush or a stone where a hare has gone): the muzzle reaches FORWARD at twig height, the
+    /// head swinging a few degrees one way and the other as the nose works, the ears pricked at the cover. t cycles (two sniffs).
+    /// </summary>
     public static FPose FNose(float t)
     {
         var q = FStand(0.1f);
         float b = MathF.Sin(MathF.Tau * t * 2f);
-        q.NeckAng = -20f + 3f * b; q.HeadAng = -64f + 5f * b; q.Pitch = -5f; q.Body = P(0f, 0.29f);
-        q.EarF = 22f; q.EarN = 22f; q.TailAng = -6f; q.TailCurl = 4f;
+        q.NeckAng = 8f + 3f * b; q.HeadAng = -30f + 8f * b; q.Pitch = -3f; q.Body = P(0f, 0.31f);
+        q.EarF = 14f; q.EarN = 14f; q.TailAng = -6f; q.TailCurl = 4f; q.Mouth = 0f;
         return q;
     }
 
@@ -629,18 +620,17 @@ internal static partial class FoxAndHaresArt
             Make("shake", 48, 0.80f, 0.80f, i => FShake((i % 24) / 24f, 0.9f - 0.5f * (i / 47f))),         // 19 two shakes
             Make("wipe", 9, 0.80f, 0.80f, i => FLerp(FShake(0f, 0.4f), FStand(0.1f), Sm((i + 1) / 9f))),   // 20 the last of the snow melts off the muzzle
             Make("sneeze", 24, 0.80f, 0.85f, i => FSneeze(i / 24f)),                                       // 21
-            Make("dig", 21, 0.90f, 0.70f, i => FDig(i / 21f)),                                             // 22
-            Make("noseIn", 10, 0.85f, 0.70f, i => FLerp(FStand(0.1f), FNose(0f), Sm((i + 1) / 10f))),      // 23
-            Make("nose", 24, 0.85f, 0.70f, i => FNose(i / 24f)),                                           // 24
-            Make("turn", 14, 0.85f, 0.80f, i => FTurn(90f * (i + 1) / 14f)),                               // 25
-            Make("dashIn", 9, 1.0f, 0.75f, i => FLerp(FTrot(0.30f, FoxStalkStride, 1f, 0.68f), FGallop(0f, FoxGallopStride), Sm((i + 1) / 9f))),   // 26 crouch into the dash
-            Make("lower", 10, 0.85f, 0.80f, i => FLerp(FStand(0.1f), FListen(0f), Sm((i + 1) / 10f))),     // 27 the head lowering from a stand to listen (and back)
-            Make("watch", 36, 0.95f, 0.75f, i => i < 12 ? FLerp(FTrot(0.30f, FoxStalkStride, 1f, 0.68f), FWatch(0f), Sm(i / 11f)) : FWatch((i - 12) / 24f)),   // 28 pull-up (12 pages), then a 24 page hold
-            Make("wake0", 33, 0.80f, 0.75f, i => FWakePose(i, 0f)),                                        // 29 the way up out of a curl, by how much snow lay on the back
-            Make("wake1", 33, 0.80f, 0.75f, i => FWakePose(i, 1f / 3f)),                                   // 30
-            Make("wake2", 33, 0.80f, 0.75f, i => FWakePose(i, 2f / 3f)),                                   // 31
-            Make("wake3", 33, 0.80f, 0.75f, i => FWakePose(i, 1f)),                                        // 32
-            HoleBooks("cra", 8, CraRx, CraRy, CraLip)[0], HoleBooks("cra", 8, CraRx, CraRy, CraLip)[1],   // 33 the mousing crater's back, 34 its front lip
+            Make("noseIn", 10, 0.85f, 0.70f, i => FLerp(FStand(0.1f), FNose(0f), Sm((i + 1) / 10f))),      // 22
+            Make("nose", 24, 0.85f, 0.70f, i => FNose(i / 24f)),                                           // 23
+            Make("turn", 14, 0.85f, 0.80f, i => FTurn(90f * (i + 1) / 14f)),                               // 24
+            Make("dashIn", 9, 1.0f, 0.75f, i => FLerp(FTrot(0.30f, FoxStalkStride, 1f, 0.68f), FGallop(0f, FoxGallopStride), Sm((i + 1) / 9f))),   // 25 crouch into the dash
+            Make("lower", 10, 0.85f, 0.80f, i => FLerp(FStand(0.1f), FListen(0f), Sm((i + 1) / 10f))),     // 26 the head lowering from a stand to listen (and back)
+            Make("watch", 36, 0.95f, 0.75f, i => i < 12 ? FLerp(FTrot(0.30f, FoxStalkStride, 1f, 0.68f), FWatch(0f), Sm(i / 11f)) : FWatch((i - 12) / 24f)),   // 27 pull-up (12 pages), then a 24 page hold
+            Make("wake0", 33, 0.80f, 0.75f, i => FWakePose(i, 0f)),                                        // 28 the way up out of a curl, by how much snow lay on the back
+            Make("wake1", 33, 0.80f, 0.75f, i => FWakePose(i, 1f / 3f)),                                   // 29
+            Make("wake2", 33, 0.80f, 0.75f, i => FWakePose(i, 2f / 3f)),                                   // 30
+            Make("wake3", 33, 0.80f, 0.75f, i => FWakePose(i, 1f)),                                        // 31
+            DentBooks("dent", DentN)[0], DentBooks("dent", DentN)[1],   // 32 the mousing dent's back (a pale dimple), 33 its front mound (low, white)
         ];
     }
 

@@ -557,32 +557,6 @@ internal static partial class FoxAndHaresArt
         return HLerp(land, HSit(0.05f), Sm((t - 0.90f) / 0.10f));
     }
 
-    /// <summary>A hare diving into a snow burrow: it leaps nose-first, the body turning over to point down, and the snow swallows it hind feet last. t 0..1.</summary>
-    public static HPose HDive(float t)
-    {
-        var run = HHop(0.30f, 2.0f, true);
-        var plunge = new HPose { Body = P(0.30f, 0.42f), Tilt = -72f, Rx = 0.38f, Ry = 0.23f, Head = P(0.50f, 0.04f), HeadTilt = -78f, EarL = 168f, EarR = 160f,
-            ForeF = P(0.42f, -0.08f), ForeN = P(0.48f, -0.10f), ToeF = P(0.04f, 0.74f), ToeN = P(0.10f, 0.70f), AngF = 62f, AngN = 66f, Clip = true };
-        float a = Sm(t / 0.5f);
-        var q = HLerp(run, plunge, a);
-        q.Clip = true;
-        float sink = Sm((t - 0.45f) / 0.55f) * 1.35f;
-        q.Sink = sink; q.Lip = Sm((t - 0.35f) / 0.4f);
-        q.Shadow = 1f - Sm((t - 0.5f) / 0.4f);
-        return q;
-    }
-
-    /// <summary>A hare coming up out of its burrow: only the ears at first, then the eyes, then the head. level 0 (ear tips) to 1 (head and shoulders); look swivels the ears.</summary>
-    public static HPose HPeek(float level, float look)
-    {
-        var q = HSit(0.05f);
-        q.Clip = true; q.Sink = Lerp(0.76f, 0.30f, level); q.Lip = 1f; q.Shadow = 0f;
-        q.EarL = 96f + 24f * look; q.EarR = 90f - 18f * look;
-        q.Head = P(0.37f, 0.53f);
-        q.Blink = level > 0.2f && level < 0.45f ? 0f : 0f;
-        return q;
-    }
-
     /// <summary>The sat hare turned "yaw" degrees toward us: the pages that turn it round on the spot.</summary>
     public static HPose HTurn(float yaw)
     {
@@ -592,230 +566,47 @@ internal static partial class FoxAndHaresArt
     }
 
 
-    // ---------------------------------------------------------------- keyed sequences (the round-two sheets)
+    // ---------------------------------------------------------------- hiding behind COVER (round four: "no holes")
     //
-    // FEYNMAN VERSION. A dive or a climb out is not one pose turned round: it is a RUN OF KEY POSES (crouch, push off,
-    // fly, nose in, shoulders in, hind feet last) with the in-between pages drawn by a SMOOTH CURVE through them (a
-    // Catmull-Rom spline, the way an animator's in-betweens ease through every key instead of stopping at each).
-    // The sheet is anchored at the HOLE, not at the body: x = 0 is the middle of the burrow, y = 0 the snow line,
-    // and the hare's body travels across the page. The saver puts the page's origin on the hole.
+    // FEYNMAN VERSION. A hare behind a stone is not hidden by magic, it is hidden by being SMALL: it presses itself flat to the
+    // snow, the long ears laid back along its back, the chin on the ground, the way a hare "forms" (lies tight) when a hawk is about.
+    // That is the LOAF. A hare behind a low stone is a loaf; a hare behind a tall bush may simply sit. To look, it does what a
+    // real hare does: the EARS go up first (slowly, one then the other), then the head lifts, until it is sitting up (behind a bush:
+    // up on its hind legs). Everything is a blend of poses, so every page flows from the last, and the ears LEAD the rise.
+    // ----------------------------------------------------------------
 
-    /// <summary>A pose moved sideways by dx (units): every point that is a place, not an angle.</summary>
-    public static HPose HShift(HPose a, float dx)
+    /// <summary>
+    /// THE LOAF, t = 0..1 one slow breath (3 s): body and chin low on the snow, ears flat along the back (it is 0.50 of a body length
+    /// tall at the ears' roots), the breath lifting the back a hair, an ear twitching once. t = 0 is the exact base pose (the rise's first page).
+    /// </summary>
+    public static HPose HLoaf(float t)
     {
-        var q = HLerp(a, a, 0f);
-        q.Body = P(a.Body.X + dx, a.Body.Y); q.Head = P(a.Head.X + dx, a.Head.Y);
-        q.ForeF = P(a.ForeF.X + dx, a.ForeF.Y); q.ForeN = P(a.ForeN.X + dx, a.ForeN.Y);
-        q.ToeF = P(a.ToeF.X + dx, a.ToeF.Y); q.ToeN = P(a.ToeN.X + dx, a.ToeN.Y);
-        return q;
-    }
-
-    /// <summary>Every number of a pose through the key poses by a smooth curve (t between ts[0] and ts[^1]).</summary>
-    public static HPose HSpline(float t, float[] ts, HPose[] k)
-    {
-        float V(Func<HPose, float> f) { var vs = new float[k.Length]; for (int i = 0; i < k.Length; i++) vs[i] = f(k[i]); return Spline(t, ts, vs); }
-        return new HPose
-        {
-            Body = P(V(a => a.Body.X), V(a => a.Body.Y)), Rx = V(a => a.Rx), Ry = V(a => a.Ry), Tilt = V(a => a.Tilt),
-            Head = P(V(a => a.Head.X), V(a => a.Head.Y)), HeadTilt = V(a => a.HeadTilt), EarL = V(a => a.EarL), EarR = V(a => a.EarR),
-            BendL = V(a => a.BendL), BendR = V(a => a.BendR),
-            ForeF = P(V(a => a.ForeF.X), V(a => a.ForeF.Y)), ForeN = P(V(a => a.ForeN.X), V(a => a.ForeN.Y)),
-            ToeF = P(V(a => a.ToeF.X), V(a => a.ToeF.Y)), ToeN = P(V(a => a.ToeN.X), V(a => a.ToeN.Y)),
-            AngF = V(a => a.AngF), AngN = V(a => a.AngN), Nose = V(a => a.Nose), Yaw = V(a => a.Yaw), Sink = V(a => a.Sink),
-            Blink = V(a => a.Blink), Chew = V(a => a.Chew), Shadow = V(a => a.Shadow), Lip = V(a => a.Lip), LipX = 0f,
-        };
-    }
-
-    /// <summary>Where the dive's first page puts the body, behind the hole (units). It is one body length plus a bit: the whole hare, nose included, stands on snow CLEAR of the mouth and its rim, then dives forward into it.</summary>
-    public const float DiveRun = 1.05f;
-    /// <summary>The dive sheet: 56 pages over 1.6 s (35 a second): gather, push, a low arc of about one body length, nose in, back over the lip, hind feet kick, rump and white tail last, the tail tip stays at the mouth for a beat, then sinks.</summary>
-    public const int DiveN = 56;
-    public const float DiveSecs = 1.6f;
-
-    // ---- THE DIVE'S PATH. The head follows ONE curve (control points in hole coordinates: x forward, y up, the lip at about y 0.05):
-    // along the snow, up in a low arc, over the lip and DOWN through the mouth. Every other part of the body is hung on the same curve
-    // at a fixed distance behind the head (the body's middle 0.64 behind, the hind feet about a body length behind), so the body
-    // FOLLOWS ALONG ITS OWN SPINE like a train into a tunnel and keeps its full width and every part: nothing narrows, shrinks or turns.
-    static readonly PointF[] DiveCtl =
-    [
-        P(-1.25f, 0.45f), P(-0.68f, 0.53f), P(-0.30f, 0.74f), P(0.00f, 0.66f), P(0.16f, 0.28f), P(0.36f, -0.14f), P(0.66f, -0.76f), P(1.00f, -1.46f), P(1.30f, -2.06f),
-    ];
-    static float[]? _dpX, _dpY, _dpS;
-    static readonly object _dpLock = new();
-
-    static void BuildDivePath()
-    {
-        lock (_dpLock)
-        {
-            if (_dpX != null) return;
-            var xs = new List<float>(); var ys = new List<float>(); var ss = new List<float>();
-            float acc = 0f;
-            for (int i = 0; i < DiveCtl.Length - 1; i++)
-            {
-                PointF p0 = DiveCtl[Math.Max(0, i - 1)], p1 = DiveCtl[i], p2 = DiveCtl[i + 1], p3 = DiveCtl[Math.Min(DiveCtl.Length - 1, i + 2)];
-                for (int k = 0; k < 24; k++)
-                {
-                    float u = k / 24f;
-                    float x = 0.5f * (2 * p1.X + (-p0.X + p2.X) * u + (2 * p0.X - 5 * p1.X + 4 * p2.X - p3.X) * u * u + (-p0.X + 3 * p1.X - 3 * p2.X + p3.X) * u * u * u);
-                    float y = 0.5f * (2 * p1.Y + (-p0.Y + p2.Y) * u + (2 * p0.Y - 5 * p1.Y + 4 * p2.Y - p3.Y) * u * u + (-p0.Y + 3 * p1.Y - 3 * p2.Y + p3.Y) * u * u * u);
-                    if (xs.Count > 0) acc += MathF.Sqrt((x - xs[^1]) * (x - xs[^1]) + (y - ys[^1]) * (y - ys[^1]));
-                    xs.Add(x); ys.Add(y); ss.Add(acc);
-                }
-            }
-            _dpY = [.. ys]; _dpS = [.. ss]; _dpX = [.. xs];
-        }
-    }
-
-    /// <summary>The point at arc length s along the dive path (s = 0 at the first control point), and the path's direction there in degrees (plus = rising). Before 0 the path continues straight back.</summary>
-    static PointF DivePathAt(float s, out float deg)
-    {
-        BuildDivePath();
-        float[] X = _dpX!, Y = _dpY!, S = _dpS!;
-        int n = X.Length;
-        if (s <= 0f)
-        {
-            float dx0 = X[1] - X[0], dy0 = Y[1] - Y[0], l0 = MathF.Sqrt(dx0 * dx0 + dy0 * dy0);
-            deg = MathF.Atan2(dy0, dx0) * 57.2958f;
-            return P(X[0] + dx0 / l0 * s, Y[0] + dy0 / l0 * s);
-        }
-        if (s >= S[n - 1]) { s = S[n - 1]; }
-        int i = 0; while (i < n - 2 && S[i + 1] < s) i++;
-        float u = (s - S[i]) / MathF.Max(1e-5f, S[i + 1] - S[i]);
-        float dx = X[i + 1] - X[i], dy = Y[i + 1] - Y[i];
-        deg = MathF.Atan2(dy, dx) * 57.2958f;
-        return P(X[i] + dx * u, Y[i] + dy * u);
-    }
-
-    /// <summary>The head's arc length where the path first comes down through height h after its apex.</summary>
-    static float DiveSAtHeightDown(float h)
-    {
-        BuildDivePath();
-        float[] Y = _dpY!, S = _dpS!;
-        int apex = 0; for (int i = 1; i < Y.Length; i++) if (Y[i] > Y[apex]) apex = i;
-        for (int i = apex; i < Y.Length - 1; i++) if (Y[i] >= h && Y[i + 1] < h) return S[i] + (S[i + 1] - S[i]) * (Y[i] - h) / (Y[i] - Y[i + 1]);
-        return S[^1];
-    }
-
-    /// <summary>A hare hung on the dive path with its head at arc length s: kick 0..1 is the hind feet's flick as the hips pass the lip, ext 0..1 how far the forepaws reach.</summary>
-    static HPose OnDivePath(float s, float kick, float ext)
-    {
-        PointF hd = DivePathAt(s, out float ah);
-        PointF bc = DivePathAt(s - 0.64f, out float ab);
-        var q = new HPose { Body = bc, Tilt = Math.Clamp(ab, -80f, 60f), Rx = 0.40f, Ry = 0.23f, Head = hd, HeadTilt = ah * 0.85f };
-        q.EarL = Math.Clamp(168f + ah * 0.55f, 120f, 185f); q.EarR = q.EarL - 6f;
-        // forepaws reach ahead of the nose along the path, a little below it; the far paw a touch behind
-        PointF pf = DivePathAt(s + 0.10f + 0.10f * ext, out _);
-        q.ForeN = P(pf.X, pf.Y - 0.05f); q.ForeF = P(pf.X - 0.07f, pf.Y - 0.06f);
-        // the hind feet trail behind the haunch (a big pair, together), and FLICK up as the hips pass the lip
-        PointF hp = DivePathAt(s - 0.80f, out float ahp);              // the big hind feet are folded up under the rump, so the ROUND WHITE TAIL is the last thing above the lip
-        q.ToeN = P(hp.X + 0.10f * kick, hp.Y - 0.02f + 0.28f * kick); q.ToeF = P(q.ToeN.X - 0.07f, q.ToeN.Y + 0.02f);
-        q.AngN = Lerp(30f, 62f, kick); q.AngF = q.AngN;
-        q.Shadow = 0f; q.Hole = true;
-        return q;
-    }
-
-    /// <summary>THE DIVE, t 0..1 (1.6 s, 56 pages).</summary>
-    public static HPose HDive2(float t)
-    {
-        float sA = 0.57f;                                  // the head's arc length at the second control point (the gather's head place)
-        float sApex = DiveSAtHeightDown(0.70f) - 0.28f;    // the top of the low arc
-        float sMouth = DiveSAtHeightDown(0.22f);           // the nose at the mouth
-        float sHip = sMouth + 0.64f + 0.15f;               // the hips at the lip
-        float sTail = DiveSAtHeightDown(0.12f) + 1.03f;    // only the white tail still above the lip
-        float sEnd = sTail + 0.42f;
-        var gather = HShift(HHop(15f / 16f, HareFleeD, true), -DiveRun);
-        float[] ts = [0.16f, 0.34f, 0.46f, 0.64f, 0.74f, 0.88f, 1f];
-        float[] ss = [sA, sApex, sMouth, sHip, sTail, sTail + 0.04f, sEnd];
-        float s = Spline(t, ts, ss);
-        float kick = Sm((s - (sHip - 0.30f)) / 0.30f) * (1f - Sm((s - (sHip + 0.35f)) / 0.30f));
-        float ext = Sm((t - 0.16f) / 0.18f) * (1f - Sm((t - 0.52f) / 0.12f));
-        var on = OnDivePath(Math.Max(s, sA), kick, ext);
-        HPose q;
-        if (t < 0.16f)
-        {
-            // ANTICIPATION: the gather settles lower and the head dips toward the mouth before the push (the pose eases from the bolt's rest page onto the path)
-            q = HLerp(gather, on, Sm(t / 0.16f));
-            q.Hole = false;
-        }
-        else q = on;
-        q.Hole = t > 0.30f; q.Lip = 0f; q.LipX = 0.02f;
-        q.Shadow = t < 0.16f ? Lerp(1f, 0.8f, t / 0.16f) : 0.8f * (1f - Sm((t - 0.16f) / 0.30f));
+        var q = HSit(0.05f);
+        q.Body = P(0.00f, 0.185f); q.Tilt = 5f; q.Rx = 0.41f; q.Ry = 0.175f;
+        q.Head = P(0.40f, 0.285f); q.HeadTilt = -12f;
+        q.EarL = 165f; q.EarR = 160f;
+        q.ForeF = P(0.30f, 0f); q.ForeN = P(0.36f, 0f);
+        q.Nose = 0f; q.Blink = 0f;
+        float breath = MathF.Sin(MathF.Tau * t);
+        q.Ry += 0.007f * breath; q.Head = P(q.Head.X, q.Head.Y + 0.004f * breath);
+        float tw = t > 0.55f && t < 0.70f ? MathF.Sin((t - 0.55f) / 0.15f * MathF.PI) : 0f;
+        q.EarL += 9f * tw; q.Nose = 0.010f * tw * MathF.Sin(MathF.Tau * 12f * t);
         return q;
     }
 
     /// <summary>
-    /// COMING UP, t 0..1 (2.4 s), in the reverse order of the dive's body parts: the EAR TIPS (they swivel), the eyes, the
-    /// head (a look round), the shoulders, then a hop OUT onto the snow and a settle into a sit, 0.85 ahead of the hole.
+    /// THE RISE, s = 0 (the loaf) to 1 (the sit the other sheets start from: HSit(0.05)): the EARS lead (they are up by the time s is a
+    /// half, while the head is still low), then the head lifts and the back straightens. Pages i = 0..23 are s = i / 23.
     /// </summary>
-    public static HPose HEmerge(float t)
+    public static HPose HLoafRise(float s)
     {
-        // THE CLIMB: the hare is inside the burrow on a SLANT (nose up, body tilted 55 degrees, centre a little behind the hole's
-        // middle), head first. Every key puts the head and body on that line, so the body follows the head up it, like a train out of
-        // a tunnel: ear tips, eyes over the lip, a look round, head and shoulders, the forepaws reaching onto the snow AHEAD of the hole,
-        // the heave (the body flattens), the haunches out, a hop onto the snow, a settle into a sit 0.85 ahead of the hole.
-        // The page is cut under the lip's top edge (Hole), and the lip is stamped over it: what is lower is hidden by snow.
-        HPose Climb(float bx, float by, float tilt, float headTilt, float earL, float earR, PointF? fore = null, PointF? toe = null, float blink = 0f)
-        {
-            var q = HSit(0.05f); q.Shadow = 0f; q.Blink = blink;
-            q.Body = P(bx, by); q.Tilt = tilt; q.Head = Add(q.Body, Rot(P(0.37f, 0.26f), tilt - 30f)); q.HeadTilt = headTilt; q.EarL = earL; q.EarR = earR;
-            PointF fn = fore ?? Add(q.Body, Rot(P(0.40f, -0.40f), tilt - 30f)); q.ForeN = fn; q.ForeF = P(fn.X - 0.06f, fn.Y);
-            PointF tn = toe ?? Add(q.Body, Rot(P(-0.10f, -0.45f), tilt - 30f)); q.ToeN = tn; q.ToeF = P(tn.X - 0.05f, tn.Y);
-            q.AngN = 0f; q.AngF = 0f;
-            return q;
-        }
-        var launch = HLerp(HSit(0.05f), HHop(0.02f, HareHopD, false), 0.55f);       // the push: the gather, hind toes still down
-        var fly = new HPose { Body = P(0.48f, 0.52f), Tilt = 10f, Rx = 0.38f, Ry = 0.22f, Head = P(0.84f, 0.64f), HeadTilt = 6f, EarL = 118f, EarR = 112f, ForeF = P(0.74f, 0.40f), ForeN = P(0.80f, 0.36f), ToeF = P(0.08f, 0.40f), ToeN = P(0.14f, 0.36f), AngF = 40f, AngN = 44f, Shadow = 0.5f };
-        // The keys are placed by the HEIGHT OF THE HEAD (headY, the head's middle above the snow line; the lip's top is at 0.05): at -0.10 the
-        // ears (0.28 long, the head's middle at their root) stand a hand above the lip, pale with black tips, on a head that is still below it;
-        // at 0.12 the eyes are clear. The ears are up as EARS inside 0.2 s and the eyes are over the lip inside 0.5 s.
-        HPose ClimbH(float headY, float tilt, float headTilt, float earL, float earR, PointF? fore = null, PointF? toe = null, float blink = 0f)
-        {
-            float oy = Rot(P(0.37f, 0.26f), tilt - 30f).Y;
-            return Climb(0.04f - Rot(P(0.37f, 0.26f), tilt - 30f).X, headY - oy, tilt, headTilt, earL, earR, fore, toe, blink);
-        }
-        float[] ts = [0f, 0.05f, 0.10f, 0.17f, 0.24f, 0.32f, 0.40f, 0.50f, 0.60f, 0.70f, 0.80f, 0.92f, 1f];
-        HPose[] k =
-        [
-            ClimbH(-0.62f, 55f, 12f, 96f, 90f),                    // 0 all below the lip: nothing shows
-            ClimbH(-0.10f, 55f, 12f, 96f, 90f),                    // 1 the ears are UP (pale, black tips) over the lip, the head just below it
-            ClimbH(-0.02f, 55f, 12f, 114f, 78f),                   // 2 the ears swivel, the top of the head rises into view
-            ClimbH(0.08f, 55f, 14f, 88f, 106f),                    // 3 the forehead and eyes come over the lip
-            ClimbH(0.12f, 55f, 22f, 104f, 94f),                    // 4 a look: head up and round
-            ClimbH(0.13f, 55f, 4f, 92f, 100f, null, null, 0.9f),   // 5 the other way, and a blink
-            ClimbH(0.15f, 55f, 12f, 98f, 92f),                     // 6 settles and looks out
-            ClimbH(0.22f, 50f, 8f, 100f, 94f, P(0.42f, 0.02f)),    // 7 head and shoulders over the lip, the forepaws reach out onto the snow
-            Climb(-0.02f, 0.12f, 40f, 6f, 104f, 98f, P(0.50f, 0.00f), P(-0.36f, -0.20f)),     // 8 THE HEAVE: the body flattens, the paws pull
-            HShift(launch, 0.02f), fly, HShift(HHop(HopRest, HareHopD, false), 0.85f), HShift(HSit(0.05f), 0.85f),
-        ];
-        var q = HSpline(t, ts, k);
-        q.Hole = t < 0.70f; q.Lip = 0f; q.LipX = 0.02f;
-        q.Shadow = t < 0.60f ? 0f : Sm((t - 0.60f) / 0.40f);
+        var a = HLoaf(0f); var b = HSit(0.05f);
+        float body = Sm(Math.Clamp((s - 0.18f) / 0.82f, 0f, 1f)), ears = Sm(Math.Clamp(s / 0.50f, 0f, 1f));
+        var q = HLerp(a, b, body);
+        q.EarL = Lerp(a.EarL, b.EarL, ears); q.EarR = Lerp(a.EarR, b.EarR, Sm(Math.Clamp((s - 0.06f) / 0.50f, 0f, 1f)));      // the near ear a beat after the far one
         return q;
     }
 
-    /// <summary>
-    /// DIGGING a burrow, on a sheet of 44 pages: 0..9 the gather (the bolt's last rest pose) sinks into the dig crouch, 10..33 one
-    /// scrape cycle (the forepaws stroke back along the snow in turn, twice, the head bobbing), 34..43 back up to the gather.
-    /// The hole is DiveRun ahead of the body: the paws scrape at x about 0.55.
-    /// </summary>
-    public static HPose HDigBase(float t)
-    {
-        var q = HHop(15f / 16f, HareFleeD, true);
-        q.Body = P(0.02f, 0.21f); q.Tilt = 12f; q.Head = P(0.58f, 0.18f); q.HeadTilt = -46f; q.EarL = 150f; q.EarR = 142f;
-        float ph = t * 2f; float a = ph - MathF.Floor(ph), b = (ph + 0.5f) - MathF.Floor(ph + 0.5f);
-        PointF Paw(float u) => u < 0.55f ? P(Lerp(0.80f, 0.46f, Sm(u / 0.55f)), 0f) : P(Lerp(0.46f, 0.80f, Sm((u - 0.55f) / 0.45f)), 0.16f * MathF.Sin(MathF.PI * (u - 0.55f) / 0.45f));
-        q.ForeN = Paw(a); q.ForeF = Paw(b);
-        q.Head = P(q.Head.X + 0.012f * MathF.Sin(MathF.Tau * ph), q.Head.Y - 0.010f * MathF.Sin(MathF.Tau * ph));
-        q.Nose = 0.012f * MathF.Sin(MathF.Tau * 5f * t);
-        return q;
-    }
-    public static HPose HDig(int i)
-    {
-        var gather = HHop(15f / 16f, HareFleeD, true);
-        if (i < 10) return HLerp(gather, HDigBase(0f), Sm((i + 1) / 11f));
-        if (i < 34) return HDigBase((i - 10) / 24f);
-        return HLerp(HDigBase(0f), gather, Sm((i - 34 + 1) / 11f));
-    }
 
     /// <summary>
     /// GROOM as a SHEET of loops (the first one was one slow pass of 24 pages: four face strokes were sampled by
@@ -919,137 +710,66 @@ internal static partial class FoxAndHaresArt
             Make("tall", 24, 0.8f, 1.5f, i => HTall(i / 24f)),                                  // 9
             Make("thump", 36, 0.8f, 1.5f, ThumpPose),                                           // 10
             Make("binky", 36, W, 1.75f, i => HBinky((i + 0.5f) / 36f), HBinky, i => (i + 0.5f) / 36f),                         // 11
-            Make("dive", DiveN, 1.8f, 1.4f, i => HDive2(i / (DiveN - 1f)), HDive2, i => i / (DiveN - 1f)),                                 // 12 anchored at the HOLE (0 = the burrow's middle)
-            Make("peek", 72, 1.5f, 1.4f, i => HEmerge(i / 71f), HEmerge, i => i / 71f),                                // 13 the way out, anchored at the hole
-            Make("turn", 14, 0.8f, 1.1f, i => HTurn(90f * (i + 1) / 14f)),                           // 14 yaw 22.5, 45, 67.5, 90
+            Make("turn", 14, 0.8f, 1.1f, i => HTurn(90f * (i + 1) / 14f)),                           // 12 yaw 6.4 degrees a page, side on to head on
             new BookSpec { Name = "twig", N = 1, HalfW = 0.25f, Above = 0.5f, Paint = (g, i) => PaintTwig(g) },   // 15
-            Make("nlook", 22, 0.9f, 1.1f, i => i < 10 ? HNibbleUp((i + 1) / 10f) : HNibbleUp(1f, (i - 10) / 12f)),  // 16 head up from a twig: 6 pages up, then an 8 page hold
-            Make("settleF", 8, W + 0.4f, 1.2f, i => HSettle((i + 1) / 8f, DF, true)),             // 17 the bolt's rest page to a sit
-            HoleBooks("bur", OpenN, BurRx, BurRy, BurLip)[0], HoleBooks("bur", OpenN, BurRx, BurRy, BurLip)[1],   // 18 the burrow's back, 19 its front lip (open 1/8 .. 8/8)
-            Make("dig", 44, W + 0.4f, 1.1f, HDig),                                                // 20 a hare digging a burrow where it stands
+            Make("nlook", 22, 0.9f, 1.1f, i => i < 10 ? HNibbleUp((i + 1) / 10f) : HNibbleUp(1f, (i - 10) / 12f)),  // 14 head up from a twig: 6 pages up, then an 8 page hold
+            Make("settleF", 8, W + 0.4f, 1.2f, i => HSettle((i + 1) / 8f, DF, true)),             // 15 the bolt's rest page to a sit
+            Make("loaf", 24, 0.8f, 0.8f, i => HLoaf(i / 24f)),                                    // 16 the loaf: a hare pressed flat behind a stone (page 0 is the rise's first page)
+            Make("loafRise", 24, 0.8f, 1.1f, i => HLoafRise(i / 23f)),                            // 17 the ears lead, then the head: loaf (0) to the sit the other sheets start from (23)
         ];
     }
 
-    // ================================================================ THE BURROW (the hole is a PLACE, in two pieces)
+    // ================================================================ THE DENT (where the fox plunges its head into the snow)
     //
-    // FEYNMAN VERSION. A stage trapdoor: the hole is there before the animal comes and after it has gone. It is drawn in
-    // TWO stamps. The BACK piece (the dark mouth, with the far rim of dug snow behind it) goes down BEFORE the animal; the
-    // FRONT LIP (the near rim, a crescent of piled snow lit on top and shadowed under) goes down AFTER the animal, in the
-    // same place on every frame. The animal is drawn at its full size and its page is cut off just under the lip's top
-    // edge (HoleCut); whatever part of it is lower than the lip's top is covered by real snow standing in front of it.
-    // Nothing fades, shrinks or turns: it goes DOWN BEHIND SOMETHING.
-    //
-    // The numbers are in the animal's own unit (a hare unit for a burrow, metres for the fox's crater): rx, ry the
-    // mouth's half sizes, lipTop how far above the snow line the lip's top edge stands at the middle. "open" 0..1 is how
-    // far the hole has been dug (a page per step), so a hole that is DUG grows rather than appears.
+    // FEYNMAN VERSION. There is no hole. The fox dives its nose into DEEP SOFT SNOW, and what it leaves is a dent: a pale dimple
+    // with a faint blue shadow and a few scattered clumps, nothing dark in it. While the head is in the snow it is hidden by a
+    // small LOW WHITE MOUND stamped AFTER the fox in the same place every frame (a front piece, like the near edge of a snow
+    // bank); the fox's page is cut just under the mound's crest (HoleCut), so what is lower than the crest is hidden by snow in
+    // front of it. The dent is the back piece (stamped before the fox), the mound the front piece (after it).
     // ----------------------------------------------------------------
 
-    /// <summary>Where the page is cut, just under the lip's top edge (units, y up). Painted pages of an animal at a hole use it.</summary>
+    /// <summary>Where the fox's mousing pages are cut, just under the front mound's crest (units, y up).</summary>
     public const float HoleCut = -0.045f;
 
-    /// <summary>Hare burrow: inner mouth half sizes and the lip's height at its middle (hare units).</summary>
-    public const float BurRx = 0.34f, BurRy = 0.105f, BurLip = 0.05f;
-    /// <summary>A burrow digs open over this many steps (pages 0 .. OpenN-1 of its two books; the last is the finished hole).</summary>
-    public const int OpenN = 12;
-    /// <summary>The fox's crater, in metres.</summary>
-    public const float CraRx = 0.17f, CraRy = 0.058f, CraLip = 0.03f;
+    /// <summary>The fox's dent, in metres: the half width of the mound, the height of its crest, and how many steps it grows over.</summary>
+    public const float DentRx = 0.23f, DentLip = 0.036f;
+    public const int DentN = 8;
 
-    /// <summary>The mouth's middle height and half sizes at "open".</summary>
-    static void HoleDims(float rx, float ry, float lipTop, float open, out float orx, out float ory, out float yc)
+    /// <summary>The dent: a pale dimple (a shade darker than the snow, blue at its far side) with scattered clumps. o 0..1 is how far the fox has pressed in.</summary>
+    public static void PaintDentBack(Graphics g, float rx, float lip, float o)
     {
-        float o = MathF.Max(0.12f, open);
-        orx = rx * o; ory = ry * o; yc = lipTop * o + ory;
+        o = MathF.Max(0.15f, o);
+        Ell(g, 0f, 0.012f, rx * 1.55f * o + 0.02f, 0.050f * o + 0.008f, Color.FromArgb(54, 120, 146, 205));          // a soft blue shadow on the snow
+        Ell(g, 0.02f, 0.020f, rx * 1.15f * o + 0.02f, 0.034f * o + 0.006f, Color.FromArgb(120, 168, 186, 226));      // the dimple, only a shade down from the snow
+        Ell(g, -0.01f, 0.030f, rx * 0.80f * o + 0.01f, 0.018f * o + 0.004f, Color.FromArgb(96, 140, 160, 212));      // its far wall in shadow
+        float[] cx = [-1.45f, -1.05f, 1.15f, 1.50f, -0.35f, 0.55f, 1.85f, -1.85f], cy = [-0.35f, 0.55f, 0.48f, -0.30f, 0.95f, 0.85f, 0.10f, 0.05f];
+        float[] cr = [0.020f, 0.026f, 0.022f, 0.018f, 0.016f, 0.020f, 0.014f, 0.012f];
+        for (int i = 0; i < cx.Length; i++) Ell(g, cx[i] * rx * o, cy[i] * lip * o, cr[i], cr[i] * 0.5f, Color.FromArgb(i % 3 == 0 ? 238 : 226, 238, 252));
     }
 
-    // The mouth's outline is NOT an ellipse: a fixed table of radius factors makes it lumpy, the near (lower) side is flatter, the far (upper)
-    // edge is ragged. The same table is used by both pieces, so the front lip fits the back piece exactly.
-    static readonly float[] MouthJit = [1.00f, 0.94f, 1.06f, 0.92f, 1.04f, 0.97f, 1.08f, 0.95f, 1.00f, 0.96f, 1.03f, 0.90f, 1.00f, 1.05f, 0.93f, 1.02f, 0.97f, 1.04f];
-
-    static PointF[] MouthPts(float orx, float ory, float yc)
+    /// <summary>The front mound: low, white, lit on its crest, blue-shadowed on its near face, wide enough to hide the neck where the head has gone in.</summary>
+    public static void PaintDentFront(Graphics g, float rx, float lip, float o)
     {
-        int n = MouthJit.Length; var pts = new PointF[n];
-        for (int i = 0; i < n; i++)
-        {
-            float a = MathF.Tau * i / n, c = MathF.Cos(a), sn = MathF.Sin(a);
-            float j = MouthJit[i];
-            float flat = sn < 0f ? 0.80f : 1f;                                                   // the near side is flatter
-            float rag = sn > 0.3f ? 0.05f * ory * (i % 2 == 0 ? 1f : -1f) : 0f;                  // the far edge is ragged
-            pts[i] = P(orx * j * c, yc + ory * j * sn * flat + rag);
-        }
-        return pts;
+        o = MathF.Max(0.2f, o);
+        float h = lip * o;
+        Ell(g, 0f, -0.020f, rx * 1.05f, 0.040f + h * 0.5f, Color.FromArgb(214, 226, 248));                       // the body of the bank, down below the cut line
+        Ell(g, -0.01f, 0.004f, rx * 1.02f, h * 0.95f, Color.FromArgb(188, 204, 236));                            // its blue shadowed near face
+        Ell(g, 0.01f, 0.010f + h * 0.10f, rx * 0.98f, h * 0.80f, Color.FromArgb(226, 236, 252));                 // the snow's own tone
+        Ell(g, 0.03f * rx, 0.016f + h * 0.28f, rx * 0.78f, h * 0.50f, Color.FromArgb(241, 247, 255));           // a thin lit crest
+        for (int i = 0; i < 4; i++) Ell(g, (-0.8f + 0.55f * i) * rx, -0.030f - 0.006f * (i % 2), 0.018f, 0.008f, Color.FromArgb(232, 240, 254));   // a few crumbs on the near side
     }
 
-    static void SmoothFill(Graphics g, Brush b, PointF[] pts, float tension = 0.35f)
+    /// <summary>The dent's two pieces as two books of n pages (the press-in fraction (i+1)/n), anchored on the middle of the dent.</summary>
+    public static BookSpec[] DentBooks(string name, int n)
     {
-        using var path = new GraphicsPath(); path.AddClosedCurve(pts, tension); g.FillPath(b, path);
-    }
-
-    /// <summary>
-    /// The BACK piece of a burrow, painted so it reads as a place a hare lives, not a target: a faint blue shadow, a LOW lumpy mound of dug snow
-    /// heaped mostly on the far side and to the right (only a shade lighter than the snow round it, never a white ring), and an irregular
-    /// mouth shaded from near-black at the back to a blue-brown at the front where the near wall catches a little light.
-    /// </summary>
-    public static void PaintHoleBack(Graphics g, float rx, float ry, float lipTop, float open)
-    {
-        HoleDims(rx, ry, lipTop, open, out float orx, out float ory, out float yc);
-        float th = 0.20f * orx;
-        Ell(g, 0.05f * orx, yc * 0.55f, orx + th * 3.2f, ory + th * 1.4f, Color.FromArgb(52, 70, 100, 170));          // a soft shadow on the snow
-        // the mound: three overlapping lumps, biggest on the far side and to the right, small on the left
-        Ell(g, 0.20f * orx, yc + ory * 0.55f, orx + th * 1.7f, ory + th * 1.5f, Color.FromArgb(205, 216, 241));         // its shaded outer flank
-        Ell(g, -0.55f * orx, yc + ory * 0.20f, orx * 0.55f + th * 0.8f, ory + th * 0.6f, Color.FromArgb(206, 217, 242));
-        Ell(g, 0.28f * orx, yc + ory * 0.78f, orx + th * 1.2f, ory + th * 1.0f, Color.FromArgb(226, 235, 251));         // the lit top, a shade lighter than the snow
-        Ell(g, 0.70f * orx, yc + ory * 0.30f, orx * 0.45f + th * 0.9f, ory + th * 0.9f, Color.FromArgb(224, 234, 250));
-        PointF[] mouth = MouthPts(orx, ory, yc);
-        using (var grad = new System.Drawing.Drawing2D.LinearGradientBrush(P(0f, yc + ory * 1.1f), P(0f, yc - ory * 1.0f), Color.FromArgb(4, 5, 14), Color.FromArgb(70, 58, 84)))
-            SmoothFill(g, grad, mouth);
-        Ell(g, -0.1f * orx, yc + ory * 0.45f, orx * 0.85f, ory * 0.40f, Color.FromArgb(120, 0, 0, 6));                    // darkest at the top-back
-    }
-
-    /// <summary>
-    /// The FRONT LIP: LOW, uneven, only a little lighter than the snow, blue-shadowed on its near face, cut from an outer lump by ERASING the
-    /// mouth's own outline (so it fits the back piece), kept only below the mouth's middle line; then a fan of thrown crumbs on the near
-    /// side and three pairs of prints leading in from the left.
-    /// </summary>
-    public static void PaintHoleFront(Graphics g, float rx, float ry, float lipTop, float open)
-    {
-        HoleDims(rx, ry, lipTop, open, out float orx, out float ory, out float yc);
-        float th = 0.20f * orx;
-        var st = g.Save();
-        g.SetClip(new RectangleF(-4f, -4f, 8f, 4f + yc));
-        Ell(g, -0.06f * orx, yc - ory * 0.20f - th * 0.3f, orx + th * 1.5f, ory + th * 1.5f, Color.FromArgb(176, 192, 228));     // the blue-shadowed near face
-        Ell(g, 0f, yc - ory * 0.14f - th * 0.1f, orx + th * 1.1f, ory + th * 1.15f, Color.FromArgb(218, 230, 250));              // the body of the lip, about the snow's own tone
-        Ell(g, 0.08f * orx, yc - ory * 0.04f, orx + th * 0.7f, ory + th * 0.55f, Color.FromArgb(232, 240, 254));                 // a thin lit crest, a shade lighter
-        var cm = g.CompositingMode;
-        g.CompositingMode = CompositingMode.SourceCopy;
-        using (var clear = new SolidBrush(Color.FromArgb(0, 0, 0, 0))) SmoothFill(g, clear, MouthPts(orx, ory, yc));
-        g.CompositingMode = cm;
-        g.Restore(st);
-        float k = orx / 0.34f;
-        // thrown crumbs fanning out on the near side (each a lump of snow)
-        float[] cx = [-1.25f, -0.95f, -0.62f, -0.30f, 0.15f, 0.48f, 0.80f, 1.10f, 1.30f, -0.10f], cy = [-0.35f, -0.85f, -1.15f, -0.70f, -1.20f, -0.80f, -1.05f, -0.55f, -0.20f, -1.25f];
-        float[] cr = [0.030f, 0.040f, 0.026f, 0.034f, 0.028f, 0.036f, 0.024f, 0.032f, 0.026f, 0.020f];
-        for (int i = 0; i < cx.Length; i++) Ell(g, cx[i] * orx, cy[i] * ory, cr[i] * k, cr[i] * 0.45f * k, Color.FromArgb(i % 3 == 0 ? 236 : 226, 238, 252));
-        // prints leading in from the left on the near side: a fore pair, a hind pair, a fore pair, fading
-        for (int i = 0; i < 3; i++)
-        {
-            float px = (-2.05f + 0.50f * i) * orx, py = (-0.95f + 0.12f * i) * ory;
-            int a = 130 - i * 25;
-            Ell(g, px, py, 0.036f * k, 0.017f * k, Color.FromArgb(a, 142, 160, 204));
-            Ell(g, px + 0.07f * k, py - 0.012f * k, 0.026f * k, 0.013f * k, Color.FromArgb(a, 142, 160, 204));
-        }
-    }
-
-    /// <summary>A hole's two pieces as two books of "n" pages each (the open fraction (i+1)/n), anchored at the hole's middle.</summary>
-    public static BookSpec[] HoleBooks(string name, int n, float rx, float ry, float lipTop)
-    {
-        float W = rx * 2.6f;
         BookSpec Make(string nm, bool front) => new()
         {
-            Name = nm, N = n, HalfW = W, Above = lipTop + ry * 2f + rx * 0.9f,
-            Paint = (g, i) => { float o = (i + 1) / (float)n; if (front) PaintHoleFront(g, rx, ry, lipTop, o); else PaintHoleBack(g, rx, ry, lipTop, o); },
+            Name = nm, N = n, HalfW = DentRx * 2.3f, Above = DentLip + 0.12f,
+            Paint = (g, i) => { float o = (i + 1) / (float)n; if (front) PaintDentFront(g, DentRx, DentLip, o); else PaintDentBack(g, DentRx, DentLip, o); },
         };
         return [Make(name + "Back", false), Make(name + "Front", true)];
     }
+
 
     public const float HareHopD = 1.25f, HareFleeD = 2.3f;       // units a cycle of the lollop and of the bolt
 
