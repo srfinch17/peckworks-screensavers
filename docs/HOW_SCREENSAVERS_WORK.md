@@ -67,7 +67,7 @@ src/
     NativeMethods.cs               the few raw Windows functions .NET doesn't wrap
     IScreensaverScene.cs           the contract a screensaver fills in
     ScreensaverSettings.cs         a list of knobs, saved in the registry
-    SettingsDialog.cs              the Settings dialog: live preview + one slider per knob
+    SettingsDialog.cs              the Settings dialog: live preview + one slider per knob (the sliders scroll when there are more than the screen has room for)
     Sprite.cs                      a small picture painted once and stamped each frame (bats, Santa, glows); DrawSmooth stamps at a fraction of a pixel, DrawBlend shows a picture part way between two flip-book pages
     FrameSections.cs               a lap timer for a frame: which part costs what (off unless PECKWORKS_SECTIONS is set)
     Happenings.cs                  small random events: the base class, and the director that deals them out

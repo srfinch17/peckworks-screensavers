@@ -66,16 +66,32 @@ public sealed class SettingsDialog : Form
         };
         Controls.Add(_preview);
 
-        // ---- One slider per setting ----
-        int y = 326;
+        // ---- One slider per setting, in a box that SCROLLS when there are too many to fit ----
+        // Think of a long shopping list in a short window: you do not make the window taller than the
+        // wall, you let the list slide up and down inside it. The sliders live in their own box (a
+        // Panel). If they all fit on the screen the box is exactly as tall as the list and the dialog
+        // looks as it always did. If they do not (the pond has 24 sliders; at 250% scaling the screen
+        // has room for about nine: the last sliders AND the OK button were below the bottom of the
+        // screen, out of reach), the box stops at the room there is and grows a scroll bar.
+        // WinForms does the scrolling itself: AutoScroll = true is the whole trick.
+        var knobs = new Panel { Location = new Point(0, 318), AutoScroll = true, BackColor = back };
+        int y = 8;
         foreach (IntSetting s in draft.All)
         {
-            AddSlider(s, y);
+            AddSlider(knobs, s, y);
             y += 44;
         }
+        // The room for the box, in the same 100%-scaling units as everything here: the screen's
+        // working height (the part not under the taskbar) divided back down by the scaling, less the
+        // preview above (318), the buttons below (56) and the title bar and a margin (48). Never
+        // fewer than three rows, however small the screen.
+        int screenHeight = (Screen.PrimaryScreen ?? Screen.AllScreens[0]).WorkingArea.Height;
+        int room = Math.Max(3 * 44 + 8, (int)(screenHeight * 96f / DeviceDpi) - 318 - 56 - 48);
+        knobs.Size = new Size(560, Math.Min(y, room));
+        Controls.Add(knobs);
 
         // ---- Buttons ----
-        int buttonY = y + 12;
+        int buttonY = knobs.Bottom + 12;
         var ok = MakeButton("OK", 290, buttonY);
         var cancel = MakeButton("Cancel", 380, buttonY);
         var defaults = MakeButton("Defaults", 470, buttonY);
@@ -102,7 +118,7 @@ public sealed class SettingsDialog : Form
         _preview.Start();
     }
 
-    private void AddSlider(IntSetting setting, int y)
+    private void AddSlider(Panel box, IntSetting setting, int y)
     {
         var name = new Label { Text = setting.Label, Location = new Point(12, y + 6), AutoSize = true };
         var value = new Label { Location = new Point(496, y + 6), AutoSize = true };
@@ -124,7 +140,7 @@ public sealed class SettingsDialog : Form
             _debounce.Stop();    // restart the "has it been still?" countdown
             _debounce.Start();
         };
-        Controls.AddRange([name, bar, value]);
+        box.Controls.AddRange([name, bar, value]);
         _sliders.Add((bar, setting));
     }
 
