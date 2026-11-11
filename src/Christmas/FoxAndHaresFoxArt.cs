@@ -76,7 +76,7 @@ internal static partial class FoxAndHaresArt
         float yaw = q.Yaw * MathF.PI / 180f, c = MathF.Cos(yaw), s = MathF.Sin(yaw);
         PointF Pr(PointF p, float lat = 0f) => P(p.X * c + lat * s, p.Y);
         Shadow(g, 0.04f, 0.58f * (0.55f + 0.45f * c), 0.085f, q.Shadow);
-        if (q.Clip) g.SetClip(new RectangleF(-4f, 0f, 8f, 6f));
+        if (q.Clip) g.SetClip(new RectangleF(-4f, HoleCut, 8f, 6f));      // cut just under the crater's front lip, which is a separate stamp drawn AFTER this page
         g.TranslateTransform(0f, -q.Sink);
 
         float tilt = q.Pitch * c;
@@ -251,11 +251,7 @@ internal static partial class FoxAndHaresArt
 
         g.TranslateTransform(0f, q.Sink);
         if (q.Clip) g.ResetClip();
-        if (q.Lip > 0.01f)
-        {
-            Ell(g, 0.16f, -0.012f, 0.30f * q.Lip + 0.04f, 0.050f * q.Lip + 0.004f, Color.FromArgb(205, 218, 244));
-            Ell(g, 0.16f, 0.012f, 0.28f * q.Lip + 0.04f, 0.044f * q.Lip + 0.004f, Color.FromArgb(238, 245, 255));
-        }
+        // (the old pale lip ellipses are gone: the crater's two pieces, FoxAndHaresArt.HoleBooks, are stamped before and after this page)
     }
 
     /// <summary>The fox's nose in pose units (where the breath comes from, where the snow is).</summary>
@@ -644,6 +640,7 @@ internal static partial class FoxAndHaresArt
             Make("wake1", 33, 0.80f, 0.75f, i => FWakePose(i, 1f / 3f)),                                   // 30
             Make("wake2", 33, 0.80f, 0.75f, i => FWakePose(i, 2f / 3f)),                                   // 31
             Make("wake3", 33, 0.80f, 0.75f, i => FWakePose(i, 1f)),                                        // 32
+            HoleBooks("cra", 8, CraRx, CraRy, CraLip)[0], HoleBooks("cra", 8, CraRx, CraRy, CraLip)[1],   // 33 the mousing crater's back, 34 its front lip
         ];
     }
 
