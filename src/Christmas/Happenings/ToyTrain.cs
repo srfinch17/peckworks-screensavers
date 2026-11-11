@@ -70,7 +70,7 @@ internal sealed class ToyTrain : Happening
         }
         _lamp = Sprite.Glow(Math.Max(3, (int)(s.U * 0.008f)), Lit);
         for (int i = 0; i < PuffSizes; i++)
-            _puff[i] = Sprite.Glow(Math.Max(2, (int)(s.U * (0.0045f + 0.0042f * i))), Smoke);
+            _puff[i] = Sprite.Glow(Math.Max(2, (int)(s.U * (0.0060f + 0.0058f * i))), Smoke);
     }
 
     /// <summary>
@@ -159,7 +159,7 @@ internal sealed class ToyTrain : Happening
             float py = top - _s.U * 0.004f - rise * (1f - (1f - a) * (1f - a));   // shoots up hot, then slows: fast at first, hanging at the end
             int size = Math.Min(PuffSizes - 1, (int)(a * 1.6f * PuffSizes));    // swells quickly, then drifts at full size
             // Thick as it leaves the funnel, thinning as it spreads; faded in over the first tenth of a second so it never pops.
-            float opacity = 0.80f * MathF.Min(1f, age * 10f) * (1f - a) * (1f - 0.5f * a);
+            float opacity = MathF.Min(1f, age * 10f) * MathF.Pow(1f - a, 0.8f);     // the first film had it at 0.8 falling off twice as fast: a few faint specks; it has to read as a plume from across the room
             _puff[size].DrawCentered(fb, px, py, opacity, _s.OpenValley);
         }
 
