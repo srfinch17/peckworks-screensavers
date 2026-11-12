@@ -167,8 +167,8 @@ a fed koi was as hungry as before and went straight back for the next.
 
   Christmas/                       falling snow, twinkling lights, a village, and a snowfield of residents
     Program.cs                     Main(), plus the definition
-    ChristmasScene.cs              backdrop + the live lights (stars, village and cabin windows, lamp, glitter, bulbs) + smoke + Santa + the residents through one depth queue + the stories + the calm noticeboard + the one start for every resident + the shared engine dropping snow
-    ChristmasPainter.cs            paints the low-horizon night, the village in the valley, the log cabin, the pines and their lights, the snowfield with its frozen pond and ice hole and its cover (shrubs, boulders, a stump, brush piles), the toy train's track with its sleepers and telegraph poles, the lamp post, the fallen log, the bird table, the tiny fir and the holly; hands back the facts, the depth picture (NearDepth), the two bands of the field and the "who stands where" list
+    ChristmasScene.cs              backdrop + the wind sheets (the pines bend and the corner branches bob, drawn live every frame) + the live lights (stars, village and cabin windows, lamp, glitter, bulbs, riding their trees) + smoke + Santa + the residents through one depth queue + the stories + the calm noticeboard + the one start for every resident + the shared engine dropping snow
+    ChristmasPainter.cs            paints the low-horizon night, the village in the valley, the log cabin, the pines and their lights and the bare corner branches (each on its own clear sheet, not in the backdrop, so the scene can bend them in the wind; plus PinesAtRest, the backdrop with the pines standing still), the snowfield with its frozen pond and ice hole and its cover (shrubs, boulders, a stump, brush piles), the toy train's track with its sleepers and telegraph poles, the lamp post, the fallen log, the bird table, the tiny fir and the holly; hands back the facts, the depth picture (NearDepth), the two bands of the field and the "who stands where" list
     ChristmasSettings.cs           declares its knobs (including Draw width)
     Resident.cs                    the base class of everything that lives in the scene (its own dice, painting on a helper thread, Lull, Stamp) and the shared mind log
     ReindeerHerd.cs, ReindeerArt.cs      the grazing herd: minds and flip-books
@@ -461,15 +461,43 @@ wing positions in three sizes; Santa's reindeer share a set of twenty-page flyin
 
 A soft **glow** is also a sprite: a round patch of color, strong in the middle and fading to
 nothing at the edge. Stamping it at changing strength is what makes a jack-o'-lantern flicker, a
-Christmas bulb twinkle, and Rudolph's nose shine. The bulbs themselves are painted into the
-backdrop as dull dots (strung along each pine by asking the pine how wide it is at each height);
-the animation only adds the light.
+Christmas bulb twinkle, and Rudolph's nose shine. The bulbs themselves are painted as dull dots
+(strung along each pine by asking the pine how wide it is at each height): the cabin's and the
+village's into the backdrop, the pines' and the corner branches' onto those trees' own clear
+sheets (see "When a painted thing has to move" below), so a bulb travels with its tree and its
+glow is stamped wherever the bulb is this frame. The animation only adds the light.
 
 *Santa flies behind the overhanging branches* with one trick. Right after painting the sky, the Christmas painter
 keeps a copy of the picture. When the whole backdrop is finished, it compares the two: any pixel
 that did not change is still sky. That gives a stencil with one yes/no per pixel, and the sleigh
-is only ever stamped on the "yes" pixels. Nothing has to know where the branches are. (He flies
-well above the pines, so in practice it is only the corner branches that cover him.)
+is only ever stamped on the "yes" pixels. Nothing has to know where the mountains or the cabin are.
+The corner branches and the pines are no longer in the backdrop at all (they are clear sheets drawn
+live, so they can move in the wind): the stencil also says "no" wherever a branch hangs when the air
+is still, and both sheets are drawn AFTER the sleigh, so a branch or a pine that has swung a few
+pixels still covers him.
+
+*When a painted thing has to move: a clear sheet.* A thing painted into the backdrop can never move, because the
+backdrop is one flat picture. Christmas wanted its pines to bend and its corner branches to bob in the wind, so
+those two things are painted on their OWN clear sheets (`ChristmasScenery.PineLayer` and `BranchLayer`): think of
+trees painted on panes of glass held in front of the picture. Every frame `ChristmasScene.DrawPines` and
+`DrawBranches` lay the sheets back on the frame, each slightly moved.
+
+The move is a deck of cards. Slide every card of a deck sideways by a different amount, a little more for the
+cards near the top, and the whole deck leans. The pine sheet is slid ROW by row, more the higher the row
+(`ChristmasScenery.PineDx`), so the foot stays planted and the tip sways. The branch sheet is lifted or dropped
+COLUMN by column (`BranchDy`), more the farther out along the bough. The push comes from the snow's own breeze
+(`PetalField.Breeze`), so there is one wind in the picture, not two that disagree.
+
+Why half pixels matter: a row slid by 3.4 pixels is drawn as a mix of the picture slid by 3 and slid by 4 (60 and
+40 percent). Without that mix every row jumps a whole pixel at a time and the tree crawls like a staircase.
+
+The trap: once a thing leaves the backdrop, anything that used to cut its picture out of the backdrop gets
+sky instead. That really happened: when a bird or a squirrel went into a pine, the bough dips and the code copies a
+patch of the backdrop to redraw it, and the patch (now with no pine in it) flashed as an oval of sky. So the painter
+also keeps `ChristmasScenery.PinesAtRest`, a copy of the backdrop WITH the pines standing still, and anything that
+redraws a piece of a pine cuts from that. `ChristmasScenery.Pixels` has no pines in it any more. The bulbs' glows
+(`Light.On`) and a bird perched on a corner branch (`Perch.RestY`) ask the same two functions where their tree is
+right now, so nothing floats beside a branch that moved.
 
 **Happenings** (in every painted saver) are small events that come and go: a shooting star, a
 ghost rising from a grave, a spider spinning a web, an owl blinking on a branch. Think of a cuckoo clock: each happening is one bird behind

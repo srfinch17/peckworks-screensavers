@@ -48,6 +48,7 @@ internal sealed class FeederBirds : Resident
     private sealed class Perch
     {
         public PointF At;
+        public float RestY;      // a perch on a corner branch: its height when the bough is still (At.Y is that plus the bough's bob right now)
         public Spot Kind;
         public float FootY;      // the prop's foot: how near the prop is (a bird on it is stamped one step nearer)
         public int Level;
@@ -229,7 +230,7 @@ internal sealed class FeederBirds : Resident
         float nudge = 0f;
         float ny = snap ? SnapTop(x, y, up, down, out nudge) : y;
         if (_log != null) _log.WriteLine($"0.000 FeederBirds perch {kind} x={x:0.0} nominalY={y:0.0} y={ny:0.0} nudge={(snap ? nudge.ToString("0.0") : "-")}");
-        _perches.Add(new Perch { At = new PointF(x, ny), Kind = kind, FootY = footY, Level = kind == Spot.Branch ? 2 : LevelOf(S.FieldScale(footY)) });
+        _perches.Add(new Perch { At = new PointF(x, ny), RestY = ny, Kind = kind, FootY = footY, Level = kind == Spot.Branch ? 2 : LevelOf(S.FieldScale(footY)) });
     }
 
     private void BuildPerches()
@@ -286,8 +287,8 @@ internal sealed class FeederBirds : Resident
     {
         if (x < 0 || y < 0 || x >= S.Width || y >= S.Height) return false;
         int i = y * S.Width + x;
-        if (S.OpenOfBranches[i]) return false;
-        uint c = S.Pixels[i];
+        uint c = S.BranchLayer[i];                    // the branches live on their own sheet now (they bob in the wind): the wood is looked for THERE, where it stands at rest
+        if ((c >> 24) < 200) return false;
         int d = Math.Abs((int)((c >> 16) & 0xFF) - 30) + Math.Abs((int)((c >> 8) & 0xFF) - 26) + Math.Abs((int)(c & 0xFF) - 40);
         return d < 60;
     }
@@ -320,6 +321,16 @@ internal sealed class FeederBirds : Resident
 
     public override void Update(float dt)
     {
+        // A PERCH ON A CORNER BRANCH RIDES THE BOUGH: the branches bob in the wind (ChristmasScenery.BranchDy), so the perch moves by what the
+        // bough moved since last frame, and a bird sitting on it is carried along (a bird still flying in simply aims at where the perch is now).
+        for (int pi = 0; pi < _perches.Count; pi++)
+        {
+            Perch p = _perches[pi];
+            if (p.Kind != Spot.Branch) continue;
+            float ny = p.RestY + S.BranchDy(p.At.X), moved = ny - p.At.Y;
+            p.At = new PointF(p.At.X, ny);
+            if (p.Owner >= 0 && _birds[p.Owner].PerchIx == pi && _birds[p.Owner].Mind.Doing != Doing.Fly) _birds[p.Owner].Y += moved;
+        }
         if (_birds.Length == 0) return;
         long u0 = _firstUpdate ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
         UpdateAll(dt);
@@ -1169,7 +1180,7 @@ internal sealed class FeederBirds : Resident
         for (int y = 0; y < ph + 2 * pad; y++)
         {
             int sy = Math.Clamp(y0 - pad + y, 0, S.Height - 1);
-            Array.Copy(S.Pixels, sy * S.Width + x0, src, y * pw, pw);
+            Array.Copy(S.PinesAtRest, sy * S.Width + x0, src, y * pw, pw);     // (PinesAtRest, not Pixels: the backdrop has no pines in it, they are a live sheet that bends; cut from Pixels this patch was an oval of sky flashing over the tree)
         }
         for (int i = 0; i < _boughs.Length; i++)
             if (!_boughs[i].On) { _boughs[i] = new Bough { On = true, X = at.X, Y = at.Y, T = delay, Amp = amp * _u, Src = src, Hx = Hump(pw), Px = x0, Py = y0, Pw = pw, Ph = ph, Pad = pad, Pine = pineIx }; return; }

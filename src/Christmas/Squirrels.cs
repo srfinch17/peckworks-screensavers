@@ -1171,7 +1171,7 @@ internal sealed class Squirrels : Resident
         for (int y = 0; y < ph + 2 * pad; y++)
         {
             int sy = Math.Clamp(y0 - pad + y, 0, S.Height - 1);
-            Array.Copy(S.Pixels, sy * S.Width + x0, src, y * pw, pw);
+            Array.Copy(S.PinesAtRest, sy * S.Width + x0, src, y * pw, pw);     // (PinesAtRest, not Pixels: the backdrop has no pines in it, they are a live sheet that bends; cut from Pixels this patch was an oval of sky flashing over the tree)
         }
         var hx = new float[pw]; for (int i = 0; i < pw; i++) hx[i] = MathF.Sin(MathF.PI * (i + 0.5f) / pw);
         for (int i = 0; i < _boughs.Length; i++)

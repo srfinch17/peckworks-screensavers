@@ -65,6 +65,7 @@ internal sealed class ChristmasScene : IScreensaverScene
         public float X, Y;
         public int Color;
         public float Phase, Speed;
+        public byte On;          // what the bulb hangs on: 0 = a thing that stands still (the cabin), 1 = a pine, 2 = a corner branch. A bulb moves with what it hangs on.
     }
 
     /// <summary>
@@ -113,6 +114,217 @@ internal sealed class ChristmasScene : IScreensaverScene
             if (sw[i] <= 0f) continue;
             _slR[i] = (byte)(sr[i] / sw[i]); _slG[i] = (byte)(sg[i] / sw[i]); _slB[i] = (byte)(sb[i] / sw[i]);
             _slK[i] *= 0.9f;
+        }
+    }
+
+    // ================================================================ THE WIND IN THE TREES
+    //
+    // ONE WIND. The snow already has a breeze that rises and dies (PetalField.Breeze): the flakes stream sideways in a gust and fall
+    // straight in a lull. The pines and the corner branches read that SAME number, so when the snow streams the trees bend, and when it
+    // falls straight they stand. Two winds that disagree would look like the snow is on a different pane of glass from the trees.
+    //
+    // HOW A PAINTED TREE MOVES. The pines and the branches are each on their own clear sheet (ChristmasPainter made them). Every frame:
+    //   - THE PINES: each ROW of the sheet is slid sideways, a little more the higher the row (ChristmasScenery.PineDx). Slide the rows of
+    //     a deck of cards and the deck leans: the same thing.
+    //   - THE BRANCHES: each COLUMN of the sheet is lifted or dropped (ChristmasScenery.BranchDy), more the farther out along the bough,
+    //     with the lift travelling outward as a wave: a bough bobbing.
+    // HALF PIXELS MATTER. A row slid by 3.4 pixels is drawn as a mix of the picture slid by 3 and by 4 (60% and 40%). Without that mix
+    // each row would jump a whole pixel at a time and the tree would crawl like a staircase; with it the bend is smooth however slow.
+
+    private int _pineY0, _pineY1;                          // the rows of the screen the pines' sheet has anything on
+    private int[] _pineXa = [], _pineXb = [];              // for each of those rows, and each grove (left = even, right = odd): the first and last column with pine on it
+    private int _brY1, _brPad;                             // the last row the branches reach at rest, and how many rows of slack the bob needs
+    private int[] _pineSeg = [], _pineSegs = [];           // for each row and grove, the SOLID stretches of pine (every pixel fully opaque, nothing nearer in front): row y, grove g's stretches are _pineSegs[_pineSeg[y * 2 + g] .. _pineSeg[y * 2 + g + 1]), in pairs (first column, last column). A solid stretch needs no see-through sums, so it is drawn by the quick loop; only the ragged edges take the slow one.
+    private int[] _pineRag = [], _pineRags = [];           // ... and the RAGGED stretches (edges, twig tips: anything on the sheet that is not inside a solid stretch), stored the same way. The empty air between two pines is in neither list, so it is never looked at.
+    private uint[] _brT = [];                              // the branches' sheet turned on its side (column after column, each _brH rows): a column is then one run of memory, read front to back
+    private int _brH;
+    private int[] _brCol = [], _brRuns = [];               // for each COLUMN, the stretches of rows with branch on them at rest: column x's stretches are _brRuns[_brCol[x] .. _brCol[x + 1]), in pairs (first row, last row). A column moves up and down as one piece, so the branches are drawn a column at a time and only where there is wood or bulb: nine tenths of their box is empty air and is never looked at.
+    private readonly string? _windTest = Environment.GetEnvironmentVariable("PECKWORKS_WIND");   // test aid: nopines or nobranches leaves that sheet undrawn (to time the other), still holds the air still (to compare a picture with the old backdrop)
+    private long _twP, _twB, _twN;                           // test aid (PECKWORKS_WIND=count): time spent drawing each sheet
+    private double _swayPhase, _bobPhase;                  // the pines' small rocking and the boughs' bob: each its own wrapped angle (a screensaver runs for days)
+
+    private void BuildWindSheets(int w, int h)
+    {
+        uint[] P = _scenery.PineLayer, B = _scenery.BranchLayer;
+        _pineY0 = h; _pineY1 = -1;
+        _pineXa = new int[h * 2]; _pineXb = new int[h * 2];
+        for (int y = 0; y < h; y++)
+        {
+            int la = w, lb = -1, ra = w, rb = -1, half = w / 2;
+            for (int x = 0; x < w; x++)
+            {
+                if ((P[y * w + x] >> 24) == 0) continue;
+                if (x < half) { if (x < la) la = x; lb = x; } else { if (x < ra) ra = x; rb = x; }
+            }
+            _pineXa[y * 2] = la; _pineXb[y * 2] = lb; _pineXa[y * 2 + 1] = ra; _pineXb[y * 2 + 1] = rb;
+            if (lb >= 0 || rb >= 0) { if (y < _pineY0) _pineY0 = y; _pineY1 = y; }
+        }
+        // The solid stretches of each row (see _pineSeg).
+        int reach = (int)MathF.Ceiling(LeanMax * 1.2f * _u) + 3;
+        bool[] open = _scenery.PineOpen;
+        var segs = new List<int>(); _pineSeg = new int[h * 2 + 1];
+        var rags = new List<int>(); _pineRag = new int[h * 2 + 1];
+        var quick = new bool[w + 2];
+        for (int y = 0; y < h; y++)
+            for (int grove = 0; grove < 2; grove++)
+            {
+                _pineSeg[y * 2 + grove] = segs.Count; _pineRag[y * 2 + grove] = rags.Count;
+                int a = _pineXa[y * 2 + grove], b = _pineXb[y * 2 + grove];
+                if (b < 0) continue;
+                Array.Clear(quick, a, b + 2 - a);
+                int start = -1;
+                for (int x = a; x <= b + 1; x++)
+                {
+                    bool solid = x <= b && (P[y * w + x] >> 24) == 255;
+                    if (solid && start < 0) start = x;
+                    else if (!solid && start >= 0)
+                    {
+                        // a stretch with a nearer prop anywhere within the lean's reach of it is left to the careful loop (the lamp post stands between two pines)
+                        bool clear = x - start >= 4;
+                        for (int q = Math.Max(0, start - reach); q <= Math.Min(w - 1, x - 1 + reach) && clear; q++) clear = open[y * w + q];
+                        if (clear) { segs.Add(start); segs.Add(x - 1); for (int q = start + 1; q <= x - 1; q++) quick[q] = true; }      // (the quick loop draws a stretch from its SECOND pixel: the first still mixes with whatever is on its left)
+                        start = -1;
+                    }
+                }
+                // ragged: every column that has pine on it or just to its left (that neighbour's left-over part lands here) and is not the quick loop's
+                start = -1;
+                for (int x = Math.Max(1, a); x <= Math.Min(w - 1, b + 1) + 1; x++)
+                {
+                    bool rag = x <= Math.Min(w - 1, b + 1) && !quick[x] && ((P[y * w + x] | P[y * w + x - 1]) >> 24) != 0;
+                    if (rag && start < 0) start = x;
+                    else if (!rag && start >= 0) { rags.Add(start); rags.Add(x - 1); start = -1; }
+                }
+            }
+        _pineRag[h * 2] = rags.Count; _pineRags = [.. rags];
+        _pineSeg[h * 2] = segs.Count; _pineSegs = [.. segs];
+        if (Environment.GetEnvironmentVariable("PECKWORKS_WIND") == "count") { long solid = 0, all = 0; for (int q = 0; q < segs.Count; q += 2) solid += segs[q + 1] - segs[q] + 1; foreach (uint c in P) if ((c >> 24) != 0) all++; Console.Error.WriteLine($"pines: {all} pixels, {solid} in solid stretches"); System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pinecount.txt"), $"pines: {all} pixels, {solid} in {segs.Count / 2} solid stretches"); }
+        _brPad = (int)MathF.Ceiling(BobMax * _u) + 2;
+        _brY1 = -1;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) if ((B[y * w + x] >> 24) != 0) { _brY1 = y; break; }
+        var runs = new List<int>(); _brCol = new int[w + 1];
+        for (int x = 0; x < w; x++)
+        {
+            _brCol[x] = runs.Count;
+            int start = -1, last = -9;
+            for (int y = 0; y <= _brY1 + 1; y++)
+            {
+                bool on = y <= _brY1 && y < h && (B[y * w + x] >> 24) != 0;
+                if (on) { if (start < 0) start = y; last = y; }
+                else if (start >= 0 && y - last > 3) { runs.Add(start); runs.Add(last); start = -1; }       // (a gap of up to three rows is cheaper to draw through than to end a stretch for)
+            }
+            if (start >= 0) { runs.Add(start); runs.Add(last); }
+        }
+        _brCol[w] = runs.Count; _brRuns = [.. runs];
+        _brH = Math.Min(h, _brY1 + 2);
+        _brT = new uint[w * Math.Max(1, _brH)];
+        for (int x = 0; x < w; x++) for (int y = 0; y < _brH; y++) _brT[x * _brH + y] = B[y * w + x];
+    }
+
+    private const float LeanMax = 0.011f;      // the tallest pine's tip in the strongest gust: this much of U to one side (about 12 pixels at 1080p)
+    private const float BobMax = 0.0085f;      // the corner twigs' tips in the strongest gust: this much of U up and down (about 9 pixels at 1080p)
+
+    /// <summary>Once a frame: read the snow's breeze and turn it into the four numbers the scenery hands out (how far the pines lean, how big the boughs' bob is).</summary>
+    private void UpdateWind(float dt)
+    {
+        float breeze = _windTest == "still" ? 0f : Math.Clamp(_snow.Breeze, -0.3f, 1.35f) / 1.35f;      // -0.2 (a breath the other way) to 1 (the strongest gust)
+        float strength = MathF.Abs(breeze);
+        _swayPhase = (_swayPhase + dt * 2.1) % Math.Tau;                    // a tree held bent by the wind still rocks: about one rock every three seconds
+        _bobPhase = (_bobPhase + dt * (2.2 + 1.6 * strength)) % (Math.Tau * 10);   // (times ten: BranchDy also uses 1.7 times this angle, and 17 whole turns wrap cleanly)
+        float rockL = 0.16f * strength * (float)Math.Sin(_swayPhase), rockR = 0.16f * strength * (float)Math.Sin(_swayPhase - 1.1);   // the right grove a beat behind the left: the gust reaches it later
+        _scenery.PineLeanL = LeanMax * _u * (breeze + rockL);
+        _scenery.PineLeanR = LeanMax * _u * (breeze + rockR);
+        _scenery.BranchAmp = BobMax * _u * (0.15f + 0.85f * strength);       // never quite still: a bough always stirs a little
+        _scenery.BranchPhase = (float)_bobPhase;
+    }
+
+    /// <summary>A mix of two pixels of a clear sheet, f out of 256 of b: all four parts (see-through-ness, red, green, blue) in two multiplies.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private static uint Mix(uint a, uint b, int f)
+    {
+        uint inv = (uint)(256 - f), ff = (uint)f;
+        uint rb = (((a & 0x00FF00FFu) * inv + (b & 0x00FF00FFu) * ff) >> 8) & 0x00FF00FFu;
+        uint ag = (((a >> 8) & 0x00FF00FFu) * inv + ((b >> 8) & 0x00FF00FFu) * ff) & 0xFF00FF00u;
+        return rb | ag;
+    }
+
+    /// <summary>Lays one pixel of a clear sheet (c, its colour already scaled by its solidness) over a pixel of the frame.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private static uint Over(uint c, uint bg)
+    {
+        uint ia = 256 - (c >> 24);
+        uint rb = ((bg & 0x00FF00FFu) * ia >> 8) & 0x00FF00FFu;
+        uint g = ((bg & 0x0000FF00u) * ia >> 8) & 0x0000FF00u;
+        return (c & 0x00FFFFFFu) + (rb | g);
+    }
+
+    private void DrawPines(FrameBuffer fb)
+    {
+        int w = _w; uint[] P = _scenery.PineLayer; bool[] open = _scenery.PineOpen; uint[] px = fb.Pixels;
+        for (int y = _pineY0; y <= _pineY1; y++)
+        {
+            int row = y * w;
+            for (int grove = 0; grove < 2; grove++)
+            {
+                if (_pineXb[y * 2 + grove] < 0) continue;
+                float dx = _scenery.PineDx(grove == 0 ? 0 : w - 1, y);
+                int ix = (int)MathF.Floor(dx), f = (int)((dx - ix) * 256f);
+                // The frame's pixel x shows the sheet's pixel s = x - ix, mixed with the one to its left by the left-over part of a pixel.
+                int sMin = Math.Max(1, 1 - ix), sMax = Math.Min(w - 1, w - 1 - ix);     // the sheet columns whose pixel, its left neighbour and its place in the frame all exist
+                // QUICK: inside a solid stretch both pixels are fully opaque, so the mix is opaque too and simply replaces the frame's pixel.
+                for (int r = _pineSeg[y * 2 + grove], rEnd = _pineSeg[y * 2 + grove + 1]; r < rEnd; r += 2)
+                {
+                    int qa = Math.Max(_pineSegs[r] + 1, sMin), qb = Math.Min(_pineSegs[r + 1], sMax);
+                    if (qa > qb) continue;
+                    // (Spans: the two stretches are checked ONCE to lie inside their arrays, then walked with no check per pixel.)
+                    ReadOnlySpan<uint> src = P.AsSpan(row + qa - 1, qb - qa + 2);
+                    Span<uint> dst = px.AsSpan(row + qa + ix, qb - qa + 1);
+                    uint p0 = src[0];
+                    if (f == 0) src[1..].CopyTo(dst);        // slid by a whole number of pixels: a straight copy
+                    else for (int k = 0; k < dst.Length; k++) { uint p1 = src[k + 1]; dst[k] = p0 == p1 ? p1 : Mix(p1, p0, f); p0 = p1; }
+                }
+                // CAREFUL: the ragged edges, where a pixel is partly see-through and is laid over what is behind it.
+                for (int r = _pineRag[y * 2 + grove], rEnd = _pineRag[y * 2 + grove + 1]; r < rEnd; r += 2)
+                {
+                    int qb = Math.Min(_pineRags[r + 1], sMax);
+                    for (int sx = Math.Max(_pineRags[r], sMin); sx <= qb; sx++)
+                    {
+                        uint p1 = P[row + sx], p0 = P[row + sx - 1];
+                        uint c = p0 == p1 ? p1 : Mix(p1, p0, f);
+                        uint al = c >> 24;
+                        if (al == 0 || !open[row + sx + ix]) continue;
+                        px[row + sx + ix] = al == 255 ? c : Over(c, px[row + sx + ix]);
+                    }
+                }
+            }
+        }
+    }
+
+    private void DrawBranches(FrameBuffer fb)
+    {
+        int w = _w, h = _h, bh = _brH; uint[] T = _brT; uint[] px = fb.Pixels;
+        for (int x = 0; x < w; x++)
+        {
+            int r = _brCol[x], rEnd = _brCol[x + 1];
+            if (r == rEnd) continue;
+            float dy = _scenery.BranchDy(x); int iy = (int)MathF.Floor(dy), f = (int)((dy - iy) * 256f);
+            int col = x * bh;
+            for (; r < rEnd; r += 2)
+            {
+                // The frame's pixel y shows the sheet's pixel sy = y - iy, mixed with the one above it by the left-over part of a pixel.
+                // One row past the stretch's end too: that is where the last pixel's left-over part lands.
+                int sA = Math.Max(_brRuns[r], Math.Max(1, 1 - iy)), sB = Math.Min(_brRuns[r + 1] + 1, Math.Min(bh - 1, h - 1 - iy));
+                for (int sy = sA; sy <= sB; sy++)
+                {
+                    uint p1 = T[col + sy], p0 = T[col + sy - 1];
+                    if ((p0 | p1) >> 24 == 0) continue;
+                    uint c = p0 == p1 ? p1 : Mix(p1, p0, f);
+                    uint al = c >> 24;
+                    if (al == 0) continue;
+                    int at = (sy + iy) * w + x;
+                    px[at] = al == 255 ? c : Over(c, px[at]);
+                }
+            }
         }
     }
 
@@ -199,6 +411,8 @@ internal sealed class ChristmasScene : IScreensaverScene
             Phase = (float)(_rng.NextDouble() * Math.PI * 2),
             Speed = 1.0f + 2.6f * (float)_rng.NextDouble(),
         }).ToArray();
+        for (int li = _scenery.CabinBulbs; li < _lights.Length; li++) _lights[li].On = (byte)(li >= _scenery.BranchBulbFirst ? 2 : 1);   // (the star, listed right after the pines' bulbs, rides its pine too)
+        BuildWindSheets(width, height);
         BuildSnowLight(width, height);
         _snow.LightAt = SnowLight;
 
@@ -297,6 +511,7 @@ internal sealed class ChristmasScene : IScreensaverScene
         float dt = (float)elapsedSeconds;
         _time += dt;
         _snow.Update(dt);
+        UpdateWind(dt);
         _smoke.Update(dt);
         _santa.Update(dt);
         _board.Tick(dt);
@@ -425,6 +640,13 @@ internal sealed class ChristmasScene : IScreensaverScene
         // 3. Santa, behind everything that is not sky (in practice, the corner branches).
         _santa.Draw(fb);
 
+        // 3b. The pines, bent by the wind, then the corner branches, bobbing (see BuildWindSheets). After Santa, so he flies behind both.
+        long tw0 = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (_windTest != "nopines") DrawPines(fb);
+        long tw1 = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (_windTest != "nobranches") DrawBranches(fb);
+        if (_windTest == "count") { _twP += tw1 - tw0; _twB += System.Diagnostics.Stopwatch.GetTimestamp() - tw1; if (++_twN % 300 == 0) System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "windcost.txt"), $"pines {_twP * 1000.0 / System.Diagnostics.Stopwatch.Frequency / _twN:F3} ms, branches {_twB * 1000.0 / System.Diagnostics.Stopwatch.Frequency / _twN:F3} ms a frame over {_twN} frames"); }
+
         // 4. The lights. sin() swings between -1 and 1; the arithmetic turns
         //    that into "between 35% and 100% bright", so a bulb dims but
         //    never goes fully out.
@@ -432,7 +654,9 @@ internal sealed class ChristmasScene : IScreensaverScene
         {
             ref readonly Light l = ref _lights[li];
             float bright = 0.35f + 0.65f * (0.5f + 0.5f * (float)Math.Sin(_time * l.Speed + l.Phase));
-            (li >= _branchFirst ? _branchGlows : li >= _pineFirst && li < _pineEnd ? _pineGlows : _bulbGlows)[l.Color].DrawCentered(fb, l.X, l.Y, bright);
+            float lx = l.X, ly = l.Y;
+            if (l.On == 1) lx += _scenery.PineDx(l.X, l.Y); else if (l.On == 2) ly += _scenery.BranchDy(l.X);       // the glow goes where its bulb went
+            (li >= _branchFirst ? _branchGlows : li >= _pineFirst && li < _pineEnd ? _pineGlows : _bulbGlows)[l.Color].DrawCentered(fb, lx, ly, bright);
         }
 
         // 4a. The snow's glitter and the lamp. A sparkle is sin() raised to a

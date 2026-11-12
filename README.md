@@ -565,6 +565,13 @@ Thanksgiving uses for its pumpkins.
   Sakura petal engine drawing soft white dots, and a flake that falls past a bulb takes that bulb's colour
   for a moment, then fades back to white as it drifts away (the scene keeps a small map of where each bulb's
   light reaches, and each flake looks itself up on it).
+- **The trees move in the wind.** The pines lean and the big corner branches bob, driven by the very same
+  breeze that blows the snow sideways: when the flakes stream across the screen the trees bend with them, and
+  when the snow falls straight they stand up again. The higher up a pine, the more it leans (like a fishing rod),
+  the right grove feels each gust a moment after the left, and the corner branches never quite stop stirring.
+  The bulbs' glows ride along with their bulbs, and a bird perched on a corner branch is carried up and down
+  with the bough. (The test setting `PECKWORKS_WIND` set to `still`, `nopines`, `nobranches` or `count` holds
+  the air still, leaves out one set of trees, or writes how many milliseconds each costs.)
 - **Santa's sleigh crosses the sky** behind the overhanging branches, pulled by eight reindeer in four pairs
   with Rudolph alone in front, his red nose glowing. Every reindeer gallops on its own beat (no two are in
   step), a gang line runs down the middle of the team from the sleigh to Rudolph and sags and tightens with

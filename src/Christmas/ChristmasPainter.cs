@@ -45,6 +45,37 @@ internal sealed class ChristmasScenery
     public required PointF ChimneyTop { get; init; }                    // where the smoke comes out
     public required int CabinBulbs { get; init; }                       // the first this-many entries of Lights are the bulbs along the cabin's roof
     public required List<(float X, float Foot, float Top)> Pines { get; init; } // each pine: trunk x, where it meets the snow, its tip (ask Brushwork.PineHalfWidth for its width at any height)
+    public required uint[] PineLayer { get; init; }                     // the pines on their own clear sheet (premultiplied ARGB, the screen's size): the scene redraws it every frame, bent by the wind
+    public required uint[] PinesAtRest { get; init; }                   // the backdrop as it was with the pines painted in, standing still. Pixels has NO pines (they are a live sheet): anything that wants a pine's own picture cuts it from HERE, or it cuts a piece of sky
+    public required bool[] PineOpen { get; init; }                      // stencil: true where a pine may be drawn (false where a nearer prop was painted over one)
+    public required uint[] BranchLayer { get; init; }                   // the corner branches and their bulbs on their own clear sheet (premultiplied ARGB): redrawn every frame, bobbing
+    public required float PineRefY { get; init; }                       // the row where the pines' boughs end: nothing below it moves in the wind
+    public required float PineRefH { get; init; }                       // from that row up to the tallest pine's tip, in pixels
+
+    // ---- THE WIND'S LIVE NUMBERS. The scene writes these four once a frame (ChristmasScene.UpdateWind); everybody else only READS them,
+    //      through PineDx and BranchDy. One owner of "where is the tree right now": the sheet's drawing, the bulbs' glows and a bird
+    //      on a twig all ask the same two functions, so nothing floats beside a branch that moved. ----
+    public float PineLeanL, PineLeanR;                                  // how far the tallest pine's tip is pushed sideways right now, in pixels: the left grove and the right grove
+    public float BranchAmp, BranchPhase;                                // the corner branches' bob: how big (pixels at the twig tips) and where in its swing (radians)
+
+    /// <summary>How far sideways the pine sheet is slid at (x, y) right now. Nothing at the foot, most at the tip: a fishing rod, not a door.</summary>
+    public float PineDx(float x, float y)
+    {
+        float t = Math.Clamp((PineRefY - y) / PineRefH, 0f, 1f);
+        return (x < Width * 0.5f ? PineLeanL : PineLeanR) * t * MathF.Sqrt(t);
+    }
+
+    /// <summary>
+    /// How far down (plus) or up (minus) the corner branches' sheet is moved at column x right now. Each branch grows in from a top corner,
+    /// so the farther a twig is from its side edge the more it bobs (s runs 0 at the edge to 1 mid-screen), and the bob travels out along
+    /// the bough as a wave (the "- 3 s": the tip is a little behind the root, like a whip), two rhythms mixed so it never ticks like a clock.
+    /// </summary>
+    public float BranchDy(float x)
+    {
+        float s = Math.Clamp(MathF.Min(x, Width - 1 - x) / (0.5f * Width), 0f, 1f);
+        return BranchAmp * s * MathF.Sqrt(s) * (0.7f * MathF.Sin(BranchPhase - 3f * s) + 0.3f * MathF.Sin(1.7f * BranchPhase - 5f * s));
+    }
+
     public required float PineU { get; init; }                          // the pines' own measuring stick (the screen's u times ChristmasPainter.PineK): hand THIS to Brushwork.PineHalfWidth, never the screen's u
     public required int PineBulbs { get; init; }                        // this many entries of Lights, straight after the cabin's, are the bulbs on the pines (bigger bulbs, a bigger glow)
     public required int BranchBulbFirst { get; init; }                  // the entries of Lights from this one to the end are the bulbs on the corner branches (the biggest bulbs: the branches hang nearest)
@@ -381,20 +412,37 @@ internal static class ChristmasPainter
         // (the birds, the squirrels) asks with ChristmasScenery.PineU, never the screen's u, so the knob can be turned without anyone
         // perching in the air beside a tree that grew.
         float pineU = u * PineK;
+        // THE PINES BEND IN THE WIND (his line, 2026-11-11: "the trees in the back have to bend with the wind too"). A thing painted into the
+        // backdrop can never move, so the pines are painted on their OWN clear sheet (pineBmp), like trees painted on a pane of glass held in
+        // front of the picture. The scene redraws that sheet every frame, sliding each row sideways a little more the higher up it is: that
+        // is the bend. The sheet is also pressed onto the backdrop here (DrawImageUnscaled) so everything painted LATER, and every stencil and
+        // the depth picture, see the pines standing where they always stood; at the very end the pines are lifted off the backdrop again.
+        g.Flush();
+        uint[] beforePines = Brushwork.ToPixels(bmp);
+        using var pineBmp = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
+        using var gp = Graphics.FromImage(pineBmp);
+        gp.SmoothingMode = SmoothingMode.AntiAlias;
         var pineFacts = new List<(float X, float Foot, float Top)>();
         int pineBulbFirst = lights.Count;
+        float pineRefY = 0, pineTopY = h;
         foreach (var p in pines)
         {
             float x = w * p.X, foot = ground.YAt(x) + u * 0.02f, top = foot - pineU * p.Height;
-            Brushwork.Pine(g, x, top, foot, pineU, rng, snowy: true);
-            StringLights(g, x, top, foot, pineU, rng, lights);
+            Brushwork.Pine(gp, x, top, foot, pineU, rng, snowy: true);
+            StringLights(gp, x, top, foot, pineU, rng, lights);
             pineFacts.Add((x, foot, top));
+            pineRefY = Math.Max(pineRefY, foot - pineU * 0.03f); pineTopY = Math.Min(pineTopY, top);
         }
         int pineBulbs = lights.Count - pineBulbFirst;
         // The star goes on the tallest tree (the one at 88% across, number 4 in the list).
         const int starPine = 4;
         float starX = w * 0.88f, starY = ground.YAt(starX) + u * 0.02f - pineU * StarPineTall - pineU * 0.008f;
-        PaintStar(g, starX, starY, pineU * 0.016f);
+        PaintStar(gp, starX, starY, pineU * 0.016f);
+        gp.Flush();
+        g.DrawImageUnscaled(pineBmp, 0, 0);
+        g.Flush();
+        uint[] afterPines = Brushwork.ToPixels(bmp);
+        uint[] pineLayer = ToPixelsArgb(pineBmp);
         lights.Add((new PointF(starX, starY), Butter));
 
         // ---- The near props. Where each stands (its FOOT), then its soft shadow, then the prop itself. ----
@@ -504,20 +552,43 @@ internal static class ChristmasPainter
         g.Flush();
         uint[] upToBranches = Brushwork.ToPixels(bmp);   // a third stencil copy: "unchanged since here" = no corner branch in front
         int branchBulbFirst = lights.Count;
-        List<PointF> cornerSpots = PaintCornerBranches(g, w, h, u, rng, lights);
+        // THE BRANCHES SHAKE IN THE WIND (his line: "when the wind blows. the branches ahve to shake"): the same trick as the pines. They are
+        // painted on their own clear sheet and never onto the backdrop at all (they are the last and nearest thing, so nothing is painted
+        // over them); the scene redraws the sheet every frame with each column lifted or dropped a little: the bough bobbing.
+        using var branchBmp = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
+        using var gb = Graphics.FromImage(branchBmp);
+        gb.SmoothingMode = SmoothingMode.AntiAlias;
+        List<PointF> cornerSpots = PaintCornerBranches(gb, w, h, u, rng, lights);
+        gb.Flush();
+        uint[] branchLayer = ToPixelsArgb(branchBmp);
 
-        g.Flush();
-        uint[] pixels = Brushwork.ToPixels(bmp);
+        // The stencils are made from the picture WITH the pines and the branches where they stand at rest, exactly as before.
+        uint[] pixels = upToBranches;
         var isSky = new bool[pixels.Length];
-        for (int i = 0; i < pixels.Length; i++) isSky[i] = pixels[i] == skyOnly[i];
+        var openOfBranches = new bool[pixels.Length];
+        bool[] openValley = Brushwork.Unchanged(upToValley, pixels);
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            bool noBranch = (branchLayer[i] >> 24) == 0;
+            openOfBranches[i] = noBranch;
+            isSky[i] = noBranch && pixels[i] == skyOnly[i];
+            openValley[i] &= noBranch;
+        }
+        // Now lift the pines off the backdrop: wherever a pine is the top thing (nothing was painted over it later), put back what was
+        // there before the pines. PineOpen remembers "a pine may be drawn here" (false where a later prop stands in front of one).
+        uint[] pinesAtRest = (uint[])pixels.Clone();      // the picture WITH the pines standing still, kept for whoever redraws a piece of a pine (the bough that dips under a bird)
+        bool[] pineOpen = Brushwork.Unchanged(afterPines, pixels);
+        for (int i = 0; i < pixels.Length; i++)
+            if ((pineLayer[i] >> 24) != 0 && pineOpen[i]) pixels[i] = beforePines[i];
 
         return new ChristmasScenery
         {
             Pixels = pixels, Lights = lights, IsSky = isSky,
             Width = w, Height = h, U = u, Horizon = horizon,
             Moon = (new PointF(w * 0.24f, h * 0.19f), u * 0.065f),   // the same numbers PaintMoon was given above
-            OpenValley = Brushwork.Unchanged(upToValley, pixels),
-            OpenOfBranches = Brushwork.Unchanged(upToBranches, pixels),
+            OpenValley = openValley,
+            OpenOfBranches = openOfBranches,
+            PineLayer = pineLayer, PineOpen = pineOpen, PinesAtRest = pinesAtRest, BranchLayer = branchLayer, PineRefY = pineRefY, PineRefH = Math.Max(1f, pineRefY - pineTopY),
             FarRange = farRange, NearRange = nearRange, Ground = ground,
             CabinFoot = cabinFoot, CabinWall = cabin.Wall, CabinRoofRise = cabin.RoofRise,
             CabinWindows = cabin.Windows, CabinDoor = cabin.Door, ChimneyTop = cabin.ChimneyTop, CabinBulbs = cabin.Bulbs,
@@ -531,6 +602,21 @@ internal static class ChristmasPainter
             SnowmanFoot = snowmanFoot, SnowmanHeight = snowmanTall,
             Bushes = bushes, Covers = covers, NearDepth = nearDepth, CrestMin = crestMin, CrestMax = crestMax,
         };
+    }
+
+    /// <summary>A clear sheet's pixels, each with its own see-through-ness kept (Brushwork.ToPixels throws that away): premultiplied ARGB, one uint a pixel.</summary>
+    private static uint[] ToPixelsArgb(Bitmap bmp)
+    {
+        var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppPArgb);
+        try
+        {
+            var raw = new int[bmp.Width * bmp.Height];
+            System.Runtime.InteropServices.Marshal.Copy(data.Scan0, raw, 0, raw.Length);
+            var pixels = new uint[raw.Length];
+            Buffer.BlockCopy(raw, 0, pixels, 0, raw.Length * 4);
+            return pixels;
+        }
+        finally { bmp.UnlockBits(data); }
     }
 
     // ================================================================ sky

@@ -92,6 +92,13 @@ public sealed class PetalField
     /// </summary>
     public Func<float, float, (int R, int G, int B, float K)>? LightAt { get; set; }
 
+    /// <summary>
+    /// How hard the breeze that pushes the flakes sideways is blowing right now: about -0.25 (a breath the other way) through 0 (still air)
+    /// to 1.35 (the strongest gust), at 100% wind. A scene whose trees should bend WITH the snow reads this, so there is one wind in the
+    /// picture and not two that disagree (snow streaming right past a tree that stands still looks like the snow is on a different pane of glass).
+    /// </summary>
+    public float Breeze { get; private set; }
+
     /// <summary>The outline of each falling thing. Cherry petals unless a scene says otherwise.</summary>
     public FlakeShape Shape { get; set; } = FlakeShape.Petal;
 
@@ -209,8 +216,8 @@ public sealed class PetalField
         // The breeze: two slow waves added together, so gusts rise and fall on
         // an irregular rhythm instead of a steady beat. Mostly blowing right,
         // occasionally stilling almost to nothing.
-        float wind = _u * 0.03f * _windScale *
-                     (0.55f + 0.5f * (float)Math.Sin(_time * 0.11) + 0.3f * (float)Math.Sin(_time * 0.043 + 2));
+        Breeze = _windScale * (0.55f + 0.5f * (float)Math.Sin(_time * 0.11) + 0.3f * (float)Math.Sin(_time * 0.043 + 2));
+        float wind = _u * 0.03f * Breeze;
 
         float margin = _h * 0.1f;
         for (int i = 0; i < _petals.Length; i++)
